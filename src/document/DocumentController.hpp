@@ -41,12 +41,14 @@ public:
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &center,
-        qreal factor);
+        qreal factor,
+        const QImage &selectionMask = {});
     bool rotateStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &center,
-        qreal degrees);
+        qreal degrees,
+        const QImage &selectionMask = {});
     bool duplicateStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
@@ -103,7 +105,8 @@ private:
         const QVector<QUuid> &strokeIds,
         const QTransform &transform,
         qreal widthScale,
-        const QString &text);
+        const QString &text,
+        const QImage &selectionMask);
     void pushDocumentCommand(
         QString text,
         std::function<void()> redoAction,

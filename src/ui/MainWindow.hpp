@@ -74,6 +74,7 @@ private:
     QAction *m_scaleSelectionAction = nullptr;
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
+    QAction *m_mirrorCanvasAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;

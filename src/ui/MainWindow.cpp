@@ -466,6 +466,27 @@ void MainWindow::createActions()
     registerShortcut(fitAction, QKeySequence(QStringLiteral("Ctrl+0")));
     connect(fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
 
+    m_mirrorCanvasAction =
+        new QAction(tr("Flip canvas horizontally"), this);
+    m_mirrorCanvasAction->setObjectName(
+        QStringLiteral("mirrorCanvasAction"));
+    m_mirrorCanvasAction->setCheckable(true);
+    m_mirrorCanvasAction->setIcon(
+        Icons::toggleIcon(IconGlyph::MirrorHorizontal));
+    registerShortcut(
+        m_mirrorCanvasAction,
+        QKeySequence(QStringLiteral("M")));
+    connect(
+        m_mirrorCanvasAction,
+        &QAction::toggled,
+        m_canvas,
+        &CanvasWidget::setCanvasMirrored);
+    connect(
+        m_canvas,
+        &CanvasWidget::canvasMirroredChanged,
+        m_mirrorCanvasAction,
+        &QAction::setChecked);
+
     m_playAction = new QAction(tr("&Animate preview"), this);
     m_playAction->setCheckable(true);
     m_playAction->setChecked(true);
@@ -552,6 +573,7 @@ void MainWindow::createActions()
     addAction(m_duplicateSelectionAction);
     addAction(clearLayerAction);
     addAction(fitAction);
+    addAction(m_mirrorCanvasAction);
     addAction(m_playAction);
     addAction(checkForUpdatesAction);
 }
@@ -587,6 +609,7 @@ void MainWindow::createMenus()
 
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
+    viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
     viewMenu->addSeparator();
     viewMenu->addAction(m_layerDock->toggleViewAction());
@@ -739,6 +762,12 @@ void MainWindow::createStatusBar()
     m_zoomLabel->setMinimumWidth(56);
     m_zoomLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     statusBar()->addPermanentWidget(m_zoomLabel);
+
+    auto *mirrorButton = new QToolButton(this);
+    mirrorButton->setObjectName(QStringLiteral("mirrorCanvasButton"));
+    mirrorButton->setDefaultAction(m_mirrorCanvasAction);
+    mirrorButton->setIconSize(QSize(16, 16));
+    statusBar()->addPermanentWidget(mirrorButton);
 
     auto *fitButton = new QToolButton(this);
     fitButton->setDefaultAction(

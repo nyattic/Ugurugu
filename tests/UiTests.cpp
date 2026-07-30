@@ -481,6 +481,68 @@ private slots:
         QVERIFY(canvas->hasTransformableSelection());
     }
 
+    void mirrorsTheCanvasAsAViewOnlyToggle()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *mirrorAction = window.findChild<QAction *>(
+            QStringLiteral("mirrorCanvasAction"));
+        QToolButton *mirrorButton = window.findChild<QToolButton *>(
+            QStringLiteral("mirrorCanvasButton"));
+        QVERIFY(canvas);
+        QVERIFY(mirrorAction);
+        QVERIFY(mirrorButton);
+        QVERIFY(mirrorAction->isCheckable());
+        QCOMPARE(
+            mirrorAction->shortcut(),
+            QKeySequence(QStringLiteral("M")));
+        QVERIFY(!canvas->isCanvasMirrored());
+        QVERIFY(!window.isWindowModified());
+
+        mirrorAction->trigger();
+        QVERIFY(canvas->isCanvasMirrored());
+        QVERIFY(mirrorAction->isChecked());
+        QVERIFY(canvas->zoom() > 0.0);
+        QVERIFY(!window.isWindowModified());
+
+        mirrorAction->trigger();
+        QVERIFY(!canvas->isCanvasMirrored());
+        QVERIFY(!mirrorAction->isChecked());
+        QVERIFY(!window.isWindowModified());
+    }
+
+    void mapsDrawingInputThroughTheMirroredCanvas()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setCanvasMirrored(true);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const QPoint leftOfCenter(100, 200);
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            leftOfCenter);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            leftOfCenter);
+
+        const Layer &layer = controller.document().layers.first();
+        QCOMPARE(layer.strokes.size(), 1);
+        QVERIFY(layer.strokes.first().points.first().position.x() > 70.0);
+    }
+
     void clipsDrawingToolsToPersistentLasso()
     {
         Document document = Document::createDefault(QSize(100, 100));

@@ -289,7 +289,12 @@ int CanvasWidget::currentFrame() const
 
 qreal CanvasWidget::zoom() const
 {
-    return documentTransform().m11();
+    return std::abs(documentTransform().m11());
+}
+
+bool CanvasWidget::isCanvasMirrored() const
+{
+    return m_canvasMirrored;
 }
 
 bool CanvasWidget::hasSelection() const
@@ -307,7 +312,7 @@ bool CanvasWidget::scaleSelection(qreal factor)
     QRectF bounds;
     if (!std::isfinite(factor)
         || factor <= 0.0
-        || !selectedStrokeBounds(&bounds)) {
+        || !selectionBounds(&bounds)) {
         return false;
     }
     const bool scaled = m_controller->scaleStrokes(
@@ -316,7 +321,8 @@ bool CanvasWidget::scaleSelection(qreal factor)
             m_selectedStrokes.cbegin(),
             m_selectedStrokes.cend()),
         bounds.center(),
-        factor);
+        factor,
+        m_selectionMask);
     if (!scaled) {
         emit interactionMessage(
             tr("The selection cannot be scaled outside the canvas."));
@@ -329,7 +335,7 @@ bool CanvasWidget::rotateSelection(qreal degrees)
     QRectF bounds;
     if (!std::isfinite(degrees)
         || qFuzzyIsNull(degrees)
-        || !selectedStrokeBounds(&bounds)) {
+        || !selectionBounds(&bounds)) {
         return false;
     }
     const bool rotated = m_controller->rotateStrokes(
@@ -338,7 +344,8 @@ bool CanvasWidget::rotateSelection(qreal degrees)
             m_selectedStrokes.cbegin(),
             m_selectedStrokes.cend()),
         bounds.center(),
-        degrees);
+        degrees,
+        m_selectionMask);
     if (!rotated) {
         emit interactionMessage(
             tr("The selection cannot be rotated outside the canvas."));
@@ -465,6 +472,24 @@ void CanvasWidget::fitToWindow()
     m_pan = QPointF();
     notifyZoomChanged();
     update();
+}
+
+void CanvasWidget::setCanvasMirrored(bool mirrored)
+{
+    if (m_canvasMirrored == mirrored) {
+        return;
+    }
+    cancelStroke();
+    endPan();
+    m_canvasMirrored = mirrored;
+    updatePointerPosition(m_pointerWidgetPosition);
+    emit canvasMirroredChanged(mirrored);
+    update();
+}
+
+void CanvasWidget::toggleCanvasMirrored()
+{
+    setCanvasMirrored(!m_canvasMirrored);
 }
 
 void CanvasWidget::setCurrentFrame(int frame)
@@ -873,7 +898,7 @@ QTransform CanvasWidget::documentTransform() const
 
     QTransform transform;
     transform.translate(center.x() + m_pan.x(), center.y() + m_pan.y());
-    transform.scale(scale, scale);
+    transform.scale(m_canvasMirrored ? -scale : scale, scale);
     transform.translate(-canvasCenter.x(), -canvasCenter.y());
     return transform;
 }
@@ -1700,43 +1725,37 @@ void CanvasWidget::notifySelectionTransformAvailability()
         hasTransformableSelection());
 }
 
-bool CanvasWidget::selectedStrokeBounds(QRectF *bounds) const
+bool CanvasWidget::selectionBounds(QRectF *bounds) const
 {
-    const Document &document = m_controller->document();
-    const Layer *layer = document.layer(m_selectionLayer);
-    if (!bounds || !layer || m_selectedStrokes.isEmpty()) {
+    if (!bounds
+        || m_selectionMask.isNull()
+        || m_selectedStrokes.isEmpty()) {
         return false;
     }
-    qreal minimumX = 0.0;
-    qreal minimumY = 0.0;
-    qreal maximumX = 0.0;
-    qreal maximumY = 0.0;
-    bool found = false;
-    for (const Stroke &stroke : layer->strokes) {
-        if (!m_selectedStrokes.contains(stroke.id)) {
-            continue;
-        }
-        for (const StrokePoint &point : stroke.points) {
-            if (!found) {
-                minimumX = point.position.x();
-                minimumY = point.position.y();
-                maximumX = point.position.x();
-                maximumY = point.position.y();
-                found = true;
-            } else {
-                minimumX = std::min(minimumX, point.position.x());
-                minimumY = std::min(minimumY, point.position.y());
-                maximumX = std::max(maximumX, point.position.x());
-                maximumY = std::max(maximumY, point.position.y());
+
+    int left = m_selectionMask.width();
+    int top = m_selectionMask.height();
+    int right = -1;
+    int bottom = -1;
+    for (int y = 0; y < m_selectionMask.height(); ++y) {
+        const uchar *line = m_selectionMask.constScanLine(y);
+        for (int x = 0; x < m_selectionMask.width(); ++x) {
+            if (line[x] < 128) {
+                continue;
             }
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x);
+            bottom = std::max(bottom, y);
         }
     }
-    if (found) {
-        *bounds = QRectF(
-            QPointF(minimumX, minimumY),
-            QPointF(maximumX, maximumY));
+    if (right < left || bottom < top) {
+        return false;
     }
-    return found;
+    *bounds = QRectF(
+        QPointF(left, top),
+        QPointF(right + 1.0, bottom + 1.0));
+    return true;
 }
 
 QPointF CanvasWidget::clampedSelectionDelta(const QPointF &delta) const

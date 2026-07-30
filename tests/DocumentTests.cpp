@@ -453,6 +453,73 @@ private slots:
         QCOMPARE(controller.document().layers.first().strokes.size(), 2);
     }
 
+    void rotatesOnlyTheSelectedPartOfAnIntersectingStroke()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        Stroke stroke;
+        stroke.width = 4.0;
+        stroke.points = {
+            {QPointF(10.0, 50.0), 1.0},
+            {QPointF(90.0, 50.0), 1.0}
+        };
+        const QUuid strokeId = stroke.id;
+        const QUuid layerId = document.activeLayerId;
+        document.layers.first().strokes.append(stroke);
+
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(0);
+        for (int y = 40; y <= 60; ++y) {
+            uchar *line = selection.scanLine(y);
+            std::fill(line + 40, line + 61, 255);
+        }
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.rotateStrokes(
+            layerId,
+            {strokeId},
+            QPointF(50.0, 50.0),
+            90.0,
+            selection));
+
+        const Layer &rotatedLayer =
+            controller.document().layers.first();
+        QCOMPARE(rotatedLayer.strokes.size(), 2);
+        const auto selected = std::find_if(
+            rotatedLayer.strokes.cbegin(),
+            rotatedLayer.strokes.cend(),
+            [strokeId](const Stroke &candidate) {
+                return candidate.id == strokeId;
+            });
+        QVERIFY(selected != rotatedLayer.strokes.cend());
+        const auto remainder = std::find_if(
+            rotatedLayer.strokes.cbegin(),
+            rotatedLayer.strokes.cend(),
+            [strokeId](const Stroke &candidate) {
+                return candidate.id != strokeId;
+            });
+        QVERIFY(remainder != rotatedLayer.strokes.cend());
+
+        QCOMPARE(remainder->points, stroke.points);
+        QCOMPARE(remainder->clipMask.constScanLine(50)[20], 255);
+        QCOMPARE(remainder->clipMask.constScanLine(50)[50], 0);
+        QCOMPARE(selected->clipMask.constScanLine(50)[50], 255);
+        QCOMPARE(selected->clipMask.constScanLine(50)[20], 0);
+        QVERIFY(qAbs(selected->points.first().position.x() - 50.0) < 0.0001);
+        QVERIFY(qAbs(selected->points.last().position.x() - 50.0) < 0.0001);
+
+        controller.undoStack()->undo();
+        const Layer &restoredLayer =
+            controller.document().layers.first();
+        QCOMPARE(restoredLayer.strokes.size(), 1);
+        QCOMPARE(restoredLayer.strokes.first().id, strokeId);
+        QCOMPARE(restoredLayer.strokes.first().points, stroke.points);
+        QVERIFY(restoredLayer.strokes.first().clipMask.isNull());
+
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+    }
+
     void loadsBundledExample()
     {
         QString error;

@@ -21,6 +21,7 @@ enum class IconGlyph {
     EyeOpen,
     EyeClosed,
     FitView,
+    MirrorHorizontal,
     Lasso,
     Wand,
     Bucket,

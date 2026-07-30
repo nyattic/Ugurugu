@@ -79,6 +79,7 @@ Shortcuts**.
 | `W` | Auto select |
 | `G` | Paint bucket |
 | `P` | Play or pause the preview |
+| `M` | Flip the canvas horizontally (view only) |
 | `Space` + drag | Pan the canvas |
 | Scroll | Zoom |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |

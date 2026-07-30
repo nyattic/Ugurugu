@@ -185,6 +185,63 @@ bool transformMask(
     return true;
 }
 
+QImage maskedPart(
+    const QImage &source,
+    const QImage &selection,
+    bool insideSelection)
+{
+    if (selection.isNull()
+        || selection.format() != QImage::Format_Grayscale8
+        || (!source.isNull()
+            && (source.size() != selection.size()
+                || source.format() != QImage::Format_Grayscale8))) {
+        return {};
+    }
+
+    QImage result(selection.size(), QImage::Format_Grayscale8);
+    if (result.isNull()) {
+        return {};
+    }
+    for (int y = 0; y < selection.height(); ++y) {
+        const uchar *sourceLine =
+            source.isNull() ? nullptr : source.constScanLine(y);
+        const uchar *selectionLine = selection.constScanLine(y);
+        uchar *resultLine = result.scanLine(y);
+        for (int x = 0; x < selection.width(); ++x) {
+            const bool sourceContains =
+                !sourceLine || sourceLine[x] >= 128;
+            const bool selectionContains =
+                selectionLine[x] >= 128;
+            resultLine[x] =
+                sourceContains
+                    && (insideSelection
+                            ? selectionContains
+                            : !selectionContains)
+                ? 255
+                : 0;
+        }
+    }
+    return result;
+}
+
+bool maskHasContent(const QImage &mask)
+{
+    if (mask.isNull()
+        || mask.format() != QImage::Format_Grayscale8) {
+        return false;
+    }
+    for (int y = 0; y < mask.height(); ++y) {
+        const uchar *line = mask.constScanLine(y);
+        if (std::any_of(
+                line,
+                line + mask.width(),
+                [](uchar value) { return value >= 128; })) {
+            return true;
+        }
+    }
+    return false;
+}
+
 quint64 distinctClipMaskBytes(const Document &document)
 {
     QSet<qint64> seen;
@@ -568,7 +625,8 @@ bool DocumentController::scaleStrokes(
     const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
     const QPointF &center,
-    qreal factor)
+    qreal factor,
+    const QImage &selectionMask)
 {
     if (!std::isfinite(center.x())
         || !std::isfinite(center.y())
@@ -585,14 +643,16 @@ bool DocumentController::scaleStrokes(
         strokeIds,
         transform,
         factor,
-        tr("Scale selection"));
+        tr("Scale selection"),
+        selectionMask);
 }
 
 bool DocumentController::rotateStrokes(
     const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
     const QPointF &center,
-    qreal degrees)
+    qreal degrees,
+    const QImage &selectionMask)
 {
     if (!std::isfinite(center.x())
         || !std::isfinite(center.y())
@@ -609,7 +669,8 @@ bool DocumentController::rotateStrokes(
         strokeIds,
         transform,
         1.0,
-        tr("Rotate selection"));
+        tr("Rotate selection"),
+        selectionMask);
 }
 
 bool DocumentController::duplicateStrokes(
@@ -734,7 +795,8 @@ bool DocumentController::transformStrokes(
     const QVector<QUuid> &strokeIds,
     const QTransform &transform,
     qreal widthScale,
-    const QString &text)
+    const QString &text,
+    const QImage &selectionMask)
 {
     const Layer *layer = m_document.layer(layerId);
     if (!layer
@@ -745,6 +807,114 @@ bool DocumentController::transformStrokes(
     }
 
     const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    if (!selectionMask.isNull()) {
+        if (selectionMask.size() != m_document.size
+            || selectionMask.format() != QImage::Format_Grayscale8) {
+            return false;
+        }
+
+        QVector<Stroke> before = layer->strokes;
+        QVector<Stroke> after;
+        after.reserve(before.size() + requested.size());
+        QVector<QUuid> transformedIds;
+        for (const Stroke &stroke : before) {
+            if (!requested.contains(stroke.id)) {
+                after.append(stroke);
+                continue;
+            }
+
+            const QImage selectedMask =
+                maskedPart(stroke.clipMask, selectionMask, true);
+            if (!maskHasContent(selectedMask)) {
+                after.append(stroke);
+                continue;
+            }
+
+            const QImage remainderMask =
+                maskedPart(stroke.clipMask, selectionMask, false);
+            if (maskHasContent(remainderMask)) {
+                Stroke remainder = stroke;
+                remainder.id = QUuid::createUuid();
+                remainder.clipMask = remainderMask;
+                after.append(std::move(remainder));
+            }
+
+            Stroke transformed = stroke;
+            for (StrokePoint &point : transformed.points) {
+                const QPointF mapped = transform.map(point.position);
+                if (!std::isfinite(mapped.x())
+                    || !std::isfinite(mapped.y())) {
+                    return false;
+                }
+                point.position = QPointF(
+                    std::clamp(
+                        mapped.x(),
+                        0.0,
+                        static_cast<qreal>(m_document.size.width())),
+                    std::clamp(
+                        mapped.y(),
+                        0.0,
+                        static_cast<qreal>(m_document.size.height())));
+            }
+            transformed.width = std::clamp(
+                transformed.width * widthScale,
+                DocumentLimits::minimumStrokeWidth,
+                DocumentLimits::maximumStrokeWidth);
+            transformed.clipMask = transformedMask(
+                selectedMask,
+                m_document.size,
+                transform);
+            if (transformed.clipMask.isNull()) {
+                return false;
+            }
+            transformedIds.append(transformed.id);
+            after.append(std::move(transformed));
+        }
+
+        if (transformedIds.isEmpty()
+            || after.size() > DocumentLimits::maximumStrokesPerLayer) {
+            return false;
+        }
+        Document transformedDocument = m_document;
+        if (Layer *target = transformedDocument.layer(layerId)) {
+            target->strokes = after;
+        }
+        if (totalStrokeCount(transformedDocument)
+                > DocumentLimits::maximumTotalStrokes
+            || totalPointCount(transformedDocument)
+                > DocumentLimits::maximumTotalPoints
+            || distinctClipMaskBytes(transformedDocument)
+                > DocumentLimits::maximumDistinctClipMaskBytes) {
+            return false;
+        }
+
+        const auto replace = [
+            this,
+            layerId,
+            transformedIds
+        ](const QVector<Stroke> &strokes, const QTransform &appliedTransform) {
+            if (Layer *target = m_document.layer(layerId)) {
+                target->strokes = strokes;
+                emit strokesTransformed(
+                    layerId,
+                    transformedIds,
+                    appliedTransform);
+                notifyDocumentChanged();
+                emit layerThumbnailChanged(layerId);
+            }
+        };
+        bool invertible = false;
+        const QTransform inverse = transform.inverted(&invertible);
+        if (!invertible) {
+            return false;
+        }
+        pushDocumentCommand(
+            text,
+            [replace, after, transform]() { replace(after, transform); },
+            [replace, before, inverse]() { replace(before, inverse); });
+        return true;
+    }
+
     QVector<Stroke> before;
     QVector<Stroke> after;
     QVector<QUuid> transformedIds;

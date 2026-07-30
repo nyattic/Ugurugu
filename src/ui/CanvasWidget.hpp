@@ -42,6 +42,7 @@ public:
     bool isAnimating() const;
     int currentFrame() const;
     qreal zoom() const;
+    bool isCanvasMirrored() const;
     bool hasSelection() const;
     bool hasTransformableSelection() const;
     bool scaleSelection(qreal factor);
@@ -57,6 +58,8 @@ public slots:
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
     void fitToWindow();
+    void setCanvasMirrored(bool mirrored);
+    void toggleCanvasMirrored();
     void setCurrentFrame(int frame);
     void setPanModifierActive(bool active);
 
@@ -68,6 +71,7 @@ signals:
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
+    void canvasMirroredChanged(bool mirrored);
     void pointerPositionChanged(const QPointF &position, bool inside);
     void interactionMessage(const QString &message);
     void selectionTransformAvailabilityChanged(bool available);
@@ -166,7 +170,7 @@ private:
     void rebuildSelectionOutline();
     void updateSelectionAnimation();
     void notifySelectionTransformAvailability();
-    bool selectedStrokeBounds(QRectF *bounds) const;
+    bool selectionBounds(QRectF *bounds) const;
     QPointF clampedSelectionDelta(const QPointF &delta) const;
     QImage renderActiveLayerImage() const;
     void drawSelectionOverlay(QPainter &painter, const QTransform &transform);
@@ -183,6 +187,7 @@ private:
     int m_currentFrame = 0;
     qreal m_zoom = 1.0;
     QPointF m_pan;
+    bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
     QTimer m_animationTimer;

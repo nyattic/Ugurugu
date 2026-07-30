@@ -227,6 +227,25 @@ Glyph fitViewGlyph()
     return glyph;
 }
 
+Glyph mirrorHorizontalGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{12.0, 3.8}, {12.0, 20.2}}));
+    glyph.lines.append(polyline({
+        {10.0, 6.0},
+        {4.2, 12.0},
+        {10.0, 18.0},
+        {10.0, 6.0}
+    }));
+    glyph.lines.append(polyline({
+        {14.0, 6.0},
+        {19.8, 12.0},
+        {14.0, 18.0},
+        {14.0, 6.0}
+    }));
+    return glyph;
+}
+
 Glyph lassoGlyph()
 {
     Glyph glyph;
@@ -322,6 +341,8 @@ Glyph glyphFor(IconGlyph glyph)
         return eyeClosedGlyph();
     case IconGlyph::FitView:
         return fitViewGlyph();
+    case IconGlyph::MirrorHorizontal:
+        return mirrorHorizontalGlyph();
     case IconGlyph::Lasso:
         return lassoGlyph();
     case IconGlyph::Wand:
