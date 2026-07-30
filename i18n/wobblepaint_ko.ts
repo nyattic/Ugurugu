@@ -143,6 +143,21 @@
     </message>
 </context>
 <context>
+    <name>wobble::BrushPopoverPanel</name>
+    <message>
+        <source>ROUGHNESS</source>
+        <translation>거칠기</translation>
+    </message>
+    <message>
+        <source>Line roughness</source>
+        <translation>선 거칠기</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+</context>
+<context>
     <name>wobble::BrushSizeRow</name>
     <message>
         <location filename="../src/ui/BrushSizeRow.cpp" line="27"/>
@@ -180,6 +195,10 @@
         <location filename="../src/ui/CanvasWidget.cpp" line="1465"/>
         <source>The active layer opacity is 0%. Increase it to draw.</source>
         <translation>활성 레이어의 불투명도가 0%입니다. 높인 후 그릴 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>The selection could not be moved.</source>
+        <translation>선택 영역을 이동할 수 없습니다.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="1371"/>

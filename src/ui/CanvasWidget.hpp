@@ -38,6 +38,7 @@ public:
     Tool tool() const;
     QColor brushColor() const;
     qreal brushWidth() const;
+    qreal brushRoughness() const;
     QString brushPresetId() const;
     bool isAnimating() const;
     int currentFrame() const;
@@ -53,6 +54,7 @@ public slots:
     void setTool(Tool tool);
     void setBrushColor(const QColor &color);
     void setBrushWidth(qreal width);
+    void setBrushRoughness(qreal roughness);
     void setBrushPreset(const QString &presetId);
     void setAnimating(bool animating);
     void toggleAnimating();
@@ -69,6 +71,7 @@ signals:
     void toolChanged(Tool tool);
     void brushColorChanged(const QColor &color);
     void brushWidthChanged(qreal width);
+    void brushRoughnessChanged(qreal roughness);
     void brushPresetChanged(const QString &presetId);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
@@ -164,10 +167,6 @@ private:
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform);
-    void translateSelectionOverlay(
-        const QUuid &layerId,
-        const QVector<QUuid> &strokeIds,
-        const QPointF &delta);
     void handleStrokesDuplicated(
         const QUuid &layerId,
         const QVector<QUuid> &sourceIds,
@@ -190,6 +189,7 @@ private:
     Tool m_tool = Tool::Brush;
     QColor m_brushColor = Qt::black;
     qreal m_brushWidth = 6.0;
+    qreal m_brushRoughness = 1.0;
     QString m_brushPresetId;
     BrushSettings m_brushSettings;
     QHash<QString, qreal> m_presetWidths;
@@ -231,6 +231,8 @@ private:
     bool m_movingSelection = false;
     QPointF m_moveStartPosition;
     QPointF m_moveDelta;
+    QHash<qint64, QImage> m_moveInsideMasks;
+    QHash<qint64, QImage> m_moveRemainderMasks;
 };
 
 }

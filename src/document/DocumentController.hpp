@@ -33,10 +33,11 @@ public:
 
     void setActiveLayer(const QUuid &id);
     void addStroke(const QUuid &layerId, Stroke stroke);
-    void translateStrokes(
+    bool moveStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
-        const QPointF &delta);
+        const QPointF &delta,
+        const QImage &selectionMask = {});
     bool scaleStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
@@ -75,10 +76,6 @@ signals:
     void modifiedChanged(bool modified);
     void layerThumbnailChanged(const QUuid &id);
     void layerThumbnailsReset();
-    void strokesTranslated(
-        const QUuid &layerId,
-        const QVector<QUuid> &strokeIds,
-        const QPointF &delta);
     void canvasResized(
         const QSize &previousSize,
         const QSize &currentSize,

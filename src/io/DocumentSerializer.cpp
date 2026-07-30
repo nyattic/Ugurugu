@@ -93,6 +93,7 @@ QJsonObject brushToJson(const BrushSettings &brush)
     object.insert(QStringLiteral("opacityDynamics"), brush.opacityDynamics);
     object.insert(QStringLiteral("sizeJitter"), brush.sizeJitter);
     object.insert(QStringLiteral("animatedJitter"), brush.animatedJitter);
+    object.insert(QStringLiteral("wobbleScale"), brush.wobbleScale);
     return object;
 }
 
@@ -118,6 +119,12 @@ std::optional<BrushSettings> brushFromJson(
         || !object.value(QStringLiteral("opacityDynamics")).isDouble()
         || !object.value(QStringLiteral("sizeJitter")).isDouble()
         || !object.value(QStringLiteral("animatedJitter")).isBool()) {
+        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        return std::nullopt;
+    }
+    const QJsonValue wobbleScaleValue =
+        object.value(QStringLiteral("wobbleScale"));
+    if (!wobbleScaleValue.isUndefined() && !wobbleScaleValue.isDouble()) {
         setError(error, QStringLiteral("A stroke has invalid brush settings."));
         return std::nullopt;
     }
@@ -155,6 +162,8 @@ std::optional<BrushSettings> brushFromJson(
         object.value(QStringLiteral("sizeJitter")).toDouble();
     brush.animatedJitter =
         object.value(QStringLiteral("animatedJitter")).toBool();
+    brush.wobbleScale =
+        wobbleScaleValue.isDouble() ? wobbleScaleValue.toDouble() : 1.0;
     if (!isValidBrushSettings(brush)) {
         setError(error, QStringLiteral("A stroke has invalid brush settings."));
         return std::nullopt;

@@ -59,6 +59,7 @@ necessary.
 - Resizable canvases that scale existing artwork and brush sizes
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - Adjustable wobble strength, frame count, and FPS
+- Per-stroke roughness control layered on top of the global wobble
 - Looping GIF export and current-frame PNG export
 - `.wagle` project files with undo and redo
 - Automatic recovery of unsaved work after an interrupted session

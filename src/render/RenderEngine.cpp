@@ -848,8 +848,10 @@ QImage renderAtSize(
                     ? QPainter::CompositionMode_DestinationOut
                     : QPainter::CompositionMode_SourceOver);
 
+            const qreal strokeWobble =
+                document.wobbleAmount * stroke.brush.wobbleScale;
             const qreal widthNoiseScale = std::clamp(
-                document.wobbleAmount / 1.6,
+                strokeWobble / 1.6,
                 0.0,
                 1.0);
             const qreal frameWidthNoise =
@@ -877,7 +879,7 @@ QImage renderAtSize(
                 stroke,
                 normalizedFrame,
                 frameCount,
-                document.wobbleAmount,
+                strokeWobble,
                 brushSpacing,
                 maximumPoints);
             if (points.isEmpty()) {
@@ -958,7 +960,7 @@ QPainterPath RenderEngine::strokePath(
         stroke,
         frameIndex,
         frameCount,
-        wobbleAmount));
+        wobbleAmount * stroke.brush.wobbleScale));
 }
 
 }

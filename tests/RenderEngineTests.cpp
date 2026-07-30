@@ -122,6 +122,29 @@ private slots:
         }
     }
 
+    void staysStillWhenBrushWobbleScaleIsZero()
+    {
+        Document document = animatedDocument();
+        document.layers.first().strokes.first().brush.wobbleScale = 0.0;
+
+        const QImage first = RenderEngine::render(document, 0);
+        QVERIFY(!first.isNull());
+        for (int frame = 1; frame < document.animationFrames; ++frame) {
+            QCOMPARE(RenderEngine::render(document, frame), first);
+        }
+    }
+
+    void scalesWobbleByBrushWobbleScale()
+    {
+        Document document = animatedDocument();
+        const QImage normal = RenderEngine::render(document, 0);
+        document.layers.first().strokes.first().brush.wobbleScale = 2.0;
+        const QImage rough = RenderEngine::render(document, 0);
+
+        QVERIFY(!normal.isNull());
+        QVERIFY(normal != rough);
+    }
+
     void rendersCrispPixelEdges()
     {
         Document document = Document::createDefault(QSize(64, 64));

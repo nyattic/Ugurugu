@@ -563,62 +563,26 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
         std::move(undoAction));
 }
 
-void DocumentController::translateStrokes(
+bool DocumentController::moveStrokes(
     const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
-    const QPointF &delta)
+    const QPointF &delta,
+    const QImage &selectionMask)
 {
-    const Layer *layer = m_document.layer(layerId);
-    if (!layer
-        || strokeIds.isEmpty()
-        || !std::isfinite(delta.x())
+    if (!std::isfinite(delta.x())
         || !std::isfinite(delta.y())
         || (qFuzzyIsNull(delta.x()) && qFuzzyIsNull(delta.y()))) {
-        return;
+        return false;
     }
-
-    QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
-    QSet<QUuid> movable;
-    for (const Stroke &stroke : layer->strokes) {
-        if (!requested.contains(stroke.id)) {
-            continue;
-        }
-        const bool staysInside = std::all_of(
-            stroke.points.cbegin(),
-            stroke.points.cend(),
-            [this, &delta](const StrokePoint &point) {
-                StrokePoint moved = point;
-                moved.position += delta;
-                return isValidStrokePoint(moved, m_document.size);
-            });
-        if (!staysInside) {
-            return;
-        }
-        movable.insert(stroke.id);
-    }
-    if (movable.isEmpty()) {
-        return;
-    }
-
-    const QVector<QUuid> movedStrokes(movable.cbegin(), movable.cend());
-    auto shift = [this, layerId, movable, movedStrokes](const QPointF &offset) {
-        if (Layer *target = m_document.layer(layerId)) {
-            for (Stroke &stroke : target->strokes) {
-                if (movable.contains(stroke.id)) {
-                    for (StrokePoint &point : stroke.points) {
-                        point.position += offset;
-                    }
-                }
-            }
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-            emit strokesTranslated(layerId, movedStrokes, offset);
-        }
-    };
-    pushDocumentCommand(
+    QTransform transform;
+    transform.translate(delta.x(), delta.y());
+    return transformStrokes(
+        layerId,
+        strokeIds,
+        transform,
+        1.0,
         tr("Move selection"),
-        [shift, delta]() { shift(delta); },
-        [shift, delta]() { shift(-delta); });
+        selectionMask);
 }
 
 bool DocumentController::scaleStrokes(

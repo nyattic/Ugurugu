@@ -46,7 +46,10 @@ bool isValidBrushSettings(const BrushSettings &settings)
         && settings.opacityDynamics <= 1.0
         && std::isfinite(settings.sizeJitter)
         && settings.sizeJitter >= 0.0
-        && settings.sizeJitter <= 1.0;
+        && settings.sizeJitter <= 1.0
+        && std::isfinite(settings.wobbleScale)
+        && settings.wobbleScale >= DocumentLimits::minimumBrushWobbleScale
+        && settings.wobbleScale <= DocumentLimits::maximumBrushWobbleScale;
 }
 
 Document Document::createDefault(const QSize &canvasSize)

@@ -599,6 +599,37 @@ private slots:
         QVERIFY(layer.strokes.isEmpty());
     }
 
+    void appliesBrushRoughnessToNewStrokes()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        canvas.setBrushRoughness(0.4);
+        QCOMPARE(canvas.brushRoughness(), 0.4);
+
+        const QPoint center(200, 200);
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center);
+        QTest::mouseMove(&canvas, center + QPoint(40, 0), 5);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center + QPoint(40, 0));
+
+        const Layer &layer = controller.document().layers.first();
+        QCOMPARE(layer.strokes.size(), 1);
+        QCOMPARE(layer.strokes.first().brush.wobbleScale, 0.4);
+    }
+
     void mapsDrawingInputThroughTheMirroredCanvas()
     {
         DocumentController controller;

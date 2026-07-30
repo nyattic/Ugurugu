@@ -249,6 +249,7 @@ private slots:
         paint.width = 9.75;
         paint.brush =
             BrushPresetCatalog::find(QStringLiteral("soft-airbrush"))->settings;
+        paint.brush.wobbleScale = 0.35;
         paint.points = {
             {QPointF(1.25, 2.5), 0.2},
             {QPointF(30.0, 40.0), 0.9}
@@ -341,6 +342,7 @@ private slots:
         QCOMPARE(stroke.brush.engine, BrushEngine::Line);
         QCOMPARE(stroke.brush.tipShape, BrushTipShape::Round);
         QCOMPARE(stroke.brush.sizeDynamics, 0.8);
+        QCOMPARE(stroke.brush.wobbleScale, 1.0);
         QVERIFY(isValidBrushSettings(stroke.brush));
     }
 
@@ -518,6 +520,111 @@ private slots:
 
         controller.undoStack()->redo();
         QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+    }
+
+    void movesOnlyTheSelectedPartOfAnIntersectingStroke()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        Stroke stroke;
+        stroke.width = 4.0;
+        stroke.points = {
+            {QPointF(10.0, 50.0), 1.0},
+            {QPointF(90.0, 50.0), 1.0}
+        };
+        const QUuid strokeId = stroke.id;
+        const QUuid layerId = document.activeLayerId;
+        document.layers.first().strokes.append(stroke);
+
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(0);
+        for (int y = 40; y <= 60; ++y) {
+            uchar *line = selection.scanLine(y);
+            std::fill(line + 40, line + 61, 255);
+        }
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.moveStrokes(
+            layerId,
+            {strokeId},
+            QPointF(0.0, 20.0),
+            selection));
+
+        const Layer &movedLayer = controller.document().layers.first();
+        QCOMPARE(movedLayer.strokes.size(), 2);
+        const auto moved = std::find_if(
+            movedLayer.strokes.cbegin(),
+            movedLayer.strokes.cend(),
+            [strokeId](const Stroke &candidate) {
+                return candidate.id == strokeId;
+            });
+        QVERIFY(moved != movedLayer.strokes.cend());
+        const auto remainder = std::find_if(
+            movedLayer.strokes.cbegin(),
+            movedLayer.strokes.cend(),
+            [strokeId](const Stroke &candidate) {
+                return candidate.id != strokeId;
+            });
+        QVERIFY(remainder != movedLayer.strokes.cend());
+
+        QCOMPARE(remainder->points, stroke.points);
+        QCOMPARE(remainder->clipMask.constScanLine(50)[20], 255);
+        QCOMPARE(remainder->clipMask.constScanLine(50)[50], 0);
+        QCOMPARE(moved->points.first().position, QPointF(10.0, 70.0));
+        QCOMPARE(moved->points.last().position, QPointF(90.0, 70.0));
+        QCOMPARE(moved->clipMask.constScanLine(70)[50], 255);
+        QCOMPARE(moved->clipMask.constScanLine(50)[50], 0);
+
+        controller.undoStack()->undo();
+        const Layer &restoredLayer =
+            controller.document().layers.first();
+        QCOMPARE(restoredLayer.strokes.size(), 1);
+        QCOMPARE(restoredLayer.strokes.first().points, stroke.points);
+        QVERIFY(restoredLayer.strokes.first().clipMask.isNull());
+    }
+
+    void movesClipMaskAlongWithFullyContainedStroke()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        Stroke stroke;
+        stroke.width = 4.0;
+        stroke.points = {
+            {QPointF(45.0, 50.0), 1.0},
+            {QPointF(55.0, 50.0), 1.0}
+        };
+        stroke.clipMask =
+            QImage(document.size, QImage::Format_Grayscale8);
+        stroke.clipMask.fill(0);
+        for (int y = 40; y <= 60; ++y) {
+            uchar *line = stroke.clipMask.scanLine(y);
+            std::fill(line + 40, line + 61, 255);
+        }
+        const QUuid strokeId = stroke.id;
+        const QUuid layerId = document.activeLayerId;
+        document.layers.first().strokes.append(stroke);
+
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(0);
+        for (int y = 30; y <= 70; ++y) {
+            uchar *line = selection.scanLine(y);
+            std::fill(line + 30, line + 71, 255);
+        }
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.moveStrokes(
+            layerId,
+            {strokeId},
+            QPointF(20.0, 0.0),
+            selection));
+
+        const Layer &movedLayer = controller.document().layers.first();
+        QCOMPARE(movedLayer.strokes.size(), 1);
+        const Stroke &moved = movedLayer.strokes.first();
+        QCOMPARE(moved.points.first().position, QPointF(65.0, 50.0));
+        QCOMPARE(moved.points.last().position, QPointF(75.0, 50.0));
+        QCOMPARE(moved.clipMask.constScanLine(50)[70], 255);
+        QCOMPARE(moved.clipMask.constScanLine(50)[50], 0);
     }
 
     void loadsBundledExample()

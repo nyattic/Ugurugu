@@ -144,6 +144,46 @@ void drawSelectionPath(
     painter.drawPath(path);
 }
 
+QImage maskedPart(
+    const QImage &source,
+    const QImage &selection,
+    bool insideSelection)
+{
+    if (selection.isNull()
+        || selection.format() != QImage::Format_Grayscale8
+        || (!source.isNull()
+            && (source.size() != selection.size()
+                || source.format() != QImage::Format_Grayscale8))) {
+        return {};
+    }
+
+    QImage result(selection.size(), QImage::Format_Grayscale8);
+    if (result.isNull()) {
+        return {};
+    }
+    bool hasContent = false;
+    for (int y = 0; y < selection.height(); ++y) {
+        const uchar *sourceLine =
+            source.isNull() ? nullptr : source.constScanLine(y);
+        const uchar *selectionLine = selection.constScanLine(y);
+        uchar *resultLine = result.scanLine(y);
+        for (int x = 0; x < selection.width(); ++x) {
+            const bool sourceContains =
+                !sourceLine || sourceLine[x] >= 128;
+            const bool selectionContains =
+                selectionLine[x] >= 128;
+            const bool contained =
+                sourceContains
+                && (insideSelection
+                        ? selectionContains
+                        : !selectionContains);
+            resultLine[x] = contained ? 255 : 0;
+            hasContent = hasContent || contained;
+        }
+    }
+    return hasContent ? result : QImage();
+}
+
 QImage transformedMask(
     const QImage &source,
     const QSize &targetSize,
@@ -194,11 +234,6 @@ CanvasWidget::CanvasWidget(
         &DocumentController::documentReplaced,
         this,
         &CanvasWidget::clearSelection);
-    connect(
-        m_controller,
-        &DocumentController::strokesTranslated,
-        this,
-        &CanvasWidget::translateSelectionOverlay);
     connect(
         m_controller,
         &DocumentController::strokesTransformed,
@@ -274,6 +309,11 @@ QColor CanvasWidget::brushColor() const
 qreal CanvasWidget::brushWidth() const
 {
     return m_brushWidth;
+}
+
+qreal CanvasWidget::brushRoughness() const
+{
+    return m_brushRoughness;
 }
 
 QString CanvasWidget::brushPresetId() const
@@ -420,6 +460,20 @@ void CanvasWidget::setBrushWidth(qreal width)
         m_presetWidths.insert(m_brushPresetId, normalized);
     }
     emit brushWidthChanged(normalized);
+    update();
+}
+
+void CanvasWidget::setBrushRoughness(qreal roughness)
+{
+    const qreal normalized = std::clamp(
+        roughness,
+        DocumentLimits::minimumBrushWobbleScale,
+        DocumentLimits::maximumBrushWobbleScale);
+    if (qFuzzyCompare(m_brushRoughness, normalized)) {
+        return;
+    }
+    m_brushRoughness = normalized;
+    emit brushRoughnessChanged(normalized);
     update();
 }
 
@@ -585,13 +639,49 @@ void CanvasWidget::paintEvent(QPaintEvent *)
                    || !qFuzzyIsNull(m_moveDelta.y()))) {
         Document previewDocument = document;
         if (Layer *layer = previewDocument.layer(m_selectionLayer)) {
-            for (Stroke &stroke : layer->strokes) {
-                if (m_selectedStrokes.contains(stroke.id)) {
-                    for (StrokePoint &point : stroke.points) {
-                        point.position += m_moveDelta;
-                    }
+            QTransform shift;
+            shift.translate(m_moveDelta.x(), m_moveDelta.y());
+            QHash<qint64, QImage> movedMasks;
+            QVector<Stroke> previewStrokes;
+            previewStrokes.reserve(
+                layer->strokes.size() + m_selectedStrokes.size());
+            for (const Stroke &stroke : layer->strokes) {
+                if (!m_selectedStrokes.contains(stroke.id)) {
+                    previewStrokes.append(stroke);
+                    continue;
                 }
+                const qint64 key = stroke.clipMask.isNull()
+                    ? 0
+                    : stroke.clipMask.cacheKey();
+                const QImage insideMask = m_moveInsideMasks.value(key);
+                if (insideMask.isNull()) {
+                    previewStrokes.append(stroke);
+                    continue;
+                }
+                const QImage remainderMask =
+                    m_moveRemainderMasks.value(key);
+                if (!remainderMask.isNull()) {
+                    Stroke stationary = stroke;
+                    stationary.clipMask = remainderMask;
+                    previewStrokes.append(std::move(stationary));
+                }
+                Stroke moved = stroke;
+                for (StrokePoint &point : moved.points) {
+                    point.position += m_moveDelta;
+                }
+                auto movedMask = movedMasks.constFind(key);
+                if (movedMask == movedMasks.cend()) {
+                    movedMask = movedMasks.insert(
+                        key,
+                        transformedMask(
+                            insideMask,
+                            document.size,
+                            shift));
+                }
+                moved.clipMask = movedMask.value();
+                previewStrokes.append(std::move(moved));
             }
+            layer->strokes = std::move(previewStrokes);
             displayedFrame = RenderEngine::renderScaled(
                 previewDocument,
                 m_currentFrame,
@@ -1099,6 +1189,7 @@ void CanvasWidget::beginStroke(
     m_activeStroke.color = m_brushColor;
     m_activeStroke.width = m_brushWidth;
     m_activeStroke.brush = m_brushSettings;
+    m_activeStroke.brush.wobbleScale = m_brushRoughness;
     if (!m_selectionMask.isNull()
         && m_selectionLayer == document.activeLayerId) {
         m_activeStroke.clipMask = m_selectionMask;
@@ -1466,12 +1557,14 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
                 m_currentFrame,
                 document.animationFrames,
                 document.wobbleAmount);
+            const qreal strokeWobble =
+                document.wobbleAmount * stroke.brush.wobbleScale;
             if (path.elementCount() == 1) {
                 const QPainterPath::Element point = path.elementAt(0);
                 QPainterPath dot;
                 const qreal radius = std::max(
                     0.5,
-                    stroke.width * 0.5 + document.wobbleAmount);
+                    stroke.width * 0.5 + strokeWobble);
                 dot.addEllipse(QPointF(point.x, point.y), radius, radius);
                 inside = selectionArea.intersects(dot);
             } else if (!path.isEmpty()) {
@@ -1487,7 +1580,7 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
                 stroker.setJoinStyle(Qt::RoundJoin);
                 stroker.setWidth(std::max(
                     1.0,
-                    visualWidth + document.wobbleAmount * 2.0));
+                    visualWidth + strokeWobble * 2.0));
                 inside = selectionArea.intersects(
                     stroker.createStroke(path));
             }
@@ -1676,6 +1769,7 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         DocumentLimits::minimumStrokeWidth,
         DocumentLimits::maximumStrokeWidth);
     fillStroke.brush = m_brushSettings;
+    fillStroke.brush.wobbleScale = m_brushRoughness;
     if (!m_selectionMask.isNull()) {
         fillStroke.clipMask = m_selectionMask;
     }
@@ -1691,6 +1785,29 @@ void CanvasWidget::beginSelectionMove(const QPointF &documentPosition)
     m_movingSelection = true;
     m_moveStartPosition = documentPosition;
     m_moveDelta = QPointF();
+    m_moveInsideMasks.clear();
+    m_moveRemainderMasks.clear();
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_selectionLayer);
+    if (!layer || m_selectionMask.isNull()) {
+        return;
+    }
+    for (const Stroke &stroke : layer->strokes) {
+        if (!m_selectedStrokes.contains(stroke.id)) {
+            continue;
+        }
+        const qint64 key =
+            stroke.clipMask.isNull() ? 0 : stroke.clipMask.cacheKey();
+        if (m_moveInsideMasks.contains(key)) {
+            continue;
+        }
+        m_moveInsideMasks.insert(
+            key,
+            maskedPart(stroke.clipMask, m_selectionMask, true));
+        m_moveRemainderMasks.insert(
+            key,
+            maskedPart(stroke.clipMask, m_selectionMask, false));
+    }
 }
 
 void CanvasWidget::continueSelectionMove(const QPointF &documentPosition)
@@ -1711,18 +1828,25 @@ void CanvasWidget::commitSelectionMove()
     m_movingSelection = false;
     const QPointF delta = m_moveDelta;
     m_moveDelta = QPointF();
+    m_moveInsideMasks.clear();
+    m_moveRemainderMasks.clear();
     if (qFuzzyIsNull(delta.x()) && qFuzzyIsNull(delta.y())) {
         update();
         return;
     }
 
     if (!m_selectedStrokes.isEmpty()) {
-        m_controller->translateStrokes(
+        const bool moved = m_controller->moveStrokes(
             m_selectionLayer,
             QVector<QUuid>(
                 m_selectedStrokes.cbegin(),
                 m_selectedStrokes.cend()),
-            delta);
+            delta,
+            m_selectionMask);
+        if (!moved) {
+            emit interactionMessage(
+                tr("The selection could not be moved."));
+        }
     }
     update();
 }
@@ -1741,6 +1865,8 @@ void CanvasWidget::clearSelection()
     m_selectionLayer = {};
     m_movingSelection = false;
     m_moveDelta = QPointF();
+    m_moveInsideMasks.clear();
+    m_moveRemainderMasks.clear();
     updateSelectionAnimation();
     notifySelectionTransformAvailability();
     update();
@@ -1801,32 +1927,6 @@ void CanvasWidget::transformSelectionOverlay(
     m_selectionMask = transformedSelection;
     rebuildSelectionOutline();
     update();
-}
-
-void CanvasWidget::translateSelectionOverlay(
-    const QUuid &layerId,
-    const QVector<QUuid> &strokeIds,
-    const QPointF &delta)
-{
-    if (m_selectionMask.isNull() || m_selectionLayer != layerId) {
-        return;
-    }
-
-    const QSet<QUuid> moved(strokeIds.cbegin(), strokeIds.cend());
-    const bool affectsSelection = std::any_of(
-        m_selectedStrokes.cbegin(),
-        m_selectedStrokes.cend(),
-        [&moved](const QUuid &id) {
-            return moved.contains(id);
-        });
-    const QPoint shift(qRound(delta.x()), qRound(delta.y()));
-    if (!affectsSelection || shift.isNull()) {
-        return;
-    }
-
-    QTransform transform;
-    transform.translate(shift.x(), shift.y());
-    transformSelectionOverlay(layerId, strokeIds, transform);
 }
 
 void CanvasWidget::handleStrokesDuplicated(
@@ -1965,6 +2065,20 @@ QPointF CanvasWidget::clampedSelectionDelta(const QPointF &delta) const
     const Layer *layer = document.layer(m_selectionLayer);
     if (!layer || m_selectedStrokes.isEmpty()) {
         return delta;
+    }
+    if (!m_selectionMask.isNull() && !m_selectionOutline.isEmpty()) {
+        const QRectF bounds = m_selectionOutline.boundingRect();
+        return QPointF(
+            std::clamp(
+                delta.x(),
+                -bounds.left(),
+                static_cast<qreal>(document.size.width())
+                    - bounds.right()),
+            std::clamp(
+                delta.y(),
+                -bounds.top(),
+                static_cast<qreal>(document.size.height())
+                    - bounds.bottom()));
     }
     qreal minX = document.size.width();
     qreal minY = document.size.height();

@@ -1,6 +1,7 @@
 #include "ui/BrushPopoverPanel.hpp"
 
 #include "brush/BrushPreset.hpp"
+#include "document/DocumentLimits.hpp"
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasWidget.hpp"
@@ -8,6 +9,10 @@
 #include <QButtonGroup>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QLabel>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -98,6 +103,67 @@ BrushPopoverPanel::BrushPopoverPanel(
     layout->addWidget(m_stack);
     layout->addWidget(
         new BrushSizeRow(canvas, QStringLiteral("brushSize"), this));
+
+    auto *roughnessRow = new QWidget(this);
+    auto *roughnessLayout = new QHBoxLayout(roughnessRow);
+    roughnessLayout->setContentsMargins(0, 0, 0, 0);
+    roughnessLayout->setSpacing(8);
+
+    auto *roughnessLabel = new QLabel(tr("ROUGHNESS"), roughnessRow);
+    roughnessLabel->setProperty("fieldLabel", true);
+    roughnessLayout->addWidget(roughnessLabel);
+
+    const int maximumPercent = static_cast<int>(
+        DocumentLimits::maximumBrushWobbleScale * 100.0);
+
+    auto *roughnessSlider = new QSlider(Qt::Horizontal, roughnessRow);
+    roughnessSlider->setObjectName(QStringLiteral("brushRoughnessSlider"));
+    roughnessSlider->setRange(0, maximumPercent);
+    roughnessSlider->setMinimumWidth(140);
+    roughnessSlider->setToolTip(tr("Line roughness"));
+    roughnessSlider->setAccessibleName(tr("Line roughness"));
+    roughnessLayout->addWidget(roughnessSlider, 1);
+
+    auto *roughnessSpin = new QSpinBox(roughnessRow);
+    roughnessSpin->setObjectName(QStringLiteral("brushRoughnessSpin"));
+    roughnessSpin->setRange(0, maximumPercent);
+    roughnessSpin->setSuffix(tr("%"));
+    roughnessSpin->setAccessibleName(tr("Line roughness"));
+    roughnessLabel->setBuddy(roughnessSpin);
+    roughnessLayout->addWidget(roughnessSpin);
+
+    const int initialRoughness =
+        qRound(canvas->brushRoughness() * 100.0);
+    roughnessSpin->setValue(initialRoughness);
+    roughnessSlider->setValue(initialRoughness);
+
+    connect(
+        roughnessSpin,
+        &QSpinBox::valueChanged,
+        this,
+        [this, roughnessSlider](int value) {
+            m_canvas->setBrushRoughness(value / 100.0);
+            QSignalBlocker blocker(roughnessSlider);
+            roughnessSlider->setValue(value);
+        });
+    connect(
+        roughnessSlider,
+        &QSlider::valueChanged,
+        roughnessSpin,
+        qOverload<int>(&QSpinBox::setValue));
+    connect(
+        canvas,
+        &CanvasWidget::brushRoughnessChanged,
+        this,
+        [roughnessSpin, roughnessSlider](qreal roughness) {
+            const int value = qRound(roughness * 100.0);
+            QSignalBlocker spinBlocker(roughnessSpin);
+            QSignalBlocker sliderBlocker(roughnessSlider);
+            roughnessSpin->setValue(value);
+            roughnessSlider->setValue(value);
+        });
+
+    layout->addWidget(roughnessRow);
 
     m_previewTimer.setInterval(120);
     connect(
