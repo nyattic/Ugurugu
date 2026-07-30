@@ -88,7 +88,7 @@ jobs:
           application="$RUNNER_TEMP/install/WagleWaglePaint.app"
           failed=0
           declared=$(plutil -extract LSMinimumSystemVersion raw -o - "$application/Contents/Info.plist")
-          if [[ "$declared" != "13.0" ]]; then
+          if [[ "$declared" != "14.0" ]]; then
             echo "Info.plist declares macOS $declared"
             failed=1
           fi
@@ -100,7 +100,7 @@ jobs:
               major="${minimum%%.*}"
               remainder="${minimum#*.}"
               minor="${remainder%%.*}"
-              if [[ -n "$major" && ( "$major" -gt 13 || ( "$major" -eq 13 && "$minor" -gt 0 ) ) ]]; then
+              if [[ -n "$major" && ( "$major" -gt 14 || ( "$major" -eq 14 && "$minor" -gt 0 ) ) ]]; then
                 echo "$binary requires macOS $minimum"
                 failed=1
               fi

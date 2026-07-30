@@ -41,6 +41,9 @@ set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "" FORCE)
 set(SPDLOG_FMT_EXTERNAL_HO OFF CACHE BOOL "" FORCE)
+if(WIN32)
+    set(SPDLOG_WCHAR_FILENAMES ON CACHE BOOL "" FORCE)
+endif()
 FetchContent_Declare(
     spdlog
     URL
@@ -169,13 +172,6 @@ endif()
 
 add_library(wobblepaint_core STATIC ${WOBBLEPAINT_CORE_SOURCES})
 target_include_directories(wobblepaint_core PUBLIC src)
-if(WIN32)
-    target_compile_definitions(
-        wobblepaint_core
-        PUBLIC
-        SPDLOG_WCHAR_FILENAMES
-    )
-endif()
 target_link_libraries(
     wobblepaint_core
     PUBLIC
@@ -334,6 +330,7 @@ if(APPLE)
         WOBBLEPAINT_DEPLOY_TOOL_OPTIONS
         "-libpath=${WOBBLEPAINT_QT_PREFIX}/lib"
         "-libpath=${sparkle_SOURCE_DIR}"
+        "-codesign=-"
     )
     set(WOBBLEPAINT_DEPLOY_PLUGIN_OPTIONS NO_PLUGINS)
     set(
