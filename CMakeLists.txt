@@ -109,6 +109,8 @@ function(wobblepaint_target_defaults target)
             /permissive-
             /Zc:__cplusplus
             /utf-8
+            /external:anglebrackets
+            /external:W0
         )
     else()
         target_compile_options(
