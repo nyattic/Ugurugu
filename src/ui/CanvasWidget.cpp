@@ -10,6 +10,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPathStroker>
 #include <QPointer>
 #include <QPolygonF>
 #include <QRandomGenerator>
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace wobble {
@@ -380,13 +382,16 @@ void CanvasWidget::paintEvent(QPaintEvent *)
 
     painter.save();
     painter.setTransform(transform);
+    const QSize renderSize = previewRenderSize();
     QImage displayedFrame;
     if (m_drawing && !m_activeStroke.points.isEmpty()) {
         Document previewDocument = document;
         if (Layer *layer = previewDocument.layer(m_activeStrokeLayer)) {
             layer->strokes.append(m_activeStroke);
-            displayedFrame =
-                RenderEngine::render(previewDocument, m_currentFrame);
+            displayedFrame = RenderEngine::renderScaled(
+                previewDocument,
+                m_currentFrame,
+                renderSize);
         }
     } else if (m_movingSelection
                && !m_selectedStrokes.isEmpty()
@@ -401,14 +406,18 @@ void CanvasWidget::paintEvent(QPaintEvent *)
                     }
                 }
             }
-            displayedFrame =
-                RenderEngine::render(previewDocument, m_currentFrame);
+            displayedFrame = RenderEngine::renderScaled(
+                previewDocument,
+                m_currentFrame,
+                renderSize);
         }
     }
     if (displayedFrame.isNull()) {
         displayedFrame = frameImage(m_currentFrame);
     }
-    painter.drawImage(QPointF(0.0, 0.0), displayedFrame);
+    painter.drawImage(
+        QRectF(QPointF(0.0, 0.0), QSizeF(document.size)),
+        displayedFrame);
     painter.restore();
 
     painter.setPen(QPen(Theme::canvasBorder(), 1.0));
@@ -752,10 +761,18 @@ QPointF CanvasWidget::clampedDocumentPosition(const QPointF &position) const
 
 QImage CanvasWidget::frameImage(int frame)
 {
+    const QSize renderSize = previewRenderSize();
+    if (renderSize != m_cachedRenderSize) {
+        m_frameCache.clear();
+        m_cachedRenderSize = renderSize;
+    }
     if (QImage *cached = m_frameCache.object(frame)) {
         return *cached;
     }
-    QImage image = RenderEngine::render(m_controller->document(), frame);
+    QImage image = RenderEngine::renderScaled(
+        m_controller->document(),
+        frame,
+        renderSize);
     if (image.isNull()) {
         return {};
     }
@@ -766,9 +783,31 @@ QImage CanvasWidget::frameImage(int frame)
     return image;
 }
 
+QSize CanvasWidget::previewRenderSize() const
+{
+    const QSize documentSize = m_controller->document().size;
+    if (!documentSize.isValid()) {
+        return {};
+    }
+    constexpr qreal maximumPreviewEdge = 4096.0;
+    const qreal displayScale =
+        std::abs(documentTransform().m11()) * devicePixelRatioF();
+    const qreal edgeScale = std::min(
+        maximumPreviewEdge / documentSize.width(),
+        maximumPreviewEdge / documentSize.height());
+    const qreal scale = std::clamp(
+        std::min(displayScale, edgeScale),
+        1.0 / std::max(documentSize.width(), documentSize.height()),
+        1.0);
+    return QSize(
+        std::max(1, qCeil(documentSize.width() * scale)),
+        std::max(1, qCeil(documentSize.height() * scale)));
+}
+
 void CanvasWidget::invalidateFrames()
 {
     m_frameCache.clear();
+    m_cachedRenderSize = {};
     const int frames = std::max(1, m_controller->document().animationFrames);
     m_currentFrame %= frames;
     updateTimerInterval();
@@ -1034,8 +1073,10 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
     SelectionState state;
     state.mask = std::move(mask);
     state.layer = document.activeLayerId;
+    QPainterPath selectionArea = outlinePath(state.mask);
+    selectionArea.setFillRule(Qt::OddEvenFill);
     for (const Stroke &stroke : layer->strokes) {
-        const bool inside = std::any_of(
+        bool inside = std::any_of(
             stroke.points.cbegin(),
             stroke.points.cend(),
             [&state](const StrokePoint &point) {
@@ -1045,6 +1086,38 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
                 return state.mask.rect().contains(pixel)
                     && state.mask.constScanLine(pixel.y())[pixel.x()] >= 128;
             });
+        if (!inside && stroke.mode != StrokeMode::Fill) {
+            const QPainterPath path = RenderEngine::strokePath(
+                stroke,
+                m_currentFrame,
+                document.animationFrames,
+                document.wobbleAmount);
+            if (path.elementCount() == 1) {
+                const QPainterPath::Element point = path.elementAt(0);
+                QPainterPath dot;
+                const qreal radius = std::max(
+                    0.5,
+                    stroke.width * 0.5 + document.wobbleAmount);
+                dot.addEllipse(QPointF(point.x, point.y), radius, radius);
+                inside = selectionArea.intersects(dot);
+            } else if (!path.isEmpty()) {
+                qreal visualWidth = stroke.width;
+                if (stroke.brush.engine == BrushEngine::Spray) {
+                    visualWidth *= std::max(
+                        1.0,
+                        stroke.brush.scatter
+                            + stroke.brush.particleSize);
+                }
+                QPainterPathStroker stroker;
+                stroker.setCapStyle(Qt::RoundCap);
+                stroker.setJoinStyle(Qt::RoundJoin);
+                stroker.setWidth(std::max(
+                    1.0,
+                    visualWidth + document.wobbleAmount * 2.0));
+                inside = selectionArea.intersects(
+                    stroker.createStroke(path));
+            }
+        }
         if (inside) {
             state.strokes.insert(stroke.id);
         }
@@ -1055,6 +1128,45 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
 CanvasWidget::SelectionState CanvasWidget::currentSelectionState() const
 {
     return {m_selectedStrokes, m_selectionLayer, m_selectionMask};
+}
+
+CanvasWidget::SelectionSnapshot CanvasWidget::selectionSnapshot(
+    const SelectionState &state) const
+{
+    SelectionSnapshot snapshot;
+    snapshot.strokes = state.strokes;
+    snapshot.layer = state.layer;
+    if (!state.mask.isNull()) {
+        snapshot.maskSize = state.mask.size();
+        const QByteArray bytes(
+            reinterpret_cast<const char *>(state.mask.constBits()),
+            state.mask.sizeInBytes());
+        snapshot.compressedMask = qCompress(bytes, 6);
+    }
+    return snapshot;
+}
+
+CanvasWidget::SelectionState CanvasWidget::selectionStateFromSnapshot(
+    const SelectionSnapshot &snapshot) const
+{
+    SelectionState state;
+    state.strokes = snapshot.strokes;
+    state.layer = snapshot.layer;
+    if (!snapshot.maskSize.isValid()) {
+        return state;
+    }
+    QImage mask(snapshot.maskSize, QImage::Format_Grayscale8);
+    const QByteArray bytes = qUncompress(snapshot.compressedMask);
+    if (mask.isNull()
+        || bytes.size() != mask.sizeInBytes()) {
+        return {};
+    }
+    std::memcpy(
+        mask.bits(),
+        bytes.constData(),
+        static_cast<std::size_t>(bytes.size()));
+    state.mask = std::move(mask);
+    return state;
 }
 
 void CanvasWidget::restoreSelectionState(const SelectionState &state)
@@ -1102,17 +1214,23 @@ void CanvasWidget::pushSelectionChange(
         return;
     }
 
+    const SelectionSnapshot previousSnapshot =
+        selectionSnapshot(previousSelection);
+    const SelectionSnapshot nextSnapshot =
+        selectionSnapshot(nextSelection);
     QPointer<CanvasWidget> canvas(this);
     m_controller->pushTransientCommand(
         text,
-        [canvas, nextSelection]() {
+        [canvas, nextSnapshot]() {
             if (canvas) {
-                canvas->restoreSelectionState(nextSelection);
+                canvas->restoreSelectionState(
+                    canvas->selectionStateFromSnapshot(nextSnapshot));
             }
         },
-        [canvas, previousSelection]() {
+        [canvas, previousSnapshot]() {
             if (canvas) {
-                canvas->restoreSelectionState(previousSelection);
+                canvas->restoreSelectionState(
+                    canvas->selectionStateFromSnapshot(previousSnapshot));
             }
         });
 }

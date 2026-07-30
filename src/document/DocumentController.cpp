@@ -142,6 +142,7 @@ DocumentController::DocumentController(QObject *parent)
     : QObject(parent)
     , m_document(Document::createDefault())
 {
+    m_undoStack.setUndoLimit(64);
     m_undoStack.setClean();
 }
 
@@ -190,6 +191,7 @@ void DocumentController::newDocument(const QSize &size)
     m_savedContentRevision = 0;
     m_nextContentRevision = 0;
     emit documentChanged();
+    emit layerThumbnailsReset();
     emit activeLayerChanged(m_document.activeLayerId);
     if (wasModified) {
         emit modifiedChanged(false);
@@ -207,9 +209,27 @@ void DocumentController::loadDocument(Document document)
     m_savedContentRevision = 0;
     m_nextContentRevision = 0;
     emit documentChanged();
+    emit layerThumbnailsReset();
     emit activeLayerChanged(m_document.activeLayerId);
     if (wasModified) {
         emit modifiedChanged(false);
+    }
+}
+
+void DocumentController::loadRecoveredDocument(Document document)
+{
+    const bool wasModified = isModified();
+    m_document = std::move(document);
+    ensureActiveLayer();
+    m_undoStack.clear();
+    m_currentContentRevision = 1;
+    m_savedContentRevision = 0;
+    m_nextContentRevision = 1;
+    emit documentChanged();
+    emit layerThumbnailsReset();
+    emit activeLayerChanged(m_document.activeLayerId);
+    if (!wasModified) {
+        emit modifiedChanged(true);
     }
 }
 
@@ -283,6 +303,7 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
         if (Layer *target = m_document.layer(layerId)) {
             target->strokes.append(stroke);
             notifyDocumentChanged();
+            emit layerThumbnailChanged(layerId);
         }
     };
     auto undoAction = [this, layerId, strokeId]() {
@@ -291,6 +312,7 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
                 if (layer->strokes[index].id == strokeId) {
                     layer->strokes.removeAt(index);
                     notifyDocumentChanged();
+                    emit layerThumbnailChanged(layerId);
                     return;
                 }
             }
@@ -350,6 +372,7 @@ void DocumentController::translateStrokes(
                 }
             }
             notifyDocumentChanged();
+            emit layerThumbnailChanged(layerId);
             emit strokesTranslated(layerId, movedStrokes, offset);
         }
     };
@@ -385,6 +408,7 @@ void DocumentController::removeStrokes(
                 return requested.contains(stroke.id);
             });
             notifyDocumentChanged();
+            emit layerThumbnailChanged(layerId);
         }
     };
     auto undoAction = [this, layerId, removed]() {
@@ -398,6 +422,7 @@ void DocumentController::removeStrokes(
                     entry.second);
             }
             notifyDocumentChanged();
+            emit layerThumbnailChanged(layerId);
         }
     };
     pushDocumentCommand(
@@ -424,6 +449,7 @@ void DocumentController::addLayer()
         m_document.layers.insert(index, layer);
         m_document.activeLayerId = layerId;
         notifyDocumentChanged();
+        emit layerThumbnailChanged(layerId);
         emit activeLayerChanged(layerId);
     };
     auto undoAction = [this, layerId, previousActive]() {
@@ -434,6 +460,7 @@ void DocumentController::addLayer()
         m_document.activeLayerId = previousActive;
         ensureActiveLayer();
         notifyDocumentChanged();
+        emit layerThumbnailChanged(layerId);
         emit activeLayerChanged(m_document.activeLayerId);
     };
     pushDocumentCommand(
@@ -486,6 +513,7 @@ void DocumentController::duplicateLayer(const QUuid &id)
             copy);
         m_document.activeLayerId = copyId;
         notifyDocumentChanged();
+        emit layerThumbnailChanged(copyId);
         emit activeLayerChanged(copyId);
     };
     auto undoAction = [this, copyId, previousActive]() {
@@ -496,6 +524,7 @@ void DocumentController::duplicateLayer(const QUuid &id)
         m_document.activeLayerId = previousActive;
         ensureActiveLayer();
         notifyDocumentChanged();
+        emit layerThumbnailChanged(copyId);
         emit activeLayerChanged(m_document.activeLayerId);
     };
     pushDocumentCommand(
@@ -522,6 +551,7 @@ void DocumentController::removeLayer(const QUuid &id)
         m_document.activeLayerId = nextActive;
         ensureActiveLayer();
         notifyDocumentChanged();
+        emit layerThumbnailChanged(id);
         emit activeLayerChanged(m_document.activeLayerId);
     };
     auto undoAction = [this, removedLayer, index, previousActive]() {
@@ -534,6 +564,7 @@ void DocumentController::removeLayer(const QUuid &id)
         m_document.activeLayerId = previousActive;
         ensureActiveLayer();
         notifyDocumentChanged();
+        emit layerThumbnailChanged(removedLayer.id);
         emit activeLayerChanged(m_document.activeLayerId);
     };
     pushDocumentCommand(
@@ -553,12 +584,14 @@ void DocumentController::clearLayer(const QUuid &id)
         if (Layer *target = m_document.layer(id)) {
             target->strokes.clear();
             notifyDocumentChanged();
+            emit layerThumbnailChanged(id);
         }
     };
     auto undoAction = [this, id, previousStrokes]() {
         if (Layer *target = m_document.layer(id)) {
             target->strokes = previousStrokes;
             notifyDocumentChanged();
+            emit layerThumbnailChanged(id);
         }
     };
     pushDocumentCommand(

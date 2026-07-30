@@ -24,13 +24,16 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: Install dependencies
-        run: brew install cmake ninja qt spdlog fmt
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          host: mac
+          target: desktop
+          cache: true
 
       - name: Configure
-        run: |
-          export CMAKE_PREFIX_PATH="$(brew --prefix qt);$(brew --prefix spdlog);$(brew --prefix fmt)"
-          cmake --preset macos-release
+        run: cmake --preset macos-release "-DCMAKE_PREFIX_PATH=$QT_ROOT_DIR"
 
       - name: Build
         run: cmake --build --preset macos-release --parallel
@@ -45,6 +48,10 @@ jobs:
           version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           architecture=$(uname -m)
           release_tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${release_tag}" != "v${version}" ]]; then
+            echo "Release tag ${release_tag} does not match project version ${version}"
+            exit 1
+          fi
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
             release_tag="v${version}"
           fi
@@ -76,6 +83,35 @@ jobs:
           cp "$RUNNER_TEMP/sparkle-updates/$archive" artifacts/
           cp "$RUNNER_TEMP/sparkle-updates/appcast.xml" artifacts/
 
+      - name: Verify macOS compatibility
+        run: |
+          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          failed=0
+          declared=$(plutil -extract LSMinimumSystemVersion raw -o - "$application/Contents/Info.plist")
+          if [[ "$declared" != "13.0" ]]; then
+            echo "Info.plist declares macOS $declared"
+            failed=1
+          fi
+          while IFS= read -r binary; do
+            if ! file "$binary" | grep -q "Mach-O"; then
+              continue
+            fi
+            while IFS= read -r minimum; do
+              major="${minimum%%.*}"
+              remainder="${minimum#*.}"
+              minor="${remainder%%.*}"
+              if [[ -n "$major" && ( "$major" -gt 13 || ( "$major" -eq 13 && "$minor" -gt 0 ) ) ]]; then
+                echo "$binary requires macOS $minimum"
+                failed=1
+              fi
+            done < <(otool -l "$binary" | awk '$1 == "minos" { print $2 }')
+            if otool -L "$binary" | grep -E -q '/opt/homebrew|/usr/local/Cellar'; then
+              echo "$binary contains a Homebrew runtime dependency"
+              failed=1
+            fi
+          done < <(find "$application" -type f)
+          exit "$failed"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: macos-release
@@ -101,19 +137,16 @@ jobs:
           arch: win64_msvc2022_64
           cache: true
 
-      - name: Install dependencies
+      - name: Install Velopack
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install spdlog:x64-windows fmt:x64-windows
           dotnet tool install --global vpk --version $env:VELOPACK_VERSION
 
       - name: Configure
         shell: pwsh
         run: |
           cmake --preset windows-release `
-            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" `
-            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            "-DVCPKG_TARGET_TRIPLET=x64-windows"
+            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
 
       - name: Build
         shell: pwsh
@@ -134,6 +167,9 @@ jobs:
             throw "Could not determine application version"
           }
           $version = $Matches[1]
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Release tag $env:GITHUB_REF_NAME does not match project version $version"
+          }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           vpk pack `
             --packId WagleWaglePaint `

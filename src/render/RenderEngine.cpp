@@ -656,16 +656,20 @@ QImage RenderEngine::fillRegionMask(const QImage &image, const QPoint &seed)
 
 namespace {
 
-void applyFillStroke(QImage &layerImage, const Stroke &stroke)
+void applyFillStroke(
+    QImage &layerImage,
+    const Stroke &stroke,
+    qreal horizontalScale,
+    qreal verticalScale)
 {
     const QPointF seedPosition = stroke.points.first().position;
     const QPoint seed(
         std::clamp(
-            static_cast<int>(seedPosition.x()),
+            static_cast<int>(seedPosition.x() * horizontalScale),
             0,
             layerImage.width() - 1),
         std::clamp(
-            static_cast<int>(seedPosition.y()),
+            static_cast<int>(seedPosition.y() * verticalScale),
             0,
             layerImage.height() - 1));
     const QImage mask = RenderEngine::fillRegionMask(layerImage, seed);
@@ -711,19 +715,24 @@ void applyFillStroke(QImage &layerImage, const Stroke &stroke)
     }
 }
 
-}
-
-QImage RenderEngine::render(const Document &document, int frameIndex)
+QImage renderAtSize(
+    const Document &document,
+    int frameIndex,
+    const QSize &outputSize)
 {
-    if (!document.size.isValid()) {
+    if (!document.size.isValid() || !outputSize.isValid()) {
         return {};
     }
 
-    QImage result(document.size, QImage::Format_ARGB32_Premultiplied);
+    QImage result(outputSize, QImage::Format_ARGB32_Premultiplied);
     if (result.isNull()) {
         return {};
     }
     result.fill(document.background);
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
 
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame = ((frameIndex % frameCount) + frameCount) % frameCount;
@@ -738,13 +747,14 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
             continue;
         }
 
-        QImage layerImage(document.size, QImage::Format_ARGB32_Premultiplied);
+        QImage layerImage(outputSize, QImage::Format_ARGB32_Premultiplied);
         if (layerImage.isNull()) {
             return {};
         }
         layerImage.fill(Qt::transparent);
         QPainter painter(&layerImage);
         painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.scale(horizontalScale, verticalScale);
 
         for (const Stroke &stroke : layer.strokes) {
             if (stroke.points.isEmpty()
@@ -754,9 +764,14 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
 
             if (stroke.mode == StrokeMode::Fill) {
                 painter.end();
-                applyFillStroke(layerImage, stroke);
+                applyFillStroke(
+                    layerImage,
+                    stroke,
+                    horizontalScale,
+                    verticalScale);
                 painter.begin(&layerImage);
                 painter.setRenderHint(QPainter::Antialiasing, false);
+                painter.scale(horizontalScale, verticalScale);
                 continue;
             }
 
@@ -846,6 +861,21 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
     }
 
     return result;
+}
+
+}
+
+QImage RenderEngine::render(const Document &document, int frameIndex)
+{
+    return renderAtSize(document, frameIndex, document.size);
+}
+
+QImage RenderEngine::renderScaled(
+    const Document &document,
+    int frameIndex,
+    const QSize &outputSize)
+{
+    return renderAtSize(document, frameIndex, outputSize);
 }
 
 QPainterPath RenderEngine::strokePath(

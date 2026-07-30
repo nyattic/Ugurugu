@@ -2,6 +2,7 @@
 
 #include "document/DocumentController.hpp"
 
+#include <QByteArray>
 #include <QCache>
 #include <QColor>
 #include <QHash>
@@ -87,9 +88,17 @@ private:
         QImage mask;
     };
 
+    struct SelectionSnapshot {
+        QSet<QUuid> strokes;
+        QUuid layer;
+        QSize maskSize;
+        QByteArray compressedMask;
+    };
+
     QTransform documentTransform() const;
     QPointF mapToDocument(const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
+    QSize previewRenderSize() const;
     QImage frameImage(int frame);
     void invalidateFrames();
     void updateTimerInterval();
@@ -116,6 +125,9 @@ private:
         const SelectionState &previousSelection);
     SelectionState selectionStateForMask(QImage mask) const;
     SelectionState currentSelectionState() const;
+    SelectionSnapshot selectionSnapshot(const SelectionState &state) const;
+    SelectionState selectionStateFromSnapshot(
+        const SelectionSnapshot &snapshot) const;
     void restoreSelectionState(const SelectionState &state);
     void pushSelectionChange(
         const SelectionState &previousSelection,
@@ -151,6 +163,7 @@ private:
     qreal m_zoom = 1.0;
     QPointF m_pan;
     QCache<int, QImage> m_frameCache;
+    QSize m_cachedRenderSize;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;

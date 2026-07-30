@@ -51,14 +51,13 @@ QPixmap renderLayerThumbnail(const Document &document, const Layer &layer)
     visibleLayer.opacity = 1.0;
     single.layers = {visibleLayer};
 
-    const QImage image = RenderEngine::render(single, 0);
+    const QSize renderSize =
+        single.size.scaled(thumbnailRenderSize, Qt::KeepAspectRatio);
+    const QImage image = RenderEngine::renderScaled(single, 0, renderSize);
     if (image.isNull()) {
         return {};
     }
-    QPixmap pixmap = QPixmap::fromImage(image.scaled(
-        thumbnailRenderSize,
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation));
+    QPixmap pixmap = QPixmap::fromImage(image);
     pixmap.setDevicePixelRatio(2.0);
     return pixmap;
 }
@@ -90,7 +89,7 @@ LayerDock::LayerDock(
         &LayerDock::regenerateThumbnails);
 
     rebuild();
-    m_thumbnailTimer.start();
+    scheduleAllThumbnails();
 }
 
 void LayerDock::buildContent()
@@ -304,8 +303,17 @@ void LayerDock::connectControls()
             this,
             [this]() {
                 rebuild();
-                m_thumbnailTimer.start();
             });
+        connect(
+            m_controller,
+            &DocumentController::layerThumbnailChanged,
+            this,
+            &LayerDock::scheduleLayerThumbnail);
+        connect(
+            m_controller,
+            &DocumentController::layerThumbnailsReset,
+            this,
+            &LayerDock::scheduleAllThumbnails);
         connect(
             m_controller,
             &DocumentController::activeLayerChanged,
@@ -403,15 +411,32 @@ void LayerDock::regenerateThumbnails()
 {
     if (!m_controller) {
         m_thumbnails.clear();
+        m_pendingThumbnails.clear();
+        m_regenerateAllThumbnails = false;
         return;
     }
 
     const Document &document = m_controller->document();
-    QHash<QUuid, QPixmap> fresh;
+    QSet<QUuid> existing;
     for (const Layer &layer : document.layers) {
-        fresh.insert(layer.id, renderLayerThumbnail(document, layer));
+        existing.insert(layer.id);
+        if (m_regenerateAllThumbnails
+            || m_pendingThumbnails.contains(layer.id)) {
+            m_thumbnails.insert(
+                layer.id,
+                renderLayerThumbnail(document, layer));
+        }
     }
-    m_thumbnails = fresh;
+    for (auto iterator = m_thumbnails.begin();
+         iterator != m_thumbnails.end();) {
+        if (!existing.contains(iterator.key())) {
+            iterator = m_thumbnails.erase(iterator);
+        } else {
+            ++iterator;
+        }
+    }
+    m_pendingThumbnails.clear();
+    m_regenerateAllThumbnails = false;
 
     QScopedValueRollback syncing(m_syncing, true);
     QSignalBlocker blocker(m_layerList);
@@ -423,6 +448,21 @@ void LayerDock::regenerateThumbnails()
             QVariant::fromValue(m_thumbnails.value(id)));
     }
     m_layerList->viewport()->update();
+}
+
+void LayerDock::scheduleAllThumbnails()
+{
+    m_regenerateAllThumbnails = true;
+    m_pendingThumbnails.clear();
+    m_thumbnailTimer.start();
+}
+
+void LayerDock::scheduleLayerThumbnail(const QUuid &id)
+{
+    if (!id.isNull() && !m_regenerateAllThumbnails) {
+        m_pendingThumbnails.insert(id);
+    }
+    m_thumbnailTimer.start();
 }
 
 void LayerDock::commitOpacity(const QUuid &id, int value)

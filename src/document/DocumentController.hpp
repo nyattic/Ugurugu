@@ -26,6 +26,7 @@ public:
 
     void newDocument(const QSize &size);
     void loadDocument(Document document);
+    void loadRecoveredDocument(Document document);
     void markSaved();
 
     void setActiveLayer(const QUuid &id);
@@ -53,6 +54,8 @@ signals:
     void documentChanged();
     void activeLayerChanged(const QUuid &id);
     void modifiedChanged(bool modified);
+    void layerThumbnailChanged(const QUuid &id);
+    void layerThumbnailsReset();
     void strokesTranslated(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,

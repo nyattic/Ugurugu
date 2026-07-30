@@ -5,11 +5,13 @@
 #include "ui/LayerDock.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "io/DocumentSerializer.hpp"
 
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFile>
 #include <QFileInfo>
 #include <QKeySequenceEdit>
 #include <QLineEdit>
@@ -50,6 +52,31 @@ private:
     QString m_key;
     bool m_existed = false;
     QVariant m_value;
+};
+
+class EnvironmentVariableGuard final
+{
+public:
+    explicit EnvironmentVariableGuard(QByteArray name)
+        : m_name(std::move(name))
+        , m_existed(qEnvironmentVariableIsSet(m_name.constData()))
+        , m_value(qgetenv(m_name.constData()))
+    {
+    }
+
+    ~EnvironmentVariableGuard()
+    {
+        if (m_existed) {
+            qputenv(m_name.constData(), m_value);
+        } else {
+            qunsetenv(m_name.constData());
+        }
+    }
+
+private:
+    QByteArray m_name;
+    bool m_existed = false;
+    QByteArray m_value;
 };
 
 class UiTests final : public QObject
@@ -313,6 +340,113 @@ private slots:
         redoAction->trigger();
         QTRY_VERIFY(canvas->hasSelection());
         QVERIFY(!window.isWindowModified());
+    }
+
+    void selectsAStrokeCrossingTheLasso()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(undoAction);
+
+        const QPoint center = canvas->rect().center();
+        const QPoint strokeStart = center - QPoint(150, 0);
+        const QPoint strokeEnd = center + QPoint(150, 0);
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            strokeStart);
+        QTest::mouseMove(canvas, strokeEnd, 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            strokeEnd);
+        QTRY_VERIFY(window.isWindowModified());
+
+        lassoAction->trigger();
+        const QPoint topLeft = center - QPoint(30, 30);
+        const QPoint topRight = center + QPoint(30, -30);
+        const QPoint bottomRight = center + QPoint(30, 30);
+        const QPoint bottomLeft = center + QPoint(-30, 30);
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+        QTest::mouseMove(canvas, topRight, 5);
+        QTest::mouseMove(canvas, bottomRight, 5);
+        QTest::mouseMove(canvas, bottomLeft, 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+        QTest::keyClick(canvas, Qt::Key_Delete);
+
+        undoAction->trigger();
+        undoAction->trigger();
+        QVERIFY(window.isWindowModified());
+        undoAction->trigger();
+        QVERIFY(!window.isWindowModified());
+    }
+
+    void autosavesModifiedWork()
+    {
+        const QString recoveryKey =
+            QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir recoveryDirectory;
+        QVERIFY(recoveryDirectory.isValid());
+        const QString recoveryPath = recoveryDirectory.filePath(
+            QStringLiteral("recovery.wagle"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            recoveryPath.toUtf8());
+
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(40, 0));
+        QTest::mouseMove(canvas, center + QPoint(40, 0), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center + QPoint(40, 0));
+        QTRY_VERIFY(window.isWindowModified());
+
+        QEvent deactivate(QEvent::ApplicationDeactivate);
+        QApplication::sendEvent(qApp, &deactivate);
+        QVERIFY(QFileInfo::exists(recoveryPath));
+
+        QString error;
+        const std::optional<Document> recovered =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(recovered.has_value(), qPrintable(error));
+        QCOMPARE(recovered->layers.first().strokes.size(), 1);
+        QFile::remove(recoveryPath);
     }
 
     void globalPanModifierPreservesTextInput()

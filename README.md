@@ -59,6 +59,7 @@ necessary.
 - Adjustable wobble strength, frame count, and FPS
 - Looping GIF export and current-frame PNG export
 - `.wagle` project files with undo and redo
+- Automatic recovery of unsaved work after an interrupted session
 - Persistent recent colors and a configurable default save folder
 - Customizable shortcuts and English or Korean interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows

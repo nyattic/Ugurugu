@@ -138,6 +138,8 @@ int main(int argc, char *argv[])
             const QString filePath =
                 QFileInfo(application.arguments().at(1)).absoluteFilePath();
             window.openFile(filePath);
+        } else {
+            window.offerRecovery();
         }
         window.show();
         result = application.exec();

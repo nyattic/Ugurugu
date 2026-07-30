@@ -4,6 +4,7 @@
 
 #include <QList>
 #include <QMainWindow>
+#include <QTimer>
 
 class QAction;
 class QCloseEvent;
@@ -25,6 +26,7 @@ class MainWindow final : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     bool openFile(const QString &filePath);
+    bool offerRecovery();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -42,6 +44,9 @@ private:
     bool save();
     bool saveAs();
     bool saveToFile(const QString &filePath);
+    void writeAutosave();
+    void clearAutosave();
+    QString autosavePath() const;
     void newDocument();
     void chooseOpenFile();
     void exportGif();
@@ -68,6 +73,8 @@ private:
     ColorSwatchRow *m_swatchRow = nullptr;
     QLabel *m_pointerLabel = nullptr;
     QLabel *m_zoomLabel = nullptr;
+    QTimer m_autosaveTimer;
+    bool m_autosavePending = false;
 };
 
 }

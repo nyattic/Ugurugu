@@ -68,6 +68,28 @@ private slots:
         QVERIFY(first == second);
     }
 
+    void rendersScaledPreview()
+    {
+        const Document document = animatedDocument();
+        const QSize previewSize(48, 36);
+        const QImage preview =
+            RenderEngine::renderScaled(document, 5, previewSize);
+
+        QVERIFY(!preview.isNull());
+        QCOMPARE(preview.size(), previewSize);
+        bool containsPaint = false;
+        for (int y = 0; y < preview.height() && !containsPaint; ++y) {
+            for (int x = 0; x < preview.width(); ++x) {
+                if (preview.pixelColor(x, y) != document.background) {
+                    containsPaint = true;
+                    break;
+                }
+            }
+        }
+        QVERIFY(containsPaint);
+        QVERIFY(RenderEngine::renderScaled(document, 0, {}).isNull());
+    }
+
     void loopsAtFrameCount()
     {
         const Document document = animatedDocument();

@@ -1,21 +1,22 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(WagleWaglePaint VERSION 0.2.2 LANGUAGES CXX)
-
-include(FetchContent)
-if(WIN32)
-    set(CMAKE_INSTALL_BINDIR ".")
-endif()
-include(GNUInstallDirs)
-
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(
         CMAKE_OSX_DEPLOYMENT_TARGET
         "13.0"
         CACHE STRING
         "Minimum supported macOS version"
+        FORCE
     )
 endif()
+
+project(WagleWaglePaint VERSION 0.3.0 LANGUAGES CXX)
+
+include(FetchContent)
+if(WIN32)
+    set(CMAKE_INSTALL_BINDIR ".")
+endif()
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,8 +34,22 @@ find_package(
     Widgets
     LinguistTools
 )
-find_package(spdlog 1.13 REQUIRED CONFIG)
-find_package(fmt REQUIRED CONFIG)
+
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
+set(SPDLOG_FMT_EXTERNAL OFF CACHE BOOL "" FORCE)
+set(SPDLOG_FMT_EXTERNAL_HO OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    spdlog
+    URL
+    "https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.tar.gz"
+    URL_HASH
+    "SHA256=8741753e488a78dd0d0024c980e1fb5b5c85888447e309d9cb9d949bdb52aa3e"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(spdlog)
 
 qt_standard_project_setup()
 
@@ -167,7 +182,7 @@ target_link_libraries(
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
-    spdlog::spdlog_header_only
+    spdlog::spdlog
 )
 wobblepaint_target_defaults(wobblepaint_core)
 
@@ -298,14 +313,6 @@ install(TARGETS WagleWaglePaint
 )
 
 if(WIN32)
-    get_target_property(WOBBLEPAINT_FMT_TARGET_TYPE fmt::fmt TYPE)
-    if(WOBBLEPAINT_FMT_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
-        install(
-            IMPORTED_RUNTIME_ARTIFACTS
-            fmt::fmt
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        )
-    endif()
     install(
         FILES
         "${velopack_SOURCE_DIR}/lib/velopack_libc_win_x64_msvc.dll"

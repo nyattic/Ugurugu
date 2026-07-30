@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QPixmap>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QUuid>
 
@@ -32,6 +33,8 @@ private:
     void rebuild();
     void syncActiveLayer(const QUuid &id);
     void updateControls();
+    void scheduleAllThumbnails();
+    void scheduleLayerThumbnail(const QUuid &id);
     void regenerateThumbnails();
     void commitOpacity(const QUuid &id, int value);
     void handleReorder(int sourceRow, int insertRow);
@@ -48,6 +51,8 @@ private:
     QLabel *m_opacityValue = nullptr;
     QTimer m_thumbnailTimer;
     QHash<QUuid, QPixmap> m_thumbnails;
+    QSet<QUuid> m_pendingThumbnails;
+    bool m_regenerateAllThumbnails = false;
     bool m_syncing = false;
     bool m_opacityDragging = false;
     QUuid m_opacityLayerId;

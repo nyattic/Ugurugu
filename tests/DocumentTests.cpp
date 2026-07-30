@@ -160,6 +160,41 @@ private slots:
         QVERIFY(!controller.isModified());
     }
 
+    void limitsUndoHistory()
+    {
+        DocumentController controller;
+        int value = 0;
+        for (int index = 1; index <= 80; ++index) {
+            controller.pushTransientCommand(
+                QStringLiteral("Transient"),
+                [&value, index]() {
+                    value = index;
+                },
+                [&value, index]() {
+                    value = index - 1;
+                });
+        }
+
+        QCOMPARE(value, 80);
+        QCOMPARE(controller.undoStack()->undoLimit(), 64);
+        QCOMPARE(controller.undoStack()->count(), 64);
+    }
+
+    void marksRecoveredDocumentsAsModified()
+    {
+        DocumentController controller;
+        Document recovered = Document::createDefault(QSize(480, 320));
+        recovered.wobbleAmount = 4.0;
+
+        controller.loadRecoveredDocument(recovered);
+
+        QCOMPARE(controller.document().size, recovered.size);
+        QCOMPARE(controller.document().wobbleAmount, recovered.wobbleAmount);
+        QVERIFY(controller.isModified());
+        controller.markSaved();
+        QVERIFY(!controller.isModified());
+    }
+
     void undoesLayerAdditionAndRemoval()
     {
         DocumentController controller;

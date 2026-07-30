@@ -25,6 +25,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -41,6 +42,7 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
@@ -146,6 +148,13 @@ MainWindow::MainWindow(QWidget *parent)
     createToolBars();
     createStatusBar();
     connectDocument();
+    m_autosaveTimer.setInterval(30000);
+    connect(
+        &m_autosaveTimer,
+        &QTimer::timeout,
+        this,
+        &MainWindow::writeAutosave);
+    m_autosaveTimer.start();
 
     const QSettings settings;
     const bool geometryRestored = restoreGeometry(
@@ -187,10 +196,57 @@ bool MainWindow::openFile(const QString &filePath)
 
     m_controller.loadDocument(*document);
     m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
+    clearAutosave();
     m_canvas->fitToWindow();
     updateWindowTitle();
     statusBar()->showMessage(tr("Opened %1").arg(m_currentFilePath), 4000);
     spdlog::info("Opened project {}", m_currentFilePath.toUtf8().constData());
+    return true;
+}
+
+bool MainWindow::offerRecovery()
+{
+    const QString recoveryPath = autosavePath();
+    if (!QFileInfo::exists(recoveryPath)) {
+        return false;
+    }
+
+    const QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        tr("Recover unsaved work"),
+        tr("WagleWaglePaint found work from a previous session. "
+           "Would you like to recover it?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (choice != QMessageBox::Yes) {
+        clearAutosave();
+        return false;
+    }
+
+    QString error;
+    const std::optional<Document> recovered =
+        DocumentSerializer::load(recoveryPath, &error);
+    if (!recovered) {
+        spdlog::error(
+            "Failed to load recovery file {}: {}",
+            recoveryPath.toUtf8().constData(),
+            error.toUtf8().constData());
+        clearAutosave();
+        QMessageBox::warning(
+            this,
+            tr("Recovery failed"),
+            tr("The recovery file could not be opened.\n\n%1").arg(error));
+        return false;
+    }
+
+    const QSettings settings;
+    m_currentFilePath = settings
+        .value(QStringLiteral("recovery/sourcePath"))
+        .toString();
+    m_controller.loadRecoveredDocument(*recovered);
+    m_canvas->fitToWindow();
+    updateWindowTitle();
+    statusBar()->showMessage(tr("Recovered unsaved work."), 5000);
     return true;
 }
 
@@ -203,6 +259,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("window/state"), saveState());
+    clearAutosave();
     event->accept();
 }
 
@@ -236,6 +293,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         || (event->type() == QEvent::WindowDeactivate
             && watched == this)) {
         m_canvas->setPanModifierActive(false);
+        writeAutosave();
     }
 
     return QMainWindow::eventFilter(watched, event);
@@ -646,11 +704,21 @@ void MainWindow::connectDocument()
 {
     connect(
         &m_controller,
+        &DocumentController::documentChanged,
+        this,
+        [this]() {
+            m_autosavePending = true;
+        });
+    connect(
+        &m_controller,
         &DocumentController::modifiedChanged,
         this,
         [this](bool modified) {
             setWindowModified(modified);
             updateWindowTitle();
+            if (!modified) {
+                clearAutosave();
+            }
         });
 }
 
@@ -754,6 +822,7 @@ bool MainWindow::saveToFile(const QString &filePath)
     }
     m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
     m_controller.markSaved();
+    clearAutosave();
     updateWindowTitle();
     statusBar()->showMessage(tr("Saved %1").arg(m_currentFilePath), 4000);
     spdlog::info("Saved project {}", m_currentFilePath.toUtf8().constData());
@@ -769,11 +838,63 @@ void MainWindow::newDocument()
     if (!size.isValid()) {
         return;
     }
+    clearAutosave();
     m_controller.newDocument(size);
     m_currentFilePath.clear();
     m_canvas->fitToWindow();
     updateWindowTitle();
     spdlog::info("Created {}x{} document", size.width(), size.height());
+}
+
+void MainWindow::writeAutosave()
+{
+    if (!m_controller.isModified() || !m_autosavePending) {
+        return;
+    }
+    const QString filePath = autosavePath();
+    if (!QDir().mkpath(QFileInfo(filePath).absolutePath())) {
+        spdlog::warn(
+            "Could not create the recovery directory {}",
+            QFileInfo(filePath).absolutePath().toUtf8().constData());
+        return;
+    }
+
+    QString error;
+    if (!DocumentSerializer::save(
+            filePath,
+            m_controller.document(),
+            &error)) {
+        spdlog::warn(
+            "Failed to write recovery file {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        return;
+    }
+    QSettings settings;
+    settings.setValue(
+        QStringLiteral("recovery/sourcePath"),
+        m_currentFilePath);
+    m_autosavePending = false;
+}
+
+void MainWindow::clearAutosave()
+{
+    QFile::remove(autosavePath());
+    m_autosavePending = false;
+    QSettings settings;
+    settings.remove(QStringLiteral("recovery/sourcePath"));
+}
+
+QString MainWindow::autosavePath() const
+{
+    const QString configured =
+        qEnvironmentVariable("WAGLEWAGLEPAINT_RECOVERY_PATH");
+    if (!configured.isEmpty()) {
+        return QFileInfo(configured).absoluteFilePath();
+    }
+    return QDir(QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation))
+        .filePath(QStringLiteral("recovery.wagle"));
 }
 
 void MainWindow::chooseOpenFile()

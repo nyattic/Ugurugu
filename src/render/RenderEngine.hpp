@@ -11,6 +11,10 @@ class RenderEngine
 {
 public:
     static QImage render(const Document &document, int frameIndex);
+    static QImage renderScaled(
+        const Document &document,
+        int frameIndex,
+        const QSize &outputSize);
     static QPainterPath strokePath(
         const Stroke &stroke,
         int frameIndex,
