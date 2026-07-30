@@ -24,7 +24,7 @@ Get the newest version from
 | Platform | Supported systems | Download this file |
 | --- | --- | --- |
 | Windows | Windows 10 or later, x64 | `WagleWaglePaint-<version>-Windows-x64-Setup.exe` |
-| macOS | macOS 13 or later, Apple Silicon | `WagleWaglePaint-<version>-macOS-arm64.dmg` |
+| macOS | macOS 14 or later, Apple Silicon | `WagleWaglePaint-<version>-macOS-arm64.dmg` |
 
 The `.zip`, `.nupkg`, `appcast.xml`, and `.json` files on the release
 page are used by the automatic updaters. They are not needed for a
@@ -53,8 +53,10 @@ necessary.
 - 17 built-in pen, marker, airbrush, and spray presets
 - Crisp pixel-edged strokes inspired by hand-drawn animation tools
 - Boiling-line wobble with independently redrawn, fully loopable frames
-- Lasso and auto selection with move, delete, and undo support
-- Paint bucket fills that wobble together with the line art
+- Persistent lasso and auto selection with move, scale, rotate, duplicate,
+  delete, and undo support
+- Selection-aware brush, eraser, and paint bucket edits
+- Resizable canvases that scale existing artwork and brush sizes
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - Adjustable wobble strength, frame count, and FPS
 - Looping GIF export and current-frame PNG export
@@ -82,6 +84,7 @@ Shortcuts**.
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
 | `Ctrl/Cmd+E` | Export an animated GIF |
+| `Ctrl/Cmd+D` | Duplicate the selection |
 | `Ctrl/Cmd+0` | Fit the canvas to the window |
 | `Esc` | Cancel the current stroke or selection |
 

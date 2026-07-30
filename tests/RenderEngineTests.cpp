@@ -256,6 +256,47 @@ private slots:
         QCOMPARE(image.pixelColor(32, 8), QColor(Qt::black));
     }
 
+    void clipsPaintAndFillToSelectionMasks()
+    {
+        QImage clipMask(QSize(64, 64), QImage::Format_Grayscale8);
+        clipMask.fill(0);
+        for (int y = 12; y < 52; ++y) {
+            std::fill_n(clipMask.scanLine(y) + 12, 20, 255);
+        }
+
+        Document paintDocument =
+            Document::createDefault(QSize(64, 64));
+        paintDocument.wobbleAmount = 0.0;
+        Stroke paint = makeStroke(
+            StrokeMode::Paint,
+            QColor(220, 30, 40),
+            16.0,
+            60,
+            {QPointF(4.0, 32.0), QPointF(60.0, 32.0)});
+        paint.clipMask = clipMask;
+        paintDocument.layers.first().strokes.append(paint);
+        const QImage painted = RenderEngine::render(paintDocument, 0);
+        QCOMPARE(painted.pixelColor(20, 32), paint.color);
+        QCOMPARE(painted.pixelColor(45, 32), QColor(Qt::white));
+
+        Document fillDocument =
+            Document::createDefault(QSize(64, 64));
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(30, 80, 220);
+        fill.points = {{QPointF(20.0, 32.0), 1.0}};
+        fill.clipMask = clipMask;
+        fillDocument.layers.first().strokes.append(fill);
+        const QImage filled = RenderEngine::render(fillDocument, 0);
+        QCOMPARE(filled.pixelColor(20, 32), fill.color);
+        QCOMPARE(filled.pixelColor(45, 32), QColor(Qt::white));
+
+        const QImage scaled =
+            RenderEngine::renderScaled(fillDocument, 0, QSize(32, 32));
+        QCOMPARE(scaled.pixelColor(10, 16), fill.color);
+        QCOMPARE(scaled.pixelColor(22, 16), QColor(Qt::white));
+    }
+
     void usesTabletPressureForWidth()
     {
         auto renderPressure = [](qreal pressure) {

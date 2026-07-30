@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QImage>
 #include <QPointF>
 #include <QSize>
 #include <QString>
@@ -50,6 +51,8 @@ bool isValidBrushSettings(const BrushSettings &settings);
 struct StrokePoint {
     QPointF position;
     qreal pressure = 1.0;
+
+    bool operator==(const StrokePoint &) const = default;
 };
 
 struct Stroke {
@@ -60,6 +63,7 @@ struct Stroke {
     qreal width = 6.0;
     BrushSettings brush;
     QVector<StrokePoint> points;
+    QImage clipMask;
 };
 
 struct Layer {

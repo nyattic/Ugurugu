@@ -11,6 +11,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <algorithm>
 #include <limits>
 
 namespace wobble {
@@ -252,6 +253,11 @@ private slots:
             {QPointF(1.25, 2.5), 0.2},
             {QPointF(30.0, 40.0), 0.9}
         };
+        paint.clipMask = QImage(source.size, QImage::Format_Grayscale8);
+        paint.clipMask.fill(0);
+        for (int y = 10; y < 40; ++y) {
+            std::fill_n(paint.clipMask.scanLine(y) + 20, 60, 255);
+        }
         firstLayer.strokes.append(paint);
 
         Layer secondLayer;
@@ -305,6 +311,7 @@ private slots:
                 QCOMPARE(actualStroke.color, expectedStroke.color);
                 QCOMPARE(actualStroke.width, expectedStroke.width);
                 QVERIFY(actualStroke.brush == expectedStroke.brush);
+                QCOMPARE(actualStroke.clipMask, expectedStroke.clipMask);
                 QCOMPARE(actualStroke.points.size(), expectedStroke.points.size());
 
                 for (int pointIndex = 0;
@@ -335,6 +342,115 @@ private slots:
         QCOMPARE(stroke.brush.tipShape, BrushTipShape::Round);
         QCOMPARE(stroke.brush.sizeDynamics, 0.8);
         QVERIFY(isValidBrushSettings(stroke.brush));
+    }
+
+    void resizesCanvasUndoably()
+    {
+        Document document = Document::createDefault(QSize(100, 50));
+        Stroke stroke;
+        stroke.width = 10.0;
+        stroke.points = {
+            {QPointF(10.0, 10.0), 0.5},
+            {QPointF(90.0, 40.0), 1.0}
+        };
+        stroke.clipMask = QImage(
+            document.size,
+            QImage::Format_Grayscale8);
+        stroke.clipMask.fill(255);
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.resizeCanvas(QSize(200, 100)));
+        QCOMPARE(controller.document().size, QSize(200, 100));
+        const Stroke &resized =
+            controller.document().layers.first().strokes.first();
+        QCOMPARE(resized.points.first().position, QPointF(20.0, 20.0));
+        QCOMPARE(resized.points.last().position, QPointF(180.0, 80.0));
+        QCOMPARE(resized.width, 20.0);
+        QCOMPARE(resized.clipMask.size(), QSize(200, 100));
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().size, QSize(100, 50));
+        const Stroke &restored =
+            controller.document().layers.first().strokes.first();
+        QCOMPARE(restored.points.first().position, QPointF(10.0, 10.0));
+        QCOMPARE(restored.points.last().position, QPointF(90.0, 40.0));
+        QCOMPARE(restored.width, 10.0);
+        QCOMPARE(restored.clipMask, stroke.clipMask);
+
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().size, QSize(200, 100));
+        QVERIFY(!controller.resizeCanvas(QSize(0, 100)));
+    }
+
+    void transformsAndDuplicatesStrokesUndoably()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        Stroke stroke;
+        stroke.width = 6.0;
+        stroke.points = {
+            {QPointF(40.0, 50.0), 1.0},
+            {QPointF(60.0, 50.0), 1.0}
+        };
+        const QUuid strokeId = stroke.id;
+        const QUuid layerId = document.activeLayerId;
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.scaleStrokes(
+            layerId,
+            {strokeId},
+            QPointF(50.0, 50.0),
+            2.0));
+        const Stroke &scaled =
+            controller.document().layers.first().strokes.first();
+        QCOMPARE(scaled.points.first().position, QPointF(30.0, 50.0));
+        QCOMPARE(scaled.points.last().position, QPointF(70.0, 50.0));
+        QCOMPARE(scaled.width, 12.0);
+
+        controller.undoStack()->undo();
+        QCOMPARE(
+            controller.document().layers.first().strokes.first().points,
+            stroke.points);
+
+        QVERIFY(controller.rotateStrokes(
+            layerId,
+            {strokeId},
+            QPointF(50.0, 50.0),
+            90.0));
+        const Stroke &rotated =
+            controller.document().layers.first().strokes.first();
+        QVERIFY(qAbs(rotated.points.first().position.x() - 50.0) < 0.0001);
+        QVERIFY(qAbs(rotated.points.last().position.x() - 50.0) < 0.0001);
+        QVERIFY(qAbs(
+            rotated.points.first().position.y()
+                - rotated.points.last().position.y()) > 19.999);
+
+        controller.undoStack()->undo();
+        QVERIFY(controller.duplicateStrokes(
+            layerId,
+            {strokeId},
+            QPointF(10.0, 5.0)));
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        const Stroke &copy =
+            controller.document().layers.first().strokes.last();
+        QVERIFY(copy.id != strokeId);
+        QCOMPARE(copy.points.first().position, QPointF(50.0, 55.0));
+        QCOMPARE(copy.points.last().position, QPointF(70.0, 55.0));
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+
+        QVERIFY(!controller.scaleStrokes(
+            layerId,
+            {strokeId},
+            QPointF(50.0, 50.0),
+            6.0));
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
     }
 
     void loadsBundledExample()
@@ -542,7 +658,7 @@ private slots:
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version")
             << QByteArrayLiteral(
-                   R"({"schemaVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
+                   R"({"schemaVersion":4,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("unsupported-algorithm")
             << QByteArrayLiteral(
                    R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");

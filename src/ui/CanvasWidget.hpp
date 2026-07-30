@@ -43,6 +43,10 @@ public:
     int currentFrame() const;
     qreal zoom() const;
     bool hasSelection() const;
+    bool hasTransformableSelection() const;
+    bool scaleSelection(qreal factor);
+    bool rotateSelection(qreal degrees);
+    bool duplicateSelection();
 
 public slots:
     void setTool(Tool tool);
@@ -66,6 +70,7 @@ signals:
     void zoomChanged(int percent);
     void pointerPositionChanged(const QPointF &position, bool inside);
     void interactionMessage(const QString &message);
+    void selectionTransformAvailabilityChanged(bool available);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -140,12 +145,28 @@ private:
     void commitSelectionMove();
     void clearSelection();
     void pruneSelection();
+    void transformSelectionOverlay(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QTransform &transform);
     void translateSelectionOverlay(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta);
+    void handleStrokesDuplicated(
+        const QUuid &layerId,
+        const QVector<QUuid> &sourceIds,
+        const QVector<QUuid> &duplicateIds,
+        const QPointF &delta,
+        bool duplicated);
+    void handleCanvasResized(
+        const QSize &previousSize,
+        const QSize &currentSize,
+        const QTransform &transform);
     void rebuildSelectionOutline();
     void updateSelectionAnimation();
+    void notifySelectionTransformAvailability();
+    bool selectedStrokeBounds(QRectF *bounds) const;
     QPointF clampedSelectionDelta(const QPointF &delta) const;
     QImage renderActiveLayerImage() const;
     void drawSelectionOverlay(QPainter &painter, const QTransform &transform);

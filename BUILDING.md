@@ -24,7 +24,7 @@ cmake --install out/build/macos-release --prefix out/install/macos-release
 open out/install/macos-release/WagleWaglePaint.app
 ```
 
-The supported deployment target is macOS 13 or later. Use the official
+The supported deployment target is macOS 14 or later. Use the official
 Qt 6.10 binaries when creating a distributable build; Homebrew Qt may
 have a newer deployment target.
 

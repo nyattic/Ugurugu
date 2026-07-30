@@ -122,23 +122,22 @@
         <translation>애플리케이션에 예기치 않은 오류가 발생했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="65"/>
         <source>New document</source>
-        <translation>새 문서</translation>
+        <translation type="vanished">새 문서</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="74"/>
-        <location filename="../src/ui/MainWindow.cpp" line="75"/>
+        <location filename="../src/ui/MainWindow.cpp" line="85"/>
+        <location filename="../src/ui/MainWindow.cpp" line="86"/>
         <source> px</source>
         <translation> px</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="76"/>
+        <location filename="../src/ui/MainWindow.cpp" line="87"/>
         <source>Width</source>
         <translation>너비</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="77"/>
+        <location filename="../src/ui/MainWindow.cpp" line="88"/>
         <source>Height</source>
         <translation>높이</translation>
     </message>
@@ -166,50 +165,69 @@
 <context>
     <name>wobble::CanvasWidget</name>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="435"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="579"/>
         <source>B Brush · E Eraser · Space Pan · Scroll Zoom · P Play</source>
         <translation>B 브러시 · E 지우개 · Space 이동 · 스크롤 확대/축소 · P 재생</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="850"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1279"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="994"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1435"/>
         <source>The active layer is hidden. Make it visible to draw.</source>
         <translation>활성 레이어가 숨겨져 있습니다. 표시한 후 그릴 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="855"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1284"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="999"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1440"/>
         <source>The active layer opacity is 0%. Increase it to draw.</source>
         <translation>활성 레이어의 불투명도가 0%입니다. 높인 후 그릴 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1197"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1346"/>
         <source>No strokes in the selected area.</source>
         <translation>선택 영역에 선이 없습니다.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/CanvasWidget.cpp" line="1198"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1347"/>
         <source>%n stroke(s) selected. Drag to move, press Delete to remove.</source>
         <translation>
             <numerusform>선 %n개 선택됨 · 드래그로 이동 · Delete 키로 삭제</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1263"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1412"/>
         <source>Click an empty area surrounded by lines to select it.</source>
         <translation>선으로 둘러싸인 빈 영역을 클릭하면 선택됩니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1061"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1430"/>
+        <source>Click inside the selected area to fill it.</source>
+        <translation>선택 영역 안을 클릭해 채우세요.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1209"/>
         <source>Select area</source>
         <translation>영역 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="236"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="674"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1024"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1245"/>
-        <location filename="../src/ui/CanvasWidget.cpp" line="1261"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="322"/>
+        <source>The selection cannot be scaled outside the canvas.</source>
+        <translation>선택 영역을 캔버스 밖으로 확대하거나 축소할 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="344"/>
+        <source>The selection cannot be rotated outside the canvas.</source>
+        <translation>선택 영역을 캔버스 밖으로 회전할 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="362"/>
+        <source>The selection could not be duplicated.</source>
+        <translation>선택 영역을 복제할 수 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="818"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1172"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1394"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="1410"/>
         <source>Deselect</source>
         <translation>선택 해제</translation>
     </message>
@@ -225,82 +243,102 @@
 <context>
     <name>wobble::DocumentController</name>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="322"/>
+        <location filename="../src/document/DocumentController.cpp" line="377"/>
+        <source>Resize canvas</source>
+        <translation>캔버스 크기 변경</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentController.cpp" line="496"/>
         <source>Draw stroke</source>
         <translation>선 그리기</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="380"/>
+        <location filename="../src/document/DocumentController.cpp" line="554"/>
         <source>Move selection</source>
         <translation>선택 이동</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="429"/>
+        <location filename="../src/document/DocumentController.cpp" line="580"/>
+        <source>Scale selection</source>
+        <translation>선택 영역 크기 조절</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentController.cpp" line="604"/>
+        <source>Rotate selection</source>
+        <translation>선택 영역 회전</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentController.cpp" line="718"/>
+        <source>Duplicate selection</source>
+        <translation>선택 영역 복제</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentController.cpp" line="871"/>
         <source>Delete selection</source>
         <translation>선택 삭제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="467"/>
+        <location filename="../src/document/DocumentController.cpp" line="909"/>
         <source>Add layer</source>
         <translation>레이어 추가</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="497"/>
+        <location filename="../src/document/DocumentController.cpp" line="939"/>
         <source>%1 copy</source>
         <translation>%1 사본</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="531"/>
+        <location filename="../src/document/DocumentController.cpp" line="973"/>
         <source>Duplicate layer</source>
         <translation>레이어 복제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="571"/>
+        <location filename="../src/document/DocumentController.cpp" line="1013"/>
         <source>Delete layer</source>
         <translation>레이어 삭제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="598"/>
+        <location filename="../src/document/DocumentController.cpp" line="1040"/>
         <source>Clear layer</source>
         <translation>레이어 비우기</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="627"/>
+        <location filename="../src/document/DocumentController.cpp" line="1069"/>
         <source>Rename layer</source>
         <translation>레이어 이름 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="652"/>
+        <location filename="../src/document/DocumentController.cpp" line="1094"/>
         <source>Toggle layer visibility</source>
         <translation>레이어 표시 전환</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="681"/>
+        <location filename="../src/document/DocumentController.cpp" line="1123"/>
         <source>Change layer opacity</source>
         <translation>레이어 불투명도 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="700"/>
+        <location filename="../src/document/DocumentController.cpp" line="1142"/>
         <source>Move layer</source>
         <translation>레이어 순서 이동</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="723"/>
+        <location filename="../src/document/DocumentController.cpp" line="1165"/>
         <source>Change wobble</source>
         <translation>우글거림 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="744"/>
+        <location filename="../src/document/DocumentController.cpp" line="1186"/>
         <source>Change animation frames</source>
         <translation>프레임 수 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="768"/>
+        <location filename="../src/document/DocumentController.cpp" line="1210"/>
         <source>Change animation speed</source>
         <translation>재생 속도 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="839"/>
+        <location filename="../src/document/DocumentController.cpp" line="1281"/>
         <source>Layer %1</source>
         <translation>레이어 %1</translation>
     </message>
@@ -357,12 +395,12 @@
 <context>
     <name>wobble::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="191"/>
+        <location filename="../src/ui/MainWindow.cpp" line="202"/>
         <source>Open failed</source>
         <translation>열기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="192"/>
+        <location filename="../src/ui/MainWindow.cpp" line="203"/>
         <source>Could not open the project.
 
 %1</source>
@@ -371,27 +409,27 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="201"/>
+        <location filename="../src/ui/MainWindow.cpp" line="212"/>
         <source>Opened %1</source>
         <translation>%1 열림</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="215"/>
+        <location filename="../src/ui/MainWindow.cpp" line="226"/>
         <source>Recover unsaved work</source>
         <translation>저장하지 않은 작업 복구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="216"/>
+        <location filename="../src/ui/MainWindow.cpp" line="227"/>
         <source>WagleWaglePaint found work from a previous session. Would you like to recover it?</source>
         <translation>WagleWaglePaint에서 이전 세션의 작업을 발견했습니다. 복구하시겠습니까?</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="236"/>
+        <location filename="../src/ui/MainWindow.cpp" line="247"/>
         <source>Recovery failed</source>
         <translation>복구 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="237"/>
+        <location filename="../src/ui/MainWindow.cpp" line="248"/>
         <source>The recovery file could not be opened.
 
 %1</source>
@@ -400,229 +438,249 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="248"/>
+        <location filename="../src/ui/MainWindow.cpp" line="259"/>
         <source>Recovered unsaved work.</source>
         <translation>저장하지 않은 작업을 복구했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="315"/>
+        <location filename="../src/ui/MainWindow.cpp" line="326"/>
         <source>&amp;New</source>
         <translation>새로 만들기(&amp;N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="320"/>
+        <location filename="../src/ui/MainWindow.cpp" line="331"/>
         <source>&amp;Open…</source>
         <translation>열기(&amp;O)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="325"/>
+        <location filename="../src/ui/MainWindow.cpp" line="336"/>
         <source>&amp;Save</source>
         <translation>저장(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="332"/>
+        <location filename="../src/ui/MainWindow.cpp" line="343"/>
         <source>Save &amp;As…</source>
         <translation>다른 이름으로 저장(&amp;A)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="339"/>
+        <location filename="../src/ui/MainWindow.cpp" line="350"/>
         <source>Export animated &amp;GIF…</source>
         <translation>움직이는 GIF 내보내기(&amp;G)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="346"/>
+        <location filename="../src/ui/MainWindow.cpp" line="357"/>
         <source>Export current frame as &amp;PNG…</source>
         <translation>현재 프레임 PNG로 내보내기(&amp;P)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="351"/>
+        <location filename="../src/ui/MainWindow.cpp" line="362"/>
         <source>&amp;Quit</source>
         <translation>종료(&amp;Q)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="356"/>
+        <location filename="../src/ui/MainWindow.cpp" line="367"/>
         <source>&amp;Settings…</source>
         <translation>설정(&amp;S)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="359"/>
+        <location filename="../src/ui/MainWindow.cpp" line="370"/>
         <source>Settings</source>
         <translation>설정</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="375"/>
+        <location filename="../src/ui/MainWindow.cpp" line="386"/>
         <source>Check for &amp;Updates…</source>
         <translation>업데이트 확인(&amp;U)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="380"/>
+        <location filename="../src/ui/MainWindow.cpp" line="391"/>
         <source>&amp;Undo</source>
         <translation>실행 취소(&amp;U)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="386"/>
+        <location filename="../src/ui/MainWindow.cpp" line="397"/>
         <source>&amp;Redo</source>
         <translation>다시 실행(&amp;R)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="391"/>
+        <location filename="../src/ui/MainWindow.cpp" line="402"/>
+        <source>Resize canvas…</source>
+        <translation>캔버스 크기 변경…</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="411"/>
+        <source>Scale selection…</source>
+        <translation>선택 영역 크기 조절…</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="422"/>
+        <source>Rotate selection…</source>
+        <translation>선택 영역 회전…</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="434"/>
+        <source>Duplicate selection</source>
+        <translation>선택 영역 복제</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="456"/>
         <source>Clear active layer</source>
         <translation>활성 레이어 비우기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="398"/>
+        <location filename="../src/ui/MainWindow.cpp" line="463"/>
         <source>&amp;Fit canvas</source>
         <translation>캔버스 맞추기(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="404"/>
+        <location filename="../src/ui/MainWindow.cpp" line="469"/>
         <source>&amp;Animate preview</source>
         <translation>미리보기 재생(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="421"/>
+        <location filename="../src/ui/MainWindow.cpp" line="486"/>
         <source>&amp;Brush</source>
         <translation>브러시(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="428"/>
+        <location filename="../src/ui/MainWindow.cpp" line="493"/>
         <source>&amp;Eraser</source>
         <translation>지우개(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="434"/>
+        <location filename="../src/ui/MainWindow.cpp" line="499"/>
         <source>&amp;Lasso select</source>
         <translation>올가미 선택(&amp;L)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="440"/>
+        <location filename="../src/ui/MainWindow.cpp" line="505"/>
         <source>Auto se&amp;lect</source>
         <translation>자동 선택(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="446"/>
+        <location filename="../src/ui/MainWindow.cpp" line="511"/>
         <source>Paint &amp;bucket</source>
         <translation>페인트 통(&amp;G)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="492"/>
+        <location filename="../src/ui/MainWindow.cpp" line="561"/>
         <source>&amp;File</source>
         <translation>파일(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="504"/>
+        <location filename="../src/ui/MainWindow.cpp" line="573"/>
         <source>&amp;Edit</source>
         <translation>편집(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="512"/>
+        <location filename="../src/ui/MainWindow.cpp" line="588"/>
         <source>&amp;View</source>
         <translation>보기(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="518"/>
+        <location filename="../src/ui/MainWindow.cpp" line="594"/>
         <source>&amp;Tools</source>
         <translation>도구(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="525"/>
+        <location filename="../src/ui/MainWindow.cpp" line="601"/>
         <source>&amp;Help</source>
         <translation>도움말(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="533"/>
+        <location filename="../src/ui/MainWindow.cpp" line="609"/>
         <source>Tools</source>
         <translation>도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="595"/>
+        <location filename="../src/ui/MainWindow.cpp" line="671"/>
         <source>Choose brush color</source>
         <translation>브러시 색 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="596"/>
-        <location filename="../src/ui/MainWindow.cpp" line="602"/>
+        <location filename="../src/ui/MainWindow.cpp" line="672"/>
+        <location filename="../src/ui/MainWindow.cpp" line="678"/>
         <source>Brush color</source>
         <translation>브러시 색</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="614"/>
+        <location filename="../src/ui/MainWindow.cpp" line="690"/>
         <source>Quick access</source>
         <translation>빠른 도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="662"/>
+        <location filename="../src/ui/MainWindow.cpp" line="738"/>
         <source>100%</source>
         <translation>100%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="680"/>
+        <location filename="../src/ui/MainWindow.cpp" line="756"/>
         <source>x %1  y %2</source>
         <translation>x %1  y %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="690"/>
+        <location filename="../src/ui/MainWindow.cpp" line="766"/>
         <source>%1%</source>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="699"/>
+        <location filename="../src/ui/MainWindow.cpp" line="775"/>
         <source>Ready</source>
         <translation>준비됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="720"/>
+        <location filename="../src/ui/MainWindow.cpp" line="803"/>
         <source>Untitled</source>
         <translation>제목 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="722"/>
+        <location filename="../src/ui/MainWindow.cpp" line="805"/>
         <source>%1[*] — WagleWaglePaint</source>
         <translation>%1[*] — WagleWaglePaint</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="747"/>
+        <location filename="../src/ui/MainWindow.cpp" line="830"/>
         <source>Unsaved changes</source>
         <translation>저장되지 않은 변경 사항</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="752"/>
+        <location filename="../src/ui/MainWindow.cpp" line="835"/>
         <source>The document has unsaved changes.</source>
         <translation>문서에 저장되지 않은 변경 사항이 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="757"/>
+        <location filename="../src/ui/MainWindow.cpp" line="840"/>
         <source>Save</source>
         <translation>저장</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="760"/>
+        <location filename="../src/ui/MainWindow.cpp" line="843"/>
         <source>Don&apos;t Save</source>
         <translation>저장 안 함</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="762"/>
-        <location filename="../src/ui/MainWindow.cpp" line="937"/>
+        <location filename="../src/ui/MainWindow.cpp" line="845"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1078"/>
         <source>Cancel</source>
         <translation>취소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="792"/>
+        <location filename="../src/ui/MainWindow.cpp" line="875"/>
         <source>Save project</source>
         <translation>프로젝트 저장</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="794"/>
+        <location filename="../src/ui/MainWindow.cpp" line="877"/>
         <source>WagleWaglePaint projects (*.wagle)</source>
         <translation>WagleWaglePaint 프로젝트 (*.wagle)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="811"/>
+        <location filename="../src/ui/MainWindow.cpp" line="894"/>
         <source>Save failed</source>
         <translation>저장 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="812"/>
+        <location filename="../src/ui/MainWindow.cpp" line="895"/>
         <source>Could not save the project.
 
 %1</source>
@@ -631,59 +689,94 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="819"/>
+        <location filename="../src/ui/MainWindow.cpp" line="902"/>
         <source>Saved %1</source>
         <translation>%1 저장됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="889"/>
+        <location filename="../src/ui/MainWindow.cpp" line="915"/>
+        <source>New document</source>
+        <translation>새 문서</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="933"/>
+        <source>Resize canvas</source>
+        <translation>캔버스 크기 변경</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="934"/>
+        <source>Artwork and brush sizes will be scaled to the new canvas.</source>
+        <translation>그림과 브러시 크기가 새 캔버스에 맞게 조절됩니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="946"/>
+        <source>Scale selection</source>
+        <translation>선택 영역 크기 조절</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="947"/>
+        <source>Scale (%)</source>
+        <translation>배율 (%)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="963"/>
+        <source>Rotate selection</source>
+        <translation>선택 영역 회전</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="964"/>
+        <source>Angle (degrees)</source>
+        <translation>각도 (도)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1030"/>
         <source>Open project</source>
         <translation>프로젝트 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="891"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1032"/>
         <source>WagleWaglePaint projects (*.wagle *.wobble);;All files (*)</source>
         <translation>WagleWaglePaint 프로젝트 (*.wagle *.wobble);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="915"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1056"/>
         <source>Animation is too large</source>
         <translation>애니메이션이 너무 큽니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="916"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1057"/>
         <source>This GIF would need about %1 MiB of working memory. Reduce the canvas size or frame count before exporting.</source>
         <translation>이 GIF는 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 캔버스 크기나 프레임 수를 줄여 주세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="925"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1066"/>
         <source>Export animated GIF</source>
         <translation>움직이는 GIF 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="927"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1068"/>
         <source>GIF images (*.gif)</source>
         <translation>GIF 이미지 (*.gif)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="936"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1077"/>
         <source>Rendering animation…</source>
         <translation>애니메이션 렌더링 중…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="958"/>
-        <location filename="../src/ui/MainWindow.cpp" line="983"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1033"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1099"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1124"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1174"/>
         <source>Export failed</source>
         <translation>내보내기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="959"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1100"/>
         <source>A frame could not be rendered. Free some memory or reduce the canvas size and frame count.</source>
         <translation>프레임을 렌더링할 수 없습니다. 메모리를 확보하거나 캔버스 크기와 프레임 수를 줄여 주세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="984"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1125"/>
         <source>Could not export the GIF.
 
 %1</source>
@@ -692,28 +785,28 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="987"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1039"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1180"/>
         <source>Exported %1</source>
         <translation>%1 내보냄</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="999"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1140"/>
         <source>Export current frame</source>
         <translation>현재 프레임 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1001"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1142"/>
         <source>PNG images (*.png)</source>
         <translation>PNG 이미지 (*.png)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1035"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1176"/>
         <source>Could not export the PNG.</source>
         <translation>PNG를 내보낼 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1036"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1177"/>
         <source>Could not export the PNG.
 
 %1</source>

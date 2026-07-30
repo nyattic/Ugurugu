@@ -3,6 +3,7 @@
 #include "document/Document.hpp"
 
 #include <QObject>
+#include <QTransform>
 #include <QUndoStack>
 
 #include <functional>
@@ -28,10 +29,25 @@ public:
     void loadDocument(Document document);
     void loadRecoveredDocument(Document document);
     void markSaved();
+    bool resizeCanvas(const QSize &size);
 
     void setActiveLayer(const QUuid &id);
     void addStroke(const QUuid &layerId, Stroke stroke);
     void translateStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &delta);
+    bool scaleStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &center,
+        qreal factor);
+    bool rotateStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &center,
+        qreal degrees);
+    bool duplicateStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta);
@@ -51,6 +67,7 @@ public:
     void setFramesPerSecond(qreal fps);
 
 signals:
+    void documentReplaced();
     void documentChanged();
     void activeLayerChanged(const QUuid &id);
     void modifiedChanged(bool modified);
@@ -60,8 +77,33 @@ signals:
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta);
+    void canvasResized(
+        const QSize &previousSize,
+        const QSize &currentSize,
+        const QTransform &transform);
+    void strokesTransformed(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QTransform &transform);
+    void strokesDuplicated(
+        const QUuid &layerId,
+        const QVector<QUuid> &sourceIds,
+        const QVector<QUuid> &duplicateIds,
+        const QPointF &delta,
+        bool duplicated);
+    void strokePresenceChanged(
+        const QUuid &layerId,
+        const QUuid &strokeId,
+        const QImage &clipMask,
+        bool present);
 
 private:
+    bool transformStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QTransform &transform,
+        qreal widthScale,
+        const QString &text);
     void pushDocumentCommand(
         QString text,
         std::function<void()> redoAction,

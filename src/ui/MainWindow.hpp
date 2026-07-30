@@ -48,6 +48,9 @@ private:
     void clearAutosave();
     QString autosavePath() const;
     void newDocument();
+    void resizeCanvas();
+    void scaleSelection();
+    void rotateSelection();
     void chooseOpenFile();
     void exportGif();
     void exportPng();
@@ -68,6 +71,9 @@ private:
     QAction *m_lassoAction = nullptr;
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
+    QAction *m_scaleSelectionAction = nullptr;
+    QAction *m_rotateSelectionAction = nullptr;
+    QAction *m_duplicateSelectionAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;

@@ -2,6 +2,7 @@
 
 #include "document/DocumentLimits.hpp"
 
+#include <QHash>
 #include <QPainter>
 #include <QRadialGradient>
 #include <QtMath>
@@ -590,6 +591,32 @@ void drawSprayStroke(
     }
 }
 
+QPainterPath maskPath(const QImage &mask)
+{
+    QPainterPath path;
+    if (mask.isNull()
+        || mask.format() != QImage::Format_Grayscale8) {
+        return path;
+    }
+    for (int y = 0; y < mask.height(); ++y) {
+        const uchar *line = mask.constScanLine(y);
+        int x = 0;
+        while (x < mask.width()) {
+            while (x < mask.width() && line[x] < 128) {
+                ++x;
+            }
+            const int left = x;
+            while (x < mask.width() && line[x] >= 128) {
+                ++x;
+            }
+            if (left < x) {
+                path.addRect(left, y, x - left, 1);
+            }
+        }
+    }
+    return path;
+}
+
 }
 
 QImage RenderEngine::fillRegionMask(const QImage &image, const QPoint &seed)
@@ -659,6 +686,7 @@ namespace {
 void applyFillStroke(
     QImage &layerImage,
     const Stroke &stroke,
+    const QImage &clipMask,
     qreal horizontalScale,
     qreal verticalScale)
 {
@@ -676,7 +704,6 @@ void applyFillStroke(
     if (mask.isNull()) {
         return;
     }
-
     const QRgb fill = qPremultiply(stroke.color.rgba());
     const int fillRed = qRed(fill);
     const int fillGreen = qGreen(fill);
@@ -691,7 +718,13 @@ void applyFillStroke(
         const uchar *maskAbove = y > 0 ? mask.constScanLine(y - 1) : nullptr;
         const uchar *maskBelow =
             y < height - 1 ? mask.constScanLine(y + 1) : nullptr;
+        const uchar *clipLine = clipMask.isNull()
+            ? nullptr
+            : clipMask.constScanLine(y);
         for (int x = 0; x < width; ++x) {
+            if (clipLine && clipLine[x] < 128) {
+                continue;
+            }
             if (maskLine[x]) {
                 line[x] = fill;
                 continue;
@@ -739,6 +772,8 @@ QImage renderAtSize(
 
     QPainter compositor(&result);
     compositor.setRenderHint(QPainter::Antialiasing, false);
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
 
     for (const Layer &layer : document.layers) {
         if (!layer.visible
@@ -763,10 +798,30 @@ QImage renderAtSize(
             }
 
             if (stroke.mode == StrokeMode::Fill) {
+                QImage scaledClipMask;
+                if (!stroke.clipMask.isNull()) {
+                    const qint64 key = stroke.clipMask.cacheKey();
+                    const auto cached = scaledClipMasks.constFind(key);
+                    if (cached != scaledClipMasks.cend()) {
+                        scaledClipMask = cached.value();
+                    } else {
+                        scaledClipMask = stroke.clipMask.size() == outputSize
+                            ? stroke.clipMask
+                            : stroke.clipMask.scaled(
+                                outputSize,
+                                Qt::IgnoreAspectRatio,
+                                Qt::FastTransformation);
+                        if (scaledClipMask.isNull()) {
+                            continue;
+                        }
+                        scaledClipMasks.insert(key, scaledClipMask);
+                    }
+                }
                 painter.end();
                 applyFillStroke(
                     layerImage,
                     stroke,
+                    scaledClipMask,
                     horizontalScale,
                     verticalScale);
                 painter.begin(&layerImage);
@@ -775,6 +830,19 @@ QImage renderAtSize(
                 continue;
             }
 
+            painter.save();
+            if (!stroke.clipMask.isNull()) {
+                const qint64 key = stroke.clipMask.cacheKey();
+                auto cached = clipPaths.constFind(key);
+                if (cached == clipPaths.cend()) {
+                    cached = clipPaths.insert(
+                        key,
+                        maskPath(stroke.clipMask));
+                }
+                painter.setClipPath(
+                    cached.value(),
+                    Qt::IntersectClip);
+            }
             painter.setCompositionMode(
                 stroke.mode == StrokeMode::Erase
                     ? QPainter::CompositionMode_DestinationOut
@@ -813,6 +881,7 @@ QImage renderAtSize(
                 brushSpacing,
                 maximumPoints);
             if (points.isEmpty()) {
+                painter.restore();
                 continue;
             }
 
@@ -853,6 +922,7 @@ QImage renderAtSize(
                     normalizedFrame);
                 break;
             }
+            painter.restore();
         }
 
         painter.end();

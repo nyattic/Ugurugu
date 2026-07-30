@@ -30,6 +30,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QImageWriter>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -60,12 +61,21 @@ namespace wobble {
 
 namespace {
 
-QSize requestCanvasSize(QWidget *parent, const QSize &current)
+QSize requestCanvasSize(
+    QWidget *parent,
+    const QSize &current,
+    const QString &title,
+    const QString &description = {})
 {
     QDialog dialog(parent);
-    dialog.setWindowTitle(QObject::tr("New document"));
+    dialog.setWindowTitle(title);
 
     auto *layout = new QFormLayout(&dialog);
+    if (!description.isEmpty()) {
+        auto *label = new QLabel(description, &dialog);
+        label->setWordWrap(true);
+        layout->addRow(label);
+    }
     auto *widthSpin = new QSpinBox(&dialog);
     auto *heightSpin = new QSpinBox(&dialog);
     widthSpin->setRange(64, DocumentLimits::maximumCanvasEdge);
@@ -389,6 +399,60 @@ void MainWindow::createActions()
     redoAction->setIcon(Icons::icon(IconGlyph::Redo));
     registerShortcut(redoAction, QKeySequence(QKeySequence::Redo));
 
+    auto *resizeCanvasAction = new QAction(tr("Resize canvas…"), this);
+    resizeCanvasAction->setObjectName(QStringLiteral("resizeCanvasAction"));
+    registerShortcut(resizeCanvasAction, {});
+    connect(
+        resizeCanvasAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::resizeCanvas);
+
+    m_scaleSelectionAction = new QAction(tr("Scale selection…"), this);
+    m_scaleSelectionAction->setObjectName(
+        QStringLiteral("scaleSelectionAction"));
+    m_scaleSelectionAction->setEnabled(false);
+    registerShortcut(m_scaleSelectionAction, {});
+    connect(
+        m_scaleSelectionAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::scaleSelection);
+
+    m_rotateSelectionAction = new QAction(tr("Rotate selection…"), this);
+    m_rotateSelectionAction->setObjectName(
+        QStringLiteral("rotateSelectionAction"));
+    m_rotateSelectionAction->setEnabled(false);
+    registerShortcut(m_rotateSelectionAction, {});
+    connect(
+        m_rotateSelectionAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::rotateSelection);
+
+    m_duplicateSelectionAction =
+        new QAction(tr("Duplicate selection"), this);
+    m_duplicateSelectionAction->setObjectName(
+        QStringLiteral("duplicateSelectionAction"));
+    m_duplicateSelectionAction->setEnabled(false);
+    registerShortcut(
+        m_duplicateSelectionAction,
+        QKeySequence(QStringLiteral("Ctrl+D")));
+    connect(
+        m_duplicateSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::duplicateSelection);
+    connect(
+        m_canvas,
+        &CanvasWidget::selectionTransformAvailabilityChanged,
+        this,
+        [this](bool available) {
+            m_scaleSelectionAction->setEnabled(available);
+            m_rotateSelectionAction->setEnabled(available);
+            m_duplicateSelectionAction->setEnabled(available);
+        });
+
     auto *clearLayerAction = new QAction(tr("Clear active layer"), this);
     clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
     registerShortcut(clearLayerAction, {});
@@ -482,6 +546,10 @@ void MainWindow::createActions()
     addAction(quitAction);
     addAction(undoAction);
     addAction(redoAction);
+    addAction(resizeCanvasAction);
+    addAction(m_scaleSelectionAction);
+    addAction(m_rotateSelectionAction);
+    addAction(m_duplicateSelectionAction);
     addAction(clearLayerAction);
     addAction(fitAction);
     addAction(m_playAction);
@@ -505,6 +573,13 @@ void MainWindow::createMenus()
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(findChild<QAction *>(QStringLiteral("undoAction")));
     editMenu->addAction(findChild<QAction *>(QStringLiteral("redoAction")));
+    editMenu->addSeparator();
+    editMenu->addAction(
+        findChild<QAction *>(QStringLiteral("resizeCanvasAction")));
+    editMenu->addSeparator();
+    editMenu->addAction(m_scaleSelectionAction);
+    editMenu->addAction(m_rotateSelectionAction);
+    editMenu->addAction(m_duplicateSelectionAction);
     editMenu->addSeparator();
     editMenu->addAction(findChild<QAction *>(QStringLiteral("clearLayerAction")));
     editMenu->addSeparator();
@@ -834,7 +909,10 @@ void MainWindow::newDocument()
     if (!maybeSave()) {
         return;
     }
-    const QSize size = requestCanvasSize(this, m_controller.document().size);
+    const QSize size = requestCanvasSize(
+        this,
+        m_controller.document().size,
+        tr("New document"));
     if (!size.isValid()) {
         return;
     }
@@ -844,6 +922,54 @@ void MainWindow::newDocument()
     m_canvas->fitToWindow();
     updateWindowTitle();
     spdlog::info("Created {}x{} document", size.width(), size.height());
+}
+
+void MainWindow::resizeCanvas()
+{
+    const QSize previous = m_controller.document().size;
+    const QSize size = requestCanvasSize(
+        this,
+        previous,
+        tr("Resize canvas"),
+        tr("Artwork and brush sizes will be scaled to the new canvas."));
+    if (!size.isValid() || size == previous) {
+        return;
+    }
+    m_controller.resizeCanvas(size);
+}
+
+void MainWindow::scaleSelection()
+{
+    bool accepted = false;
+    const double percent = QInputDialog::getDouble(
+        this,
+        tr("Scale selection"),
+        tr("Scale (%)"),
+        125.0,
+        10.0,
+        400.0,
+        0,
+        &accepted);
+    if (accepted) {
+        m_canvas->scaleSelection(percent / 100.0);
+    }
+}
+
+void MainWindow::rotateSelection()
+{
+    bool accepted = false;
+    const double degrees = QInputDialog::getDouble(
+        this,
+        tr("Rotate selection"),
+        tr("Angle (degrees)"),
+        90.0,
+        -360.0,
+        360.0,
+        1,
+        &accepted);
+    if (accepted && !qFuzzyIsNull(degrees)) {
+        m_canvas->rotateSelection(degrees);
+    }
 }
 
 void MainWindow::writeAutosave()

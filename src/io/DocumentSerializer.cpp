@@ -3,6 +3,7 @@
 #include "document/DocumentLimits.hpp"
 
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -11,14 +12,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace wobble {
 
 namespace {
 
-constexpr int schemaVersion = 2;
+constexpr int schemaVersion = 3;
 constexpr int algorithmVersion = 2;
+
+std::optional<int> integerFromJson(const QJsonValue &value);
 
 void setError(QString *error, const QString &message)
 {
@@ -181,12 +185,104 @@ QJsonObject strokeToJson(const Stroke &stroke)
     object.insert(QStringLiteral("width"), stroke.width);
     object.insert(QStringLiteral("brush"), brushToJson(stroke.brush));
     object.insert(QStringLiteral("points"), points);
+    if (!stroke.clipMask.isNull()) {
+        const QByteArray bytes(
+            reinterpret_cast<const char *>(stroke.clipMask.constBits()),
+            stroke.clipMask.sizeInBytes());
+        QJsonObject clipMask;
+        clipMask.insert(QStringLiteral("width"), stroke.clipMask.width());
+        clipMask.insert(QStringLiteral("height"), stroke.clipMask.height());
+        clipMask.insert(
+            QStringLiteral("data"),
+            QString::fromLatin1(qCompress(bytes, 6).toBase64()));
+        object.insert(QStringLiteral("clipMask"), clipMask);
+    }
     return object;
+}
+
+std::optional<QImage> clipMaskFromJson(
+    const QJsonValue &value,
+    QHash<QByteArray, QImage> &maskCache,
+    quint64 &distinctMaskBytes,
+    QString *error)
+{
+    if (!value.isObject()) {
+        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const std::optional<int> width =
+        integerFromJson(object.value(QStringLiteral("width")));
+    const std::optional<int> height =
+        integerFromJson(object.value(QStringLiteral("height")));
+    if (!width
+        || !height
+        || !object.value(QStringLiteral("data")).isString()
+        || *width < DocumentLimits::minimumCanvasEdge
+        || *height < DocumentLimits::minimumCanvasEdge
+        || *width > DocumentLimits::maximumCanvasEdge
+        || *height > DocumentLimits::maximumCanvasEdge) {
+        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        return std::nullopt;
+    }
+
+    QImage mask(QSize(*width, *height), QImage::Format_Grayscale8);
+    if (mask.isNull()) {
+        setError(error, QStringLiteral("A stroke clip mask is too large."));
+        return std::nullopt;
+    }
+    const QByteArray compressed = QByteArray::fromBase64(
+        object.value(QStringLiteral("data")).toString().toLatin1());
+    if (compressed.size() < 4) {
+        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        return std::nullopt;
+    }
+    const auto *header =
+        reinterpret_cast<const uchar *>(compressed.constData());
+    const quint32 declaredSize =
+        (static_cast<quint32>(header[0]) << 24U)
+        | (static_cast<quint32>(header[1]) << 16U)
+        | (static_cast<quint32>(header[2]) << 8U)
+        | static_cast<quint32>(header[3]);
+    if (declaredSize != static_cast<quint32>(mask.sizeInBytes())) {
+        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        return std::nullopt;
+    }
+    QByteArray cacheKey =
+        QByteArray::number(*width)
+        + 'x'
+        + QByteArray::number(*height)
+        + ':'
+        + compressed;
+    const auto cached = maskCache.constFind(cacheKey);
+    if (cached != maskCache.cend()) {
+        return cached.value();
+    }
+    if (declaredSize
+        > DocumentLimits::maximumDistinctClipMaskBytes
+            - distinctMaskBytes) {
+        setError(error, QStringLiteral("The project contains too much selection data."));
+        return std::nullopt;
+    }
+    const QByteArray bytes = qUncompress(compressed);
+    if (bytes.size() != mask.sizeInBytes()) {
+        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        return std::nullopt;
+    }
+    std::memcpy(
+        mask.bits(),
+        bytes.constData(),
+        static_cast<std::size_t>(bytes.size()));
+    distinctMaskBytes += declaredSize;
+    maskCache.insert(std::move(cacheKey), mask);
+    return mask;
 }
 
 std::optional<Stroke> strokeFromJson(
     const QJsonValue &value,
     int fileSchemaVersion,
+    QHash<QByteArray, QImage> &maskCache,
+    quint64 &distinctMaskBytes,
     QString *error)
 {
     if (!value.isObject()) {
@@ -282,6 +378,18 @@ std::optional<Stroke> strokeFromJson(
         }
         stroke.points.append(*point);
     }
+    if (fileSchemaVersion >= 3
+        && object.contains(QStringLiteral("clipMask"))) {
+        const std::optional<QImage> clipMask = clipMaskFromJson(
+            object.value(QStringLiteral("clipMask")),
+            maskCache,
+            distinctMaskBytes,
+            error);
+        if (!clipMask) {
+            return std::nullopt;
+        }
+        stroke.clipMask = *clipMask;
+    }
     return stroke;
 }
 
@@ -304,6 +412,8 @@ QJsonObject layerToJson(const Layer &layer)
 std::optional<Layer> layerFromJson(
     const QJsonValue &value,
     int fileSchemaVersion,
+    QHash<QByteArray, QImage> &maskCache,
+    quint64 &distinctMaskBytes,
     QString *error)
 {
     if (!value.isObject()) {
@@ -350,7 +460,12 @@ std::optional<Layer> layerFromJson(
 
     for (const QJsonValue &strokeValue : strokes) {
         const std::optional<Stroke> stroke =
-            strokeFromJson(strokeValue, fileSchemaVersion, error);
+            strokeFromJson(
+                strokeValue,
+                fileSchemaVersion,
+                maskCache,
+                distinctMaskBytes,
+                error);
         if (!stroke) {
             return std::nullopt;
         }
@@ -451,8 +566,10 @@ bool validateDocument(const Document &document, QString *error)
 
     QSet<QUuid> layerIds;
     QSet<QUuid> strokeIds;
+    QSet<qint64> clipMaskKeys;
     qsizetype totalStrokes = 0;
     qsizetype totalPoints = 0;
+    quint64 clipMaskBytes = 0;
     bool activeLayerFound = false;
     for (const Layer &layer : document.layers) {
         if (layer.id.isNull() || layerIds.contains(layer.id)) {
@@ -480,6 +597,21 @@ bool validateDocument(const Document &document, QString *error)
                 return false;
             }
             strokeIds.insert(stroke.id);
+            if (!stroke.clipMask.isNull()
+                && !clipMaskKeys.contains(stroke.clipMask.cacheKey())) {
+                clipMaskKeys.insert(stroke.clipMask.cacheKey());
+                const quint64 maskBytes = stroke.clipMask.sizeInBytes();
+                if (maskBytes
+                    > DocumentLimits::maximumDistinctClipMaskBytes
+                        - clipMaskBytes) {
+                    setError(
+                        error,
+                        QStringLiteral(
+                            "The project contains too much selection data."));
+                    return false;
+                }
+                clipMaskBytes += maskBytes;
+            }
             if ((stroke.mode != StrokeMode::Paint
                  && stroke.mode != StrokeMode::Erase
                  && stroke.mode != StrokeMode::Fill)
@@ -490,6 +622,10 @@ bool validateDocument(const Document &document, QString *error)
                 || !isValidBrushSettings(stroke.brush)
                 || stroke.points.isEmpty()
                 || stroke.points.size() > DocumentLimits::maximumPointsPerStroke
+                || (!stroke.clipMask.isNull()
+                    && (stroke.clipMask.size() != document.size
+                        || stroke.clipMask.format()
+                            != QImage::Format_Grayscale8))
                 || stroke.points.size()
                     > DocumentLimits::maximumTotalPoints - totalPoints) {
                 setError(error, QStringLiteral("A stroke contains invalid data."));
@@ -708,10 +844,17 @@ std::optional<Document> DocumentSerializer::fromJson(
     QSet<QUuid> layerIds;
     QSet<QUuid> strokeIds;
     qsizetype totalPoints = 0;
+    QHash<QByteArray, QImage> maskCache;
+    quint64 distinctMaskBytes = 0;
 
     for (const QJsonValue &layerValue : layers) {
         const std::optional<Layer> layer =
-            layerFromJson(layerValue, *fileSchemaVersion, error);
+            layerFromJson(
+                layerValue,
+                *fileSchemaVersion,
+                maskCache,
+                distinctMaskBytes,
+                error);
         if (!layer) {
             return std::nullopt;
         }

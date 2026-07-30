@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(
         CMAKE_OSX_DEPLOYMENT_TARGET
-        "13.0"
+        "14.0"
         CACHE STRING
         "Minimum supported macOS version"
         FORCE

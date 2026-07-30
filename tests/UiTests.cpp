@@ -6,6 +6,7 @@
 #include "ui/MainWindow.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "io/DocumentSerializer.hpp"
+#include "render/RenderEngine.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -399,6 +400,161 @@ private slots:
         QVERIFY(window.isWindowModified());
         undoAction->trigger();
         QVERIFY(!window.isWindowModified());
+    }
+
+    void keepsSelectionAcrossToolsAndTransformsIt()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *brushAction =
+            window.findChild<QAction *>(QStringLiteral("brushAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *bucketAction =
+            window.findChild<QAction *>(QStringLiteral("bucketAction"));
+        QAction *scaleAction = window.findChild<QAction *>(
+            QStringLiteral("scaleSelectionAction"));
+        QAction *rotateAction = window.findChild<QAction *>(
+            QStringLiteral("rotateSelectionAction"));
+        QAction *duplicateAction = window.findChild<QAction *>(
+            QStringLiteral("duplicateSelectionAction"));
+        QVERIFY(canvas);
+        QVERIFY(brushAction);
+        QVERIFY(lassoAction);
+        QVERIFY(bucketAction);
+        QVERIFY(scaleAction);
+        QVERIFY(rotateAction);
+        QVERIFY(duplicateAction);
+        QVERIFY(!scaleAction->isEnabled());
+        QVERIFY(!rotateAction->isEnabled());
+        QVERIFY(!duplicateAction->isEnabled());
+
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(60, 0));
+        QTest::mouseMove(canvas, center + QPoint(60, 0), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center + QPoint(60, 0));
+
+        lassoAction->trigger();
+        const QPoint topLeft = center - QPoint(90, 50);
+        const QPoint topRight = center + QPoint(90, -50);
+        const QPoint bottomRight = center + QPoint(90, 50);
+        const QPoint bottomLeft = center + QPoint(-90, 50);
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+        QTest::mouseMove(canvas, topRight, 5);
+        QTest::mouseMove(canvas, bottomRight, 5);
+        QTest::mouseMove(canvas, bottomLeft, 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+
+        QTRY_VERIFY(canvas->hasSelection());
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(scaleAction->isEnabled());
+        QTRY_VERIFY(rotateAction->isEnabled());
+        QTRY_VERIFY(duplicateAction->isEnabled());
+
+        bucketAction->trigger();
+        QVERIFY(canvas->hasSelection());
+        brushAction->trigger();
+        QVERIFY(canvas->hasSelection());
+        QVERIFY(canvas->scaleSelection(0.75));
+        QVERIFY(canvas->rotateSelection(90.0));
+        duplicateAction->trigger();
+        QVERIFY(canvas->hasTransformableSelection());
+    }
+
+    void clipsDrawingToolsToPersistentLasso()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const QPoint center = canvas.rect().center();
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        const QPoint topLeft = center - QPoint(50, 50);
+        const QPoint topRight = center + QPoint(50, -50);
+        const QPoint bottomRight = center + QPoint(50, 50);
+        const QPoint bottomLeft = center + QPoint(-50, 50);
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+        QTest::mouseMove(&canvas, topRight, 5);
+        QTest::mouseMove(&canvas, bottomRight, 5);
+        QTest::mouseMove(&canvas, bottomLeft, 5);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+        QVERIFY(canvas.hasSelection());
+
+        canvas.setTool(CanvasWidget::Tool::Brush);
+        QVERIFY(canvas.hasSelection());
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(120, 0));
+        QTest::mouseMove(&canvas, center + QPoint(120, 0), 5);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center + QPoint(120, 0));
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        QVERIFY(!controller.document()
+                     .layers.first()
+                     .strokes.first()
+                     .clipMask.isNull());
+        QImage rendered = RenderEngine::render(
+            controller.document(),
+            0);
+        QCOMPARE(rendered.pixelColor(20, 50), QColor(Qt::white));
+        QCOMPARE(rendered.pixelColor(50, 50), QColor(Qt::black));
+
+        canvas.setBrushColor(QColor(220, 30, 40));
+        canvas.setTool(CanvasWidget::Tool::Bucket);
+        QVERIFY(canvas.hasSelection());
+        QTest::mouseClick(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(0, 25));
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        QVERIFY(!controller.document()
+                     .layers.first()
+                     .strokes.last()
+                     .clipMask.isNull());
+        rendered = RenderEngine::render(controller.document(), 0);
+        QCOMPARE(
+            rendered.pixelColor(50, 42),
+            canvas.brushColor());
+        QCOMPARE(rendered.pixelColor(20, 42), QColor(Qt::white));
     }
 
     void autosavesModifiedWork()
