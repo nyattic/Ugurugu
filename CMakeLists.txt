@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(WagleWaglePaint VERSION 0.2.0 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.2.1 LANGUAGES CXX)
 
 include(FetchContent)
 include(GNUInstallDirs)
@@ -287,6 +287,7 @@ if(WIN32)
         FILES
         "${velopack_SOURCE_DIR}/lib/velopack_libc_win_x64_msvc.dll"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RENAME velopack_libc.dll
     )
 endif()
 

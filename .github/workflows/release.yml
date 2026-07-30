@@ -136,7 +136,7 @@ jobs:
           $version = $Matches[1]
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           vpk pack `
-            --packId dev.waglewaglepaint.app `
+            --packId WagleWaglePaint `
             --packVersion $version `
             --packDir "$env:RUNNER_TEMP\WagleWaglePaint\bin" `
             --mainExe WagleWaglePaint.exe `
@@ -148,6 +148,9 @@ jobs:
             --delta None `
             --noPortable true `
             --outputDir artifacts
+          Rename-Item `
+            -Path "artifacts\WagleWaglePaint-win-Setup.exe" `
+            -NewName "WagleWaglePaint-${version}-Windows-x64-Setup.exe"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
