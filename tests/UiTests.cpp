@@ -1,3 +1,4 @@
+#include "brush/BrushPreset.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/MainWindow.hpp"
@@ -69,6 +70,27 @@ private slots:
         QVERIFY(layerDock);
         QVERIFY(undoAction);
         QVERIFY(!undoAction->isEnabled());
+        QComboBox *brushPresetCombo =
+            window.findChild<QComboBox *>(
+                QStringLiteral("brushPresetCombo"));
+        QSpinBox *brushSizeSpin =
+            window.findChild<QSpinBox *>(
+                QStringLiteral("brushSizeSpin"));
+        QVERIFY(brushPresetCombo);
+        QVERIFY(brushSizeSpin);
+        QCOMPARE(
+            brushPresetCombo->count(),
+            BrushPresetCatalog::builtIns().size());
+        const int softAirbrushIndex =
+            brushPresetCombo->findData(QStringLiteral("soft-airbrush"));
+        QVERIFY(softAirbrushIndex >= 0);
+        brushPresetCombo->setCurrentIndex(softAirbrushIndex);
+        QCOMPARE(canvas->brushPresetId(), QStringLiteral("soft-airbrush"));
+        QCOMPARE(
+            brushSizeSpin->value(),
+            qRound(
+                BrushPresetCatalog::find(
+                    QStringLiteral("soft-airbrush"))->defaultSize));
 
         QSpinBox *currentFrameSpin =
             window.findChild<QSpinBox *>(QStringLiteral("currentFrameSpin"));

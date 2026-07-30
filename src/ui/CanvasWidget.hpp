@@ -4,6 +4,7 @@
 
 #include <QCache>
 #include <QColor>
+#include <QHash>
 #include <QImage>
 #include <QPainterPath>
 #include <QSet>
@@ -36,6 +37,7 @@ public:
     Tool tool() const;
     QColor brushColor() const;
     qreal brushWidth() const;
+    QString brushPresetId() const;
     bool isAnimating() const;
     int currentFrame() const;
     qreal zoom() const;
@@ -45,6 +47,7 @@ public slots:
     void setTool(Tool tool);
     void setBrushColor(const QColor &color);
     void setBrushWidth(qreal width);
+    void setBrushPreset(const QString &presetId);
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
@@ -56,6 +59,7 @@ signals:
     void toolChanged(Tool tool);
     void brushColorChanged(const QColor &color);
     void brushWidthChanged(qreal width);
+    void brushPresetChanged(const QString &presetId);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
@@ -138,6 +142,9 @@ private:
     Tool m_tool = Tool::Brush;
     QColor m_brushColor = Qt::black;
     qreal m_brushWidth = 6.0;
+    QString m_brushPresetId;
+    BrushSettings m_brushSettings;
+    QHash<QString, qreal> m_presetWidths;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
     int m_currentFrame = 0;

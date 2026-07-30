@@ -1,5 +1,6 @@
 #include "ui/CanvasWidget.hpp"
 
+#include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/Theme.hpp"
@@ -151,6 +152,11 @@ CanvasWidget::CanvasWidget(
     setMouseTracking(true);
     setCursor(Qt::BlankCursor);
     m_frameCache.setMaxCost(96 * 1024);
+    const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
+    m_brushPresetId = defaultPreset.id;
+    m_brushSettings = defaultPreset.settings;
+    m_brushWidth = defaultPreset.defaultSize;
+    m_presetWidths.insert(m_brushPresetId, m_brushWidth);
 
     connect(m_controller, &DocumentController::documentChanged, this, [this]() {
         invalidateFrames();
@@ -187,6 +193,11 @@ QColor CanvasWidget::brushColor() const
 qreal CanvasWidget::brushWidth() const
 {
     return m_brushWidth;
+}
+
+QString CanvasWidget::brushPresetId() const
+{
+    return m_brushPresetId;
 }
 
 bool CanvasWidget::isAnimating() const
@@ -247,7 +258,32 @@ void CanvasWidget::setBrushWidth(qreal width)
         return;
     }
     m_brushWidth = normalized;
+    if (!m_brushPresetId.isEmpty()) {
+        m_presetWidths.insert(m_brushPresetId, normalized);
+    }
     emit brushWidthChanged(normalized);
+    update();
+}
+
+void CanvasWidget::setBrushPreset(const QString &presetId)
+{
+    const BrushPreset *preset = BrushPresetCatalog::find(presetId);
+    if (!preset || m_brushPresetId == preset->id) {
+        return;
+    }
+    cancelStroke();
+    m_brushPresetId = preset->id;
+    m_brushSettings = preset->settings;
+    const qreal nextWidth = std::clamp(
+        m_presetWidths.value(preset->id, preset->defaultSize),
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+    m_presetWidths.insert(preset->id, nextWidth);
+    if (!qFuzzyCompare(m_brushWidth, nextWidth)) {
+        m_brushWidth = nextWidth;
+        emit brushWidthChanged(nextWidth);
+    }
+    emit brushPresetChanged(preset->id);
     update();
 }
 
@@ -569,11 +605,21 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
 {
     const bool eraser =
         event->pointerType() == QPointingDevice::PointerType::Eraser;
-    if (!eraser && m_tool != Tool::Brush && m_tool != Tool::Eraser) {
-        QWidget::tabletEvent(event);
-        return;
-    }
     if (event->type() == QEvent::TabletPress) {
+        if (event->button() != Qt::LeftButton) {
+            QWidget::tabletEvent(event);
+            return;
+        }
+        if (m_spacePressed) {
+            m_tabletSequence = true;
+            beginPan(event->position());
+            event->accept();
+            return;
+        }
+        if (!eraser && m_tool != Tool::Brush && m_tool != Tool::Eraser) {
+            QWidget::tabletEvent(event);
+            return;
+        }
         m_tabletSequence = true;
         beginStroke(event->position(), event->pressure(), eraser);
         event->accept();
@@ -581,12 +627,20 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
     }
     if (event->type() == QEvent::TabletMove && m_tabletSequence) {
         updatePointerPosition(event->position());
-        continueStroke(event->position(), event->pressure());
+        if (m_panning) {
+            continuePan(event->position());
+        } else {
+            continueStroke(event->position(), event->pressure());
+        }
         event->accept();
         return;
     }
     if (event->type() == QEvent::TabletRelease && m_tabletSequence) {
-        endStroke(event->position(), event->pressure());
+        if (m_panning) {
+            endPan();
+        } else {
+            endStroke(event->position(), event->pressure());
+        }
         m_tabletSequence = false;
         event->accept();
         return;
@@ -771,6 +825,7 @@ void CanvasWidget::beginStroke(
         : StrokeMode::Paint;
     m_activeStroke.color = m_brushColor;
     m_activeStroke.width = m_brushWidth;
+    m_activeStroke.brush = m_brushSettings;
     m_activeStroke.points.append({
         clampedDocumentPosition(documentPosition),
         std::clamp(pressure, 0.05, 1.0)
@@ -1120,6 +1175,7 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         m_brushWidth,
         DocumentLimits::minimumStrokeWidth,
         DocumentLimits::maximumStrokeWidth);
+    fillStroke.brush = m_brushSettings;
     fillStroke.points.append({
         clampedDocumentPosition(documentPosition),
         1.0

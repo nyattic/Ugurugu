@@ -17,6 +17,13 @@ struct DocumentLimits final
     static constexpr qreal maximumWobbleAmount = 12.0;
     static constexpr qreal minimumStrokeWidth = 0.25;
     static constexpr qreal maximumStrokeWidth = 512.0;
+    static constexpr qreal minimumBrushSpacing = 0.02;
+    static constexpr qreal maximumBrushSpacing = 2.0;
+    static constexpr qreal maximumBrushScatter = 2.0;
+    static constexpr qreal minimumBrushParticleSize = 0.01;
+    static constexpr qreal maximumBrushParticleSize = 1.0;
+    static constexpr qreal minimumBrushDensity = 0.05;
+    static constexpr qreal maximumBrushDensity = 4.0;
     static constexpr int maximumLayerNameLength = 256;
     static constexpr int maximumLayers = 256;
     static constexpr int maximumStrokesPerLayer = 20000;

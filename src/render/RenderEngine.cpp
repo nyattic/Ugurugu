@@ -3,6 +3,7 @@
 #include "document/DocumentLimits.hpp"
 
 #include <QPainter>
+#include <QRadialGradient>
 #include <QtMath>
 
 #include <algorithm>
@@ -15,6 +16,8 @@ namespace {
 
 constexpr qsizetype maximumResampledPoints =
     DocumentLimits::maximumPointsPerStroke;
+constexpr qsizetype maximumBrushDabs = 50000;
+constexpr qsizetype maximumSprayParticles = 250000;
 
 quint64 mixHash(quint64 value)
 {
@@ -50,10 +53,15 @@ qreal smoothFieldNoise(
     return a + (b - a) * blend;
 }
 
-QVector<StrokePoint> resample(const QVector<StrokePoint> &source, qreal spacing)
+QVector<StrokePoint> resample(
+    const QVector<StrokePoint> &source,
+    qreal spacing,
+    qsizetype maximumPoints = maximumResampledPoints)
 {
     if (!std::isfinite(spacing)
         || spacing <= 0.0
+        || maximumPoints < 2
+        || maximumPoints > maximumResampledPoints
         || source.size() > DocumentLimits::maximumPointsPerStroke) {
         return {};
     }
@@ -102,14 +110,14 @@ QVector<StrokePoint> resample(const QVector<StrokePoint> &source, qreal spacing)
     }
 
     const long double minimumSpacing =
-        totalLength / static_cast<long double>(maximumResampledPoints - 1);
+        totalLength / static_cast<long double>(maximumPoints - 1);
     spacing = std::max(
         spacing,
         static_cast<qreal>(minimumSpacing));
 
     QVector<StrokePoint> result;
     result.reserve(std::min(
-        maximumResampledPoints,
+        maximumPoints,
         source.size() * 2));
     result.append(source.first());
 
@@ -122,7 +130,7 @@ QVector<StrokePoint> resample(const QVector<StrokePoint> &source, qreal spacing)
         qreal segmentLength = std::hypot(delta.x(), delta.y());
 
         while (segmentLength >= distanceToNext && segmentLength > 0.0) {
-            if (result.size() >= maximumResampledPoints - 1) {
+            if (result.size() >= maximumPoints - 1) {
                 result.append(source.last());
                 return result;
             }
@@ -144,7 +152,7 @@ QVector<StrokePoint> resample(const QVector<StrokePoint> &source, qreal spacing)
 
     const QPointF tail = source.last().position - result.last().position;
     if (std::hypot(tail.x(), tail.y()) > 0.01
-        && result.size() < maximumResampledPoints) {
+        && result.size() < maximumPoints) {
         result.append(source.last());
     }
     return result;
@@ -163,7 +171,9 @@ QVector<StrokePoint> displacedStrokePoints(
     const Stroke &stroke,
     int frameIndex,
     int frameCount,
-    qreal wobbleAmount)
+    qreal wobbleAmount,
+    qreal requestedSpacing = -1.0,
+    qsizetype maximumPoints = maximumResampledPoints)
 {
     if (stroke.points.isEmpty()) {
         return {};
@@ -172,8 +182,11 @@ QVector<StrokePoint> displacedStrokePoints(
     const int normalizedCount = std::max(1, frameCount);
     const int normalizedFrame =
         ((frameIndex % normalizedCount) + normalizedCount) % normalizedCount;
-    const qreal spacing = std::clamp(stroke.width * 0.55, 2.0, 5.0);
-    QVector<StrokePoint> samples = resample(stroke.points, spacing);
+    const qreal spacing = requestedSpacing > 0.0
+        ? requestedSpacing
+        : std::clamp(stroke.width * 0.55, 2.0, 5.0);
+    QVector<StrokePoint> samples =
+        resample(stroke.points, spacing, maximumPoints);
     const qreal amplitude =
         std::max(0.0, wobbleAmount)
         * (0.82 + std::min(stroke.width, 40.0) * 0.018);
@@ -244,33 +257,91 @@ QPainterPath smoothedPath(const QVector<StrokePoint> &points)
     return smoothedPath(positions);
 }
 
-qreal pressureWidth(qreal baseWidth, qreal pressure)
+qreal pressureScale(qreal dynamics, qreal pressure)
+{
+    const qreal normalizedDynamics = std::clamp(dynamics, 0.0, 1.0);
+    return 1.0 - normalizedDynamics
+        + std::clamp(pressure, 0.0, 1.0) * normalizedDynamics;
+}
+
+qreal pressureWidth(
+    qreal baseWidth,
+    qreal pressure,
+    qreal sizeDynamics)
 {
     return std::max(
         0.5,
-        baseWidth * (0.2 + std::clamp(pressure, 0.0, 1.0) * 0.8));
+        baseWidth * pressureScale(sizeDynamics, pressure));
+}
+
+QColor colorWithOpacity(const QColor &color, qreal opacity)
+{
+    QColor adjusted = color;
+    adjusted.setAlpha(std::clamp(
+        qRound(
+            static_cast<qreal>(color.alpha())
+            * std::clamp(opacity, 0.0, 1.0)),
+        0,
+        255));
+    return adjusted;
 }
 
 void drawPath(
     QPainter &painter,
     const QPainterPath &path,
     const QColor &color,
-    qreal width)
+    qreal width,
+    BrushTipShape tipShape)
 {
+    const Qt::PenCapStyle capStyle =
+        tipShape == BrushTipShape::Square
+        ? Qt::SquareCap
+        : Qt::RoundCap;
+    const Qt::PenJoinStyle joinStyle =
+        tipShape == BrushTipShape::Square
+        ? Qt::MiterJoin
+        : Qt::RoundJoin;
     painter.setPen(QPen(
         color,
         width,
         Qt::SolidLine,
-        Qt::RoundCap,
-        Qt::RoundJoin));
+        capStyle,
+        joinStyle));
     painter.drawPath(path);
 }
 
-void drawPressureStroke(
+void drawLineDot(
+    QPainter &painter,
+    const StrokePoint &point,
+    const QColor &color,
+    qreal baseWidth,
+    const BrushSettings &brush)
+{
+    const qreal width =
+        pressureWidth(baseWidth, point.pressure, brush.sizeDynamics);
+    const QColor adjusted = colorWithOpacity(
+        color,
+        brush.opacity
+            * pressureScale(brush.opacityDynamics, point.pressure));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(adjusted);
+    if (brush.tipShape == BrushTipShape::Square) {
+        painter.drawRect(QRectF(
+            point.position.x() - width * 0.5,
+            point.position.y() - width * 0.5,
+            width,
+            width));
+    } else {
+        painter.drawEllipse(point.position, width * 0.5, width * 0.5);
+    }
+}
+
+void drawLineStroke(
     QPainter &painter,
     const QVector<StrokePoint> &points,
     const QColor &color,
-    qreal baseWidth)
+    qreal baseWidth,
+    const BrushSettings &brush)
 {
     if (points.size() < 2) {
         return;
@@ -284,11 +355,16 @@ void drawPressureStroke(
     }
 
     if (maximumPressure - minimumPressure < 0.01) {
+        const qreal pressure = points.first().pressure;
         drawPath(
             painter,
             smoothedPath(points),
-            color,
-            pressureWidth(baseWidth, points.first().pressure));
+            colorWithOpacity(
+                color,
+                brush.opacity
+                    * pressureScale(brush.opacityDynamics, pressure)),
+            pressureWidth(baseWidth, pressure, brush.sizeDynamics),
+            brush.tipShape);
         return;
     }
 
@@ -300,10 +376,17 @@ void drawPressureStroke(
     drawPath(
         painter,
         firstSegment,
-        color,
+        colorWithOpacity(
+            color,
+            brush.opacity
+                * pressureScale(
+                    brush.opacityDynamics,
+                    (points[0].pressure + points[1].pressure) * 0.5)),
         pressureWidth(
             baseWidth,
-            (points[0].pressure + points[1].pressure) * 0.5));
+            (points[0].pressure + points[1].pressure) * 0.5,
+            brush.sizeDynamics),
+        brush.tipShape);
 
     for (int index = 1; index < points.size() - 1; ++index) {
         const QPointF start =
@@ -316,8 +399,17 @@ void drawPressureStroke(
         drawPath(
             painter,
             segment,
-            color,
-            pressureWidth(baseWidth, points[index].pressure));
+            colorWithOpacity(
+                color,
+                brush.opacity
+                    * pressureScale(
+                        brush.opacityDynamics,
+                        points[index].pressure)),
+            pressureWidth(
+                baseWidth,
+                points[index].pressure,
+                brush.sizeDynamics),
+            brush.tipShape);
     }
 
     const int lastIndex = static_cast<int>(points.size()) - 1;
@@ -329,12 +421,173 @@ void drawPressureStroke(
     drawPath(
         painter,
         lastSegment,
-        color,
+        colorWithOpacity(
+            color,
+            brush.opacity
+                * pressureScale(
+                    brush.opacityDynamics,
+                    (points[lastIndex - 1].pressure
+                     + points[lastIndex].pressure)
+                        * 0.5)),
         pressureWidth(
             baseWidth,
             (points[lastIndex - 1].pressure
              + points[lastIndex].pressure)
-                * 0.5));
+                * 0.5,
+            brush.sizeDynamics),
+        brush.tipShape);
+}
+
+void drawAirbrushDab(
+    QPainter &painter,
+    const QPointF &position,
+    qreal diameter,
+    const QColor &color,
+    qreal hardness,
+    BrushTipShape tipShape)
+{
+    if (diameter <= 0.0 || color.alpha() <= 0) {
+        return;
+    }
+    const QRectF bounds(
+        position.x() - diameter * 0.5,
+        position.y() - diameter * 0.5,
+        diameter,
+        diameter);
+    painter.setPen(Qt::NoPen);
+    if (tipShape == BrushTipShape::Square || hardness >= 0.995) {
+        painter.setBrush(color);
+        if (tipShape == BrushTipShape::Square) {
+            painter.drawRect(bounds);
+        } else {
+            painter.drawEllipse(bounds);
+        }
+        return;
+    }
+
+    QRadialGradient gradient(position, diameter * 0.5);
+    const qreal innerStop = std::clamp(hardness, 0.0, 0.98);
+    gradient.setColorAt(0.0, color);
+    if (innerStop > 0.001) {
+        gradient.setColorAt(innerStop, color);
+    }
+    QColor edge = color;
+    edge.setAlpha(0);
+    gradient.setColorAt(1.0, edge);
+    painter.setBrush(gradient);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.drawEllipse(bounds);
+    painter.restore();
+}
+
+void drawAirbrushStroke(
+    QPainter &painter,
+    const QVector<StrokePoint> &points,
+    const QColor &color,
+    qreal baseWidth,
+    const BrushSettings &brush)
+{
+    for (const StrokePoint &point : points) {
+        const qreal diameter =
+            pressureWidth(baseWidth, point.pressure, brush.sizeDynamics);
+        const QColor dabColor = colorWithOpacity(
+            color,
+            brush.opacity
+                * brush.flow
+                * pressureScale(brush.opacityDynamics, point.pressure));
+        drawAirbrushDab(
+            painter,
+            point.position,
+            diameter,
+            dabColor,
+            brush.hardness,
+            brush.tipShape);
+    }
+}
+
+qreal unitNoise(quint64 seed, int frame, int index, quint64 channel)
+{
+    return (signedNoise(seed, frame, index, channel) + 1.0) * 0.5;
+}
+
+void drawSprayStroke(
+    QPainter &painter,
+    const QVector<StrokePoint> &points,
+    const QColor &color,
+    qreal baseWidth,
+    const BrushSettings &brush,
+    quint64 seed,
+    int frameIndex)
+{
+    const int particlesPerPoint = std::clamp(
+        qRound(brush.density * 6.0),
+        1,
+        24);
+    const int noiseFrame = brush.animatedJitter ? frameIndex : 0;
+    qsizetype emittedParticles = 0;
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setPen(Qt::NoPen);
+
+    for (int pointIndex = 0; pointIndex < points.size(); ++pointIndex) {
+        const StrokePoint &point = points[pointIndex];
+        const qreal pressureSize =
+            pressureScale(brush.sizeDynamics, point.pressure);
+        const QColor particleColor = colorWithOpacity(
+            color,
+            brush.opacity
+                * brush.flow
+                * pressureScale(brush.opacityDynamics, point.pressure));
+        painter.setBrush(particleColor);
+
+        for (int particleIndex = 0;
+             particleIndex < particlesPerPoint;
+             ++particleIndex) {
+            if (emittedParticles >= maximumSprayParticles) {
+                return;
+            }
+            ++emittedParticles;
+            const int noiseIndex =
+                pointIndex * particlesPerPoint + particleIndex;
+            const qreal angle =
+                unitNoise(seed, noiseFrame, noiseIndex, 0x36d1a53bULL)
+                * std::numbers::pi * 2.0;
+            const qreal radius =
+                std::sqrt(unitNoise(
+                    seed,
+                    noiseFrame,
+                    noiseIndex,
+                    0x9c8e31d7ULL))
+                * brush.scatter * baseWidth * 0.5;
+            const QPointF position =
+                point.position
+                + QPointF(std::cos(angle), std::sin(angle)) * radius;
+            const qreal jitter =
+                1.0
+                + signedNoise(
+                    seed,
+                    noiseFrame,
+                    noiseIndex,
+                    0xa24baed4ULL)
+                    * brush.sizeJitter * 0.75;
+            const qreal particleDiameter = std::max(
+                0.5,
+                baseWidth
+                    * brush.particleSize
+                    * pressureSize
+                    * std::max(0.1, jitter));
+            const QRectF bounds(
+                position.x() - particleDiameter * 0.5,
+                position.y() - particleDiameter * 0.5,
+                particleDiameter,
+                particleDiameter);
+            if (brush.tipShape == BrushTipShape::Square) {
+                painter.drawRect(bounds);
+            } else {
+                painter.drawEllipse(bounds);
+            }
+        }
+    }
 }
 
 }
@@ -494,7 +747,8 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
         painter.setRenderHint(QPainter::Antialiasing, false);
 
         for (const Stroke &stroke : layer.strokes) {
-            if (stroke.points.isEmpty()) {
+            if (stroke.points.isEmpty()
+                || !isValidBrushSettings(stroke.brush)) {
                 continue;
             }
 
@@ -528,30 +782,61 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
             painter.setBrush(Qt::NoBrush);
             const QColor strokeColor =
                 stroke.mode == StrokeMode::Erase ? Qt::black : stroke.color;
+            const qreal brushSpacing =
+                stroke.brush.engine == BrushEngine::Line
+                ? -1.0
+                : std::max(0.5, width * stroke.brush.spacing);
+            const qsizetype maximumPoints =
+                stroke.brush.engine == BrushEngine::Line
+                ? maximumResampledPoints
+                : maximumBrushDabs;
             const QVector<StrokePoint> points = displacedStrokePoints(
                 stroke,
                 normalizedFrame,
                 frameCount,
-                document.wobbleAmount);
+                document.wobbleAmount,
+                brushSpacing,
+                maximumPoints);
             if (points.isEmpty()) {
                 continue;
             }
 
-            if (points.size() == 1) {
-                const qreal dotWidth =
-                    pressureWidth(width, points.first().pressure);
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(strokeColor);
-                painter.drawEllipse(
-                    points.first().position,
-                    dotWidth * 0.5,
-                    dotWidth * 0.5);
-            } else {
-                drawPressureStroke(
+            switch (stroke.brush.engine) {
+            case BrushEngine::Line:
+                if (points.size() == 1) {
+                    drawLineDot(
+                        painter,
+                        points.first(),
+                        strokeColor,
+                        width,
+                        stroke.brush);
+                } else {
+                    drawLineStroke(
+                        painter,
+                        points,
+                        strokeColor,
+                        width,
+                        stroke.brush);
+                }
+                break;
+            case BrushEngine::Airbrush:
+                drawAirbrushStroke(
                     painter,
                     points,
                     strokeColor,
-                    width);
+                    width,
+                    stroke.brush);
+                break;
+            case BrushEngine::Spray:
+                drawSprayStroke(
+                    painter,
+                    points,
+                    strokeColor,
+                    width,
+                    stroke.brush,
+                    stroke.seed,
+                    normalizedFrame);
+                break;
             }
         }
 

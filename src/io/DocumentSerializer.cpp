@@ -17,8 +17,8 @@ namespace wobble {
 
 namespace {
 
-constexpr int schemaVersion = 1;
-constexpr int algorithmVersion = 1;
+constexpr int schemaVersion = 2;
+constexpr int algorithmVersion = 2;
 
 void setError(QString *error, const QString &message)
 {
@@ -62,6 +62,102 @@ std::optional<StrokePoint> pointFromJson(const QJsonValue &value)
     return point;
 }
 
+QJsonObject brushToJson(const BrushSettings &brush)
+{
+    QString engineName = QStringLiteral("line");
+    if (brush.engine == BrushEngine::Airbrush) {
+        engineName = QStringLiteral("airbrush");
+    } else if (brush.engine == BrushEngine::Spray) {
+        engineName = QStringLiteral("spray");
+    }
+    const QString tipName =
+        brush.tipShape == BrushTipShape::Square
+        ? QStringLiteral("square")
+        : QStringLiteral("round");
+
+    QJsonObject object;
+    object.insert(QStringLiteral("engine"), engineName);
+    object.insert(QStringLiteral("tip"), tipName);
+    object.insert(QStringLiteral("opacity"), brush.opacity);
+    object.insert(QStringLiteral("flow"), brush.flow);
+    object.insert(QStringLiteral("hardness"), brush.hardness);
+    object.insert(QStringLiteral("spacing"), brush.spacing);
+    object.insert(QStringLiteral("scatter"), brush.scatter);
+    object.insert(QStringLiteral("particleSize"), brush.particleSize);
+    object.insert(QStringLiteral("density"), brush.density);
+    object.insert(QStringLiteral("sizeDynamics"), brush.sizeDynamics);
+    object.insert(QStringLiteral("opacityDynamics"), brush.opacityDynamics);
+    object.insert(QStringLiteral("sizeJitter"), brush.sizeJitter);
+    object.insert(QStringLiteral("animatedJitter"), brush.animatedJitter);
+    return object;
+}
+
+std::optional<BrushSettings> brushFromJson(
+    const QJsonValue &value,
+    QString *error)
+{
+    if (!value.isObject()) {
+        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    if (!object.value(QStringLiteral("engine")).isString()
+        || !object.value(QStringLiteral("tip")).isString()
+        || !object.value(QStringLiteral("opacity")).isDouble()
+        || !object.value(QStringLiteral("flow")).isDouble()
+        || !object.value(QStringLiteral("hardness")).isDouble()
+        || !object.value(QStringLiteral("spacing")).isDouble()
+        || !object.value(QStringLiteral("scatter")).isDouble()
+        || !object.value(QStringLiteral("particleSize")).isDouble()
+        || !object.value(QStringLiteral("density")).isDouble()
+        || !object.value(QStringLiteral("sizeDynamics")).isDouble()
+        || !object.value(QStringLiteral("opacityDynamics")).isDouble()
+        || !object.value(QStringLiteral("sizeJitter")).isDouble()
+        || !object.value(QStringLiteral("animatedJitter")).isBool()) {
+        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        return std::nullopt;
+    }
+
+    BrushSettings brush;
+    const QString engine = object.value(QStringLiteral("engine")).toString();
+    if (engine == QStringLiteral("airbrush")) {
+        brush.engine = BrushEngine::Airbrush;
+    } else if (engine == QStringLiteral("spray")) {
+        brush.engine = BrushEngine::Spray;
+    } else if (engine != QStringLiteral("line")) {
+        setError(error, QStringLiteral("A stroke has an invalid brush engine."));
+        return std::nullopt;
+    }
+    const QString tip = object.value(QStringLiteral("tip")).toString();
+    if (tip == QStringLiteral("square")) {
+        brush.tipShape = BrushTipShape::Square;
+    } else if (tip != QStringLiteral("round")) {
+        setError(error, QStringLiteral("A stroke has an invalid brush tip."));
+        return std::nullopt;
+    }
+    brush.opacity = object.value(QStringLiteral("opacity")).toDouble();
+    brush.flow = object.value(QStringLiteral("flow")).toDouble();
+    brush.hardness = object.value(QStringLiteral("hardness")).toDouble();
+    brush.spacing = object.value(QStringLiteral("spacing")).toDouble();
+    brush.scatter = object.value(QStringLiteral("scatter")).toDouble();
+    brush.particleSize =
+        object.value(QStringLiteral("particleSize")).toDouble();
+    brush.density = object.value(QStringLiteral("density")).toDouble();
+    brush.sizeDynamics =
+        object.value(QStringLiteral("sizeDynamics")).toDouble();
+    brush.opacityDynamics =
+        object.value(QStringLiteral("opacityDynamics")).toDouble();
+    brush.sizeJitter =
+        object.value(QStringLiteral("sizeJitter")).toDouble();
+    brush.animatedJitter =
+        object.value(QStringLiteral("animatedJitter")).toBool();
+    if (!isValidBrushSettings(brush)) {
+        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        return std::nullopt;
+    }
+    return brush;
+}
+
 QJsonObject strokeToJson(const Stroke &stroke)
 {
     QJsonArray points;
@@ -83,12 +179,14 @@ QJsonObject strokeToJson(const Stroke &stroke)
         QStringLiteral("color"),
         stroke.color.name(QColor::HexArgb));
     object.insert(QStringLiteral("width"), stroke.width);
+    object.insert(QStringLiteral("brush"), brushToJson(stroke.brush));
     object.insert(QStringLiteral("points"), points);
     return object;
 }
 
 std::optional<Stroke> strokeFromJson(
     const QJsonValue &value,
+    int fileSchemaVersion,
     QString *error)
 {
     if (!value.isObject()) {
@@ -166,6 +264,14 @@ std::optional<Stroke> strokeFromJson(
         setError(error, QStringLiteral("A stroke has an invalid width."));
         return std::nullopt;
     }
+    if (fileSchemaVersion >= 2) {
+        const std::optional<BrushSettings> brush =
+            brushFromJson(object.value(QStringLiteral("brush")), error);
+        if (!brush) {
+            return std::nullopt;
+        }
+        stroke.brush = *brush;
+    }
     stroke.points.reserve(points.size());
 
     for (const QJsonValue &pointValue : points) {
@@ -197,6 +303,7 @@ QJsonObject layerToJson(const Layer &layer)
 
 std::optional<Layer> layerFromJson(
     const QJsonValue &value,
+    int fileSchemaVersion,
     QString *error)
 {
     if (!value.isObject()) {
@@ -242,7 +349,8 @@ std::optional<Layer> layerFromJson(
     layer.strokes.reserve(strokes.size());
 
     for (const QJsonValue &strokeValue : strokes) {
-        const std::optional<Stroke> stroke = strokeFromJson(strokeValue, error);
+        const std::optional<Stroke> stroke =
+            strokeFromJson(strokeValue, fileSchemaVersion, error);
         if (!stroke) {
             return std::nullopt;
         }
@@ -379,6 +487,7 @@ bool validateDocument(const Document &document, QString *error)
                 || !std::isfinite(stroke.width)
                 || stroke.width < DocumentLimits::minimumStrokeWidth
                 || stroke.width > DocumentLimits::maximumStrokeWidth
+                || !isValidBrushSettings(stroke.brush)
                 || stroke.points.isEmpty()
                 || stroke.points.size() > DocumentLimits::maximumPointsPerStroke
                 || stroke.points.size()
@@ -508,7 +617,9 @@ std::optional<Document> DocumentSerializer::fromJson(
     const QJsonObject root = json.object();
     const std::optional<int> fileSchemaVersion =
         integerFromJson(root.value(QStringLiteral("schemaVersion")));
-    if (!fileSchemaVersion || *fileSchemaVersion != schemaVersion) {
+    if (!fileSchemaVersion
+        || *fileSchemaVersion < 1
+        || *fileSchemaVersion > schemaVersion) {
         setError(error, QStringLiteral("This project version is not supported."));
         return std::nullopt;
     }
@@ -599,7 +710,8 @@ std::optional<Document> DocumentSerializer::fromJson(
     qsizetype totalPoints = 0;
 
     for (const QJsonValue &layerValue : layers) {
-        const std::optional<Layer> layer = layerFromJson(layerValue, error);
+        const std::optional<Layer> layer =
+            layerFromJson(layerValue, *fileSchemaVersion, error);
         if (!layer) {
             return std::nullopt;
         }

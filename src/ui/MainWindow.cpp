@@ -1,5 +1,6 @@
 #include "ui/MainWindow.hpp"
 
+#include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
@@ -17,6 +18,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -483,6 +485,55 @@ void MainWindow::createToolBars()
     tools->addAction(m_bucketAction);
     tools->addSeparator();
 
+    auto *presetLabel = new QLabel(tr("BRUSH"), tools);
+    presetLabel->setProperty("fieldLabel", true);
+    tools->addWidget(presetLabel);
+
+    m_brushPresetCombo = new QComboBox(tools);
+    m_brushPresetCombo->setObjectName(
+        QStringLiteral("brushPresetCombo"));
+    m_brushPresetCombo->setMinimumContentsLength(18);
+    m_brushPresetCombo->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_brushPresetCombo->setToolTip(tr("Brush preset"));
+    m_brushPresetCombo->setAccessibleName(tr("Brush preset"));
+    for (const BrushPreset &preset : BrushPresetCatalog::builtIns()) {
+        m_brushPresetCombo->addItem(
+            tr("%1 · %2")
+                .arg(
+                    BrushPresetCatalog::categoryName(preset.category),
+                    BrushPresetCatalog::displayName(preset)),
+            preset.id);
+    }
+    presetLabel->setBuddy(m_brushPresetCombo);
+    tools->addWidget(m_brushPresetCombo);
+    connect(
+        m_brushPresetCombo,
+        qOverload<int>(&QComboBox::currentIndexChanged),
+        this,
+        [this](int index) {
+            const QString presetId =
+                m_brushPresetCombo->itemData(index).toString();
+            if (presetId.isEmpty()) {
+                return;
+            }
+            m_canvas->setBrushPreset(presetId);
+            if (m_canvas->tool() != CanvasWidget::Tool::Brush) {
+                m_brushAction->trigger();
+            }
+        });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushPresetChanged,
+        this,
+        [this](const QString &presetId) {
+            const int index = m_brushPresetCombo->findData(presetId);
+            if (index >= 0 && index != m_brushPresetCombo->currentIndex()) {
+                QSignalBlocker blocker(m_brushPresetCombo);
+                m_brushPresetCombo->setCurrentIndex(index);
+            }
+        });
+
     m_colorButton = new QPushButton(tools);
     m_colorButton->setFixedSize(34, 24);
     m_colorButton->setToolTip(tr("Choose brush color"));
@@ -550,6 +601,18 @@ void MainWindow::createToolBars()
         &QSlider::valueChanged,
         m_brushSizeSpin,
         qOverload<int>(&QSpinBox::setValue));
+    connect(
+        m_canvas,
+        &CanvasWidget::brushWidthChanged,
+        this,
+        [this, sizeSlider](qreal width) {
+            const int value = qRound(width);
+            QSignalBlocker spinBlocker(m_brushSizeSpin);
+            QSignalBlocker sliderBlocker(sizeSlider);
+            m_brushSizeSpin->setValue(value);
+            sizeSlider->setValue(
+                std::clamp(value, sizeSlider->minimum(), sizeSlider->maximum()));
+        });
 
     tools->addSeparator();
     tools->addAction(
@@ -709,12 +772,12 @@ bool MainWindow::saveAs()
     const QString selected = QFileDialog::getSaveFileName(
         this,
         tr("Save project"),
-        saveDialogStartPath(QStringLiteral("wobble")),
-        tr("WagleWaglePaint projects (*.wobble)"));
+        saveDialogStartPath(QStringLiteral("wagle")),
+        tr("WagleWaglePaint projects (*.wagle)"));
     if (selected.isEmpty()) {
         return false;
     }
-    return saveToFile(normalizedPath(selected, QStringLiteral("wobble")));
+    return saveToFile(normalizedPath(selected, QStringLiteral("wagle")));
 }
 
 bool MainWindow::saveToFile(const QString &filePath)
@@ -761,7 +824,7 @@ void MainWindow::chooseOpenFile()
         this,
         tr("Open project"),
         QString(),
-        tr("WagleWaglePaint projects (*.wobble);;All files (*)"));
+        tr("WagleWaglePaint projects (*.wagle *.wobble);;All files (*)"));
     if (!filePath.isEmpty()) {
         openFile(filePath);
     }
@@ -930,7 +993,7 @@ QString MainWindow::saveDialogStartPath(const QString &extension) const
     if (!m_currentFilePath.isEmpty()) {
         const QFileInfo currentFile(m_currentFilePath);
         if (extension.compare(
-                QStringLiteral("wobble"),
+                QStringLiteral("wagle"),
                 Qt::CaseInsensitive) == 0) {
             return currentFile.absoluteFilePath();
         }

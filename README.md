@@ -50,6 +50,7 @@ necessary.
 ## Features
 
 - Brush and eraser with drawing-tablet pressure support
+- 17 built-in pen, marker, airbrush, and spray presets
 - Crisp pixel-edged strokes inspired by hand-drawn animation tools
 - Boiling-line wobble with independently redrawn, fully loopable frames
 - Lasso and auto selection with move, delete, and undo support
@@ -57,7 +58,7 @@ necessary.
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - Adjustable wobble strength, frame count, and FPS
 - Looping GIF export and current-frame PNG export
-- `.wobble` project files with undo and redo
+- `.wagle` project files with undo and redo
 - Persistent recent colors and a configurable default save folder
 - Customizable shortcuts and English or Korean interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows

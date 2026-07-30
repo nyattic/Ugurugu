@@ -2,6 +2,93 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ko_KR">
 <context>
+    <name>BrushPresets</name>
+    <message>
+        <source>Pen</source>
+        <translation>펜</translation>
+    </message>
+    <message>
+        <source>Marker</source>
+        <translation>마커</translation>
+    </message>
+    <message>
+        <source>Airbrush</source>
+        <translation>에어브러시</translation>
+    </message>
+    <message>
+        <source>Spray</source>
+        <translation>스프레이</translation>
+    </message>
+    <message>
+        <source>Ink Pen</source>
+        <translation>잉크 펜</translation>
+    </message>
+    <message>
+        <source>G-Pen</source>
+        <translation>G펜</translation>
+    </message>
+    <message>
+        <source>Round Pen</source>
+        <translation>둥근 펜</translation>
+    </message>
+    <message>
+        <source>Monoline</source>
+        <translation>모노라인</translation>
+    </message>
+    <message>
+        <source>Bold Ink</source>
+        <translation>굵은 잉크</translation>
+    </message>
+    <message>
+        <source>Opaque Marker</source>
+        <translation>불투명 마커</translation>
+    </message>
+    <message>
+        <source>Transparent Marker</source>
+        <translation>투명 마커</translation>
+    </message>
+    <message>
+        <source>Highlighter</source>
+        <translation>형광펜</translation>
+    </message>
+    <message>
+        <source>Soft Airbrush</source>
+        <translation>부드러운 에어브러시</translation>
+    </message>
+    <message>
+        <source>Hard Airbrush</source>
+        <translation>하드 에어브러시</translation>
+    </message>
+    <message>
+        <source>Dense Airbrush</source>
+        <translation>진한 에어브러시</translation>
+    </message>
+    <message>
+        <source>Fine Mist</source>
+        <translation>미세 분사</translation>
+    </message>
+    <message>
+        <source>Pixel Spray</source>
+        <translation>픽셀 스프레이</translation>
+    </message>
+    <message>
+        <source>Rough Spray</source>
+        <translation>거친 스프레이</translation>
+    </message>
+    <message>
+        <source>Dust Spray</source>
+        <translation>먼지 스프레이</translation>
+    </message>
+    <message>
+        <source>Droplet Spray</source>
+        <translation>물방울 스프레이</translation>
+    </message>
+    <message>
+        <source>Wobble Spray</source>
+        <translation>우글 스프레이</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>WagleWaglePaint</source>
@@ -301,6 +388,18 @@
         <translation>도구</translation>
     </message>
     <message>
+        <source>BRUSH</source>
+        <translation>브러시</translation>
+    </message>
+    <message>
+        <source>Brush preset</source>
+        <translation>브러시 프리셋</translation>
+    </message>
+    <message>
+        <source>%1 · %2</source>
+        <translation>%1 · %2</translation>
+    </message>
+    <message>
         <source>Choose brush color</source>
         <translation>브러시 색 선택</translation>
     </message>
@@ -369,8 +468,8 @@
         <translation>프로젝트 저장</translation>
     </message>
     <message>
-        <source>WagleWaglePaint projects (*.wobble)</source>
-        <translation>WagleWaglePaint 프로젝트 (*.wobble)</translation>
+        <source>WagleWaglePaint projects (*.wagle)</source>
+        <translation>WagleWaglePaint 프로젝트 (*.wagle)</translation>
     </message>
     <message>
         <source>Save failed</source>
@@ -393,8 +492,8 @@
         <translation>프로젝트 열기</translation>
     </message>
     <message>
-        <source>WagleWaglePaint projects (*.wobble);;All files (*)</source>
-        <translation>WagleWaglePaint 프로젝트 (*.wobble);;모든 파일 (*)</translation>
+        <source>WagleWaglePaint projects (*.wagle *.wobble);;All files (*)</source>
+        <translation>WagleWaglePaint 프로젝트 (*.wagle *.wobble);;모든 파일 (*)</translation>
     </message>
     <message>
         <source>Animation is too large</source>

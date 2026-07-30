@@ -248,6 +248,7 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
         || !std::isfinite(stroke.width)
         || stroke.width < DocumentLimits::minimumStrokeWidth
         || stroke.width > DocumentLimits::maximumStrokeWidth
+        || !isValidBrushSettings(stroke.brush)
         || stroke.points.isEmpty()) {
         return;
     }

@@ -1,3 +1,4 @@
+#include "brush/BrushPreset.hpp"
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
@@ -209,6 +210,8 @@ private slots:
         paint.mode = StrokeMode::Paint;
         paint.color = QColor(1, 2, 3, 4);
         paint.width = 9.75;
+        paint.brush =
+            BrushPresetCatalog::find(QStringLiteral("soft-airbrush"))->settings;
         paint.points = {
             {QPointF(1.25, 2.5), 0.2},
             {QPointF(30.0, 40.0), 0.9}
@@ -265,6 +268,7 @@ private slots:
                 QCOMPARE(actualStroke.mode, expectedStroke.mode);
                 QCOMPARE(actualStroke.color, expectedStroke.color);
                 QCOMPARE(actualStroke.width, expectedStroke.width);
+                QVERIFY(actualStroke.brush == expectedStroke.brush);
                 QCOMPARE(actualStroke.points.size(), expectedStroke.points.size());
 
                 for (int pointIndex = 0;
@@ -281,12 +285,28 @@ private slots:
         }
     }
 
+    void loadsLegacyBrushAsInk()
+    {
+        const QByteArray json = QByteArrayLiteral(
+            R"({"schemaVersion":1,"algorithmVersion":1,"canvas":{"width":20,"height":20,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":true,"opacity":1,"strokes":[{"id":"22222222-2222-2222-2222-222222222222","seed":"1","mode":"paint","color":"#ff000000","width":6,"points":[[5,5,0.5],[15,15,1]]}]}]})");
+
+        QString error;
+        const std::optional<Document> document =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(document.has_value(), qPrintable(error));
+        const Stroke &stroke = document->layers.first().strokes.first();
+        QCOMPARE(stroke.brush.engine, BrushEngine::Line);
+        QCOMPARE(stroke.brush.tipShape, BrushTipShape::Round);
+        QCOMPARE(stroke.brush.sizeDynamics, 0.8);
+        QVERIFY(isValidBrushSettings(stroke.brush));
+    }
+
     void loadsBundledExample()
     {
         QString error;
         const QString path =
             QStringLiteral(WOBBLEPAINT_SOURCE_DIR)
-            + QStringLiteral("/examples/Wave.wobble");
+            + QStringLiteral("/examples/Wave.wagle");
         const std::optional<Document> document =
             DocumentSerializer::load(path, &error);
         QVERIFY2(document.has_value(), qPrintable(error));
@@ -302,7 +322,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("project.wobble"));
+            directory.filePath(QStringLiteral("project.wagle"));
         Document source = Document::createDefault(QSize(222, 111));
         source.wobbleAmount = 3.4;
 
@@ -323,7 +343,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("maximum-points.wobble"));
+            directory.filePath(QStringLiteral("maximum-points.wagle"));
         Document source = Document::createDefault(QSize(4096, 4096));
         const StrokePoint point {
             QPointF(1234.56789012345, 3987.65432109876),
@@ -365,7 +385,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("unsafe.wobble"));
+            directory.filePath(QStringLiteral("unsafe.wagle"));
 
         Document document = Document::createDefault(QSize(100, 100));
         Stroke stroke;
@@ -394,7 +414,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("oversized.wobble"));
+            directory.filePath(QStringLiteral("oversized.wagle"));
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         QVERIFY(file.resize(DocumentLimits::maximumProjectBytes + 1));
@@ -486,10 +506,10 @@ private slots:
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version")
             << QByteArrayLiteral(
-                   R"({"schemaVersion":2,"canvas":{"width":10,"height":10},"layers":[{}]})");
+                   R"({"schemaVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("unsupported-algorithm")
             << QByteArrayLiteral(
-                   R"({"schemaVersion":1,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[{}]})");
+                   R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("invalid-canvas")
             << QByteArrayLiteral(
                    R"({"schemaVersion":1,"canvas":{"width":0,"height":10},"layers":[{}]})");
@@ -517,6 +537,9 @@ private slots:
         QTest::newRow("invalid-pressure")
             << QByteArrayLiteral(
                    R"({"schemaVersion":1,"algorithmVersion":1,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":true,"opacity":1,"strokes":[{"id":"22222222-2222-2222-2222-222222222222","seed":"1","mode":"paint","color":"#ff000000","width":1,"points":[[5,5,1.1]]}]}]})");
+        QTest::newRow("missing-brush")
+            << QByteArrayLiteral(
+                   R"({"schemaVersion":2,"algorithmVersion":2,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":true,"opacity":1,"strokes":[{"id":"22222222-2222-2222-2222-222222222222","seed":"1","mode":"paint","color":"#ff000000","width":1,"points":[[5,5,1]]}]}]})");
         QTest::newRow("wrong-field-type")
             << QByteArrayLiteral(
                    R"({"schemaVersion":1,"algorithmVersion":1,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":1,"opacity":1,"strokes":[]}]})");

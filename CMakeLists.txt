@@ -129,6 +129,8 @@ endfunction()
 set(WOBBLEPAINT_CORE_SOURCES
     src/app/Logging.cpp
     src/app/Logging.hpp
+    src/brush/BrushPreset.cpp
+    src/brush/BrushPreset.hpp
     src/document/Document.cpp
     src/document/Document.hpp
     src/document/DocumentController.cpp
