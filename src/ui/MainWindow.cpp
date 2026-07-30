@@ -460,6 +460,25 @@ void MainWindow::createActions()
         m_controller.clearLayer(m_controller.document().activeLayerId);
     });
 
+    auto *zoomInAction = new QAction(tr("Zoom &in"), this);
+    zoomInAction->setObjectName(QStringLiteral("zoomInAction"));
+    registerShortcut(zoomInAction, QKeySequence(QKeySequence::ZoomIn));
+    if (zoomInAction->shortcut() == QKeySequence(QKeySequence::ZoomIn)) {
+        zoomInAction->setShortcuts(
+            {zoomInAction->shortcut(),
+             QKeySequence(QStringLiteral("Ctrl+="))});
+    }
+    connect(zoomInAction, &QAction::triggered, m_canvas, &CanvasWidget::zoomIn);
+
+    auto *zoomOutAction = new QAction(tr("Zoom &out"), this);
+    zoomOutAction->setObjectName(QStringLiteral("zoomOutAction"));
+    registerShortcut(zoomOutAction, QKeySequence(QKeySequence::ZoomOut));
+    connect(
+        zoomOutAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::zoomOut);
+
     auto *fitAction = new QAction(tr("&Fit canvas"), this);
     fitAction->setObjectName(QStringLiteral("fitAction"));
     fitAction->setIcon(Icons::icon(IconGlyph::FitView));
@@ -572,6 +591,8 @@ void MainWindow::createActions()
     addAction(m_rotateSelectionAction);
     addAction(m_duplicateSelectionAction);
     addAction(clearLayerAction);
+    addAction(zoomInAction);
+    addAction(zoomOutAction);
     addAction(fitAction);
     addAction(m_mirrorCanvasAction);
     addAction(m_playAction);
@@ -608,6 +629,8 @@ void MainWindow::createMenus()
     editMenu->addAction(findChild<QAction *>(QStringLiteral("settingsAction")));
 
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(findChild<QAction *>(QStringLiteral("zoomInAction")));
+    viewMenu->addAction(findChild<QAction *>(QStringLiteral("zoomOutAction")));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);

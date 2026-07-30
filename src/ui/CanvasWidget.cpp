@@ -28,6 +28,10 @@ namespace wobble {
 namespace {
 
 constexpr qreal canvasMargin = 32.0;
+constexpr qreal minimumZoom = 0.1;
+constexpr qreal maximumZoom = 12.0;
+constexpr qreal keyboardZoomStep = 1.25;
+constexpr qreal dragZoomDoublingDistance = 120.0;
 
 qreal pointDistance(const QPointF &a, const QPointF &b)
 {
@@ -474,6 +478,16 @@ void CanvasWidget::fitToWindow()
     update();
 }
 
+void CanvasWidget::zoomIn()
+{
+    zoomToward(m_zoom * keyboardZoomStep, zoomAnchorPosition());
+}
+
+void CanvasWidget::zoomOut()
+{
+    zoomToward(m_zoom / keyboardZoomStep, zoomAnchorPosition());
+}
+
 void CanvasWidget::setCanvasMirrored(bool mirrored)
 {
     if (m_canvasMirrored == mirrored) {
@@ -481,6 +495,7 @@ void CanvasWidget::setCanvasMirrored(bool mirrored)
     }
     cancelStroke();
     endPan();
+    endZoomDrag();
     m_canvasMirrored = mirrored;
     updatePointerPosition(m_pointerWidgetPosition);
     emit canvasMirroredChanged(mirrored);
@@ -601,7 +616,8 @@ void CanvasWidget::paintEvent(QPaintEvent *)
         painter.drawText(
             canvasRect.adjusted(0.0, 0.0, 0.0, -14.0),
             Qt::AlignHCenter | Qt::AlignBottom,
-            tr("B Brush · E Eraser · Space Pan · Scroll Zoom · P Play"));
+            tr("B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space "
+               "Zoom · P Play"));
     }
 
     drawSelectionOverlay(painter, transform);
@@ -648,6 +664,13 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
 {
     updatePointerPosition(event->position());
     setFocus(Qt::MouseFocusReason);
+    if (event->button() == Qt::LeftButton
+        && m_spacePressed
+        && event->modifiers().testFlag(Qt::ControlModifier)) {
+        beginZoomDrag(event->position());
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton
         || (event->button() == Qt::LeftButton && m_spacePressed)) {
         beginPan(event->position());
@@ -688,6 +711,11 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
 void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 {
     updatePointerPosition(event->position());
+    if (m_zoomDragging) {
+        continueZoomDrag(event->position());
+        event->accept();
+        return;
+    }
     if (m_panning) {
         continuePan(event->position());
         event->accept();
@@ -720,6 +748,11 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
 {
     updatePointerPosition(event->position());
+    if (m_zoomDragging && event->button() == Qt::LeftButton) {
+        endZoomDrag();
+        event->accept();
+        return;
+    }
     if (m_panning
         && (event->button() == Qt::MiddleButton
             || event->button() == Qt::LeftButton)) {
@@ -762,20 +795,8 @@ void CanvasWidget::wheelEvent(QWheelEvent *event)
 {
     const QPointF cursor = event->position();
     updatePointerPosition(cursor);
-    bool inside = false;
-    const QPointF anchor = mapToDocument(cursor, &inside);
     const qreal factor = std::pow(1.0015, event->angleDelta().y());
-    const qreal previousZoom = m_zoom;
-    m_zoom = std::clamp(m_zoom * factor, 0.1, 12.0);
-    if (qFuzzyCompare(previousZoom, m_zoom)) {
-        return;
-    }
-    if (inside) {
-        const QPointF mappedAfter = documentTransform().map(anchor);
-        m_pan += cursor - mappedAfter;
-    }
-    notifyZoomChanged();
-    update();
+    zoomToward(m_zoom * factor, cursor);
     event->accept();
 }
 
@@ -790,7 +811,11 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         }
         if (m_spacePressed) {
             m_tabletSequence = true;
-            beginPan(event->position());
+            if (event->modifiers().testFlag(Qt::ControlModifier)) {
+                beginZoomDrag(event->position());
+            } else {
+                beginPan(event->position());
+            }
             event->accept();
             return;
         }
@@ -805,7 +830,9 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
     }
     if (event->type() == QEvent::TabletMove && m_tabletSequence) {
         updatePointerPosition(event->position());
-        if (m_panning) {
+        if (m_zoomDragging) {
+            continueZoomDrag(event->position());
+        } else if (m_panning) {
             continuePan(event->position());
         } else {
             continueStroke(event->position(), event->pressure());
@@ -814,7 +841,9 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         return;
     }
     if (event->type() == QEvent::TabletRelease && m_tabletSequence) {
-        if (m_panning) {
+        if (m_zoomDragging) {
+            endZoomDrag();
+        } else if (m_panning) {
             endPan();
         } else {
             endStroke(event->position(), event->pressure());
@@ -842,6 +871,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
         cancelLasso();
         pushSelectionChange(previousSelection, {}, tr("Deselect"));
         endPan();
+        endZoomDrag();
         event->accept();
         return;
     }
@@ -1122,6 +1152,76 @@ void CanvasWidget::endPan()
     updateCursor();
 }
 
+QPointF CanvasWidget::zoomAnchorPosition() const
+{
+    return m_pointerOverWidget
+        ? m_pointerWidgetPosition
+        : QPointF(width() * 0.5, height() * 0.5);
+}
+
+void CanvasWidget::zoomToward(
+    qreal targetZoom,
+    const QPointF &widgetPosition)
+{
+    const qreal nextZoom =
+        std::clamp(targetZoom, minimumZoom, maximumZoom);
+    if (qFuzzyCompare(m_zoom, nextZoom)) {
+        return;
+    }
+    bool inside = false;
+    const QPointF anchor = mapToDocument(widgetPosition, &inside);
+    m_zoom = nextZoom;
+    if (inside) {
+        m_pan += widgetPosition - documentTransform().map(anchor);
+    }
+    notifyZoomChanged();
+    update();
+}
+
+void CanvasWidget::beginZoomDrag(const QPointF &widgetPosition)
+{
+    cancelStroke();
+    endPan();
+    m_zoomDragging = true;
+    m_zoomDragStart = widgetPosition;
+    m_zoomDragStartZoom = m_zoom;
+    m_zoomDragAnchor =
+        mapToDocument(widgetPosition, &m_zoomDragAnchorInside);
+    updateCursor();
+}
+
+void CanvasWidget::continueZoomDrag(const QPointF &widgetPosition)
+{
+    if (!m_zoomDragging) {
+        return;
+    }
+    const qreal distance = widgetPosition.x() - m_zoomDragStart.x();
+    const qreal nextZoom = std::clamp(
+        m_zoomDragStartZoom
+            * std::pow(2.0, distance / dragZoomDoublingDistance),
+        minimumZoom,
+        maximumZoom);
+    if (qFuzzyCompare(m_zoom, nextZoom)) {
+        return;
+    }
+    m_zoom = nextZoom;
+    if (m_zoomDragAnchorInside) {
+        m_pan +=
+            m_zoomDragStart - documentTransform().map(m_zoomDragAnchor);
+    }
+    notifyZoomChanged();
+    update();
+}
+
+void CanvasWidget::endZoomDrag()
+{
+    if (!m_zoomDragging) {
+        return;
+    }
+    m_zoomDragging = false;
+    updateCursor();
+}
+
 void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
 {
     bool inside = false;
@@ -1135,6 +1235,10 @@ void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
 
 void CanvasWidget::updateCursor()
 {
+    if (m_zoomDragging) {
+        setCursor(Qt::SizeHorCursor);
+        return;
+    }
     if (m_panning) {
         setCursor(Qt::ClosedHandCursor);
         return;

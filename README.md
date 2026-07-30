@@ -82,6 +82,8 @@ Shortcuts**.
 | `M` | Flip the canvas horizontally (view only) |
 | `Space` + drag | Pan the canvas |
 | Scroll | Zoom |
+| `Ctrl/Cmd++` / `Ctrl/Cmd+-` | Zoom in / out |
+| `Ctrl/Cmd+Space` + drag | Zoom with the pen or mouse (drag right to zoom in) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
 | `Ctrl/Cmd+E` | Export an animated GIF |

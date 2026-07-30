@@ -166,8 +166,8 @@
     <name>wobble::CanvasWidget</name>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="604"/>
-        <source>B Brush · E Eraser · Space Pan · Scroll Zoom · P Play</source>
-        <translation>B 브러시 · E 지우개 · Space 이동 · 스크롤 확대/축소 · P 재생</translation>
+        <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
+        <translation>B 브러시 · E 지우개 · Space 이동 · 스크롤/Ctrl+Space 확대·축소 · P 재생</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="1019"/>
@@ -529,6 +529,16 @@
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="463"/>
+        <source>Zoom &amp;in</source>
+        <translation>확대(&amp;I)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="472"/>
+        <source>Zoom &amp;out</source>
+        <translation>축소(&amp;O)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="480"/>
         <source>&amp;Fit canvas</source>
         <translation>캔버스 맞추기(&amp;F)</translation>
     </message>

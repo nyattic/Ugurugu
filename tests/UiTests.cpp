@@ -515,6 +515,62 @@ private slots:
         QVERIFY(!window.isWindowModified());
     }
 
+    void zoomsWithKeyboardActions()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *zoomInAction = window.findChild<QAction *>(
+            QStringLiteral("zoomInAction"));
+        QAction *zoomOutAction = window.findChild<QAction *>(
+            QStringLiteral("zoomOutAction"));
+        QVERIFY(canvas);
+        QVERIFY(zoomInAction);
+        QVERIFY(zoomOutAction);
+
+        const qreal initialZoom = canvas->zoom();
+        zoomInAction->trigger();
+        QVERIFY(canvas->zoom() > initialZoom);
+        zoomOutAction->trigger();
+        zoomOutAction->trigger();
+        QVERIFY(canvas->zoom() < initialZoom);
+        QVERIFY(!window.isWindowModified());
+    }
+
+    void zoomsWithPanModifierCtrlDrag()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const qreal initialZoom = canvas.zoom();
+        canvas.setPanModifierActive(true);
+        const QPoint start(200, 200);
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::ControlModifier,
+            start);
+        QTest::mouseMove(&canvas, start + QPoint(120, 0), 5);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::ControlModifier,
+            start + QPoint(120, 0));
+        canvas.setPanModifierActive(false);
+        QVERIFY(canvas.zoom() > initialZoom);
+
+        const Layer &layer = controller.document().layers.first();
+        QVERIFY(layer.strokes.isEmpty());
+    }
+
     void mapsDrawingInputThroughTheMirroredCanvas()
     {
         DocumentController controller;

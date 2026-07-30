@@ -58,6 +58,8 @@ public slots:
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
     void fitToWindow();
+    void zoomIn();
+    void zoomOut();
     void setCanvasMirrored(bool mirrored);
     void toggleCanvasMirrored();
     void setCurrentFrame(int frame);
@@ -122,6 +124,11 @@ private:
     void beginPan(const QPointF &widgetPosition);
     void continuePan(const QPointF &widgetPosition);
     void endPan();
+    QPointF zoomAnchorPosition() const;
+    void zoomToward(qreal targetZoom, const QPointF &widgetPosition);
+    void beginZoomDrag(const QPointF &widgetPosition);
+    void continueZoomDrag(const QPointF &widgetPosition);
+    void endZoomDrag();
     void updatePointerPosition(const QPointF &widgetPosition);
     void updateCursor();
     void notifyZoomChanged();
@@ -198,6 +205,11 @@ private:
     bool m_panning = false;
     bool m_spacePressed = false;
     bool m_tabletSequence = false;
+    bool m_zoomDragging = false;
+    QPointF m_zoomDragStart;
+    QPointF m_zoomDragAnchor;
+    bool m_zoomDragAnchorInside = false;
+    qreal m_zoomDragStartZoom = 1.0;
     QPointF m_lastPanPosition;
     QPointF m_pointerWidgetPosition;
     bool m_pointerInside = false;
