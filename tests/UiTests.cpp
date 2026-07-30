@@ -1,4 +1,6 @@
 #include "brush/BrushPreset.hpp"
+#include "ui/BrushPopoverPanel.hpp"
+#include "ui/BrushPresetButton.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/MainWindow.hpp"
@@ -70,22 +72,25 @@ private slots:
         QVERIFY(layerDock);
         QVERIFY(undoAction);
         QVERIFY(!undoAction->isEnabled());
-        QComboBox *brushPresetCombo =
-            window.findChild<QComboBox *>(
-                QStringLiteral("brushPresetCombo"));
+        const QList<BrushPresetButton *> presetButtons =
+            window.findChildren<BrushPresetButton *>();
         QSpinBox *brushSizeSpin =
             window.findChild<QSpinBox *>(
                 QStringLiteral("brushSizeSpin"));
-        QVERIFY(brushPresetCombo);
         QVERIFY(brushSizeSpin);
         QCOMPARE(
-            brushPresetCombo->count(),
+            presetButtons.size(),
             BrushPresetCatalog::builtIns().size());
-        const int softAirbrushIndex =
-            brushPresetCombo->findData(QStringLiteral("soft-airbrush"));
-        QVERIFY(softAirbrushIndex >= 0);
-        brushPresetCombo->setCurrentIndex(softAirbrushIndex);
+        BrushPresetButton *softAirbrushButton = nullptr;
+        for (BrushPresetButton *button : presetButtons) {
+            if (button->presetId() == QStringLiteral("soft-airbrush")) {
+                softAirbrushButton = button;
+            }
+        }
+        QVERIFY(softAirbrushButton);
+        softAirbrushButton->click();
         QCOMPARE(canvas->brushPresetId(), QStringLiteral("soft-airbrush"));
+        QVERIFY(softAirbrushButton->isChecked());
         QCOMPARE(
             brushSizeSpin->value(),
             qRound(
@@ -120,6 +125,18 @@ private slots:
         if (!screenshotPath.isEmpty()) {
             QVERIFY(window.grab().save(screenshotPath, "PNG"));
             QVERIFY(QFileInfo(screenshotPath).size() > 0);
+        }
+
+        const QString brushPanelScreenshotPath =
+            qEnvironmentVariable("WOBBLEPAINT_BRUSH_PANEL_SCREENSHOT");
+        if (!brushPanelScreenshotPath.isEmpty()) {
+            BrushPopoverPanel *brushPanel =
+                window.findChild<BrushPopoverPanel *>();
+            QVERIFY(brushPanel);
+            QWidget *popover = brushPanel->window();
+            popover->adjustSize();
+            QVERIFY(popover->grab().save(brushPanelScreenshotPath, "PNG"));
+            QVERIFY(QFileInfo(brushPanelScreenshotPath).size() > 0);
         }
 
         undoAction->trigger();

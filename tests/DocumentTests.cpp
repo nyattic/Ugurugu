@@ -3,6 +3,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "io/DocumentSerializer.hpp"
+#include "ui/Theme.hpp"
 
 #include <QApplication>
 #include <QFile>
@@ -565,6 +566,7 @@ private slots:
 int main(int argc, char **argv)
 {
     QApplication application(argc, argv);
+    wobble::Theme::apply(application);
     wobble::DocumentTests documentTests;
     int result = QTest::qExec(&documentTests, argc, argv);
     result |= wobble::runRenderEngineTests(argc, argv);

@@ -1,28 +1,29 @@
 #include "ui/MainWindow.hpp"
 
-#include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
 #include "render/RenderEngine.hpp"
+#include "ui/BrushPopoverPanel.hpp"
+#include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorSwatchRow.hpp"
 #include "ui/Icons.hpp"
 #include "ui/LayerDock.hpp"
+#include "ui/PopoverToolButton.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
+#include "ui/ToolPopover.hpp"
 
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
-#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
-#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -39,8 +40,6 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSettings>
-#include <QSignalBlocker>
-#include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
@@ -474,68 +473,68 @@ void MainWindow::createMenus()
 
 void MainWindow::createToolBars()
 {
-    QToolBar *tools = addToolBar(tr("Tools"));
-    tools->setObjectName(QStringLiteral("PaintTools"));
-    tools->setMovable(false);
-    tools->setIconSize(QSize(22, 22));
-    tools->addAction(m_brushAction);
-    tools->addAction(m_eraserAction);
-    tools->addAction(m_lassoAction);
-    tools->addAction(m_wandAction);
-    tools->addAction(m_bucketAction);
-    tools->addSeparator();
+    auto *rail = new QToolBar(tr("Tools"), this);
+    rail->setObjectName(QStringLiteral("ToolRail"));
+    rail->setMovable(false);
+    rail->setIconSize(QSize(24, 24));
+    addToolBar(Qt::LeftToolBarArea, rail);
 
-    auto *presetLabel = new QLabel(tr("BRUSH"), tools);
-    presetLabel->setProperty("fieldLabel", true);
-    tools->addWidget(presetLabel);
+    const auto addRailButton = [rail](QAction *action) {
+        auto *button = new PopoverToolButton(rail);
+        button->setDefaultAction(action);
+        button->setIconSize(rail->iconSize());
+        rail->addWidget(button);
+        return button;
+    };
 
-    m_brushPresetCombo = new QComboBox(tools);
-    m_brushPresetCombo->setObjectName(
-        QStringLiteral("brushPresetCombo"));
-    m_brushPresetCombo->setMinimumContentsLength(18);
-    m_brushPresetCombo->setSizeAdjustPolicy(
-        QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    m_brushPresetCombo->setToolTip(tr("Brush preset"));
-    m_brushPresetCombo->setAccessibleName(tr("Brush preset"));
-    for (const BrushPreset &preset : BrushPresetCatalog::builtIns()) {
-        m_brushPresetCombo->addItem(
-            tr("%1 · %2")
-                .arg(
-                    BrushPresetCatalog::categoryName(preset.category),
-                    BrushPresetCatalog::displayName(preset)),
-            preset.id);
-    }
-    presetLabel->setBuddy(m_brushPresetCombo);
-    tools->addWidget(m_brushPresetCombo);
+    PopoverToolButton *brushButton = addRailButton(m_brushAction);
+    PopoverToolButton *eraserButton = addRailButton(m_eraserAction);
+    addRailButton(m_lassoAction);
+    addRailButton(m_wandAction);
+    addRailButton(m_bucketAction);
+
+    auto *brushPopover = new ToolPopover(this);
+    auto *brushPanel = new BrushPopoverPanel(m_canvas);
+    brushPopover->setContentWidget(brushPanel);
     connect(
-        m_brushPresetCombo,
-        qOverload<int>(&QComboBox::currentIndexChanged),
-        this,
-        [this](int index) {
-            const QString presetId =
-                m_brushPresetCombo->itemData(index).toString();
-            if (presetId.isEmpty()) {
-                return;
-            }
-            m_canvas->setBrushPreset(presetId);
-            if (m_canvas->tool() != CanvasWidget::Tool::Brush) {
-                m_brushAction->trigger();
-            }
+        brushPopover,
+        &ToolPopover::popoverShown,
+        brushPanel,
+        [brushPanel]() {
+            brushPanel->setAnimationActive(true);
         });
+    connect(
+        brushPopover,
+        &ToolPopover::popoverHidden,
+        brushPanel,
+        [brushPanel]() {
+            brushPanel->setAnimationActive(false);
+        });
+    brushButton->setPopover(brushPopover);
+
+    auto *eraserPopover = new ToolPopover(this);
+    eraserPopover->setContentWidget(
+        new BrushSizeRow(m_canvas, QStringLiteral("eraserSize")));
+    eraserButton->setPopover(eraserPopover);
+
     connect(
         m_canvas,
         &CanvasWidget::brushPresetChanged,
         this,
-        [this](const QString &presetId) {
-            const int index = m_brushPresetCombo->findData(presetId);
-            if (index >= 0 && index != m_brushPresetCombo->currentIndex()) {
-                QSignalBlocker blocker(m_brushPresetCombo);
-                m_brushPresetCombo->setCurrentIndex(index);
+        [this](const QString &) {
+            if (m_canvas->tool() != CanvasWidget::Tool::Brush) {
+                m_brushAction->trigger();
             }
         });
 
-    m_colorButton = new QPushButton(tools);
-    m_colorButton->setFixedSize(34, 24);
+    auto *railSpacer = new QWidget(rail);
+    railSpacer->setSizePolicy(
+        QSizePolicy::Preferred,
+        QSizePolicy::Expanding);
+    rail->addWidget(railSpacer);
+
+    m_colorButton = new QPushButton(rail);
+    m_colorButton->setFixedSize(28, 28);
     m_colorButton->setToolTip(tr("Choose brush color"));
     m_colorButton->setAccessibleName(tr("Brush color"));
     m_colorButton->setCursor(Qt::PointingHandCursor);
@@ -549,81 +548,40 @@ void MainWindow::createToolBars()
             m_canvas->setBrushColor(color);
         }
     });
-    tools->addWidget(m_colorButton);
+    auto *colorHolder = new QWidget(rail);
+    auto *colorLayout = new QHBoxLayout(colorHolder);
+    colorLayout->setContentsMargins(0, 2, 0, 8);
+    colorLayout->addWidget(m_colorButton, 0, Qt::AlignHCenter);
+    rail->addWidget(colorHolder);
 
-    m_swatchRow = new ColorSwatchRow(tools);
+    QToolBar *quick = addToolBar(tr("Quick access"));
+    quick->setObjectName(QStringLiteral("PaintTools"));
+    quick->setMovable(false);
+    quick->setIconSize(QSize(22, 22));
+
+    m_swatchRow = new ColorSwatchRow(quick);
     connect(
         m_swatchRow,
         &ColorSwatchRow::colorSelected,
         m_canvas,
         &CanvasWidget::setBrushColor);
-    tools->addWidget(m_swatchRow);
+    quick->addWidget(m_swatchRow);
 
-    tools->addSeparator();
+    auto *quickSpacer = new QWidget(quick);
+    quickSpacer->setSizePolicy(
+        QSizePolicy::Expanding,
+        QSizePolicy::Preferred);
+    quick->addWidget(quickSpacer);
 
-    auto *sizeLabel = new QLabel(tr("SIZE"), tools);
-    sizeLabel->setProperty("fieldLabel", true);
-    tools->addWidget(sizeLabel);
-
-    auto *sizeSlider = new QSlider(Qt::Horizontal, tools);
-    sizeSlider->setObjectName(QStringLiteral("brushSizeSlider"));
-    sizeSlider->setRange(
-        static_cast<int>(std::ceil(DocumentLimits::minimumStrokeWidth)),
-        128);
-    sizeSlider->setFixedWidth(96);
-    sizeSlider->setToolTip(tr("Brush size"));
-    sizeSlider->setAccessibleName(tr("Brush size"));
-    tools->addWidget(sizeSlider);
-
-    m_brushSizeSpin = new QSpinBox(tools);
-    m_brushSizeSpin->setObjectName(QStringLiteral("brushSizeSpin"));
-    m_brushSizeSpin->setRange(
-        static_cast<int>(std::ceil(DocumentLimits::minimumStrokeWidth)),
-        static_cast<int>(std::floor(DocumentLimits::maximumStrokeWidth)));
-    m_brushSizeSpin->setValue(qRound(m_canvas->brushWidth()));
-    m_brushSizeSpin->setSuffix(tr(" px"));
-    sizeLabel->setBuddy(m_brushSizeSpin);
-    tools->addWidget(m_brushSizeSpin);
-
-    sizeSlider->setValue(qRound(m_canvas->brushWidth()));
-    connect(
-        m_brushSizeSpin,
-        &QSpinBox::valueChanged,
-        this,
-        [this, sizeSlider](int value) {
-            m_canvas->setBrushWidth(value);
-            QSignalBlocker blocker(sizeSlider);
-            sizeSlider->setValue(
-                std::clamp(value, sizeSlider->minimum(), sizeSlider->maximum()));
-        });
-    connect(
-        sizeSlider,
-        &QSlider::valueChanged,
-        m_brushSizeSpin,
-        qOverload<int>(&QSpinBox::setValue));
-    connect(
-        m_canvas,
-        &CanvasWidget::brushWidthChanged,
-        this,
-        [this, sizeSlider](qreal width) {
-            const int value = qRound(width);
-            QSignalBlocker spinBlocker(m_brushSizeSpin);
-            QSignalBlocker sliderBlocker(sizeSlider);
-            m_brushSizeSpin->setValue(value);
-            sizeSlider->setValue(
-                std::clamp(value, sizeSlider->minimum(), sizeSlider->maximum()));
-        });
-
-    tools->addSeparator();
-    tools->addAction(
+    quick->addAction(
         findChild<QAction *>(QStringLiteral("undoAction")));
-    tools->addAction(
+    quick->addAction(
         findChild<QAction *>(QStringLiteral("redoAction")));
-    tools->addSeparator();
+    quick->addSeparator();
     QAction *settingsAction =
         findChild<QAction *>(QStringLiteral("settingsAction"));
-    tools->addAction(settingsAction);
-    if (QWidget *settingsButton = tools->widgetForAction(settingsAction)) {
+    quick->addAction(settingsAction);
+    if (QWidget *settingsButton = quick->widgetForAction(settingsAction)) {
         settingsButton->setObjectName(QStringLiteral("settingsButton"));
     }
 
@@ -713,8 +671,8 @@ void MainWindow::updateColorButton()
     const QColor color = m_canvas->brushColor();
     m_colorButton->setStyleSheet(
         QStringLiteral(
-            "QPushButton { background: %1; border: 1px solid "
-            "rgba(255, 255, 255, 70); border-radius: 5px; }"
+            "QPushButton { background: %1; border: 2px solid "
+            "rgba(255, 255, 255, 70); border-radius: 14px; }"
             "QPushButton:hover { border-color: %2; }")
             .arg(color.name(QColor::HexArgb), Theme::accent().name()));
 }

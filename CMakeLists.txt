@@ -172,6 +172,12 @@ target_link_libraries(
 wobblepaint_target_defaults(wobblepaint_core)
 
 add_library(wobblepaint_ui STATIC
+    src/ui/BrushPopoverPanel.cpp
+    src/ui/BrushPopoverPanel.hpp
+    src/ui/BrushPresetButton.cpp
+    src/ui/BrushPresetButton.hpp
+    src/ui/BrushSizeRow.cpp
+    src/ui/BrushSizeRow.hpp
     src/ui/CanvasWidget.cpp
     src/ui/CanvasWidget.hpp
     src/ui/ColorSwatchRow.cpp
@@ -186,12 +192,16 @@ add_library(wobblepaint_ui STATIC
     src/ui/LayerListWidget.hpp
     src/ui/MainWindow.cpp
     src/ui/MainWindow.hpp
+    src/ui/PopoverToolButton.cpp
+    src/ui/PopoverToolButton.hpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.hpp
     src/ui/Theme.cpp
     src/ui/Theme.hpp
     src/ui/TimelineBar.cpp
     src/ui/TimelineBar.hpp
+    src/ui/ToolPopover.cpp
+    src/ui/ToolPopover.hpp
     src/ui/WobblePlayButton.cpp
     src/ui/WobblePlayButton.hpp
 )

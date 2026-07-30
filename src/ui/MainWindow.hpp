@@ -7,11 +7,9 @@
 
 class QAction;
 class QCloseEvent;
-class QComboBox;
 class QEvent;
 class QLabel;
 class QPushButton;
-class QSpinBox;
 
 namespace wobble {
 
@@ -68,8 +66,6 @@ private:
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;
-    QComboBox *m_brushPresetCombo = nullptr;
-    QSpinBox *m_brushSizeSpin = nullptr;
     QLabel *m_pointerLabel = nullptr;
     QLabel *m_zoomLabel = nullptr;
 };

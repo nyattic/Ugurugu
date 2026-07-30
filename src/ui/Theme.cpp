@@ -120,6 +120,10 @@ QToolBar::separator {
     width: 1px;
     margin: 6px 8px;
 }
+QToolBar#ToolRail {
+    padding: 8px 4px;
+    spacing: 4px;
+}
 QToolBar QLabel {
     color: %MUTED%;
     padding: 0 2px;
@@ -152,6 +156,23 @@ QToolButton:checked:hover {
 }
 QToolButton:disabled {
     color: %DISABLED%;
+}
+QToolButton[categoryTab="true"] {
+    background: transparent;
+    color: %MUTED%;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QToolButton[categoryTab="true"]:hover {
+    background: %HOVER%;
+    color: %TEXT%;
+}
+QToolButton[categoryTab="true"]:checked {
+    background: %ACCENT%;
+    color: %ACCENTTEXT%;
 }
 QSpinBox, QDoubleSpinBox {
     background: %BASE%;
