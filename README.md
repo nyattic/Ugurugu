@@ -1,35 +1,71 @@
+<p align="center">
+  <img src="resources/icons/WobblePaint.png" width="128" alt="WagleWaglePaint app icon">
+</p>
+
 # WagleWaglePaint
 
-![Last Commit](https://img.shields.io/github/last-commit/nyattic/WagleWaglePaint?style=for-the-badge&logo=git&logoColor=white&labelColor=1e1b2e&color=ffc94a)
+[![Latest Release](https://img.shields.io/github/v/release/nyattic/WagleWaglePaint?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/nyattic/WagleWaglePaint/total?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases)
 ![License](https://img.shields.io/badge/license-MIT-ffc94a?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
-A drawing tool where every line wobbles. Draw once and your sketch
-comes alive as a boiling-line animation, ready to export as a looping
-GIF.
+A native drawing app where every line wobbles. Draw once and your
+sketch comes alive as a crisp, boiling-line animation ready to export
+as a looping GIF.
 
-Inspired by Shake Art DELUXE and PS1-style vertex jitter, rebuilt as a
-native desktop app with layers, pressure support, and project files.
+Inspired by Shake Art DELUXE and PS1-style vertex jitter, with layers,
+tablet pressure, selections, project files, and automatic updates.
+
+## Download
+
+Get the newest version from
+[GitHub Releases](https://github.com/nyattic/WagleWaglePaint/releases/latest).
+
+| Platform | Supported systems | Download this file |
+| --- | --- | --- |
+| Windows | Windows 10 or later, x64 | `WagleWaglePaint-<version>-Windows-x64-Setup.exe` |
+| macOS | macOS 13 or later, Apple Silicon | `WagleWaglePaint-<version>-macOS-arm64.dmg` |
+
+The `.zip`, `.nupkg`, `appcast.xml`, and `.json` files on the release
+page are used by the automatic updaters. They are not needed for a
+normal installation.
+
+## Install
+
+### Windows
+
+Run the downloaded Setup file. WagleWaglePaint installs for the current
+user and opens when installation is complete.
+
+### macOS
+
+Open the DMG and drag WagleWaglePaint into the Applications folder.
+
+The current builds are not signed with a trusted developer certificate
+or notarized, so Windows SmartScreen or macOS Gatekeeper may show a
+warning. Only download the app from the official Releases page. On
+macOS, Control-click the app, choose **Open**, and confirm the prompt if
+necessary.
 
 ## Features
 
-- Brush and eraser with tablet pressure support
+- Brush and eraser with drawing-tablet pressure support
 - Crisp pixel-edged strokes inspired by hand-drawn animation tools
-- Boiling-line wobble: every frame is an independent redraw of your
-  strokes, fully loopable
-- Lasso select and auto select (click inside line art) to move or
-  delete strokes
-- Paint bucket that fills enclosed areas — fills wobble along with the
-  lines
+- Boiling-line wobble with independently redrawn, fully loopable frames
+- Lasso and auto selection with move, delete, and undo support
+- Paint bucket fills that wobble together with the line art
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - Adjustable wobble strength, frame count, and FPS
-- Looping GIF export and single-frame PNG export
-- `.wobble` project files with full undo/redo
+- Looping GIF export and current-frame PNG export
+- `.wobble` project files with undo and redo
+- Persistent recent colors and a configurable default save folder
+- Customizable shortcuts and English or Korean interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
-- English and Korean UI, following the system or an in-app preference
 
 ## Controls
+
+These are the default shortcuts. They can be changed in **Settings →
+Shortcuts**.
 
 | Key | Action |
 | --- | --- |
@@ -41,43 +77,33 @@ native desktop app with layers, pressure support, and project files.
 | `P` | Play or pause the preview |
 | `Space` + drag | Pan the canvas |
 | Scroll | Zoom |
-| `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` | Undo / Redo |
-| `Ctrl/Cmd+E` | Export animated GIF |
-| `Esc` | Cancel stroke or selection |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
+| `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
+| `Ctrl/Cmd+E` | Export an animated GIF |
+| `Ctrl/Cmd+0` | Fit the canvas to the window |
+| `Esc` | Cancel the current stroke or selection |
 
-Open `examples/Wave.wobble` to try a ready-made document.
+## Settings
 
-## Building from source
+Open Settings with the gear button in the toolbar. It is also available
+from **Edit → Settings** on Windows and **WagleWaglePaint → Settings**
+on macOS.
 
-Requires CMake 3.25+, Ninja, Qt 6.10+, spdlog, and fmt.
+- **General:** choose the interface language and drawing animation
+  behavior. Restart the app after changing the language.
+- **Files:** choose the default folder used by save and export dialogs.
+- **Shortcuts:** replace any application shortcut and restore the
+  defaults when needed.
 
-### macOS
+## Automatic updates
 
-```sh
-brew install cmake ninja qt spdlog fmt
-cmake --preset macos-release
-cmake --build --preset macos-release
-open out/build/macos-release/WagleWaglePaint.app
-```
+WagleWaglePaint checks for updates after launch. You can also use
+**Help → Check for Updates** at any time. Updates are downloaded and
+installed through Sparkle on macOS and Velopack on Windows.
 
-### Windows
+## For developers
 
-Requires Visual Studio 2022 and Qt 6 (MSVC 2022 x64). Install spdlog
-with vcpkg.
-
-```powershell
-vcpkg install spdlog:x64-windows fmt:x64-windows
-cmake --preset windows-release -DCMAKE_PREFIX_PATH=C:\Qt\6.x.x\msvc2022_64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake
-cmake --build --preset windows-release
-```
-
-### Tests
-
-```sh
-cmake --preset macos-debug
-cmake --build --preset macos-debug
-ctest --preset macos-debug
-```
+See [BUILDING.md](BUILDING.md) for source-build and test instructions.
 
 ## License
 
