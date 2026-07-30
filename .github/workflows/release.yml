@@ -138,7 +138,7 @@ jobs:
           vpk pack `
             --packId WagleWaglePaint `
             --packVersion $version `
-            --packDir "$env:RUNNER_TEMP\WagleWaglePaint\bin" `
+            --packDir "$env:RUNNER_TEMP\WagleWaglePaint" `
             --mainExe WagleWaglePaint.exe `
             --packTitle WagleWaglePaint `
             --packAuthors nyattic `

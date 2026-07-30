@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(WagleWaglePaint VERSION 0.2.1 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.2.2 LANGUAGES CXX)
 
 include(FetchContent)
+if(WIN32)
+    set(CMAKE_INSTALL_BINDIR ".")
+endif()
 include(GNUInstallDirs)
 
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
@@ -138,6 +141,14 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/RenderEngine.cpp
     src/render/RenderEngine.hpp
 )
+
+if(MSVC)
+    set_property(
+        SOURCE src/app/Logging.cpp
+        APPEND
+        PROPERTY COMPILE_OPTIONS /wd4702
+    )
+endif()
 
 add_library(wobblepaint_core STATIC ${WOBBLEPAINT_CORE_SOURCES})
 target_include_directories(wobblepaint_core PUBLIC src)
