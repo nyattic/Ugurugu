@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# C++
+out/
+build/
+CMakeUserPresets.json
+compile_commands.json
+.cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# Other
+*.user
+/*.gif

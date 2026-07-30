@@ -1,0 +1,251 @@
+#include "io/GifWriter.hpp"
+#include "render/RenderEngine.hpp"
+
+#include <QFile>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QTemporaryDir>
+#include <QtTest>
+
+#include <cmath>
+
+namespace wobble {
+
+class GifWriterTests final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void writesAnimatedGif()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        QVector<QImage> frames;
+        const QVector<QRgb> colors {
+            qRgb(239, 62, 54),
+            qRgb(72, 187, 120),
+            qRgb(66, 153, 225)
+        };
+
+        for (QRgb color : colors) {
+            QImage frame(48, 32, QImage::Format_ARGB32);
+            frame.fill(color);
+            frames.append(frame);
+        }
+
+        const QString path = directory.filePath(QStringLiteral("animation.gif"));
+        QString error;
+        QVERIFY2(GifWriter::write(path, frames, 7, &error), qPrintable(error));
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray contents = file.readAll();
+        QVERIFY(contents.startsWith("GIF89a"));
+        QVERIFY(contents.endsWith(QByteArray(1, static_cast<char>(0x3b))));
+        QVERIFY(contents.contains("NETSCAPE2.0"));
+
+        QImageReader reader(path, QByteArrayLiteral("gif"));
+        QVERIFY2(reader.canRead(), qPrintable(reader.errorString()));
+        QCOMPARE(reader.size(), QSize(48, 32));
+
+        if (reader.supportsAnimation()) {
+            QCOMPARE(reader.imageCount(), frames.size());
+        }
+    }
+
+    void writesPerFrameDelays()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        QVector<QImage> frames;
+        for (int value : {20, 100, 220}) {
+            QImage frame(12, 8, QImage::Format_ARGB32);
+            frame.fill(QColor(value, 40, 80));
+            frames.append(frame);
+        }
+
+        const QVector<int> delays {3, 7, 11};
+        const QString path =
+            directory.filePath(QStringLiteral("variable-delay.gif"));
+        QString error;
+        QVERIFY2(
+            GifWriter::write(path, frames, delays, &error),
+            qPrintable(error));
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray contents = file.readAll();
+        QVector<int> encodedDelays;
+        const QByteArray marker("\x21\xf9\x04", 3);
+        qsizetype offset = 0;
+        while ((offset = contents.indexOf(marker, offset)) >= 0) {
+            QVERIFY(offset + 6 < contents.size());
+            const int low = static_cast<quint8>(contents.at(offset + 4));
+            const int high = static_cast<quint8>(contents.at(offset + 5));
+            encodedDelays.append(low | (high << 8));
+            offset += marker.size();
+        }
+        QCOMPARE(encodedDelays, delays);
+    }
+
+    void rejectsInvalidPerFrameDelays()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage frame(8, 8, QImage::Format_ARGB32);
+        frame.fill(Qt::black);
+        const QVector<QImage> frames {frame, frame};
+        QString error;
+
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("missing-delay.gif")),
+            frames,
+            QVector<int> {5},
+            &error));
+        QVERIFY(!error.isEmpty());
+
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("negative-delay.gif")),
+            frames,
+            QVector<int> {5, -1},
+            &error));
+        QVERIFY(!error.isEmpty());
+
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("uniform-negative-delay.gif")),
+            frames,
+            -1,
+            &error));
+        QVERIFY(!error.isEmpty());
+
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("large-delay.gif")),
+            frames,
+            QVector<int> {5, 65536},
+            &error));
+        QVERIFY(!error.isEmpty());
+    }
+
+    void rejectsMismatchedFrames()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        QVector<QImage> frames {
+            QImage(8, 8, QImage::Format_ARGB32),
+            QImage(9, 8, QImage::Format_ARGB32)
+        };
+        QString error;
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("invalid.gif")),
+            frames,
+            5,
+            &error));
+        QVERIFY(!error.isEmpty());
+    }
+
+    void rejectsExcessiveWorkingSet()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        QImage frame(2048, 2048, QImage::Format_ARGB32);
+        QVERIFY(!frame.isNull());
+        frame.fill(Qt::black);
+        const QVector<QImage> frames(17, frame);
+        QString error;
+        QVERIFY(!GifWriter::write(
+            directory.filePath(QStringLiteral("too-large.gif")),
+            frames,
+            4,
+            &error));
+        QVERIFY(!error.isEmpty());
+    }
+
+    void preservesBinaryTransparency()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage frame(32, 24, QImage::Format_ARGB32);
+        frame.fill(Qt::transparent);
+        for (int y = 6; y < 18; ++y) {
+            for (int x = 8; x < 24; ++x) {
+                frame.setPixelColor(x, y, QColor(220, 40, 70));
+            }
+        }
+
+        const QString path =
+            directory.filePath(QStringLiteral("transparent.gif"));
+        QString error;
+        QVERIFY2(
+            GifWriter::write(path, {frame, frame}, 5, &error),
+            qPrintable(error));
+
+        QImageReader reader(path, QByteArrayLiteral("gif"));
+        const QImage decoded = reader.read();
+        QVERIFY2(!decoded.isNull(), qPrintable(reader.errorString()));
+        QCOMPARE(decoded.pixelColor(0, 0).alpha(), 0);
+        QVERIFY(decoded.pixelColor(16, 12).alpha() > 0);
+        QVERIFY(decoded.pixelColor(16, 12).red() > 180);
+    }
+
+    void writesRenderedWobbleAnimation()
+    {
+        Document document = Document::createDefault(QSize(320, 200));
+        document.animationFrames = 24;
+        document.framesPerSecond = 24.0;
+        document.wobbleAmount = 1.6;
+
+        Stroke stroke;
+        stroke.seed = 0x9f2b31c4a5678de0ULL;
+        stroke.color = QColor(28, 30, 34);
+        stroke.width = 7.0;
+        for (int x = 24; x <= 296; x += 8) {
+            const qreal y =
+                100.0 + std::sin(static_cast<qreal>(x) * 0.045) * 48.0;
+            stroke.points.append({QPointF(x, y), 1.0});
+        }
+        document.layers.first().strokes.append(stroke);
+
+        QVector<QImage> frames;
+        frames.reserve(document.animationFrames);
+        for (int frame = 0; frame < document.animationFrames; ++frame) {
+            frames.append(RenderEngine::render(document, frame));
+        }
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString temporaryPath =
+            directory.filePath(QStringLiteral("rendered.gif"));
+        QString error;
+        QVERIFY2(
+            GifWriter::write(temporaryPath, frames, 4, &error),
+            qPrintable(error));
+
+        QImageReader reader(temporaryPath, QByteArrayLiteral("gif"));
+        QVERIFY2(reader.canRead(), qPrintable(reader.errorString()));
+        QCOMPARE(reader.size(), document.size);
+        QCOMPARE(reader.imageCount(), document.animationFrames);
+
+        const QString outputPath =
+            qEnvironmentVariable("WOBBLEPAINT_TEST_GIF");
+        if (!outputPath.isEmpty()) {
+            QVERIFY2(
+                GifWriter::write(outputPath, frames, 4, &error),
+                qPrintable(error));
+            QVERIFY(QFileInfo(outputPath).size() > 0);
+        }
+    }
+};
+
+int runGifWriterTests(int argc, char **argv)
+{
+    GifWriterTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
+
+}
+
+#include "GifWriterTests.moc"

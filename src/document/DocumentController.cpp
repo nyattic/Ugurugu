@@ -1,0 +1,644 @@
+#include "document/DocumentController.hpp"
+
+#include "document/DocumentLimits.hpp"
+
+#include <QUndoCommand>
+
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <utility>
+
+namespace wobble {
+
+namespace {
+
+class LambdaCommand final : public QUndoCommand
+{
+public:
+    LambdaCommand(
+        QString text,
+        std::function<void()> redoAction,
+        std::function<void()> undoAction,
+        int mergeId = -1,
+        QUuid mergeScope = QUuid())
+        : QUndoCommand(std::move(text))
+        , m_redoAction(std::move(redoAction))
+        , m_undoAction(std::move(undoAction))
+        , m_mergeId(mergeId)
+        , m_mergeScope(mergeScope)
+    {
+    }
+
+    int id() const override
+    {
+        return m_mergeId;
+    }
+
+    bool mergeWith(const QUndoCommand *other) override
+    {
+        const auto *command = dynamic_cast<const LambdaCommand *>(other);
+        if (!command
+            || command->m_mergeId != m_mergeId
+            || command->m_mergeScope != m_mergeScope) {
+            return false;
+        }
+        m_redoAction = command->m_redoAction;
+        return true;
+    }
+
+    void redo() override
+    {
+        m_redoAction();
+    }
+
+    void undo() override
+    {
+        m_undoAction();
+    }
+
+private:
+    std::function<void()> m_redoAction;
+    std::function<void()> m_undoAction;
+    int m_mergeId = -1;
+    QUuid m_mergeScope;
+};
+
+constexpr int wobbleAmountMergeId = 1;
+constexpr int animationFramesMergeId = 2;
+constexpr int framesPerSecondMergeId = 3;
+constexpr int layerOpacityMergeId = 4;
+
+qsizetype totalPointCount(const Document &document)
+{
+    qsizetype count = 0;
+    for (const Layer &layer : document.layers) {
+        for (const Stroke &stroke : layer.strokes) {
+            if (stroke.points.size()
+                > DocumentLimits::maximumTotalPoints - count) {
+                return DocumentLimits::maximumTotalPoints + 1;
+            }
+            count += stroke.points.size();
+        }
+    }
+    return count;
+}
+
+qsizetype totalStrokeCount(const Document &document)
+{
+    qsizetype count = 0;
+    for (const Layer &layer : document.layers) {
+        if (layer.strokes.size()
+            > DocumentLimits::maximumTotalStrokes - count) {
+            return DocumentLimits::maximumTotalStrokes + 1;
+        }
+        count += layer.strokes.size();
+    }
+    return count;
+}
+
+qsizetype layerPointCount(const Layer &layer)
+{
+    qsizetype count = 0;
+    for (const Stroke &stroke : layer.strokes) {
+        if (stroke.points.size()
+            > DocumentLimits::maximumTotalPoints - count) {
+            return DocumentLimits::maximumTotalPoints + 1;
+        }
+        count += stroke.points.size();
+    }
+    return count;
+}
+
+bool containsStrokeId(const Document &document, const QUuid &id)
+{
+    for (const Layer &layer : document.layers) {
+        for (const Stroke &stroke : layer.strokes) {
+            if (stroke.id == id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool isValidStrokePoint(const StrokePoint &point, const QSize &size)
+{
+    return std::isfinite(point.position.x())
+        && std::isfinite(point.position.y())
+        && std::isfinite(point.pressure)
+        && point.position.x() >= 0.0
+        && point.position.y() >= 0.0
+        && point.position.x() <= size.width()
+        && point.position.y() <= size.height()
+        && point.pressure >= 0.0
+        && point.pressure <= 1.0;
+}
+
+}
+
+DocumentController::DocumentController(QObject *parent)
+    : QObject(parent)
+    , m_document(Document::createDefault())
+{
+    connect(&m_undoStack, &QUndoStack::cleanChanged, this, [this](bool clean) {
+        emit modifiedChanged(!clean);
+    });
+    m_undoStack.setClean();
+}
+
+const Document &DocumentController::document() const
+{
+    return m_document;
+}
+
+QUndoStack *DocumentController::undoStack()
+{
+    return &m_undoStack;
+}
+
+bool DocumentController::isModified() const
+{
+    return !m_undoStack.isClean();
+}
+
+void DocumentController::newDocument(const QSize &size)
+{
+    const QSize normalized(
+        std::clamp(
+            size.width(),
+            DocumentLimits::minimumCanvasEdge,
+            DocumentLimits::maximumCanvasEdge),
+        std::clamp(
+            size.height(),
+            DocumentLimits::minimumCanvasEdge,
+            DocumentLimits::maximumCanvasEdge));
+    m_document = Document::createDefault(normalized);
+    m_undoStack.clear();
+    m_undoStack.setClean();
+    emit documentChanged();
+    emit activeLayerChanged(m_document.activeLayerId);
+}
+
+void DocumentController::loadDocument(Document document)
+{
+    m_document = std::move(document);
+    ensureActiveLayer();
+    m_undoStack.clear();
+    m_undoStack.setClean();
+    emit documentChanged();
+    emit activeLayerChanged(m_document.activeLayerId);
+}
+
+void DocumentController::markSaved()
+{
+    m_undoStack.setClean();
+}
+
+void DocumentController::setActiveLayer(const QUuid &id)
+{
+    if (m_document.activeLayerId == id || !m_document.layer(id)) {
+        return;
+    }
+    m_document.activeLayerId = id;
+    emit activeLayerChanged(id);
+}
+
+void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
+{
+    Layer *layer = m_document.layer(layerId);
+    if (!layer
+        || layer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
+        || totalStrokeCount(m_document)
+            >= DocumentLimits::maximumTotalStrokes
+        || stroke.id.isNull()
+        || containsStrokeId(m_document, stroke.id)
+        || (stroke.mode != StrokeMode::Paint
+            && stroke.mode != StrokeMode::Erase)
+        || !stroke.color.isValid()
+        || !std::isfinite(stroke.width)
+        || stroke.width < DocumentLimits::minimumStrokeWidth
+        || stroke.width > DocumentLimits::maximumStrokeWidth
+        || stroke.points.isEmpty()) {
+        return;
+    }
+
+    const qsizetype currentPointCount = totalPointCount(m_document);
+    if (currentPointCount >= DocumentLimits::maximumTotalPoints) {
+        return;
+    }
+    const qsizetype availablePoints =
+        DocumentLimits::maximumTotalPoints - currentPointCount;
+    const qsizetype acceptedPointCount = std::min(
+        stroke.points.size(),
+        std::min(
+            static_cast<qsizetype>(DocumentLimits::maximumPointsPerStroke),
+            availablePoints));
+    stroke.points.resize(acceptedPointCount);
+    if (!std::all_of(
+            stroke.points.cbegin(),
+            stroke.points.cend(),
+            [this](const StrokePoint &point) {
+                return isValidStrokePoint(point, m_document.size);
+            })) {
+        return;
+    }
+
+    const QUuid strokeId = stroke.id;
+    auto redoAction = [
+        this,
+        layerId,
+        stroke = std::move(stroke)
+    ]() {
+        if (Layer *target = m_document.layer(layerId)) {
+            target->strokes.append(stroke);
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, layerId, strokeId]() {
+        if (Layer *layer = m_document.layer(layerId)) {
+            for (int index = layer->strokes.size() - 1; index >= 0; --index) {
+                if (layer->strokes[index].id == strokeId) {
+                    layer->strokes.removeAt(index);
+                    notifyDocumentChanged();
+                    return;
+                }
+            }
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Draw stroke"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::addLayer()
+{
+    if (m_document.layers.size() >= DocumentLimits::maximumLayers) {
+        return;
+    }
+    Layer layer;
+    layer.name = nextLayerName();
+    const int insertionIndex = m_document.layers.size();
+    const QUuid previousActive = m_document.activeLayerId;
+    const QUuid layerId = layer.id;
+    auto redoAction = [this, layer, insertionIndex, layerId]() {
+        const int index = std::clamp(
+            insertionIndex,
+            0,
+            static_cast<int>(m_document.layers.size()));
+        m_document.layers.insert(index, layer);
+        m_document.activeLayerId = layerId;
+        notifyDocumentChanged();
+        emit activeLayerChanged(layerId);
+    };
+    auto undoAction = [this, layerId, previousActive]() {
+        const int index = m_document.layerIndex(layerId);
+        if (index >= 0) {
+            m_document.layers.removeAt(index);
+        }
+        m_document.activeLayerId = previousActive;
+        ensureActiveLayer();
+        notifyDocumentChanged();
+        emit activeLayerChanged(m_document.activeLayerId);
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Add layer"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::duplicateLayer(const QUuid &id)
+{
+    const int sourceIndex = m_document.layerIndex(id);
+    if (sourceIndex < 0
+        || m_document.layers.size() >= DocumentLimits::maximumLayers) {
+        return;
+    }
+    const qsizetype sourcePointCount =
+        layerPointCount(m_document.layers[sourceIndex]);
+    const qsizetype existingPointCount = totalPointCount(m_document);
+    const qsizetype sourceStrokeCount =
+        m_document.layers[sourceIndex].strokes.size();
+    const qsizetype existingStrokeCount = totalStrokeCount(m_document);
+    if (sourcePointCount > DocumentLimits::maximumTotalPoints
+        || existingPointCount > DocumentLimits::maximumTotalPoints
+        || sourcePointCount
+            > DocumentLimits::maximumTotalPoints - existingPointCount
+        || sourceStrokeCount > DocumentLimits::maximumTotalStrokes
+        || existingStrokeCount > DocumentLimits::maximumTotalStrokes
+        || sourceStrokeCount
+            > DocumentLimits::maximumTotalStrokes - existingStrokeCount) {
+        return;
+    }
+    Layer copy = m_document.layers[sourceIndex];
+    copy.id = QUuid::createUuid();
+    copy.name = tr("%1 copy").arg(copy.name);
+    if (copy.name.size() > DocumentLimits::maximumLayerNameLength) {
+        copy.name.truncate(DocumentLimits::maximumLayerNameLength);
+    }
+    for (Stroke &stroke : copy.strokes) {
+        stroke.id = QUuid::createUuid();
+    }
+    const int insertionIndex = sourceIndex + 1;
+    const QUuid copyId = copy.id;
+    const QUuid previousActive = m_document.activeLayerId;
+    auto redoAction = [this, copy, insertionIndex, copyId]() {
+        m_document.layers.insert(
+            std::clamp(
+                insertionIndex,
+                0,
+                static_cast<int>(m_document.layers.size())),
+            copy);
+        m_document.activeLayerId = copyId;
+        notifyDocumentChanged();
+        emit activeLayerChanged(copyId);
+    };
+    auto undoAction = [this, copyId, previousActive]() {
+        const int index = m_document.layerIndex(copyId);
+        if (index >= 0) {
+            m_document.layers.removeAt(index);
+        }
+        m_document.activeLayerId = previousActive;
+        ensureActiveLayer();
+        notifyDocumentChanged();
+        emit activeLayerChanged(m_document.activeLayerId);
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Duplicate layer"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::removeLayer(const QUuid &id)
+{
+    const int index = m_document.layerIndex(id);
+    if (index < 0 || m_document.layers.size() <= 1) {
+        return;
+    }
+    const Layer removedLayer = m_document.layers[index];
+    const QUuid previousActive = m_document.activeLayerId;
+    const int nextIndex = std::max(0, index - 1);
+    const QUuid nextActive = m_document.layers[nextIndex].id;
+    auto redoAction = [this, id, nextActive]() {
+        const int currentIndex = m_document.layerIndex(id);
+        if (currentIndex >= 0) {
+            m_document.layers.removeAt(currentIndex);
+        }
+        m_document.activeLayerId = nextActive;
+        ensureActiveLayer();
+        notifyDocumentChanged();
+        emit activeLayerChanged(m_document.activeLayerId);
+    };
+    auto undoAction = [this, removedLayer, index, previousActive]() {
+        m_document.layers.insert(
+            std::clamp(
+                index,
+                0,
+                static_cast<int>(m_document.layers.size())),
+            removedLayer);
+        m_document.activeLayerId = previousActive;
+        ensureActiveLayer();
+        notifyDocumentChanged();
+        emit activeLayerChanged(m_document.activeLayerId);
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Delete layer"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::clearLayer(const QUuid &id)
+{
+    Layer *layer = m_document.layer(id);
+    if (!layer || layer->strokes.isEmpty()) {
+        return;
+    }
+    const QVector<Stroke> previousStrokes = layer->strokes;
+    auto redoAction = [this, id]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->strokes.clear();
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, id, previousStrokes]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->strokes = previousStrokes;
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Clear layer"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::renameLayer(const QUuid &id, const QString &name)
+{
+    Layer *layer = m_document.layer(id);
+    const QString normalized = name.trimmed();
+    if (!layer
+        || normalized.isEmpty()
+        || normalized.size() > DocumentLimits::maximumLayerNameLength
+        || layer->name == normalized) {
+        return;
+    }
+    const QString previousName = layer->name;
+    auto redoAction = [this, id, normalized]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->name = normalized;
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, id, previousName]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->name = previousName;
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Rename layer"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::setLayerVisible(const QUuid &id, bool visible)
+{
+    Layer *layer = m_document.layer(id);
+    if (!layer || layer->visible == visible) {
+        return;
+    }
+    const bool previous = layer->visible;
+    auto redoAction = [this, id, visible]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->visible = visible;
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, id, previous]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->visible = previous;
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Toggle layer visibility"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
+{
+    Layer *layer = m_document.layer(id);
+    if (!std::isfinite(opacity)) {
+        return;
+    }
+    const qreal normalized = std::clamp(opacity, 0.0, 1.0);
+    if (!layer || qFuzzyCompare(layer->opacity, normalized)) {
+        return;
+    }
+    const qreal previous = layer->opacity;
+    auto redoAction = [this, id, normalized]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->opacity = normalized;
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, id, previous]() {
+        if (Layer *target = m_document.layer(id)) {
+            target->opacity = previous;
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Change layer opacity"),
+        std::move(redoAction),
+        std::move(undoAction),
+        layerOpacityMergeId,
+        id));
+}
+
+void DocumentController::moveLayer(const QUuid &id, int offset)
+{
+    const int from = m_document.layerIndex(id);
+    const int to = from + offset;
+    if (from < 0 || to < 0 || to >= m_document.layers.size() || from == to) {
+        return;
+    }
+    auto move = [this](int source, int destination) {
+        m_document.layers.move(source, destination);
+        notifyDocumentChanged();
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Move layer"),
+        [move, from, to]() { move(from, to); },
+        [move, from, to]() { move(to, from); }));
+}
+
+void DocumentController::setWobbleAmount(qreal amount)
+{
+    if (!std::isfinite(amount)) {
+        return;
+    }
+    const qreal normalized = std::clamp(
+        amount,
+        DocumentLimits::minimumWobbleAmount,
+        DocumentLimits::maximumWobbleAmount);
+    if (qFuzzyCompare(m_document.wobbleAmount, normalized)) {
+        return;
+    }
+    const qreal previous = m_document.wobbleAmount;
+    auto apply = [this](qreal value) {
+        m_document.wobbleAmount = value;
+        notifyDocumentChanged();
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Change wobble"),
+        [apply, normalized]() { apply(normalized); },
+        [apply, previous]() { apply(previous); },
+        wobbleAmountMergeId));
+}
+
+void DocumentController::setAnimationFrames(int frames)
+{
+    const int normalized = std::clamp(
+        frames,
+        DocumentLimits::minimumAnimationFrames,
+        DocumentLimits::maximumAnimationFrames);
+    if (m_document.animationFrames == normalized) {
+        return;
+    }
+    const int previous = m_document.animationFrames;
+    auto apply = [this](int value) {
+        m_document.animationFrames = value;
+        notifyDocumentChanged();
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Change animation frames"),
+        [apply, normalized]() { apply(normalized); },
+        [apply, previous]() { apply(previous); },
+        animationFramesMergeId));
+}
+
+void DocumentController::setFramesPerSecond(qreal fps)
+{
+    if (!std::isfinite(fps)) {
+        return;
+    }
+    const qreal normalized = std::clamp(
+        fps,
+        DocumentLimits::minimumFramesPerSecond,
+        DocumentLimits::maximumFramesPerSecond);
+    if (qFuzzyCompare(m_document.framesPerSecond, normalized)) {
+        return;
+    }
+    const qreal previous = m_document.framesPerSecond;
+    auto apply = [this](qreal value) {
+        m_document.framesPerSecond = value;
+        notifyDocumentChanged();
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Change animation speed"),
+        [apply, normalized]() { apply(normalized); },
+        [apply, previous]() { apply(previous); },
+        framesPerSecondMergeId));
+}
+
+void DocumentController::notifyDocumentChanged()
+{
+    emit documentChanged();
+}
+
+void DocumentController::ensureActiveLayer()
+{
+    if (m_document.layer(m_document.activeLayerId)) {
+        return;
+    }
+    if (m_document.layers.isEmpty()) {
+        Layer layer;
+        layer.name = QStringLiteral("Layer 1");
+        m_document.layers.append(layer);
+    }
+    m_document.activeLayerId = m_document.layers.constLast().id;
+}
+
+QString DocumentController::nextLayerName() const
+{
+    int number = m_document.layers.size() + 1;
+    while (true) {
+        const QString candidate = tr("Layer %1").arg(number);
+        bool exists = false;
+        for (const Layer &layer : m_document.layers) {
+            if (layer.name == candidate) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            return candidate;
+        }
+        ++number;
+    }
+}
+
+}

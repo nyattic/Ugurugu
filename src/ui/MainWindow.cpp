@@ -1,0 +1,830 @@
+#include "ui/MainWindow.hpp"
+
+#include "document/DocumentLimits.hpp"
+#include "io/DocumentSerializer.hpp"
+#include "io/GifWriter.hpp"
+#include "render/RenderEngine.hpp"
+#include "ui/CanvasWidget.hpp"
+#include "ui/ColorSwatchRow.hpp"
+#include "ui/Icons.hpp"
+#include "ui/LayerDock.hpp"
+#include "ui/SettingsDialog.hpp"
+#include "ui/Theme.hpp"
+#include "ui/TimelineBar.hpp"
+
+#include <QAction>
+#include <QActionGroup>
+#include <QApplication>
+#include <QCloseEvent>
+#include <QColorDialog>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QDoubleSpinBox>
+#include <QEvent>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFormLayout>
+#include <QImageWriter>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QProgressDialog>
+#include <QPushButton>
+#include <QSaveFile>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QSpinBox>
+#include <QStatusBar>
+#include <QToolBar>
+#include <QToolButton>
+#include <QTextEdit>
+#include <QVBoxLayout>
+
+#include <spdlog/spdlog.h>
+
+#include <algorithm>
+#include <cmath>
+#include <optional>
+#include <utility>
+
+namespace wobble {
+
+namespace {
+
+QSize requestCanvasSize(QWidget *parent, const QSize &current)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QObject::tr("New document"));
+
+    auto *layout = new QFormLayout(&dialog);
+    auto *widthSpin = new QSpinBox(&dialog);
+    auto *heightSpin = new QSpinBox(&dialog);
+    widthSpin->setRange(64, DocumentLimits::maximumCanvasEdge);
+    heightSpin->setRange(64, DocumentLimits::maximumCanvasEdge);
+    widthSpin->setValue(current.width());
+    heightSpin->setValue(current.height());
+    widthSpin->setSuffix(QObject::tr(" px"));
+    heightSpin->setSuffix(QObject::tr(" px"));
+    layout->addRow(QObject::tr("Width"), widthSpin);
+    layout->addRow(QObject::tr("Height"), heightSpin);
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+        &dialog);
+    QObject::connect(
+        buttons,
+        &QDialogButtonBox::accepted,
+        &dialog,
+        &QDialog::accept);
+    QObject::connect(
+        buttons,
+        &QDialogButtonBox::rejected,
+        &dialog,
+        &QDialog::reject);
+    layout->addRow(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return {};
+    }
+    return QSize(widthSpin->value(), heightSpin->value());
+}
+
+QVector<int> gifFrameDelays(int frameCount, qreal framesPerSecond)
+{
+    const qreal fps = std::clamp(
+        framesPerSecond,
+        DocumentLimits::minimumFramesPerSecond,
+        DocumentLimits::maximumFramesPerSecond);
+    QVector<int> delays;
+    delays.reserve(frameCount);
+
+    qint64 emittedCentiseconds = 0;
+    for (int frame = 1; frame <= frameCount; ++frame) {
+        const qint64 targetCentiseconds =
+            qRound64(static_cast<qreal>(frame) * 100.0 / fps);
+        const int delay = static_cast<int>(
+            std::max<qint64>(
+                1,
+                targetCentiseconds - emittedCentiseconds));
+        delays.append(delay);
+        emittedCentiseconds += delay;
+    }
+    return delays;
+}
+
+}
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
+{
+    setObjectName(QStringLiteral("MainWindow"));
+    setAcceptDrops(false);
+    setMinimumSize(900, 640);
+
+    auto *central = new QWidget(this);
+    auto *centralLayout = new QVBoxLayout(central);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+    m_canvas = new CanvasWidget(&m_controller, central);
+    centralLayout->addWidget(m_canvas, 1);
+    m_timeline = new TimelineBar(&m_controller, m_canvas, central);
+    centralLayout->addWidget(m_timeline);
+    setCentralWidget(central);
+
+    m_layerDock = new LayerDock(&m_controller, this);
+    addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
+
+    createActions();
+    createMenus();
+    createToolBars();
+    createStatusBar();
+    connectDocument();
+
+    const QSettings settings;
+    const bool geometryRestored = restoreGeometry(
+        settings.value(QStringLiteral("window/geometry")).toByteArray());
+    restoreState(settings.value(QStringLiteral("window/state")).toByteArray());
+    if (!geometryRestored) {
+        resize(1280, 820);
+    }
+
+    m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
+    updateWindowTitle();
+    m_canvas->setFocus(Qt::OtherFocusReason);
+    qApp->installEventFilter(this);
+}
+
+bool MainWindow::openFile(const QString &filePath)
+{
+    if (filePath.isEmpty()) {
+        return false;
+    }
+    if (!maybeSave()) {
+        return false;
+    }
+
+    QString error;
+    const std::optional<Document> document =
+        DocumentSerializer::load(filePath, &error);
+    if (!document) {
+        spdlog::error(
+            "Failed to open project {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(
+            this,
+            tr("Open failed"),
+            tr("Could not open the project.\n\n%1").arg(error));
+        return false;
+    }
+
+    m_controller.loadDocument(*document);
+    m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
+    m_canvas->fitToWindow();
+    updateWindowTitle();
+    statusBar()->showMessage(tr("Opened %1").arg(m_currentFilePath), 4000);
+    spdlog::info("Opened project {}", m_currentFilePath.toUtf8().constData());
+    return true;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!maybeSave()) {
+        event->ignore();
+        return;
+    }
+    QSettings settings;
+    settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("window/state"), saveState());
+    event->accept();
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    const auto *widget = qobject_cast<QWidget *>(watched);
+    const bool belongsToWindow = widget && widget->window() == this;
+    const bool acceptsText =
+        qobject_cast<QLineEdit *>(watched)
+        || qobject_cast<QPlainTextEdit *>(watched)
+        || qobject_cast<QTextEdit *>(watched);
+    if (belongsToWindow
+        && (event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        const auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Space
+            && !keyEvent->isAutoRepeat()) {
+            if (event->type() == QEvent::KeyRelease) {
+                m_canvas->setPanModifierActive(false);
+                return !acceptsText;
+            }
+            if (!acceptsText) {
+                m_canvas->setPanModifierActive(true);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    if (event->type() == QEvent::ApplicationDeactivate
+        || (event->type() == QEvent::WindowDeactivate
+            && watched == this)) {
+        m_canvas->setPanModifierActive(false);
+    }
+
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::createActions()
+{
+    auto *newAction = new QAction(tr("&New"), this);
+    newAction->setShortcut(QKeySequence::New);
+    connect(newAction, &QAction::triggered, this, &MainWindow::newDocument);
+    newAction->setObjectName(QStringLiteral("newAction"));
+
+    auto *openAction = new QAction(tr("&Open…"), this);
+    openAction->setShortcut(QKeySequence::Open);
+    connect(openAction, &QAction::triggered, this, &MainWindow::chooseOpenFile);
+    openAction->setObjectName(QStringLiteral("openAction"));
+
+    m_saveAction = new QAction(tr("&Save"), this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    connect(m_saveAction, &QAction::triggered, this, [this]() {
+        save();
+    });
+    m_saveAction->setObjectName(QStringLiteral("saveAction"));
+
+    auto *saveAsAction = new QAction(tr("Save &As…"), this);
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    connect(saveAsAction, &QAction::triggered, this, [this]() {
+        saveAs();
+    });
+    saveAsAction->setObjectName(QStringLiteral("saveAsAction"));
+
+    auto *exportGifAction = new QAction(tr("Export animated &GIF…"), this);
+    exportGifAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
+    connect(exportGifAction, &QAction::triggered, this, &MainWindow::exportGif);
+    exportGifAction->setObjectName(QStringLiteral("exportGifAction"));
+
+    auto *exportPngAction = new QAction(tr("Export current frame as &PNG…"), this);
+    connect(exportPngAction, &QAction::triggered, this, &MainWindow::exportPng);
+    exportPngAction->setObjectName(QStringLiteral("exportPngAction"));
+
+    auto *quitAction = new QAction(tr("&Quit"), this);
+    quitAction->setShortcut(QKeySequence::Quit);
+    connect(quitAction, &QAction::triggered, this, &QWidget::close);
+    quitAction->setObjectName(QStringLiteral("quitAction"));
+
+    auto *settingsAction = new QAction(tr("&Settings…"), this);
+    settingsAction->setShortcut(QKeySequence::Preferences);
+    settingsAction->setMenuRole(QAction::PreferencesRole);
+    connect(settingsAction, &QAction::triggered, this, [this]() {
+        SettingsDialog dialog(this);
+        connect(
+            &dialog,
+            &SettingsDialog::animateWhileDrawingChanged,
+            m_canvas,
+            &CanvasWidget::setAnimateWhileDrawing);
+        dialog.exec();
+    });
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
+
+    QAction *undoAction = m_controller.undoStack()->createUndoAction(this);
+    undoAction->setText(tr("&Undo"));
+    undoAction->setShortcut(QKeySequence::Undo);
+    undoAction->setIcon(Icons::icon(IconGlyph::Undo));
+    undoAction->setObjectName(QStringLiteral("undoAction"));
+
+    QAction *redoAction = m_controller.undoStack()->createRedoAction(this);
+    redoAction->setText(tr("&Redo"));
+    redoAction->setShortcut(QKeySequence::Redo);
+    redoAction->setIcon(Icons::icon(IconGlyph::Redo));
+    redoAction->setObjectName(QStringLiteral("redoAction"));
+
+    auto *clearLayerAction = new QAction(tr("Clear active layer"), this);
+    connect(clearLayerAction, &QAction::triggered, this, [this]() {
+        m_controller.clearLayer(m_controller.document().activeLayerId);
+    });
+    clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
+
+    auto *fitAction = new QAction(tr("&Fit canvas"), this);
+    fitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
+    fitAction->setIcon(Icons::icon(IconGlyph::FitView));
+    connect(fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
+    fitAction->setObjectName(QStringLiteral("fitAction"));
+
+    m_playAction = new QAction(tr("&Animate preview"), this);
+    m_playAction->setCheckable(true);
+    m_playAction->setChecked(true);
+    m_playAction->setIcon(Icons::toggleIcon(IconGlyph::Play));
+    m_playAction->setShortcut(QKeySequence(QStringLiteral("P")));
+    connect(
+        m_playAction,
+        &QAction::toggled,
+        m_canvas,
+        &CanvasWidget::setAnimating);
+    connect(
+        m_canvas,
+        &CanvasWidget::animatingChanged,
+        m_playAction,
+        &QAction::setChecked);
+    m_playAction->setObjectName(QStringLiteral("playAction"));
+
+    m_brushAction = new QAction(tr("&Brush"), this);
+    m_brushAction->setCheckable(true);
+    m_brushAction->setChecked(true);
+    m_brushAction->setIcon(Icons::toggleIcon(IconGlyph::Brush));
+    m_brushAction->setShortcut(QKeySequence(QStringLiteral("B")));
+    m_brushAction->setObjectName(QStringLiteral("brushAction"));
+
+    m_eraserAction = new QAction(tr("&Eraser"), this);
+    m_eraserAction->setCheckable(true);
+    m_eraserAction->setIcon(Icons::toggleIcon(IconGlyph::Eraser));
+    m_eraserAction->setShortcut(QKeySequence(QStringLiteral("E")));
+    m_eraserAction->setObjectName(QStringLiteral("eraserAction"));
+
+    auto *toolGroup = new QActionGroup(this);
+    toolGroup->setExclusive(true);
+    toolGroup->addAction(m_brushAction);
+    toolGroup->addAction(m_eraserAction);
+    connect(m_brushAction, &QAction::triggered, this, [this]() {
+        m_canvas->setTool(CanvasWidget::Tool::Brush);
+    });
+    connect(m_eraserAction, &QAction::triggered, this, [this]() {
+        m_canvas->setTool(CanvasWidget::Tool::Eraser);
+    });
+
+    addAction(newAction);
+    addAction(openAction);
+    addAction(m_saveAction);
+    addAction(saveAsAction);
+    addAction(exportGifAction);
+    addAction(exportPngAction);
+    addAction(quitAction);
+    addAction(undoAction);
+    addAction(redoAction);
+    addAction(clearLayerAction);
+    addAction(fitAction);
+    addAction(m_playAction);
+}
+
+void MainWindow::createMenus()
+{
+    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("newAction")));
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("openAction")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_saveAction);
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("saveAsAction")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("exportGifAction")));
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("exportPngAction")));
+    fileMenu->addSeparator();
+    fileMenu->addAction(findChild<QAction *>(QStringLiteral("quitAction")));
+
+    QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
+    editMenu->addAction(findChild<QAction *>(QStringLiteral("undoAction")));
+    editMenu->addAction(findChild<QAction *>(QStringLiteral("redoAction")));
+    editMenu->addSeparator();
+    editMenu->addAction(findChild<QAction *>(QStringLiteral("clearLayerAction")));
+    editMenu->addSeparator();
+    editMenu->addAction(findChild<QAction *>(QStringLiteral("settingsAction")));
+
+    QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
+    viewMenu->addAction(m_playAction);
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_layerDock->toggleViewAction());
+
+    QMenu *toolMenu = menuBar()->addMenu(tr("&Tools"));
+    toolMenu->addAction(m_brushAction);
+    toolMenu->addAction(m_eraserAction);
+}
+
+void MainWindow::createToolBars()
+{
+    QToolBar *tools = addToolBar(tr("Tools"));
+    tools->setObjectName(QStringLiteral("PaintTools"));
+    tools->setMovable(false);
+    tools->setIconSize(QSize(22, 22));
+    tools->addAction(m_brushAction);
+    tools->addAction(m_eraserAction);
+    tools->addSeparator();
+
+    m_colorButton = new QPushButton(tools);
+    m_colorButton->setFixedSize(34, 24);
+    m_colorButton->setToolTip(tr("Choose brush color"));
+    m_colorButton->setAccessibleName(tr("Brush color"));
+    m_colorButton->setCursor(Qt::PointingHandCursor);
+    connect(m_colorButton, &QPushButton::clicked, this, [this]() {
+        const QColor color = QColorDialog::getColor(
+            m_canvas->brushColor(),
+            this,
+            tr("Brush color"),
+            QColorDialog::ShowAlphaChannel);
+        if (color.isValid()) {
+            m_canvas->setBrushColor(color);
+        }
+    });
+    tools->addWidget(m_colorButton);
+
+    m_swatchRow = new ColorSwatchRow(tools);
+    connect(
+        m_swatchRow,
+        &ColorSwatchRow::colorSelected,
+        m_canvas,
+        &CanvasWidget::setBrushColor);
+    tools->addWidget(m_swatchRow);
+
+    tools->addSeparator();
+
+    auto *sizeLabel = new QLabel(tr("SIZE"), tools);
+    sizeLabel->setProperty("fieldLabel", true);
+    tools->addWidget(sizeLabel);
+
+    auto *sizeSlider = new QSlider(Qt::Horizontal, tools);
+    sizeSlider->setObjectName(QStringLiteral("brushSizeSlider"));
+    sizeSlider->setRange(
+        static_cast<int>(std::ceil(DocumentLimits::minimumStrokeWidth)),
+        128);
+    sizeSlider->setFixedWidth(96);
+    sizeSlider->setToolTip(tr("Brush size"));
+    sizeSlider->setAccessibleName(tr("Brush size"));
+    tools->addWidget(sizeSlider);
+
+    m_brushSizeSpin = new QSpinBox(tools);
+    m_brushSizeSpin->setObjectName(QStringLiteral("brushSizeSpin"));
+    m_brushSizeSpin->setRange(
+        static_cast<int>(std::ceil(DocumentLimits::minimumStrokeWidth)),
+        static_cast<int>(std::floor(DocumentLimits::maximumStrokeWidth)));
+    m_brushSizeSpin->setValue(qRound(m_canvas->brushWidth()));
+    m_brushSizeSpin->setSuffix(tr(" px"));
+    sizeLabel->setBuddy(m_brushSizeSpin);
+    tools->addWidget(m_brushSizeSpin);
+
+    sizeSlider->setValue(qRound(m_canvas->brushWidth()));
+    connect(
+        m_brushSizeSpin,
+        &QSpinBox::valueChanged,
+        this,
+        [this, sizeSlider](int value) {
+            m_canvas->setBrushWidth(value);
+            QSignalBlocker blocker(sizeSlider);
+            sizeSlider->setValue(
+                std::clamp(value, sizeSlider->minimum(), sizeSlider->maximum()));
+        });
+    connect(
+        sizeSlider,
+        &QSlider::valueChanged,
+        m_brushSizeSpin,
+        qOverload<int>(&QSpinBox::setValue));
+
+    tools->addSeparator();
+    tools->addAction(
+        findChild<QAction *>(QStringLiteral("undoAction")));
+    tools->addAction(
+        findChild<QAction *>(QStringLiteral("redoAction")));
+
+    connect(
+        m_canvas,
+        &CanvasWidget::brushColorChanged,
+        this,
+        [this](const QColor &color) {
+            updateColorButton();
+            m_swatchRow->setActiveColor(color);
+        });
+    updateColorButton();
+}
+
+void MainWindow::createStatusBar()
+{
+    m_pointerLabel = new QLabel(this);
+    m_pointerLabel->setMinimumWidth(150);
+    statusBar()->addPermanentWidget(m_pointerLabel);
+
+    m_zoomLabel = new QLabel(tr("100%"), this);
+    m_zoomLabel->setMinimumWidth(56);
+    m_zoomLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    statusBar()->addPermanentWidget(m_zoomLabel);
+
+    auto *fitButton = new QToolButton(this);
+    fitButton->setDefaultAction(
+        findChild<QAction *>(QStringLiteral("fitAction")));
+    fitButton->setIconSize(QSize(16, 16));
+    statusBar()->addPermanentWidget(fitButton);
+
+    connect(
+        m_canvas,
+        &CanvasWidget::pointerPositionChanged,
+        this,
+        [this](const QPointF &position, bool inside) {
+            m_pointerLabel->setText(
+                inside
+                    ? tr("x %1  y %2")
+                          .arg(qRound(position.x()))
+                          .arg(qRound(position.y()))
+                    : QString());
+        });
+    connect(
+        m_canvas,
+        &CanvasWidget::zoomChanged,
+        this,
+        [this](int percent) {
+            m_zoomLabel->setText(tr("%1%").arg(percent));
+        });
+    connect(
+        m_canvas,
+        &CanvasWidget::interactionMessage,
+        this,
+        [this](const QString &message) {
+            statusBar()->showMessage(message, 4000);
+        });
+    statusBar()->showMessage(tr("Ready"), 2000);
+}
+
+void MainWindow::connectDocument()
+{
+    connect(
+        &m_controller,
+        &DocumentController::modifiedChanged,
+        this,
+        [this](bool modified) {
+            setWindowModified(modified);
+            updateWindowTitle();
+        });
+}
+
+void MainWindow::updateWindowTitle()
+{
+    const QString name = m_currentFilePath.isEmpty()
+        ? tr("Untitled")
+        : QFileInfo(m_currentFilePath).fileName();
+    setWindowTitle(tr("%1[*] — WobblePaint").arg(name));
+    setWindowFilePath(m_currentFilePath);
+}
+
+void MainWindow::updateColorButton()
+{
+    if (!m_colorButton) {
+        return;
+    }
+    const QColor color = m_canvas->brushColor();
+    m_colorButton->setStyleSheet(
+        QStringLiteral(
+            "QPushButton { background: %1; border: 1px solid "
+            "rgba(255, 255, 255, 70); border-radius: 5px; }"
+            "QPushButton:hover { border-color: %2; }")
+            .arg(color.name(QColor::HexArgb), Theme::accent().name()));
+}
+
+bool MainWindow::maybeSave()
+{
+    if (!m_controller.isModified()) {
+        return true;
+    }
+    const QMessageBox::StandardButton choice = QMessageBox::warning(
+        this,
+        tr("Unsaved changes"),
+        tr("The document has unsaved changes."),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+    if (choice == QMessageBox::Save) {
+        return save();
+    }
+    return choice == QMessageBox::Discard;
+}
+
+bool MainWindow::save()
+{
+    return m_currentFilePath.isEmpty()
+        ? saveAs()
+        : saveToFile(m_currentFilePath);
+}
+
+bool MainWindow::saveAs()
+{
+    const QString selected = QFileDialog::getSaveFileName(
+        this,
+        tr("Save project"),
+        m_currentFilePath,
+        tr("WobblePaint projects (*.wobble)"));
+    if (selected.isEmpty()) {
+        return false;
+    }
+    return saveToFile(normalizedPath(selected, QStringLiteral("wobble")));
+}
+
+bool MainWindow::saveToFile(const QString &filePath)
+{
+    QString error;
+    if (!DocumentSerializer::save(filePath, m_controller.document(), &error)) {
+        spdlog::error(
+            "Failed to save project {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(
+            this,
+            tr("Save failed"),
+            tr("Could not save the project.\n\n%1").arg(error));
+        return false;
+    }
+    m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
+    m_controller.markSaved();
+    updateWindowTitle();
+    statusBar()->showMessage(tr("Saved %1").arg(m_currentFilePath), 4000);
+    spdlog::info("Saved project {}", m_currentFilePath.toUtf8().constData());
+    return true;
+}
+
+void MainWindow::newDocument()
+{
+    if (!maybeSave()) {
+        return;
+    }
+    const QSize size = requestCanvasSize(this, m_controller.document().size);
+    if (!size.isValid()) {
+        return;
+    }
+    m_controller.newDocument(size);
+    m_currentFilePath.clear();
+    m_canvas->fitToWindow();
+    updateWindowTitle();
+    spdlog::info("Created {}x{} document", size.width(), size.height());
+}
+
+void MainWindow::chooseOpenFile()
+{
+    const QString filePath = QFileDialog::getOpenFileName(
+        this,
+        tr("Open project"),
+        QString(),
+        tr("WobblePaint projects (*.wobble);;All files (*)"));
+    if (!filePath.isEmpty()) {
+        openFile(filePath);
+    }
+}
+
+void MainWindow::exportGif()
+{
+    const Document &document = m_controller.document();
+    const long double workingBytes =
+        static_cast<long double>(document.size.width())
+        * static_cast<long double>(document.size.height())
+        * static_cast<long double>(document.animationFrames)
+        * 12.0L;
+    if (document.size.width() <= 0
+        || document.size.height() <= 0
+        || document.animationFrames <= 0
+        || workingBytes
+            > static_cast<long double>(
+                DocumentLimits::maximumGifWorkingBytes)) {
+        const long double mebibytes =
+            workingBytes / (1024.0L * 1024.0L);
+        QMessageBox::warning(
+            this,
+            tr("Animation is too large"),
+            tr(
+                "This GIF would need about %1 MiB of working memory. "
+                "Reduce the canvas size or frame count before exporting.")
+                .arg(static_cast<double>(mebibytes), 0, 'f', 0));
+        return;
+    }
+
+    const QString selected = QFileDialog::getSaveFileName(
+        this,
+        tr("Export animated GIF"),
+        QString(),
+        tr("GIF images (*.gif)"));
+    if (selected.isEmpty()) {
+        return;
+    }
+    const QString filePath = normalizedPath(selected, QStringLiteral("gif"));
+    QVector<QImage> frames;
+    frames.reserve(document.animationFrames);
+
+    QProgressDialog progress(
+        tr("Rendering animation…"),
+        tr("Cancel"),
+        0,
+        document.animationFrames,
+        this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(300);
+
+    for (int frame = 0; frame < document.animationFrames; ++frame) {
+        progress.setValue(frame);
+        QApplication::processEvents();
+        if (progress.wasCanceled()) {
+            spdlog::info("GIF export canceled");
+            return;
+        }
+        QImage image = RenderEngine::render(document, frame);
+        if (image.isNull()) {
+            spdlog::error(
+                "Failed to render frame {} for GIF export",
+                frame);
+            QMessageBox::critical(
+                this,
+                tr("Export failed"),
+                tr(
+                    "A frame could not be rendered. Free some memory or "
+                    "reduce the canvas size and frame count."));
+            return;
+        }
+        frames.append(std::move(image));
+    }
+    progress.setValue(document.animationFrames);
+
+    QString error;
+    const QVector<int> delaysCentiseconds = gifFrameDelays(
+        document.animationFrames,
+        document.framesPerSecond);
+    if (!GifWriter::write(
+            filePath,
+            frames,
+            delaysCentiseconds,
+            &error)) {
+        spdlog::error(
+            "Failed to export GIF {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(
+            this,
+            tr("Export failed"),
+            tr("Could not export the GIF.\n\n%1").arg(error));
+        return;
+    }
+    statusBar()->showMessage(tr("Exported %1").arg(filePath), 5000);
+    spdlog::info(
+        "Exported GIF {} with {} frames",
+        filePath.toUtf8().constData(),
+        frames.size());
+}
+
+void MainWindow::exportPng()
+{
+    const int frame = m_canvas->currentFrame();
+    const QString selected = QFileDialog::getSaveFileName(
+        this,
+        tr("Export current frame"),
+        QString(),
+        tr("PNG images (*.png)"));
+    if (selected.isEmpty()) {
+        return;
+    }
+    const QString filePath = normalizedPath(selected, QStringLiteral("png"));
+    const QImage image =
+        RenderEngine::render(m_controller.document(), frame);
+    QSaveFile file(filePath);
+    QString error;
+    bool saved = !image.isNull() && file.open(QIODevice::WriteOnly);
+    if (saved) {
+        QImageWriter writer(&file, "PNG");
+        saved = writer.write(image);
+        if (!saved) {
+            error = writer.errorString();
+        }
+    } else if (!image.isNull()) {
+        error = file.errorString();
+    }
+    if (saved) {
+        saved = file.commit();
+        if (!saved) {
+            error = file.errorString();
+        }
+    }
+    if (!saved) {
+        spdlog::error(
+            "Failed to export PNG {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(
+            this,
+            tr("Export failed"),
+            error.isEmpty()
+                ? tr("Could not export the PNG.")
+                : tr("Could not export the PNG.\n\n%1").arg(error));
+        return;
+    }
+    statusBar()->showMessage(tr("Exported %1").arg(filePath), 5000);
+    spdlog::info("Exported PNG {}", filePath.toUtf8().constData());
+}
+
+QString MainWindow::normalizedPath(
+    const QString &filePath,
+    const QString &extension) const
+{
+    if (QFileInfo(filePath).suffix().compare(
+            extension,
+            Qt::CaseInsensitive) == 0) {
+        return filePath;
+    }
+    return filePath + QStringLiteral(".") + extension;
+}
+
+}
