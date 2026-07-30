@@ -261,13 +261,44 @@ endif()
 set(CPACK_PACKAGE_NAME "WobblePaint")
 set(CPACK_PACKAGE_VENDOR "WobblePaint")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(
-    CPACK_PACKAGE_FILE_NAME
-    "WobblePaint-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}"
-)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Animated drawing tool")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/nyattic/WobblePaint")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "WobblePaint")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_VERBATIM_VARIABLES TRUE)
 if(APPLE)
     set(CPACK_GENERATOR "DragNDrop")
+    set(
+        CPACK_PACKAGE_FILE_NAME
+        "WobblePaint-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}"
+    )
 elseif(WIN32)
-    set(CPACK_GENERATOR "ZIP")
+    set(CPACK_GENERATOR "NSIS")
+    set(
+        CPACK_PACKAGE_FILE_NAME
+        "WobblePaint-${PROJECT_VERSION}-Windows-x64-Setup"
+    )
+    set(CPACK_PACKAGE_EXECUTABLES "WobblePaint" "WobblePaint")
+    set(CPACK_CREATE_DESKTOP_LINKS "WobblePaint")
+    set(CPACK_NSIS_DISPLAY_NAME "WobblePaint")
+    set(CPACK_NSIS_PACKAGE_NAME "WobblePaint")
+    set(CPACK_NSIS_EXECUTABLES_DIRECTORY "bin")
+    set(
+        CPACK_NSIS_INSTALLED_ICON_NAME
+        "bin\\\\WobblePaint.exe"
+    )
+    set(
+        CPACK_NSIS_MUI_ICON
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/WobblePaint.ico"
+    )
+    set(
+        CPACK_NSIS_MUI_UNIICON
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/WobblePaint.ico"
+    )
+    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "WobblePaint.exe")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
+    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/nyattic/WobblePaint")
+    set(CPACK_NSIS_HELP_LINK "https://github.com/nyattic/WobblePaint/issues")
 endif()
 include(CPack)

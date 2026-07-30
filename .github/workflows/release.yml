@@ -54,7 +54,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Build Windows ZIP
+    name: Build Windows installer
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -81,24 +81,22 @@ jobs:
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             "-DVCPKG_TARGET_TRIPLET=x64-windows"
 
-      - name: Build ZIP
+      - name: Build installer
         shell: pwsh
         run: cmake --build --preset windows-release --target package --parallel
 
       - name: Stage artifact
         shell: pwsh
         run: |
-          $package = Get-ChildItem out/build/windows-release -Filter *.zip -File | Select-Object -First 1
-          if (-not $package) { throw "ZIP package was not created" }
-          $match = [regex]::Match((Get-Content CMakeLists.txt -Raw), 'project\(WobblePaint VERSION ([0-9.]+)')
-          if (-not $match.Success) { throw "Project version was not found" }
+          $package = Get-ChildItem out/build/windows-release -Filter *-Setup.exe -File | Select-Object -First 1
+          if (-not $package) { throw "Windows installer was not created" }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          Copy-Item $package.FullName "artifacts/WobblePaint-$($match.Groups[1].Value)-Windows-x64.zip"
+          Copy-Item $package.FullName artifacts
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: windows-zip
-          path: artifacts/*.zip
+          name: windows-installer
+          path: artifacts/*.exe
           if-no-files-found: error
 
   publish:
