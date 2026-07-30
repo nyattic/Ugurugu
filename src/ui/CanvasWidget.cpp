@@ -381,6 +381,7 @@ void CanvasWidget::setTool(Tool tool)
         return;
     }
     cancelStroke();
+    endColorPick();
     if (m_lassoActive) {
         const SelectionState previousSelection =
             m_hasSelectionBeforeLasso
@@ -496,6 +497,7 @@ void CanvasWidget::setCanvasMirrored(bool mirrored)
     cancelStroke();
     endPan();
     endZoomDrag();
+    endColorPick();
     m_canvasMirrored = mirrored;
     updatePointerPosition(m_pointerWidgetPosition);
     emit canvasMirroredChanged(mirrored);
@@ -625,6 +627,7 @@ void CanvasWidget::paintEvent(QPaintEvent *)
     if (m_pointerOverWidget
         && !m_panning
         && !m_spacePressed
+        && !m_pickingColor
         && (m_tool == Tool::Brush || m_tool == Tool::Eraser)) {
         const qreal radius = std::max(
             1.0,
@@ -677,6 +680,14 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
         event->accept();
         return;
     }
+    if (event->button() == Qt::LeftButton
+        && !m_tabletSequence
+        && event->modifiers().testFlag(Qt::AltModifier)
+        && isColorPickableTool()) {
+        beginColorPick(event->position());
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && !m_tabletSequence) {
         const QPointF documentPosition = mapToDocument(event->position());
         switch (m_tool) {
@@ -716,6 +727,11 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
         event->accept();
         return;
     }
+    if (m_pickingColor && !m_tabletSequence) {
+        pickColorAt(event->position());
+        event->accept();
+        return;
+    }
     if (m_panning) {
         continuePan(event->position());
         event->accept();
@@ -750,6 +766,13 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
     updatePointerPosition(event->position());
     if (m_zoomDragging && event->button() == Qt::LeftButton) {
         endZoomDrag();
+        event->accept();
+        return;
+    }
+    if (m_pickingColor
+        && !m_tabletSequence
+        && event->button() == Qt::LeftButton) {
+        endColorPick();
         event->accept();
         return;
     }
@@ -819,6 +842,13 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             event->accept();
             return;
         }
+        if (event->modifiers().testFlag(Qt::AltModifier)
+            && isColorPickableTool()) {
+            m_tabletSequence = true;
+            beginColorPick(event->position());
+            event->accept();
+            return;
+        }
         if (!eraser && m_tool != Tool::Brush && m_tool != Tool::Eraser) {
             QWidget::tabletEvent(event);
             return;
@@ -832,6 +862,8 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         updatePointerPosition(event->position());
         if (m_zoomDragging) {
             continueZoomDrag(event->position());
+        } else if (m_pickingColor) {
+            pickColorAt(event->position());
         } else if (m_panning) {
             continuePan(event->position());
         } else {
@@ -843,6 +875,8 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
     if (event->type() == QEvent::TabletRelease && m_tabletSequence) {
         if (m_zoomDragging) {
             endZoomDrag();
+        } else if (m_pickingColor) {
+            endColorPick();
         } else if (m_panning) {
             endPan();
         } else {
@@ -872,6 +906,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
         pushSelectionChange(previousSelection, {}, tr("Deselect"));
         endPan();
         endZoomDrag();
+        endColorPick();
         event->accept();
         return;
     }
@@ -1222,6 +1257,64 @@ void CanvasWidget::endZoomDrag()
     updateCursor();
 }
 
+bool CanvasWidget::isColorPickableTool() const
+{
+    return m_tool == Tool::Brush
+        || m_tool == Tool::Eraser
+        || m_tool == Tool::Bucket;
+}
+
+void CanvasWidget::beginColorPick(const QPointF &widgetPosition)
+{
+    cancelStroke();
+    m_pickingColor = true;
+    updateCursor();
+    pickColorAt(widgetPosition);
+    update();
+}
+
+void CanvasWidget::endColorPick()
+{
+    if (!m_pickingColor) {
+        return;
+    }
+    m_pickingColor = false;
+    updateCursor();
+    update();
+}
+
+void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
+{
+    bool inside = false;
+    const QPointF documentPosition =
+        mapToDocument(widgetPosition, &inside);
+    const QSize documentSize = m_controller->document().size;
+    if (!inside || !documentSize.isValid()) {
+        return;
+    }
+    const QImage frame = frameImage(m_currentFrame);
+    if (frame.isNull()) {
+        return;
+    }
+    const int x = std::clamp(
+        static_cast<int>(
+            documentPosition.x() * frame.width() / documentSize.width()),
+        0,
+        frame.width() - 1);
+    const int y = std::clamp(
+        static_cast<int>(
+            documentPosition.y() * frame.height()
+                / documentSize.height()),
+        0,
+        frame.height() - 1);
+    QColor color = frame.pixelColor(x, y);
+    if (color.alpha() == 0) {
+        return;
+    }
+    color.setAlpha(255);
+    setBrushColor(color);
+}
+
 void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
 {
     bool inside = false;
@@ -1237,6 +1330,10 @@ void CanvasWidget::updateCursor()
 {
     if (m_zoomDragging) {
         setCursor(Qt::SizeHorCursor);
+        return;
+    }
+    if (m_pickingColor) {
+        setCursor(Qt::CrossCursor);
         return;
     }
     if (m_panning) {

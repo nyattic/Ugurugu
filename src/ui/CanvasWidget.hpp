@@ -129,6 +129,10 @@ private:
     void beginZoomDrag(const QPointF &widgetPosition);
     void continueZoomDrag(const QPointF &widgetPosition);
     void endZoomDrag();
+    bool isColorPickableTool() const;
+    void beginColorPick(const QPointF &widgetPosition);
+    void endColorPick();
+    void pickColorAt(const QPointF &widgetPosition);
     void updatePointerPosition(const QPointF &widgetPosition);
     void updateCursor();
     void notifyZoomChanged();
@@ -206,6 +210,7 @@ private:
     bool m_spacePressed = false;
     bool m_tabletSequence = false;
     bool m_zoomDragging = false;
+    bool m_pickingColor = false;
     QPointF m_zoomDragStart;
     QPointF m_zoomDragAnchor;
     bool m_zoomDragAnchorInside = false;

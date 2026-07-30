@@ -84,6 +84,7 @@ Shortcuts**.
 | Scroll | Zoom |
 | `Ctrl/Cmd++` / `Ctrl/Cmd+-` | Zoom in / out |
 | `Ctrl/Cmd+Space` + drag | Zoom with the pen or mouse (drag right to zoom in) |
+| `Alt` + click | Pick a color from the canvas (brush, eraser, and bucket tools) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
 | `Ctrl/Cmd+E` | Export an animated GIF |

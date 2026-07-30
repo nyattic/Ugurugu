@@ -571,6 +571,34 @@ private slots:
         QVERIFY(layer.strokes.isEmpty());
     }
 
+    void picksBrushColorWithAltClick()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        canvas.setBrushColor(Qt::red);
+        const QPoint center(200, 200);
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::AltModifier,
+            center);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::AltModifier,
+            center);
+
+        QCOMPARE(canvas.brushColor(), QColor(Qt::white));
+        const Layer &layer = controller.document().layers.first();
+        QVERIFY(layer.strokes.isEmpty());
+    }
+
     void mapsDrawingInputThroughTheMirroredCanvas()
     {
         DocumentController controller;
