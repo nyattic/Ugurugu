@@ -339,6 +339,127 @@ void drawPressureStroke(
 
 }
 
+QImage RenderEngine::fillRegionMask(const QImage &image, const QPoint &seed)
+{
+    if (image.isNull()
+        || image.format() != QImage::Format_ARGB32_Premultiplied
+        || !image.rect().contains(seed)) {
+        return {};
+    }
+    const int width = image.width();
+    const int height = image.height();
+    auto blocked = [&image](int x, int y) {
+        const QRgb *line =
+            reinterpret_cast<const QRgb *>(image.constScanLine(y));
+        return qAlpha(line[x]) >= 128;
+    };
+    if (blocked(seed.x(), seed.y())) {
+        return {};
+    }
+
+    QImage mask(width, height, QImage::Format_Grayscale8);
+    mask.fill(0);
+    QVector<QPoint> pending;
+    pending.append(seed);
+    while (!pending.isEmpty()) {
+        const QPoint point = pending.takeLast();
+        const int y = point.y();
+        uchar *maskLine = mask.scanLine(y);
+        if (maskLine[point.x()] || blocked(point.x(), y)) {
+            continue;
+        }
+        int left = point.x();
+        while (left > 0 && !maskLine[left - 1] && !blocked(left - 1, y)) {
+            --left;
+        }
+        int right = point.x();
+        while (right < width - 1
+               && !maskLine[right + 1]
+               && !blocked(right + 1, y)) {
+            ++right;
+        }
+        for (int x = left; x <= right; ++x) {
+            maskLine[x] = 255;
+        }
+        for (const int neighborY : {y - 1, y + 1}) {
+            if (neighborY < 0 || neighborY >= height) {
+                continue;
+            }
+            const uchar *neighborMask = mask.constScanLine(neighborY);
+            for (int x = left; x <= right; ++x) {
+                if (!neighborMask[x] && !blocked(x, neighborY)) {
+                    pending.append(QPoint(x, neighborY));
+                    while (x < right
+                           && !neighborMask[x + 1]
+                           && !blocked(x + 1, neighborY)) {
+                        ++x;
+                    }
+                }
+            }
+        }
+    }
+    return mask;
+}
+
+namespace {
+
+void applyFillStroke(QImage &layerImage, const Stroke &stroke)
+{
+    const QPointF seedPosition = stroke.points.first().position;
+    const QPoint seed(
+        std::clamp(
+            static_cast<int>(seedPosition.x()),
+            0,
+            layerImage.width() - 1),
+        std::clamp(
+            static_cast<int>(seedPosition.y()),
+            0,
+            layerImage.height() - 1));
+    const QImage mask = RenderEngine::fillRegionMask(layerImage, seed);
+    if (mask.isNull()) {
+        return;
+    }
+
+    const QRgb fill = qPremultiply(stroke.color.rgba());
+    const int fillRed = qRed(fill);
+    const int fillGreen = qGreen(fill);
+    const int fillBlue = qBlue(fill);
+    const int fillAlpha = qAlpha(fill);
+    const int width = layerImage.width();
+    const int height = layerImage.height();
+
+    for (int y = 0; y < height; ++y) {
+        QRgb *line = reinterpret_cast<QRgb *>(layerImage.scanLine(y));
+        const uchar *maskLine = mask.constScanLine(y);
+        const uchar *maskAbove = y > 0 ? mask.constScanLine(y - 1) : nullptr;
+        const uchar *maskBelow =
+            y < height - 1 ? mask.constScanLine(y + 1) : nullptr;
+        for (int x = 0; x < width; ++x) {
+            if (maskLine[x]) {
+                line[x] = fill;
+                continue;
+            }
+            const bool touchesRegion =
+                (x > 0 && maskLine[x - 1])
+                || (x < width - 1 && maskLine[x + 1])
+                || (maskAbove && maskAbove[x])
+                || (maskBelow && maskBelow[x]);
+            if (!touchesRegion) {
+                continue;
+            }
+            const QRgb existing = line[x];
+            const int inverse = 255 - qAlpha(existing);
+            line[x] = qRgba(
+                qRed(existing) + fillRed * inverse / 255,
+                qGreen(existing) + fillGreen * inverse / 255,
+                qBlue(existing) + fillBlue * inverse / 255,
+                qAlpha(existing) + fillAlpha * inverse / 255);
+        }
+    }
+}
+
+}
+
 QImage RenderEngine::render(const Document &document, int frameIndex)
 {
     if (!document.size.isValid()) {
@@ -374,6 +495,14 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
 
         for (const Stroke &stroke : layer.strokes) {
             if (stroke.points.isEmpty()) {
+                continue;
+            }
+
+            if (stroke.mode == StrokeMode::Fill) {
+                painter.end();
+                applyFillStroke(layerImage, stroke);
+                painter.begin(&layerImage);
+                painter.setRenderHint(QPainter::Antialiasing, true);
                 continue;
             }
 

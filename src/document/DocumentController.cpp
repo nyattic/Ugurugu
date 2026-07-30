@@ -2,6 +2,7 @@
 
 #include "document/DocumentLimits.hpp"
 
+#include <QSet>
 #include <QUndoCommand>
 
 #include <algorithm>
@@ -214,7 +215,8 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
         || stroke.id.isNull()
         || containsStrokeId(m_document, stroke.id)
         || (stroke.mode != StrokeMode::Paint
-            && stroke.mode != StrokeMode::Erase)
+            && stroke.mode != StrokeMode::Erase
+            && stroke.mode != StrokeMode::Fill)
         || !stroke.color.isValid()
         || !std::isfinite(stroke.width)
         || stroke.width < DocumentLimits::minimumStrokeWidth
@@ -268,6 +270,108 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
     };
     m_undoStack.push(new LambdaCommand(
         tr("Draw stroke"),
+        std::move(redoAction),
+        std::move(undoAction)));
+}
+
+void DocumentController::translateStrokes(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QPointF &delta)
+{
+    const Layer *layer = m_document.layer(layerId);
+    if (!layer
+        || strokeIds.isEmpty()
+        || !std::isfinite(delta.x())
+        || !std::isfinite(delta.y())
+        || (qFuzzyIsNull(delta.x()) && qFuzzyIsNull(delta.y()))) {
+        return;
+    }
+
+    QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    QSet<QUuid> movable;
+    for (const Stroke &stroke : layer->strokes) {
+        if (!requested.contains(stroke.id)) {
+            continue;
+        }
+        const bool staysInside = std::all_of(
+            stroke.points.cbegin(),
+            stroke.points.cend(),
+            [this, &delta](const StrokePoint &point) {
+                StrokePoint moved = point;
+                moved.position += delta;
+                return isValidStrokePoint(moved, m_document.size);
+            });
+        if (!staysInside) {
+            return;
+        }
+        movable.insert(stroke.id);
+    }
+    if (movable.isEmpty()) {
+        return;
+    }
+
+    auto shift = [this, layerId, movable](const QPointF &offset) {
+        if (Layer *target = m_document.layer(layerId)) {
+            for (Stroke &stroke : target->strokes) {
+                if (movable.contains(stroke.id)) {
+                    for (StrokePoint &point : stroke.points) {
+                        point.position += offset;
+                    }
+                }
+            }
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Move selection"),
+        [shift, delta]() { shift(delta); },
+        [shift, delta]() { shift(-delta); }));
+}
+
+void DocumentController::removeStrokes(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds)
+{
+    const Layer *layer = m_document.layer(layerId);
+    if (!layer || strokeIds.isEmpty()) {
+        return;
+    }
+
+    const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    QVector<QPair<int, Stroke>> removed;
+    for (int index = 0; index < layer->strokes.size(); ++index) {
+        if (requested.contains(layer->strokes[index].id)) {
+            removed.append({index, layer->strokes[index]});
+        }
+    }
+    if (removed.isEmpty()) {
+        return;
+    }
+
+    auto redoAction = [this, layerId, requested]() {
+        if (Layer *target = m_document.layer(layerId)) {
+            target->strokes.removeIf([&requested](const Stroke &stroke) {
+                return requested.contains(stroke.id);
+            });
+            notifyDocumentChanged();
+        }
+    };
+    auto undoAction = [this, layerId, removed]() {
+        if (Layer *target = m_document.layer(layerId)) {
+            for (const auto &entry : removed) {
+                target->strokes.insert(
+                    std::clamp(
+                        entry.first,
+                        0,
+                        static_cast<int>(target->strokes.size())),
+                    entry.second);
+            }
+            notifyDocumentChanged();
+        }
+    };
+    m_undoStack.push(new LambdaCommand(
+        tr("Delete selection"),
         std::move(redoAction),
         std::move(undoAction)));
 }

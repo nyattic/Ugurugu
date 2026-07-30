@@ -24,6 +24,13 @@ public:
 
     void setActiveLayer(const QUuid &id);
     void addStroke(const QUuid &layerId, Stroke stroke);
+    void translateStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &delta);
+    void removeStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds);
     void addLayer();
     void duplicateLayer(const QUuid &id);
     void removeLayer(const QUuid &id);

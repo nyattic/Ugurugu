@@ -11,7 +11,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
 find_package(spdlog 1.13 REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
 
@@ -104,6 +104,13 @@ target_include_directories(wobblepaint_ui PUBLIC src)
 target_link_libraries(wobblepaint_ui PUBLIC wobblepaint_core Qt6::Widgets)
 
 qt_add_executable(WobblePaint src/main.cpp)
+
+qt_add_translation(WOBBLEPAINT_QM_FILES i18n/wobblepaint_ko.ts)
+qt_add_resources(WobblePaint "wobblepaint_translations"
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${WOBBLEPAINT_QM_FILES}
+)
 
 target_link_libraries(WobblePaint PRIVATE wobblepaint_ui)
 target_compile_definitions(

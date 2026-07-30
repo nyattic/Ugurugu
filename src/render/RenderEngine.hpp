@@ -16,6 +16,7 @@ public:
         int frameIndex,
         int frameCount,
         qreal wobbleAmount);
+    static QImage fillRegionMask(const QImage &image, const QPoint &seed);
 };
 
 }

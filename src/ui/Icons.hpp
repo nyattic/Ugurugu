@@ -20,7 +20,10 @@ enum class IconGlyph {
     MoveDown,
     EyeOpen,
     EyeClosed,
-    FitView
+    FitView,
+    Lasso,
+    Wand,
+    Bucket
 };
 
 struct Icons final

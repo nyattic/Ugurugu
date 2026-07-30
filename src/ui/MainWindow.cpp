@@ -348,15 +348,45 @@ void MainWindow::createActions()
     m_eraserAction->setShortcut(QKeySequence(QStringLiteral("E")));
     m_eraserAction->setObjectName(QStringLiteral("eraserAction"));
 
+    m_lassoAction = new QAction(tr("&Lasso select"), this);
+    m_lassoAction->setCheckable(true);
+    m_lassoAction->setIcon(Icons::toggleIcon(IconGlyph::Lasso));
+    m_lassoAction->setShortcut(QKeySequence(QStringLiteral("L")));
+    m_lassoAction->setObjectName(QStringLiteral("lassoAction"));
+
+    m_wandAction = new QAction(tr("Auto se&lect"), this);
+    m_wandAction->setCheckable(true);
+    m_wandAction->setIcon(Icons::toggleIcon(IconGlyph::Wand));
+    m_wandAction->setShortcut(QKeySequence(QStringLiteral("W")));
+    m_wandAction->setObjectName(QStringLiteral("wandAction"));
+
+    m_bucketAction = new QAction(tr("Paint &bucket"), this);
+    m_bucketAction->setCheckable(true);
+    m_bucketAction->setIcon(Icons::toggleIcon(IconGlyph::Bucket));
+    m_bucketAction->setShortcut(QKeySequence(QStringLiteral("G")));
+    m_bucketAction->setObjectName(QStringLiteral("bucketAction"));
+
     auto *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
     toolGroup->addAction(m_brushAction);
     toolGroup->addAction(m_eraserAction);
+    toolGroup->addAction(m_lassoAction);
+    toolGroup->addAction(m_wandAction);
+    toolGroup->addAction(m_bucketAction);
     connect(m_brushAction, &QAction::triggered, this, [this]() {
         m_canvas->setTool(CanvasWidget::Tool::Brush);
     });
     connect(m_eraserAction, &QAction::triggered, this, [this]() {
         m_canvas->setTool(CanvasWidget::Tool::Eraser);
+    });
+    connect(m_lassoAction, &QAction::triggered, this, [this]() {
+        m_canvas->setTool(CanvasWidget::Tool::Lasso);
+    });
+    connect(m_wandAction, &QAction::triggered, this, [this]() {
+        m_canvas->setTool(CanvasWidget::Tool::Wand);
+    });
+    connect(m_bucketAction, &QAction::triggered, this, [this]() {
+        m_canvas->setTool(CanvasWidget::Tool::Bucket);
     });
 
     addAction(newAction);
@@ -404,6 +434,9 @@ void MainWindow::createMenus()
     QMenu *toolMenu = menuBar()->addMenu(tr("&Tools"));
     toolMenu->addAction(m_brushAction);
     toolMenu->addAction(m_eraserAction);
+    toolMenu->addAction(m_lassoAction);
+    toolMenu->addAction(m_wandAction);
+    toolMenu->addAction(m_bucketAction);
 }
 
 void MainWindow::createToolBars()
@@ -414,6 +447,9 @@ void MainWindow::createToolBars()
     tools->setIconSize(QSize(22, 22));
     tools->addAction(m_brushAction);
     tools->addAction(m_eraserAction);
+    tools->addAction(m_lassoAction);
+    tools->addAction(m_wandAction);
+    tools->addAction(m_bucketAction);
     tools->addSeparator();
 
     m_colorButton = new QPushButton(tools);
@@ -587,16 +623,40 @@ bool MainWindow::maybeSave()
     if (!m_controller.isModified()) {
         return true;
     }
-    const QMessageBox::StandardButton choice = QMessageBox::warning(
-        this,
-        tr("Unsaved changes"),
-        tr("The document has unsaved changes."),
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
-        QMessageBox::Save);
-    if (choice == QMessageBox::Save) {
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Unsaved changes"));
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(18, 16, 18, 14);
+    layout->setSpacing(14);
+    layout->addWidget(
+        new QLabel(tr("The document has unsaved changes."), &dialog));
+
+    auto *buttonLayout = new QHBoxLayout;
+    buttonLayout->setSpacing(8);
+    buttonLayout->addStretch(1);
+    auto *saveButton = new QPushButton(tr("Save"), &dialog);
+    saveButton->setDefault(true);
+    buttonLayout->addWidget(saveButton);
+    auto *discardButton = new QPushButton(tr("Don't Save"), &dialog);
+    buttonLayout->addWidget(discardButton);
+    auto *cancelButton = new QPushButton(tr("Cancel"), &dialog);
+    buttonLayout->addWidget(cancelButton);
+    layout->addLayout(buttonLayout);
+
+    connect(saveButton, &QPushButton::clicked, &dialog, [&dialog]() {
+        dialog.done(1);
+    });
+    connect(discardButton, &QPushButton::clicked, &dialog, [&dialog]() {
+        dialog.done(2);
+    });
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    const int choice = dialog.exec();
+    if (choice == 1) {
         return save();
     }
-    return choice == QMessageBox::Discard;
+    return choice == 2;
 }
 
 bool MainWindow::save()

@@ -72,11 +72,13 @@ QJsonObject strokeToJson(const Stroke &stroke)
     QJsonObject object;
     object.insert(QStringLiteral("id"), stroke.id.toString(QUuid::WithoutBraces));
     object.insert(QStringLiteral("seed"), QString::number(stroke.seed));
-    object.insert(
-        QStringLiteral("mode"),
-        stroke.mode == StrokeMode::Erase
-            ? QStringLiteral("erase")
-            : QStringLiteral("paint"));
+    QString modeName = QStringLiteral("paint");
+    if (stroke.mode == StrokeMode::Erase) {
+        modeName = QStringLiteral("erase");
+    } else if (stroke.mode == StrokeMode::Fill) {
+        modeName = QStringLiteral("fill");
+    }
+    object.insert(QStringLiteral("mode"), modeName);
     object.insert(
         QStringLiteral("color"),
         stroke.color.name(QColor::HexArgb));
@@ -138,13 +140,19 @@ std::optional<Stroke> strokeFromJson(
         return std::nullopt;
     }
     const QString mode = object.value(QStringLiteral("mode")).toString();
-    if (mode != QStringLiteral("paint") && mode != QStringLiteral("erase")) {
+    if (mode != QStringLiteral("paint")
+        && mode != QStringLiteral("erase")
+        && mode != QStringLiteral("fill")) {
         setError(error, QStringLiteral("A stroke has an invalid mode."));
         return std::nullopt;
     }
-    stroke.mode = mode == QStringLiteral("erase")
-        ? StrokeMode::Erase
-        : StrokeMode::Paint;
+    if (mode == QStringLiteral("erase")) {
+        stroke.mode = StrokeMode::Erase;
+    } else if (mode == QStringLiteral("fill")) {
+        stroke.mode = StrokeMode::Fill;
+    } else {
+        stroke.mode = StrokeMode::Paint;
+    }
     const QColor color(object.value(QStringLiteral("color")).toString());
     if (!color.isValid()) {
         setError(error, QStringLiteral("A stroke has an invalid color."));
@@ -365,7 +373,8 @@ bool validateDocument(const Document &document, QString *error)
             }
             strokeIds.insert(stroke.id);
             if ((stroke.mode != StrokeMode::Paint
-                 && stroke.mode != StrokeMode::Erase)
+                 && stroke.mode != StrokeMode::Erase
+                 && stroke.mode != StrokeMode::Fill)
                 || !stroke.color.isValid()
                 || !std::isfinite(stroke.width)
                 || stroke.width < DocumentLimits::minimumStrokeWidth

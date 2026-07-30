@@ -227,6 +227,52 @@ Glyph fitViewGlyph()
     return glyph;
 }
 
+Glyph lassoGlyph()
+{
+    Glyph glyph;
+    QPolygonF loop;
+    for (int step = 0; step <= 26; ++step) {
+        const qreal angle =
+            2.0 * std::numbers::pi_v<qreal> * step / 26.0;
+        loop.append(QPointF(
+            12.0 + 7.2 * std::cos(angle),
+            9.8 + 5.4 * std::sin(angle)));
+    }
+    glyph.lines.append(loop);
+    glyph.lines.append(
+        sampleQuad({13.6, 15.0}, {10.0, 17.4}, {6.4, 19.6}, 10));
+    glyph.lines.append(polyline({{6.4, 19.6}, {9.2, 20.8}}));
+    return glyph;
+}
+
+Glyph wandGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{15.8, 8.2}, {6.6, 17.4}}));
+    glyph.lines.append(polyline({{18.4, 2.8}, {18.4, 5.4}}));
+    glyph.lines.append(polyline({{18.4, 7.4}, {18.4, 10.0}}));
+    glyph.lines.append(polyline({{15.0, 6.4}, {17.4, 6.4}}));
+    glyph.lines.append(polyline({{19.4, 6.4}, {21.8, 6.4}}));
+    glyph.fills.append(circle({20.6, 11.6}, 1.0, 10));
+    return glyph;
+}
+
+Glyph bucketGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(
+        sampleQuad({7.2, 9.6}, {12.0, 3.6}, {16.8, 9.6}, 12));
+    glyph.lines.append(polyline({{5.8, 9.6}, {18.2, 9.6}}));
+    glyph.lines.append(polyline({
+        {6.8, 9.6},
+        {8.4, 19.2},
+        {15.6, 19.2},
+        {17.2, 9.6}
+    }));
+    glyph.fills.append(circle({20.2, 14.4}, 1.4, 12));
+    return glyph;
+}
+
 Glyph glyphFor(IconGlyph glyph)
 {
     switch (glyph) {
@@ -258,6 +304,12 @@ Glyph glyphFor(IconGlyph glyph)
         return eyeClosedGlyph();
     case IconGlyph::FitView:
         return fitViewGlyph();
+    case IconGlyph::Lasso:
+        return lassoGlyph();
+    case IconGlyph::Wand:
+        return wandGlyph();
+    case IconGlyph::Bucket:
+        return bucketGlyph();
     }
     return {};
 }

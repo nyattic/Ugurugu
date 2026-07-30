@@ -59,6 +59,9 @@ private:
     QAction *m_playAction = nullptr;
     QAction *m_brushAction = nullptr;
     QAction *m_eraserAction = nullptr;
+    QAction *m_lassoAction = nullptr;
+    QAction *m_wandAction = nullptr;
+    QAction *m_bucketAction = nullptr;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;
     QSpinBox *m_brushSizeSpin = nullptr;

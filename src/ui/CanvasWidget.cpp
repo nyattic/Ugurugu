@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 #include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QTabletEvent>
@@ -55,6 +56,7 @@ CanvasWidget::CanvasWidget(
 
     connect(m_controller, &DocumentController::documentChanged, this, [this]() {
         invalidateFrames();
+        pruneSelection();
     });
     connect(&m_animationTimer, &QTimer::timeout, this, [this]() {
         advanceFrame();
@@ -100,6 +102,8 @@ void CanvasWidget::setTool(Tool tool)
         return;
     }
     cancelStroke();
+    cancelLasso();
+    clearSelection();
     m_tool = tool;
     emit toolChanged(tool);
     updateCursor();
@@ -231,6 +235,22 @@ void CanvasWidget::paintEvent(QPaintEvent *)
             displayedFrame =
                 RenderEngine::render(previewDocument, m_currentFrame);
         }
+    } else if (m_movingSelection
+               && !m_selectedStrokes.isEmpty()
+               && (!qFuzzyIsNull(m_moveDelta.x())
+                   || !qFuzzyIsNull(m_moveDelta.y()))) {
+        Document previewDocument = document;
+        if (Layer *layer = previewDocument.layer(m_selectionLayer)) {
+            for (Stroke &stroke : layer->strokes) {
+                if (m_selectedStrokes.contains(stroke.id)) {
+                    for (StrokePoint &point : stroke.points) {
+                        point.position += m_moveDelta;
+                    }
+                }
+            }
+            displayedFrame =
+                RenderEngine::render(previewDocument, m_currentFrame);
+        }
     }
     if (displayedFrame.isNull()) {
         displayedFrame = frameImage(m_currentFrame);
@@ -253,7 +273,12 @@ void CanvasWidget::paintEvent(QPaintEvent *)
             tr("B Brush · E Eraser · Space Pan · Scroll Zoom · P Play"));
     }
 
-    if (m_pointerOverWidget && !m_panning && !m_spacePressed) {
+    drawSelectionOverlay(painter, transform);
+
+    if (m_pointerOverWidget
+        && !m_panning
+        && !m_spacePressed
+        && (m_tool == Tool::Brush || m_tool == Tool::Eraser)) {
         const qreal radius = std::max(
             1.0,
             m_brushWidth * std::abs(transform.m11()) * 0.5);
@@ -299,7 +324,30 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
         return;
     }
     if (event->button() == Qt::LeftButton && !m_tabletSequence) {
-        beginStroke(event->position(), 1.0, false);
+        const QPointF documentPosition = mapToDocument(event->position());
+        switch (m_tool) {
+        case Tool::Brush:
+        case Tool::Eraser:
+            beginStroke(event->position(), 1.0, false);
+            break;
+        case Tool::Lasso:
+            if (selectionContains(documentPosition)) {
+                beginSelectionMove(documentPosition);
+            } else {
+                beginLasso(documentPosition);
+            }
+            break;
+        case Tool::Wand:
+            if (selectionContains(documentPosition)) {
+                beginSelectionMove(documentPosition);
+            } else {
+                computeWandSelection(documentPosition);
+            }
+            break;
+        case Tool::Bucket:
+            applyBucketFill(documentPosition);
+            break;
+        }
         event->accept();
         return;
     }
@@ -316,6 +364,22 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
     }
     if (m_drawing && !m_tabletSequence) {
         continueStroke(event->position(), 1.0);
+        event->accept();
+        return;
+    }
+    if (m_movingSelection) {
+        continueSelectionMove(mapToDocument(event->position()));
+        event->accept();
+        return;
+    }
+    if (m_lassoActive) {
+        const QPointF position =
+            clampedDocumentPosition(mapToDocument(event->position()));
+        if (m_lassoPoints.isEmpty()
+            || pointDistance(position, m_lassoPoints.constLast()) >= 1.0) {
+            m_lassoPoints.append(position);
+            update();
+        }
         event->accept();
         return;
     }
@@ -336,6 +400,17 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
         && m_drawing
         && !m_tabletSequence) {
         endStroke(event->position(), 1.0);
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && m_movingSelection) {
+        continueSelectionMove(mapToDocument(event->position()));
+        commitSelectionMove();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && m_lassoActive) {
+        finishLasso();
         event->accept();
         return;
     }
@@ -377,6 +452,10 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
 {
     const bool eraser =
         event->pointerType() == QPointingDevice::PointerType::Eraser;
+    if (!eraser && m_tool != Tool::Brush && m_tool != Tool::Eraser) {
+        QWidget::tabletEvent(event);
+        return;
+    }
     if (event->type() == QEvent::TabletPress) {
         m_tabletSequence = true;
         beginStroke(event->position(), event->pressure(), eraser);
@@ -407,7 +486,21 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
     }
     if (event->key() == Qt::Key_Escape) {
         cancelStroke();
+        cancelLasso();
+        clearSelection();
         endPan();
+        event->accept();
+        return;
+    }
+    if ((event->key() == Qt::Key_Delete
+         || event->key() == Qt::Key_Backspace)
+        && !m_selectedStrokes.isEmpty()) {
+        m_controller->removeStrokes(
+            m_selectionLayer,
+            QVector<QUuid>(
+                m_selectedStrokes.cbegin(),
+                m_selectedStrokes.cend()));
+        clearSelection();
         event->accept();
         return;
     }
@@ -658,12 +751,396 @@ void CanvasWidget::updateCursor()
         setCursor(Qt::ClosedHandCursor);
         return;
     }
-    setCursor(m_spacePressed ? Qt::OpenHandCursor : Qt::BlankCursor);
+    if (m_spacePressed) {
+        setCursor(Qt::OpenHandCursor);
+        return;
+    }
+    const bool drawsWithRing =
+        m_tool == Tool::Brush || m_tool == Tool::Eraser;
+    setCursor(drawsWithRing ? Qt::BlankCursor : Qt::CrossCursor);
 }
 
 void CanvasWidget::notifyZoomChanged()
 {
     emit zoomChanged(std::max(1, qRound(std::abs(zoom()) * 100.0)));
+}
+
+bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
+{
+    if (m_selectionMask.isNull()) {
+        return false;
+    }
+    const QPoint pixel(
+        static_cast<int>(documentPosition.x()),
+        static_cast<int>(documentPosition.y()));
+    return m_selectionMask.rect().contains(pixel)
+        && m_selectionMask.constScanLine(pixel.y())[pixel.x()] >= 128;
+}
+
+void CanvasWidget::beginLasso(const QPointF &documentPosition)
+{
+    clearSelection();
+    m_lassoActive = true;
+    m_lassoPoints.clear();
+    m_lassoPoints.append(clampedDocumentPosition(documentPosition));
+    update();
+}
+
+void CanvasWidget::finishLasso()
+{
+    if (!m_lassoActive) {
+        return;
+    }
+    const QVector<QPointF> points = m_lassoPoints;
+    cancelLasso();
+    if (points.size() < 3) {
+        return;
+    }
+
+    const QSize size = m_controller->document().size;
+    QImage mask(size, QImage::Format_Grayscale8);
+    mask.fill(0);
+    QPainter painter(&mask);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::white);
+    painter.drawPolygon(QPolygonF(points));
+    painter.end();
+    applySelectionMask(mask);
+}
+
+void CanvasWidget::cancelLasso()
+{
+    if (!m_lassoActive && m_lassoPoints.isEmpty()) {
+        return;
+    }
+    m_lassoActive = false;
+    m_lassoPoints.clear();
+    update();
+}
+
+void CanvasWidget::applySelectionMask(QImage mask)
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(document.activeLayerId);
+    if (mask.isNull() || !layer) {
+        clearSelection();
+        return;
+    }
+
+    QSet<QUuid> selected;
+    for (const Stroke &stroke : layer->strokes) {
+        const bool inside = std::any_of(
+            stroke.points.cbegin(),
+            stroke.points.cend(),
+            [&mask](const StrokePoint &point) {
+                const QPoint pixel(
+                    static_cast<int>(point.position.x()),
+                    static_cast<int>(point.position.y()));
+                return mask.rect().contains(pixel)
+                    && mask.constScanLine(pixel.y())[pixel.x()] >= 128;
+            });
+        if (inside) {
+            selected.insert(stroke.id);
+        }
+    }
+
+    m_selectionMask = mask;
+    m_selectedStrokes = selected;
+    m_selectionLayer = document.activeLayerId;
+    m_moveDelta = QPointF();
+
+    m_selectionTint = QImage(
+        mask.size(),
+        QImage::Format_ARGB32_Premultiplied);
+    m_selectionTint.fill(Qt::transparent);
+    QColor tint = Theme::accent();
+    tint.setAlpha(56);
+    const QRgb tintPixel = qPremultiply(tint.rgba());
+    for (int y = 0; y < mask.height(); ++y) {
+        const uchar *maskLine = mask.constScanLine(y);
+        QRgb *tintLine =
+            reinterpret_cast<QRgb *>(m_selectionTint.scanLine(y));
+        for (int x = 0; x < mask.width(); ++x) {
+            if (maskLine[x] >= 128) {
+                tintLine[x] = tintPixel;
+            }
+        }
+    }
+
+    emit interactionMessage(
+        selected.isEmpty()
+            ? tr("No strokes in the selected area.")
+            : tr("%n stroke(s) selected. Drag to move, press Delete to "
+                 "remove.",
+                 nullptr,
+                 static_cast<int>(selected.size())));
+    update();
+}
+
+void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
+{
+    clearSelection();
+    const QSize size = m_controller->document().size;
+    const QRectF bounds(QPointF(0.0, 0.0), QSizeF(size));
+    if (!bounds.contains(documentPosition)) {
+        return;
+    }
+    const QPoint seed(
+        std::clamp(static_cast<int>(documentPosition.x()), 0, size.width() - 1),
+        std::clamp(
+            static_cast<int>(documentPosition.y()),
+            0,
+            size.height() - 1));
+
+    const QImage layerImage = renderActiveLayerImage();
+    if (layerImage.isNull()) {
+        return;
+    }
+    const QImage mask = RenderEngine::fillRegionMask(layerImage, seed);
+    if (mask.isNull()) {
+        emit interactionMessage(
+            tr("Click an empty area surrounded by lines to select it."));
+        return;
+    }
+    applySelectionMask(mask);
+}
+
+void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
+{
+    const Document &document = m_controller->document();
+    const QRectF bounds(QPointF(0.0, 0.0), QSizeF(document.size));
+    const Layer *layer = document.layer(document.activeLayerId);
+    if (!layer || !bounds.contains(documentPosition)) {
+        return;
+    }
+    if (!layer->visible) {
+        emit interactionMessage(
+            tr("The active layer is hidden. Make it visible to draw."));
+        return;
+    }
+    if (layer->opacity <= 0.0) {
+        emit interactionMessage(
+            tr("The active layer opacity is 0%. Increase it to draw."));
+        return;
+    }
+
+    Stroke fillStroke;
+    fillStroke.seed = QRandomGenerator::global()->generate64();
+    fillStroke.mode = StrokeMode::Fill;
+    fillStroke.color = m_brushColor;
+    fillStroke.width = std::clamp(
+        m_brushWidth,
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+    fillStroke.points.append({
+        clampedDocumentPosition(documentPosition),
+        1.0
+    });
+    m_controller->addStroke(document.activeLayerId, std::move(fillStroke));
+}
+
+void CanvasWidget::beginSelectionMove(const QPointF &documentPosition)
+{
+    m_movingSelection = true;
+    m_moveStartPosition = documentPosition;
+    m_moveDelta = QPointF();
+}
+
+void CanvasWidget::continueSelectionMove(const QPointF &documentPosition)
+{
+    if (!m_movingSelection) {
+        return;
+    }
+    m_moveDelta =
+        clampedSelectionDelta(documentPosition - m_moveStartPosition);
+    update();
+}
+
+void CanvasWidget::commitSelectionMove()
+{
+    if (!m_movingSelection) {
+        return;
+    }
+    m_movingSelection = false;
+    const QPointF delta = m_moveDelta;
+    m_moveDelta = QPointF();
+    if (qFuzzyIsNull(delta.x()) && qFuzzyIsNull(delta.y())) {
+        update();
+        return;
+    }
+
+    if (!m_selectedStrokes.isEmpty()) {
+        m_controller->translateStrokes(
+            m_selectionLayer,
+            QVector<QUuid>(
+                m_selectedStrokes.cbegin(),
+                m_selectedStrokes.cend()),
+            delta);
+    }
+
+    const QPoint shift(qRound(delta.x()), qRound(delta.y()));
+    if (!m_selectionMask.isNull() && !shift.isNull()) {
+        QImage movedMask(m_selectionMask.size(), m_selectionMask.format());
+        movedMask.fill(0);
+        QPainter maskPainter(&movedMask);
+        maskPainter.drawImage(shift, m_selectionMask);
+        maskPainter.end();
+        m_selectionMask = movedMask;
+
+        QImage movedTint(m_selectionTint.size(), m_selectionTint.format());
+        movedTint.fill(Qt::transparent);
+        QPainter tintPainter(&movedTint);
+        tintPainter.drawImage(shift, m_selectionTint);
+        tintPainter.end();
+        m_selectionTint = movedTint;
+    }
+    update();
+}
+
+void CanvasWidget::clearSelection()
+{
+    if (m_selectedStrokes.isEmpty()
+        && m_selectionMask.isNull()
+        && !m_movingSelection) {
+        return;
+    }
+    m_selectedStrokes.clear();
+    m_selectionMask = QImage();
+    m_selectionTint = QImage();
+    m_selectionLayer = {};
+    m_movingSelection = false;
+    m_moveDelta = QPointF();
+    update();
+}
+
+void CanvasWidget::pruneSelection()
+{
+    if (m_selectedStrokes.isEmpty() && m_selectionMask.isNull()) {
+        return;
+    }
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_selectionLayer);
+    if (!layer || document.size != m_selectionMask.size()) {
+        clearSelection();
+        return;
+    }
+    QSet<QUuid> remaining;
+    for (const Stroke &stroke : layer->strokes) {
+        if (m_selectedStrokes.contains(stroke.id)) {
+            remaining.insert(stroke.id);
+        }
+    }
+    if (remaining.size() != m_selectedStrokes.size()) {
+        m_selectedStrokes = remaining;
+        update();
+    }
+}
+
+QPointF CanvasWidget::clampedSelectionDelta(const QPointF &delta) const
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_selectionLayer);
+    if (!layer || m_selectedStrokes.isEmpty()) {
+        return delta;
+    }
+    qreal minX = document.size.width();
+    qreal minY = document.size.height();
+    qreal maxX = 0.0;
+    qreal maxY = 0.0;
+    bool found = false;
+    for (const Stroke &stroke : layer->strokes) {
+        if (!m_selectedStrokes.contains(stroke.id)) {
+            continue;
+        }
+        for (const StrokePoint &point : stroke.points) {
+            minX = std::min(minX, point.position.x());
+            minY = std::min(minY, point.position.y());
+            maxX = std::max(maxX, point.position.x());
+            maxY = std::max(maxY, point.position.y());
+            found = true;
+        }
+    }
+    if (!found) {
+        return delta;
+    }
+    return QPointF(
+        std::clamp(
+            delta.x(),
+            -minX,
+            static_cast<qreal>(document.size.width()) - maxX),
+        std::clamp(
+            delta.y(),
+            -minY,
+            static_cast<qreal>(document.size.height()) - maxY));
+}
+
+QRectF CanvasWidget::selectionBounds() const
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_selectionLayer);
+    if (!layer || m_selectedStrokes.isEmpty()) {
+        return {};
+    }
+    QRectF bounds;
+    for (const Stroke &stroke : layer->strokes) {
+        if (!m_selectedStrokes.contains(stroke.id)) {
+            continue;
+        }
+        for (const StrokePoint &point : stroke.points) {
+            const QRectF pointRect(point.position, QSizeF(0.0, 0.0));
+            bounds = bounds.isNull() ? pointRect : bounds.united(pointRect);
+        }
+    }
+    return bounds.translated(m_moveDelta);
+}
+
+QImage CanvasWidget::renderActiveLayerImage() const
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(document.activeLayerId);
+    if (!layer) {
+        return {};
+    }
+    Document single = document;
+    single.background = Qt::transparent;
+    Layer visibleLayer = *layer;
+    visibleLayer.visible = true;
+    visibleLayer.opacity = 1.0;
+    single.layers = {visibleLayer};
+    return RenderEngine::render(single, m_currentFrame);
+}
+
+void CanvasWidget::drawSelectionOverlay(
+    QPainter &painter,
+    const QTransform &transform)
+{
+    if (m_lassoActive && m_lassoPoints.size() >= 2) {
+        QPen lassoPen(Theme::accent(), 1.4);
+        lassoPen.setStyle(Qt::DashLine);
+        lassoPen.setCosmetic(true);
+        painter.setPen(lassoPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPolyline(transform.map(QPolygonF(m_lassoPoints)));
+    }
+
+    if (m_selectionTint.isNull()) {
+        return;
+    }
+    painter.save();
+    painter.setTransform(transform);
+    painter.drawImage(m_moveDelta, m_selectionTint);
+    painter.restore();
+
+    const QRectF bounds = selectionBounds();
+    if (!bounds.isNull()) {
+        QPen boundsPen(Theme::accent(), 1.0);
+        boundsPen.setStyle(Qt::DashLine);
+        boundsPen.setCosmetic(true);
+        painter.setPen(boundsPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(
+            transform.mapRect(bounds.adjusted(-4.0, -4.0, 4.0, 4.0)));
+    }
 }
 
 }

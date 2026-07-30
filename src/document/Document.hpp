@@ -12,7 +12,8 @@ namespace wobble
 
 enum class StrokeMode {
     Paint,
-    Erase
+    Erase,
+    Fill
 };
 
 struct StrokePoint {

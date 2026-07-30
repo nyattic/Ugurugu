@@ -5,8 +5,11 @@
 #include <QApplication>
 #include <QFileOpenEvent>
 #include <QFileInfo>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QMessageBox>
 #include <QObject>
+#include <QTranslator>
 
 #include <spdlog/spdlog.h>
 
@@ -51,6 +54,23 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationName(QStringLiteral("WobblePaint"));
     QApplication::setOrganizationDomain(QStringLiteral("wobblepaint.dev"));
     wobble::Theme::apply(application);
+
+    QTranslator qtBaseTranslator;
+    if (qtBaseTranslator.load(
+            QLocale::system(),
+            QStringLiteral("qtbase"),
+            QStringLiteral("_"),
+            QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+        QApplication::installTranslator(&qtBaseTranslator);
+    }
+    QTranslator appTranslator;
+    if (appTranslator.load(
+            QLocale::system(),
+            QStringLiteral("wobblepaint"),
+            QStringLiteral("_"),
+            QStringLiteral(":/i18n"))) {
+        QApplication::installTranslator(&appTranslator);
+    }
 
     wobble::Logging::initialize();
     spdlog::info("WobblePaint {} starting", QApplication::applicationVersion().toStdString());

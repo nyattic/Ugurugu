@@ -5,6 +5,8 @@
 #include <QCache>
 #include <QColor>
 #include <QElapsedTimer>
+#include <QImage>
+#include <QSet>
 #include <QTimer>
 #include <QWidget>
 
@@ -21,7 +23,10 @@ class CanvasWidget final : public QWidget
 public:
     enum class Tool {
         Brush,
-        Eraser
+        Eraser,
+        Lasso,
+        Wand,
+        Bucket
     };
 
     explicit CanvasWidget(
@@ -91,6 +96,22 @@ private:
     void updatePointerPosition(const QPointF &widgetPosition);
     void updateCursor();
     void notifyZoomChanged();
+    bool selectionContains(const QPointF &documentPosition) const;
+    void beginLasso(const QPointF &documentPosition);
+    void finishLasso();
+    void cancelLasso();
+    void applySelectionMask(QImage mask);
+    void computeWandSelection(const QPointF &documentPosition);
+    void applyBucketFill(const QPointF &documentPosition);
+    void beginSelectionMove(const QPointF &documentPosition);
+    void continueSelectionMove(const QPointF &documentPosition);
+    void commitSelectionMove();
+    void clearSelection();
+    void pruneSelection();
+    QPointF clampedSelectionDelta(const QPointF &delta) const;
+    QRectF selectionBounds() const;
+    QImage renderActiveLayerImage() const;
+    void drawSelectionOverlay(QPainter &painter, const QTransform &transform);
 
     DocumentController *m_controller;
     Tool m_tool = Tool::Brush;
@@ -113,6 +134,15 @@ private:
     QPointF m_pointerWidgetPosition;
     bool m_pointerInside = false;
     bool m_pointerOverWidget = false;
+    QVector<QPointF> m_lassoPoints;
+    bool m_lassoActive = false;
+    QSet<QUuid> m_selectedStrokes;
+    QUuid m_selectionLayer;
+    QImage m_selectionMask;
+    QImage m_selectionTint;
+    bool m_movingSelection = false;
+    QPointF m_moveStartPosition;
+    QPointF m_moveDelta;
 };
 
 }
