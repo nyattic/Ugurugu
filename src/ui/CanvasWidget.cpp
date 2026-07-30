@@ -5,9 +5,11 @@
 #include "ui/Theme.hpp"
 
 #include <QEnterEvent>
+#include <QHash>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QPolygonF>
 #include <QRandomGenerator>
 #include <QResizeEvent>
@@ -39,6 +41,102 @@ bool documentHasStrokes(const Document &document)
     return false;
 }
 
+quint64 encodedPoint(int x, int y)
+{
+    return (static_cast<quint64>(static_cast<quint32>(x)) << 32U)
+        | static_cast<quint32>(y);
+}
+
+QPointF decodedPoint(quint64 point)
+{
+    return QPointF(
+        static_cast<quint32>(point >> 32U),
+        static_cast<quint32>(point));
+}
+
+QPainterPath outlinePath(const QImage &mask)
+{
+    QHash<quint64, QVector<quint64>> edges;
+    const auto inside = [&mask](int x, int y) {
+        return x >= 0
+            && y >= 0
+            && x < mask.width()
+            && y < mask.height()
+            && mask.constScanLine(y)[x] >= 128;
+    };
+    const auto addEdge = [&edges](int x1, int y1, int x2, int y2) {
+        edges[encodedPoint(x1, y1)].append(encodedPoint(x2, y2));
+    };
+
+    for (int y = 0; y < mask.height(); ++y) {
+        const uchar *line = mask.constScanLine(y);
+        for (int x = 0; x < mask.width(); ++x) {
+            if (line[x] < 128) {
+                continue;
+            }
+            if (!inside(x, y - 1)) {
+                addEdge(x, y, x + 1, y);
+            }
+            if (!inside(x + 1, y)) {
+                addEdge(x + 1, y, x + 1, y + 1);
+            }
+            if (!inside(x, y + 1)) {
+                addEdge(x + 1, y + 1, x, y + 1);
+            }
+            if (!inside(x - 1, y)) {
+                addEdge(x, y + 1, x, y);
+            }
+        }
+    }
+
+    QPainterPath path;
+    while (!edges.isEmpty()) {
+        auto first = edges.begin();
+        const quint64 start = first.key();
+        quint64 current = start;
+        path.moveTo(decodedPoint(start));
+
+        do {
+            auto edge = edges.find(current);
+            if (edge == edges.end()) {
+                break;
+            }
+            const quint64 next = edge.value().takeLast();
+            if (edge.value().isEmpty()) {
+                edges.erase(edge);
+            }
+            path.lineTo(decodedPoint(next));
+            current = next;
+        } while (current != start);
+
+        if (current == start) {
+            path.closeSubpath();
+        }
+    }
+    return path;
+}
+
+void drawSelectionPath(
+    QPainter &painter,
+    const QPainterPath &path,
+    qreal dashOffset)
+{
+    QPen lightPen(QColor(255, 255, 255, 235), 1.8);
+    lightPen.setCosmetic(true);
+    lightPen.setJoinStyle(Qt::MiterJoin);
+    painter.setPen(lightPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(path);
+
+    QPen darkPen(QColor(20, 20, 20, 245), 1.0);
+    darkPen.setCosmetic(true);
+    darkPen.setJoinStyle(Qt::MiterJoin);
+    darkPen.setDashPattern({4.0, 4.0});
+    darkPen.setDashOffset(dashOffset);
+    painter.setPen(darkPen);
+    painter.drawPath(path);
+}
+
 }
 
 CanvasWidget::CanvasWidget(
@@ -58,8 +156,18 @@ CanvasWidget::CanvasWidget(
         invalidateFrames();
         pruneSelection();
     });
+    connect(
+        m_controller,
+        &DocumentController::strokesTranslated,
+        this,
+        &CanvasWidget::translateSelectionOverlay);
     connect(&m_animationTimer, &QTimer::timeout, this, [this]() {
         advanceFrame();
+    });
+    m_selectionAnimationTimer.setInterval(120);
+    connect(&m_selectionAnimationTimer, &QTimer::timeout, this, [this]() {
+        m_selectionDashOffset -= 1.0;
+        update();
     });
 
     updateTimerInterval();
@@ -96,14 +204,23 @@ qreal CanvasWidget::zoom() const
     return documentTransform().m11();
 }
 
+bool CanvasWidget::hasSelection() const
+{
+    return !m_selectionMask.isNull();
+}
+
 void CanvasWidget::setTool(Tool tool)
 {
     if (m_tool == tool) {
         return;
     }
+    const SelectionState previousSelection =
+        m_lassoActive && m_hasSelectionBeforeLasso
+        ? m_selectionBeforeLasso
+        : currentSelectionState();
     cancelStroke();
     cancelLasso();
-    clearSelection();
+    pushSelectionChange(previousSelection, {}, tr("Deselect"));
     m_tool = tool;
     emit toolChanged(tool);
     updateCursor();
@@ -485,9 +602,13 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
         return;
     }
     if (event->key() == Qt::Key_Escape) {
+        const SelectionState previousSelection =
+            m_lassoActive && m_hasSelectionBeforeLasso
+            ? m_selectionBeforeLasso
+            : currentSelectionState();
         cancelStroke();
         cancelLasso();
-        clearSelection();
+        pushSelectionChange(previousSelection, {}, tr("Deselect"));
         endPan();
         event->accept();
         return;
@@ -779,10 +900,13 @@ bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
 
 void CanvasWidget::beginLasso(const QPointF &documentPosition)
 {
+    m_selectionBeforeLasso = currentSelectionState();
+    m_hasSelectionBeforeLasso = true;
     clearSelection();
     m_lassoActive = true;
     m_lassoPoints.clear();
     m_lassoPoints.append(clampedDocumentPosition(documentPosition));
+    updateSelectionAnimation();
     update();
 }
 
@@ -792,8 +916,18 @@ void CanvasWidget::finishLasso()
         return;
     }
     const QVector<QPointF> points = m_lassoPoints;
-    cancelLasso();
+    const SelectionState previousSelection = m_hasSelectionBeforeLasso
+        ? m_selectionBeforeLasso
+        : SelectionState();
+    m_lassoActive = false;
+    m_lassoPoints.clear();
+    m_selectionBeforeLasso = {};
+    m_hasSelectionBeforeLasso = false;
     if (points.size() < 3) {
+        pushSelectionChange(
+            previousSelection,
+            {},
+            tr("Deselect"));
         return;
     }
 
@@ -805,7 +939,7 @@ void CanvasWidget::finishLasso()
     painter.setBrush(Qt::white);
     painter.drawPolygon(QPolygonF(points));
     painter.end();
-    applySelectionMask(mask);
+    applySelectionMask(std::move(mask), previousSelection);
 }
 
 void CanvasWidget::cancelLasso()
@@ -815,74 +949,127 @@ void CanvasWidget::cancelLasso()
     }
     m_lassoActive = false;
     m_lassoPoints.clear();
+    m_selectionBeforeLasso = {};
+    m_hasSelectionBeforeLasso = false;
+    updateSelectionAnimation();
     update();
 }
 
-void CanvasWidget::applySelectionMask(QImage mask)
+void CanvasWidget::applySelectionMask(
+    QImage mask,
+    const SelectionState &previousSelection)
+{
+    const SelectionState nextSelection =
+        selectionStateForMask(std::move(mask));
+    pushSelectionChange(
+        previousSelection,
+        nextSelection,
+        tr("Select area"));
+}
+
+CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
+    QImage mask) const
 {
     const Document &document = m_controller->document();
     const Layer *layer = document.layer(document.activeLayerId);
     if (mask.isNull() || !layer) {
-        clearSelection();
-        return;
+        return {};
     }
 
-    QSet<QUuid> selected;
+    SelectionState state;
+    state.mask = std::move(mask);
+    state.layer = document.activeLayerId;
     for (const Stroke &stroke : layer->strokes) {
         const bool inside = std::any_of(
             stroke.points.cbegin(),
             stroke.points.cend(),
-            [&mask](const StrokePoint &point) {
+            [&state](const StrokePoint &point) {
                 const QPoint pixel(
                     static_cast<int>(point.position.x()),
                     static_cast<int>(point.position.y()));
-                return mask.rect().contains(pixel)
-                    && mask.constScanLine(pixel.y())[pixel.x()] >= 128;
+                return state.mask.rect().contains(pixel)
+                    && state.mask.constScanLine(pixel.y())[pixel.x()] >= 128;
             });
         if (inside) {
-            selected.insert(stroke.id);
+            state.strokes.insert(stroke.id);
         }
     }
+    return state;
+}
 
-    m_selectionMask = mask;
-    m_selectedStrokes = selected;
-    m_selectionLayer = document.activeLayerId;
+CanvasWidget::SelectionState CanvasWidget::currentSelectionState() const
+{
+    return {m_selectedStrokes, m_selectionLayer, m_selectionMask};
+}
+
+void CanvasWidget::restoreSelectionState(const SelectionState &state)
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(state.layer);
+    if (state.mask.isNull()
+        || !layer
+        || state.mask.size() != document.size) {
+        clearSelection();
+        return;
+    }
+
+    m_selectedStrokes.clear();
+    for (const Stroke &stroke : layer->strokes) {
+        if (state.strokes.contains(stroke.id)) {
+            m_selectedStrokes.insert(stroke.id);
+        }
+    }
+    m_selectionLayer = state.layer;
+    m_selectionMask = state.mask;
+    m_movingSelection = false;
     m_moveDelta = QPointF();
-
-    m_selectionTint = QImage(
-        mask.size(),
-        QImage::Format_ARGB32_Premultiplied);
-    m_selectionTint.fill(Qt::transparent);
-    QColor tint = Theme::accent();
-    tint.setAlpha(56);
-    const QRgb tintPixel = qPremultiply(tint.rgba());
-    for (int y = 0; y < mask.height(); ++y) {
-        const uchar *maskLine = mask.constScanLine(y);
-        QRgb *tintLine =
-            reinterpret_cast<QRgb *>(m_selectionTint.scanLine(y));
-        for (int x = 0; x < mask.width(); ++x) {
-            if (maskLine[x] >= 128) {
-                tintLine[x] = tintPixel;
-            }
-        }
-    }
-
+    rebuildSelectionOutline();
+    updateSelectionAnimation();
     emit interactionMessage(
-        selected.isEmpty()
+        m_selectedStrokes.isEmpty()
             ? tr("No strokes in the selected area.")
             : tr("%n stroke(s) selected. Drag to move, press Delete to "
                  "remove.",
                  nullptr,
-                 static_cast<int>(selected.size())));
+                 static_cast<int>(m_selectedStrokes.size())));
     update();
+}
+
+void CanvasWidget::pushSelectionChange(
+    const SelectionState &previousSelection,
+    const SelectionState &nextSelection,
+    const QString &text)
+{
+    const bool bothEmpty =
+        previousSelection.mask.isNull() && nextSelection.mask.isNull();
+    if (bothEmpty) {
+        restoreSelectionState(nextSelection);
+        return;
+    }
+
+    QPointer<CanvasWidget> canvas(this);
+    m_controller->pushTransientCommand(
+        text,
+        [canvas, nextSelection]() {
+            if (canvas) {
+                canvas->restoreSelectionState(nextSelection);
+            }
+        },
+        [canvas, previousSelection]() {
+            if (canvas) {
+                canvas->restoreSelectionState(previousSelection);
+            }
+        });
 }
 
 void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
 {
+    const SelectionState previousSelection = currentSelectionState();
     clearSelection();
     const QSize size = m_controller->document().size;
     const QRectF bounds(QPointF(0.0, 0.0), QSizeF(size));
     if (!bounds.contains(documentPosition)) {
+        pushSelectionChange(previousSelection, {}, tr("Deselect"));
         return;
     }
     const QPoint seed(
@@ -898,11 +1085,12 @@ void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
     }
     const QImage mask = RenderEngine::fillRegionMask(layerImage, seed);
     if (mask.isNull()) {
+        pushSelectionChange(previousSelection, {}, tr("Deselect"));
         emit interactionMessage(
             tr("Click an empty area surrounded by lines to select it."));
         return;
     }
-    applySelectionMask(mask);
+    applySelectionMask(mask, previousSelection);
 }
 
 void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
@@ -977,23 +1165,6 @@ void CanvasWidget::commitSelectionMove()
                 m_selectedStrokes.cend()),
             delta);
     }
-
-    const QPoint shift(qRound(delta.x()), qRound(delta.y()));
-    if (!m_selectionMask.isNull() && !shift.isNull()) {
-        QImage movedMask(m_selectionMask.size(), m_selectionMask.format());
-        movedMask.fill(0);
-        QPainter maskPainter(&movedMask);
-        maskPainter.drawImage(shift, m_selectionMask);
-        maskPainter.end();
-        m_selectionMask = movedMask;
-
-        QImage movedTint(m_selectionTint.size(), m_selectionTint.format());
-        movedTint.fill(Qt::transparent);
-        QPainter tintPainter(&movedTint);
-        tintPainter.drawImage(shift, m_selectionTint);
-        tintPainter.end();
-        m_selectionTint = movedTint;
-    }
     update();
 }
 
@@ -1002,14 +1173,16 @@ void CanvasWidget::clearSelection()
     if (m_selectedStrokes.isEmpty()
         && m_selectionMask.isNull()
         && !m_movingSelection) {
+        updateSelectionAnimation();
         return;
     }
     m_selectedStrokes.clear();
     m_selectionMask = QImage();
-    m_selectionTint = QImage();
+    m_selectionOutline = QPainterPath();
     m_selectionLayer = {};
     m_movingSelection = false;
     m_moveDelta = QPointF();
+    updateSelectionAnimation();
     update();
 }
 
@@ -1033,6 +1206,53 @@ void CanvasWidget::pruneSelection()
     if (remaining.size() != m_selectedStrokes.size()) {
         m_selectedStrokes = remaining;
         update();
+    }
+}
+
+void CanvasWidget::translateSelectionOverlay(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QPointF &delta)
+{
+    if (m_selectionMask.isNull() || m_selectionLayer != layerId) {
+        return;
+    }
+
+    const QSet<QUuid> moved(strokeIds.cbegin(), strokeIds.cend());
+    const bool affectsSelection = std::any_of(
+        m_selectedStrokes.cbegin(),
+        m_selectedStrokes.cend(),
+        [&moved](const QUuid &id) {
+            return moved.contains(id);
+        });
+    const QPoint shift(qRound(delta.x()), qRound(delta.y()));
+    if (!affectsSelection || shift.isNull()) {
+        return;
+    }
+
+    QImage movedMask(m_selectionMask.size(), m_selectionMask.format());
+    movedMask.fill(0);
+    QPainter painter(&movedMask);
+    painter.drawImage(shift, m_selectionMask);
+    painter.end();
+    m_selectionMask = std::move(movedMask);
+    rebuildSelectionOutline();
+    update();
+}
+
+void CanvasWidget::rebuildSelectionOutline()
+{
+    m_selectionOutline = outlinePath(m_selectionMask);
+}
+
+void CanvasWidget::updateSelectionAnimation()
+{
+    const bool active = m_lassoActive || !m_selectionMask.isNull();
+    if (active && !m_selectionAnimationTimer.isActive()) {
+        m_selectionAnimationTimer.start();
+    } else if (!active && m_selectionAnimationTimer.isActive()) {
+        m_selectionAnimationTimer.stop();
+        m_selectionDashOffset = 0.0;
     }
 }
 
@@ -1074,26 +1294,6 @@ QPointF CanvasWidget::clampedSelectionDelta(const QPointF &delta) const
             static_cast<qreal>(document.size.height()) - maxY));
 }
 
-QRectF CanvasWidget::selectionBounds() const
-{
-    const Document &document = m_controller->document();
-    const Layer *layer = document.layer(m_selectionLayer);
-    if (!layer || m_selectedStrokes.isEmpty()) {
-        return {};
-    }
-    QRectF bounds;
-    for (const Stroke &stroke : layer->strokes) {
-        if (!m_selectedStrokes.contains(stroke.id)) {
-            continue;
-        }
-        for (const StrokePoint &point : stroke.points) {
-            const QRectF pointRect(point.position, QSizeF(0.0, 0.0));
-            bounds = bounds.isNull() ? pointRect : bounds.united(pointRect);
-        }
-    }
-    return bounds.translated(m_moveDelta);
-}
-
 QImage CanvasWidget::renderActiveLayerImage() const
 {
     const Document &document = m_controller->document();
@@ -1114,33 +1314,26 @@ void CanvasWidget::drawSelectionOverlay(
     QPainter &painter,
     const QTransform &transform)
 {
-    if (m_lassoActive && m_lassoPoints.size() >= 2) {
-        QPen lassoPen(Theme::accent(), 1.4);
-        lassoPen.setStyle(Qt::DashLine);
-        lassoPen.setCosmetic(true);
-        painter.setPen(lassoPen);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPolyline(transform.map(QPolygonF(m_lassoPoints)));
-    }
-
-    if (m_selectionTint.isNull()) {
-        return;
-    }
     painter.save();
     painter.setTransform(transform);
-    painter.drawImage(m_moveDelta, m_selectionTint);
-    painter.restore();
 
-    const QRectF bounds = selectionBounds();
-    if (!bounds.isNull()) {
-        QPen boundsPen(Theme::accent(), 1.0);
-        boundsPen.setStyle(Qt::DashLine);
-        boundsPen.setCosmetic(true);
-        painter.setPen(boundsPen);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(
-            transform.mapRect(bounds.adjusted(-4.0, -4.0, 4.0, 4.0)));
+    if (m_lassoActive && m_lassoPoints.size() >= 2) {
+        QPainterPath lassoPath;
+        lassoPath.moveTo(m_lassoPoints.first());
+        for (int index = 1; index < m_lassoPoints.size(); ++index) {
+            lassoPath.lineTo(m_lassoPoints[index]);
+        }
+        drawSelectionPath(painter, lassoPath, m_selectionDashOffset);
     }
+
+    if (!m_selectionOutline.isEmpty()) {
+        painter.translate(m_moveDelta);
+        drawSelectionPath(
+            painter,
+            m_selectionOutline,
+            m_selectionDashOffset);
+    }
+    painter.restore();
 }
 
 }

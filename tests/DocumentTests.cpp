@@ -102,6 +102,62 @@ private slots:
         QVERIFY(controller.undoStack()->isClean());
     }
 
+    void transientCommandsDoNotModifyDocument()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(320, 240));
+        int transientState = 0;
+
+        controller.pushTransientCommand(
+            QStringLiteral("Transient"),
+            [&transientState]() {
+                transientState = 1;
+            },
+            [&transientState]() {
+                transientState = 0;
+            });
+        QCOMPARE(transientState, 1);
+        QVERIFY(!controller.isModified());
+
+        controller.undoStack()->undo();
+        QCOMPARE(transientState, 0);
+        QVERIFY(!controller.isModified());
+
+        controller.undoStack()->redo();
+        QCOMPARE(transientState, 1);
+        QVERIFY(!controller.isModified());
+
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(10.0, 12.0), 1.0},
+            {QPointF(40.0, 52.0), 1.0}
+        };
+        controller.addStroke(layerId, stroke);
+        QVERIFY(controller.isModified());
+        controller.markSaved();
+        QVERIFY(!controller.isModified());
+
+        controller.pushTransientCommand(
+            QStringLiteral("Transient 2"),
+            [&transientState]() {
+                transientState = 2;
+            },
+            [&transientState]() {
+                transientState = 1;
+            });
+        QCOMPARE(transientState, 2);
+        QVERIFY(!controller.isModified());
+
+        controller.undoStack()->undo();
+        QCOMPARE(transientState, 1);
+        QVERIFY(!controller.isModified());
+        controller.undoStack()->undo();
+        QVERIFY(controller.isModified());
+        controller.undoStack()->redo();
+        QVERIFY(!controller.isModified());
+    }
+
     void undoesLayerAdditionAndRemoval()
     {
         DocumentController controller;

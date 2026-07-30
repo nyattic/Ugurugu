@@ -273,6 +273,24 @@ Glyph bucketGlyph()
     return glyph;
 }
 
+Glyph settingsGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(circle({12.0, 12.0}, 3.2, 20));
+    QPolygonF outer;
+    for (int step = 0; step <= 24; ++step) {
+        const qreal angle =
+            2.0 * std::numbers::pi_v<qreal> * step / 24.0;
+        const qreal radius = step % 3 == 1 ? 9.0 : 7.0;
+        outer.append(
+            QPointF(
+                12.0 + radius * std::cos(angle),
+                12.0 + radius * std::sin(angle)));
+    }
+    glyph.lines.append(outer);
+    return glyph;
+}
+
 Glyph glyphFor(IconGlyph glyph)
 {
     switch (glyph) {
@@ -310,6 +328,8 @@ Glyph glyphFor(IconGlyph glyph)
         return wandGlyph();
     case IconGlyph::Bucket:
         return bucketGlyph();
+    case IconGlyph::Settings:
+        return settingsGlyph();
     }
     return {};
 }

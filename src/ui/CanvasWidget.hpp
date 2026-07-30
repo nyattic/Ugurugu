@@ -4,8 +4,8 @@
 
 #include <QCache>
 #include <QColor>
-#include <QElapsedTimer>
 #include <QImage>
+#include <QPainterPath>
 #include <QSet>
 #include <QTimer>
 #include <QWidget>
@@ -39,6 +39,7 @@ public:
     bool isAnimating() const;
     int currentFrame() const;
     qreal zoom() const;
+    bool hasSelection() const;
 
 public slots:
     void setTool(Tool tool);
@@ -76,6 +77,12 @@ protected:
     void leaveEvent(QEvent *event) override;
 
 private:
+    struct SelectionState {
+        QSet<QUuid> strokes;
+        QUuid layer;
+        QImage mask;
+    };
+
     QTransform documentTransform() const;
     QPointF mapToDocument(const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
@@ -100,7 +107,16 @@ private:
     void beginLasso(const QPointF &documentPosition);
     void finishLasso();
     void cancelLasso();
-    void applySelectionMask(QImage mask);
+    void applySelectionMask(
+        QImage mask,
+        const SelectionState &previousSelection);
+    SelectionState selectionStateForMask(QImage mask) const;
+    SelectionState currentSelectionState() const;
+    void restoreSelectionState(const SelectionState &state);
+    void pushSelectionChange(
+        const SelectionState &previousSelection,
+        const SelectionState &nextSelection,
+        const QString &text);
     void computeWandSelection(const QPointF &documentPosition);
     void applyBucketFill(const QPointF &documentPosition);
     void beginSelectionMove(const QPointF &documentPosition);
@@ -108,8 +124,13 @@ private:
     void commitSelectionMove();
     void clearSelection();
     void pruneSelection();
+    void translateSelectionOverlay(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &delta);
+    void rebuildSelectionOutline();
+    void updateSelectionAnimation();
     QPointF clampedSelectionDelta(const QPointF &delta) const;
-    QRectF selectionBounds() const;
     QImage renderActiveLayerImage() const;
     void drawSelectionOverlay(QPainter &painter, const QTransform &transform);
 
@@ -124,6 +145,7 @@ private:
     QPointF m_pan;
     QCache<int, QImage> m_frameCache;
     QTimer m_animationTimer;
+    QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;
     QUuid m_activeStrokeLayer;
     bool m_drawing = false;
@@ -136,10 +158,13 @@ private:
     bool m_pointerOverWidget = false;
     QVector<QPointF> m_lassoPoints;
     bool m_lassoActive = false;
+    SelectionState m_selectionBeforeLasso;
+    bool m_hasSelectionBeforeLasso = false;
     QSet<QUuid> m_selectedStrokes;
     QUuid m_selectionLayer;
     QImage m_selectionMask;
-    QImage m_selectionTint;
+    QPainterPath m_selectionOutline;
+    qreal m_selectionDashOffset = 0.0;
     bool m_movingSelection = false;
     QPointF m_moveStartPosition;
     QPointF m_moveDelta;

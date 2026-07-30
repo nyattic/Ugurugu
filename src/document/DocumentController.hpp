@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QUndoStack>
 
+#include <functional>
+
 namespace wobble {
 
 class DocumentController final : public QObject
@@ -17,6 +19,10 @@ public:
     const Document &document() const;
     QUndoStack *undoStack();
     bool isModified() const;
+    void pushTransientCommand(
+        const QString &text,
+        std::function<void()> redoAction,
+        std::function<void()> undoAction);
 
     void newDocument(const QSize &size);
     void loadDocument(Document document);
@@ -47,14 +53,28 @@ signals:
     void documentChanged();
     void activeLayerChanged(const QUuid &id);
     void modifiedChanged(bool modified);
+    void strokesTranslated(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &delta);
 
 private:
+    void pushDocumentCommand(
+        QString text,
+        std::function<void()> redoAction,
+        std::function<void()> undoAction,
+        int mergeId = -1,
+        const QUuid &mergeScope = {});
+    void setContentRevision(quint64 revision);
     void notifyDocumentChanged();
     void ensureActiveLayer();
     QString nextLayerName() const;
 
     Document m_document;
     QUndoStack m_undoStack;
+    quint64 m_currentContentRevision = 0;
+    quint64 m_savedContentRevision = 0;
+    quint64 m_nextContentRevision = 0;
 };
 
 }

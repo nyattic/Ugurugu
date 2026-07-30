@@ -105,6 +105,26 @@ target_link_libraries(wobblepaint_ui PUBLIC wobblepaint_core Qt6::Widgets)
 
 qt_add_executable(WobblePaint src/main.cpp)
 
+if(APPLE)
+    set_source_files_properties(
+        resources/icons/WobblePaint.icns
+        PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+    target_sources(WobblePaint PRIVATE resources/icons/WobblePaint.icns)
+elseif(WIN32)
+    configure_file(
+        resources/icons/WobblePaint.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/WobblePaint.rc"
+        @ONLY
+    )
+    target_sources(
+        WobblePaint
+        PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/WobblePaint.rc"
+    )
+endif()
+
 qt_add_translation(WOBBLEPAINT_QM_FILES i18n/wobblepaint_ko.ts)
 qt_add_resources(WobblePaint "wobblepaint_translations"
     PREFIX "/i18n"
@@ -124,6 +144,7 @@ set_target_properties(WobblePaint PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_BUNDLE_NAME "WobblePaint"
+    MACOSX_BUNDLE_ICON_FILE "WobblePaint.icns"
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.wobblepaint.app"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

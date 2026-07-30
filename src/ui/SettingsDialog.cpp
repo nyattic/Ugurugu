@@ -1,11 +1,25 @@
 #include "ui/SettingsDialog.hpp"
 
+#include <QAction>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFileDialog>
+#include <QFormLayout>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QKeySequenceEdit>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QRadioButton>
+#include <QScrollArea>
 #include <QSettings>
+#include <QSignalBlocker>
+#include <QStandardPaths>
 #include <QTabWidget>
 #include <QVBoxLayout>
+
+#include <utility>
 
 namespace wobble {
 
@@ -13,6 +27,42 @@ namespace {
 
 const QString animateWhileDrawingKey =
     QStringLiteral("canvas/animateWhileDrawing");
+const QString defaultSaveFolderKey =
+    QStringLiteral("files/defaultSaveFolder");
+
+QString systemDefaultSaveFolder()
+{
+    const QString documents = QStandardPaths::writableLocation(
+        QStandardPaths::DocumentsLocation);
+    if (!documents.isEmpty() && QDir(documents).exists()) {
+        return QDir(documents).absolutePath();
+    }
+    const QString home = QStandardPaths::writableLocation(
+        QStandardPaths::HomeLocation);
+    return home.isEmpty() ? QDir::currentPath() : QDir(home).absolutePath();
+}
+
+QString shortcutKey(const QString &actionName)
+{
+    return QStringLiteral("shortcuts/%1").arg(actionName);
+}
+
+QString actionLabel(const QAction *action)
+{
+    QString label = action->property("shortcutLabel").toString();
+    if (label.isEmpty()) {
+        label = action->text();
+    }
+    label.remove(QLatin1Char('&'));
+    return label;
+}
+
+QKeySequence defaultShortcut(const QAction *action)
+{
+    return QKeySequence::fromString(
+        action->property("defaultShortcut").toString(),
+        QKeySequence::PortableText);
+}
 
 }
 
@@ -23,8 +73,39 @@ bool SettingsDialog::animateWhileDrawing()
         .toBool();
 }
 
-SettingsDialog::SettingsDialog(QWidget *parent)
+QString SettingsDialog::defaultSaveFolder()
+{
+    const QString configured = QSettings()
+        .value(defaultSaveFolderKey)
+        .toString();
+    return !configured.isEmpty() && QDir(configured).exists()
+        ? QDir(configured).absolutePath()
+        : systemDefaultSaveFolder();
+}
+
+QKeySequence SettingsDialog::shortcutForAction(
+    const QString &actionName,
+    const QKeySequence &defaultShortcut)
+{
+    const QSettings settings;
+    const QString key = shortcutKey(actionName);
+    if (!settings.contains(key)) {
+        return defaultShortcut;
+    }
+    const QString stored = settings.value(key).toString();
+    const QKeySequence shortcut = QKeySequence::fromString(
+        stored,
+        QKeySequence::PortableText);
+    return !stored.isEmpty() && shortcut.isEmpty()
+        ? defaultShortcut
+        : shortcut;
+}
+
+SettingsDialog::SettingsDialog(
+    QWidget *parent,
+    const QList<QAction *> &shortcutActions)
     : QDialog(parent)
+    , m_shortcutActions(shortcutActions)
 {
     setWindowTitle(tr("Settings"));
     setModal(true);
@@ -59,8 +140,109 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     drawingLayout->addStretch(1);
     tabs->addTab(drawingTab, tr("Drawing"));
 
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    auto *filesTab = new QWidget(tabs);
+    auto *filesLayout = new QVBoxLayout(filesTab);
+    filesLayout->setContentsMargins(14, 14, 14, 14);
+    filesLayout->setSpacing(10);
+
+    auto *folderLabel = new QLabel(tr("Default save folder"), filesTab);
+    filesLayout->addWidget(folderLabel);
+    auto *folderDescription = new QLabel(
+        tr("New projects and exports start in this folder."),
+        filesTab);
+    folderDescription->setWordWrap(true);
+    filesLayout->addWidget(folderDescription);
+
+    auto *folderRow = new QHBoxLayout;
+    folderRow->setSpacing(8);
+    m_defaultSaveFolderEdit = new QLineEdit(defaultSaveFolder(), filesTab);
+    m_defaultSaveFolderEdit->setObjectName(
+        QStringLiteral("defaultSaveFolderEdit"));
+    m_defaultSaveFolderEdit->setReadOnly(true);
+    folderRow->addWidget(m_defaultSaveFolderEdit, 1);
+    auto *chooseFolderButton = new QPushButton(tr("Choose…"), filesTab);
+    chooseFolderButton->setObjectName(
+        QStringLiteral("chooseDefaultSaveFolderButton"));
+    connect(
+        chooseFolderButton,
+        &QPushButton::clicked,
+        this,
+        &SettingsDialog::chooseDefaultSaveFolder);
+    folderRow->addWidget(chooseFolderButton);
+    filesLayout->addLayout(folderRow);
+
+    auto *systemDefaultButton = new QPushButton(
+        tr("Use system default"),
+        filesTab);
+    systemDefaultButton->setObjectName(
+        QStringLiteral("systemDefaultSaveFolderButton"));
+    connect(
+        systemDefaultButton,
+        &QPushButton::clicked,
+        this,
+        &SettingsDialog::resetDefaultSaveFolder);
+    filesLayout->addWidget(systemDefaultButton, 0, Qt::AlignLeft);
+    filesLayout->addStretch(1);
+    tabs->addTab(filesTab, tr("Files"));
+
+    auto *shortcutsTab = new QWidget(tabs);
+    auto *shortcutsLayout = new QVBoxLayout(shortcutsTab);
+    shortcutsLayout->setContentsMargins(14, 14, 14, 14);
+    shortcutsLayout->setSpacing(10);
+
+    auto *shortcutInstructions = new QLabel(
+        tr("Click a shortcut field, then press the new key combination."),
+        shortcutsTab);
+    shortcutInstructions->setWordWrap(true);
+    shortcutsLayout->addWidget(shortcutInstructions);
+
+    auto *shortcutScroll = new QScrollArea(shortcutsTab);
+    shortcutScroll->setWidgetResizable(true);
+    shortcutScroll->setFrameShape(QFrame::NoFrame);
+    auto *shortcutFormWidget = new QWidget(shortcutScroll);
+    auto *shortcutForm = new QFormLayout(shortcutFormWidget);
+    shortcutForm->setContentsMargins(0, 0, 8, 0);
+    shortcutForm->setHorizontalSpacing(18);
+    shortcutForm->setVerticalSpacing(8);
+
+    for (QAction *action : std::as_const(m_shortcutActions)) {
+        if (!action || action->objectName().isEmpty()) {
+            continue;
+        }
+        auto *editor = new QKeySequenceEdit(action->shortcut(), shortcutFormWidget);
+        editor->setObjectName(action->objectName() + QStringLiteral("ShortcutEdit"));
+        editor->setClearButtonEnabled(true);
+        editor->setMaximumSequenceLength(1);
+        shortcutForm->addRow(actionLabel(action), editor);
+        m_shortcutEditors.insert(action, editor);
+        connect(
+            editor,
+            &QKeySequenceEdit::keySequenceChanged,
+            this,
+            [this, action](const QKeySequence &shortcut) {
+                setShortcut(action, shortcut);
+            });
+    }
+
+    shortcutScroll->setWidget(shortcutFormWidget);
+    shortcutsLayout->addWidget(shortcutScroll, 1);
+
+    m_shortcutMessage = new QLabel(shortcutsTab);
+    m_shortcutMessage->setWordWrap(true);
+    m_shortcutMessage->setMinimumHeight(
+        m_shortcutMessage->fontMetrics().lineSpacing());
+    shortcutsLayout->addWidget(m_shortcutMessage);
+    tabs->addTab(shortcutsTab, tr("Shortcuts"));
+
+    auto *buttons = new QDialogButtonBox(
+        QDialogButtonBox::RestoreDefaults | QDialogButtonBox::Close,
+        this);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(
+        buttons->button(QDialogButtonBox::RestoreDefaults),
+        &QPushButton::clicked,
+        this,
+        &SettingsDialog::restoreDefaults);
     layout->addWidget(buttons);
 
     if (animateWhileDrawing()) {
@@ -79,7 +261,92 @@ SettingsDialog::SettingsDialog(QWidget *parent)
             emit animateWhileDrawingChanged(keepWobbling);
         });
 
-    resize(420, 220);
+    resize(520, 520);
+}
+
+void SettingsDialog::setShortcut(
+    QAction *action,
+    const QKeySequence &shortcut)
+{
+    if (!action) {
+        return;
+    }
+
+    for (QAction *other : std::as_const(m_shortcutActions)) {
+        if (other
+            && other != action
+            && !shortcut.isEmpty()
+            && other->shortcut() == shortcut) {
+            m_shortcutMessage->setText(
+                tr("This shortcut is already assigned to %1.")
+                    .arg(actionLabel(other)));
+            if (QKeySequenceEdit *editor = m_shortcutEditors.value(action)) {
+                const QSignalBlocker blocker(editor);
+                editor->setKeySequence(action->shortcut());
+            }
+            return;
+        }
+    }
+
+    m_shortcutMessage->clear();
+    action->setShortcut(shortcut);
+    QSettings settings;
+    const QString key = shortcutKey(action->objectName());
+    if (shortcut == defaultShortcut(action)) {
+        settings.remove(key);
+    } else {
+        settings.setValue(
+            key,
+            shortcut.toString(QKeySequence::PortableText));
+    }
+}
+
+void SettingsDialog::chooseDefaultSaveFolder()
+{
+    const QString selected = QFileDialog::getExistingDirectory(
+        this,
+        tr("Choose default save folder"),
+        defaultSaveFolder(),
+        QFileDialog::ShowDirsOnly);
+    if (selected.isEmpty()) {
+        return;
+    }
+    const QString folder = QDir(selected).absolutePath();
+    QSettings().setValue(defaultSaveFolderKey, folder);
+    m_defaultSaveFolderEdit->setText(folder);
+}
+
+void SettingsDialog::resetDefaultSaveFolder()
+{
+    QSettings().remove(defaultSaveFolderKey);
+    m_defaultSaveFolderEdit->setText(defaultSaveFolder());
+}
+
+void SettingsDialog::restoreDefaults()
+{
+    QSettings settings;
+    for (QAction *action : std::as_const(m_shortcutActions)) {
+        if (!action) {
+            continue;
+        }
+        const QKeySequence shortcut = defaultShortcut(action);
+        action->setShortcut(shortcut);
+        settings.remove(shortcutKey(action->objectName()));
+        if (QKeySequenceEdit *editor = m_shortcutEditors.value(action)) {
+            const QSignalBlocker blocker(editor);
+            editor->setKeySequence(shortcut);
+        }
+    }
+    {
+        const QSignalBlocker pauseBlocker(m_pauseWhileDrawing);
+        const QSignalBlocker wobbleBlocker(m_keepWobbling);
+        m_pauseWhileDrawing->setChecked(true);
+        m_keepWobbling->setChecked(false);
+    }
+    settings.remove(animateWhileDrawingKey);
+    emit animateWhileDrawingChanged(false);
+    resetDefaultSaveFolder();
+    m_shortcutMessage->clear();
 }
 
 }

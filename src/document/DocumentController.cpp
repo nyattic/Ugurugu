@@ -142,9 +142,6 @@ DocumentController::DocumentController(QObject *parent)
     : QObject(parent)
     , m_document(Document::createDefault())
 {
-    connect(&m_undoStack, &QUndoStack::cleanChanged, this, [this](bool clean) {
-        emit modifiedChanged(!clean);
-    });
     m_undoStack.setClean();
 }
 
@@ -160,11 +157,23 @@ QUndoStack *DocumentController::undoStack()
 
 bool DocumentController::isModified() const
 {
-    return !m_undoStack.isClean();
+    return m_currentContentRevision != m_savedContentRevision;
+}
+
+void DocumentController::pushTransientCommand(
+    const QString &text,
+    std::function<void()> redoAction,
+    std::function<void()> undoAction)
+{
+    m_undoStack.push(new LambdaCommand(
+        text,
+        std::move(redoAction),
+        std::move(undoAction)));
 }
 
 void DocumentController::newDocument(const QSize &size)
 {
+    const bool wasModified = isModified();
     const QSize normalized(
         std::clamp(
             size.width(),
@@ -177,23 +186,41 @@ void DocumentController::newDocument(const QSize &size)
     m_document = Document::createDefault(normalized);
     m_undoStack.clear();
     m_undoStack.setClean();
+    m_currentContentRevision = 0;
+    m_savedContentRevision = 0;
+    m_nextContentRevision = 0;
     emit documentChanged();
     emit activeLayerChanged(m_document.activeLayerId);
+    if (wasModified) {
+        emit modifiedChanged(false);
+    }
 }
 
 void DocumentController::loadDocument(Document document)
 {
+    const bool wasModified = isModified();
     m_document = std::move(document);
     ensureActiveLayer();
     m_undoStack.clear();
     m_undoStack.setClean();
+    m_currentContentRevision = 0;
+    m_savedContentRevision = 0;
+    m_nextContentRevision = 0;
     emit documentChanged();
     emit activeLayerChanged(m_document.activeLayerId);
+    if (wasModified) {
+        emit modifiedChanged(false);
+    }
 }
 
 void DocumentController::markSaved()
 {
+    const bool wasModified = isModified();
+    m_savedContentRevision = m_currentContentRevision;
     m_undoStack.setClean();
+    if (wasModified) {
+        emit modifiedChanged(false);
+    }
 }
 
 void DocumentController::setActiveLayer(const QUuid &id)
@@ -268,10 +295,10 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
             }
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Draw stroke"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::translateStrokes(
@@ -311,7 +338,8 @@ void DocumentController::translateStrokes(
         return;
     }
 
-    auto shift = [this, layerId, movable](const QPointF &offset) {
+    const QVector<QUuid> movedStrokes(movable.cbegin(), movable.cend());
+    auto shift = [this, layerId, movable, movedStrokes](const QPointF &offset) {
         if (Layer *target = m_document.layer(layerId)) {
             for (Stroke &stroke : target->strokes) {
                 if (movable.contains(stroke.id)) {
@@ -321,12 +349,13 @@ void DocumentController::translateStrokes(
                 }
             }
             notifyDocumentChanged();
+            emit strokesTranslated(layerId, movedStrokes, offset);
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Move selection"),
         [shift, delta]() { shift(delta); },
-        [shift, delta]() { shift(-delta); }));
+        [shift, delta]() { shift(-delta); });
 }
 
 void DocumentController::removeStrokes(
@@ -370,10 +399,10 @@ void DocumentController::removeStrokes(
             notifyDocumentChanged();
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Delete selection"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::addLayer()
@@ -406,10 +435,10 @@ void DocumentController::addLayer()
         notifyDocumentChanged();
         emit activeLayerChanged(m_document.activeLayerId);
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Add layer"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::duplicateLayer(const QUuid &id)
@@ -468,10 +497,10 @@ void DocumentController::duplicateLayer(const QUuid &id)
         notifyDocumentChanged();
         emit activeLayerChanged(m_document.activeLayerId);
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Duplicate layer"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::removeLayer(const QUuid &id)
@@ -506,10 +535,10 @@ void DocumentController::removeLayer(const QUuid &id)
         notifyDocumentChanged();
         emit activeLayerChanged(m_document.activeLayerId);
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Delete layer"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::clearLayer(const QUuid &id)
@@ -531,10 +560,10 @@ void DocumentController::clearLayer(const QUuid &id)
             notifyDocumentChanged();
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Clear layer"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::renameLayer(const QUuid &id, const QString &name)
@@ -560,10 +589,10 @@ void DocumentController::renameLayer(const QUuid &id, const QString &name)
             notifyDocumentChanged();
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Rename layer"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::setLayerVisible(const QUuid &id, bool visible)
@@ -585,10 +614,10 @@ void DocumentController::setLayerVisible(const QUuid &id, bool visible)
             notifyDocumentChanged();
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Toggle layer visibility"),
         std::move(redoAction),
-        std::move(undoAction)));
+        std::move(undoAction));
 }
 
 void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
@@ -614,12 +643,12 @@ void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
             notifyDocumentChanged();
         }
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Change layer opacity"),
         std::move(redoAction),
         std::move(undoAction),
         layerOpacityMergeId,
-        id));
+        id);
 }
 
 void DocumentController::moveLayer(const QUuid &id, int offset)
@@ -633,10 +662,10 @@ void DocumentController::moveLayer(const QUuid &id, int offset)
         m_document.layers.move(source, destination);
         notifyDocumentChanged();
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Move layer"),
         [move, from, to]() { move(from, to); },
-        [move, from, to]() { move(to, from); }));
+        [move, from, to]() { move(to, from); });
 }
 
 void DocumentController::setWobbleAmount(qreal amount)
@@ -656,11 +685,11 @@ void DocumentController::setWobbleAmount(qreal amount)
         m_document.wobbleAmount = value;
         notifyDocumentChanged();
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Change wobble"),
         [apply, normalized]() { apply(normalized); },
         [apply, previous]() { apply(previous); },
-        wobbleAmountMergeId));
+        wobbleAmountMergeId);
 }
 
 void DocumentController::setAnimationFrames(int frames)
@@ -677,11 +706,11 @@ void DocumentController::setAnimationFrames(int frames)
         m_document.animationFrames = value;
         notifyDocumentChanged();
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Change animation frames"),
         [apply, normalized]() { apply(normalized); },
         [apply, previous]() { apply(previous); },
-        animationFramesMergeId));
+        animationFramesMergeId);
 }
 
 void DocumentController::setFramesPerSecond(qreal fps)
@@ -701,11 +730,54 @@ void DocumentController::setFramesPerSecond(qreal fps)
         m_document.framesPerSecond = value;
         notifyDocumentChanged();
     };
-    m_undoStack.push(new LambdaCommand(
+    pushDocumentCommand(
         tr("Change animation speed"),
         [apply, normalized]() { apply(normalized); },
         [apply, previous]() { apply(previous); },
-        framesPerSecondMergeId));
+        framesPerSecondMergeId);
+}
+
+void DocumentController::pushDocumentCommand(
+    QString text,
+    std::function<void()> redoAction,
+    std::function<void()> undoAction,
+    int mergeId,
+    const QUuid &mergeScope)
+{
+    const quint64 previousRevision = m_currentContentRevision;
+    const quint64 nextRevision = ++m_nextContentRevision;
+    auto trackedRedo = [
+        this,
+        redoAction = std::move(redoAction),
+        nextRevision
+    ]() {
+        redoAction();
+        setContentRevision(nextRevision);
+    };
+    auto trackedUndo = [
+        this,
+        undoAction = std::move(undoAction),
+        previousRevision
+    ]() {
+        undoAction();
+        setContentRevision(previousRevision);
+    };
+    m_undoStack.push(new LambdaCommand(
+        std::move(text),
+        std::move(trackedRedo),
+        std::move(trackedUndo),
+        mergeId,
+        mergeScope));
+}
+
+void DocumentController::setContentRevision(quint64 revision)
+{
+    const bool wasModified = isModified();
+    m_currentContentRevision = revision;
+    const bool modified = isModified();
+    if (modified != wasModified) {
+        emit modifiedChanged(modified);
+    }
 }
 
 void DocumentController::notifyDocumentChanged()

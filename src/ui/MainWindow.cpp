@@ -242,49 +242,69 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 
 void MainWindow::createActions()
 {
+    const auto registerShortcut =
+        [this](QAction *action, const QKeySequence &defaultShortcut) {
+            action->setProperty("shortcutLabel", action->text());
+            action->setProperty(
+                "defaultShortcut",
+                defaultShortcut.toString(QKeySequence::PortableText));
+            action->setShortcut(SettingsDialog::shortcutForAction(
+                action->objectName(),
+                defaultShortcut));
+            m_shortcutActions.append(action);
+        };
+
     auto *newAction = new QAction(tr("&New"), this);
-    newAction->setShortcut(QKeySequence::New);
-    connect(newAction, &QAction::triggered, this, &MainWindow::newDocument);
     newAction->setObjectName(QStringLiteral("newAction"));
+    registerShortcut(newAction, QKeySequence(QKeySequence::New));
+    connect(newAction, &QAction::triggered, this, &MainWindow::newDocument);
 
     auto *openAction = new QAction(tr("&Open…"), this);
-    openAction->setShortcut(QKeySequence::Open);
-    connect(openAction, &QAction::triggered, this, &MainWindow::chooseOpenFile);
     openAction->setObjectName(QStringLiteral("openAction"));
+    registerShortcut(openAction, QKeySequence(QKeySequence::Open));
+    connect(openAction, &QAction::triggered, this, &MainWindow::chooseOpenFile);
 
     m_saveAction = new QAction(tr("&Save"), this);
-    m_saveAction->setShortcut(QKeySequence::Save);
+    m_saveAction->setObjectName(QStringLiteral("saveAction"));
+    registerShortcut(m_saveAction, QKeySequence(QKeySequence::Save));
     connect(m_saveAction, &QAction::triggered, this, [this]() {
         save();
     });
-    m_saveAction->setObjectName(QStringLiteral("saveAction"));
 
     auto *saveAsAction = new QAction(tr("Save &As…"), this);
-    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    saveAsAction->setObjectName(QStringLiteral("saveAsAction"));
+    registerShortcut(saveAsAction, QKeySequence(QKeySequence::SaveAs));
     connect(saveAsAction, &QAction::triggered, this, [this]() {
         saveAs();
     });
-    saveAsAction->setObjectName(QStringLiteral("saveAsAction"));
 
     auto *exportGifAction = new QAction(tr("Export animated &GIF…"), this);
-    exportGifAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+E")));
-    connect(exportGifAction, &QAction::triggered, this, &MainWindow::exportGif);
     exportGifAction->setObjectName(QStringLiteral("exportGifAction"));
+    registerShortcut(
+        exportGifAction,
+        QKeySequence(QStringLiteral("Ctrl+E")));
+    connect(exportGifAction, &QAction::triggered, this, &MainWindow::exportGif);
 
     auto *exportPngAction = new QAction(tr("Export current frame as &PNG…"), this);
-    connect(exportPngAction, &QAction::triggered, this, &MainWindow::exportPng);
     exportPngAction->setObjectName(QStringLiteral("exportPngAction"));
+    registerShortcut(exportPngAction, {});
+    connect(exportPngAction, &QAction::triggered, this, &MainWindow::exportPng);
 
     auto *quitAction = new QAction(tr("&Quit"), this);
-    quitAction->setShortcut(QKeySequence::Quit);
-    connect(quitAction, &QAction::triggered, this, &QWidget::close);
     quitAction->setObjectName(QStringLiteral("quitAction"));
+    registerShortcut(quitAction, QKeySequence(QKeySequence::Quit));
+    connect(quitAction, &QAction::triggered, this, &QWidget::close);
 
     auto *settingsAction = new QAction(tr("&Settings…"), this);
-    settingsAction->setShortcut(QKeySequence::Preferences);
+    settingsAction->setObjectName(QStringLiteral("settingsAction"));
+    settingsAction->setIcon(Icons::icon(IconGlyph::Settings));
+    settingsAction->setToolTip(tr("Settings"));
+    registerShortcut(
+        settingsAction,
+        QKeySequence(QKeySequence::Preferences));
     settingsAction->setMenuRole(QAction::PreferencesRole);
     connect(settingsAction, &QAction::triggered, this, [this]() {
-        SettingsDialog dialog(this);
+        SettingsDialog dialog(this, m_shortcutActions);
         connect(
             &dialog,
             &SettingsDialog::animateWhileDrawingChanged,
@@ -292,37 +312,38 @@ void MainWindow::createActions()
             &CanvasWidget::setAnimateWhileDrawing);
         dialog.exec();
     });
-    settingsAction->setObjectName(QStringLiteral("settingsAction"));
 
     QAction *undoAction = m_controller.undoStack()->createUndoAction(this);
     undoAction->setText(tr("&Undo"));
-    undoAction->setShortcut(QKeySequence::Undo);
-    undoAction->setIcon(Icons::icon(IconGlyph::Undo));
     undoAction->setObjectName(QStringLiteral("undoAction"));
+    undoAction->setIcon(Icons::icon(IconGlyph::Undo));
+    registerShortcut(undoAction, QKeySequence(QKeySequence::Undo));
 
     QAction *redoAction = m_controller.undoStack()->createRedoAction(this);
     redoAction->setText(tr("&Redo"));
-    redoAction->setShortcut(QKeySequence::Redo);
-    redoAction->setIcon(Icons::icon(IconGlyph::Redo));
     redoAction->setObjectName(QStringLiteral("redoAction"));
+    redoAction->setIcon(Icons::icon(IconGlyph::Redo));
+    registerShortcut(redoAction, QKeySequence(QKeySequence::Redo));
 
     auto *clearLayerAction = new QAction(tr("Clear active layer"), this);
+    clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
+    registerShortcut(clearLayerAction, {});
     connect(clearLayerAction, &QAction::triggered, this, [this]() {
         m_controller.clearLayer(m_controller.document().activeLayerId);
     });
-    clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
 
     auto *fitAction = new QAction(tr("&Fit canvas"), this);
-    fitAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
-    fitAction->setIcon(Icons::icon(IconGlyph::FitView));
-    connect(fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
     fitAction->setObjectName(QStringLiteral("fitAction"));
+    fitAction->setIcon(Icons::icon(IconGlyph::FitView));
+    registerShortcut(fitAction, QKeySequence(QStringLiteral("Ctrl+0")));
+    connect(fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
 
     m_playAction = new QAction(tr("&Animate preview"), this);
     m_playAction->setCheckable(true);
     m_playAction->setChecked(true);
     m_playAction->setIcon(Icons::toggleIcon(IconGlyph::Play));
-    m_playAction->setShortcut(QKeySequence(QStringLiteral("P")));
+    m_playAction->setObjectName(QStringLiteral("playAction"));
+    registerShortcut(m_playAction, QKeySequence(QStringLiteral("P")));
     connect(
         m_playAction,
         &QAction::toggled,
@@ -333,38 +354,37 @@ void MainWindow::createActions()
         &CanvasWidget::animatingChanged,
         m_playAction,
         &QAction::setChecked);
-    m_playAction->setObjectName(QStringLiteral("playAction"));
 
     m_brushAction = new QAction(tr("&Brush"), this);
     m_brushAction->setCheckable(true);
     m_brushAction->setChecked(true);
     m_brushAction->setIcon(Icons::toggleIcon(IconGlyph::Brush));
-    m_brushAction->setShortcut(QKeySequence(QStringLiteral("B")));
     m_brushAction->setObjectName(QStringLiteral("brushAction"));
+    registerShortcut(m_brushAction, QKeySequence(QStringLiteral("B")));
 
     m_eraserAction = new QAction(tr("&Eraser"), this);
     m_eraserAction->setCheckable(true);
     m_eraserAction->setIcon(Icons::toggleIcon(IconGlyph::Eraser));
-    m_eraserAction->setShortcut(QKeySequence(QStringLiteral("E")));
     m_eraserAction->setObjectName(QStringLiteral("eraserAction"));
+    registerShortcut(m_eraserAction, QKeySequence(QStringLiteral("E")));
 
     m_lassoAction = new QAction(tr("&Lasso select"), this);
     m_lassoAction->setCheckable(true);
     m_lassoAction->setIcon(Icons::toggleIcon(IconGlyph::Lasso));
-    m_lassoAction->setShortcut(QKeySequence(QStringLiteral("L")));
     m_lassoAction->setObjectName(QStringLiteral("lassoAction"));
+    registerShortcut(m_lassoAction, QKeySequence(QStringLiteral("L")));
 
     m_wandAction = new QAction(tr("Auto se&lect"), this);
     m_wandAction->setCheckable(true);
     m_wandAction->setIcon(Icons::toggleIcon(IconGlyph::Wand));
-    m_wandAction->setShortcut(QKeySequence(QStringLiteral("W")));
     m_wandAction->setObjectName(QStringLiteral("wandAction"));
+    registerShortcut(m_wandAction, QKeySequence(QStringLiteral("W")));
 
     m_bucketAction = new QAction(tr("Paint &bucket"), this);
     m_bucketAction->setCheckable(true);
     m_bucketAction->setIcon(Icons::toggleIcon(IconGlyph::Bucket));
-    m_bucketAction->setShortcut(QKeySequence(QStringLiteral("G")));
     m_bucketAction->setObjectName(QStringLiteral("bucketAction"));
+    registerShortcut(m_bucketAction, QKeySequence(QStringLiteral("G")));
 
     auto *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
@@ -525,6 +545,13 @@ void MainWindow::createToolBars()
         findChild<QAction *>(QStringLiteral("undoAction")));
     tools->addAction(
         findChild<QAction *>(QStringLiteral("redoAction")));
+    tools->addSeparator();
+    QAction *settingsAction =
+        findChild<QAction *>(QStringLiteral("settingsAction"));
+    tools->addAction(settingsAction);
+    if (QWidget *settingsButton = tools->widgetForAction(settingsAction)) {
+        settingsButton->setObjectName(QStringLiteral("settingsButton"));
+    }
 
     connect(
         m_canvas,
@@ -671,7 +698,7 @@ bool MainWindow::saveAs()
     const QString selected = QFileDialog::getSaveFileName(
         this,
         tr("Save project"),
-        m_currentFilePath,
+        saveDialogStartPath(QStringLiteral("wobble")),
         tr("WobblePaint projects (*.wobble)"));
     if (selected.isEmpty()) {
         return false;
@@ -758,7 +785,7 @@ void MainWindow::exportGif()
     const QString selected = QFileDialog::getSaveFileName(
         this,
         tr("Export animated GIF"),
-        QString(),
+        saveDialogStartPath(QStringLiteral("gif")),
         tr("GIF images (*.gif)"));
     if (selected.isEmpty()) {
         return;
@@ -832,7 +859,7 @@ void MainWindow::exportPng()
     const QString selected = QFileDialog::getSaveFileName(
         this,
         tr("Export current frame"),
-        QString(),
+        saveDialogStartPath(QStringLiteral("png")),
         tr("PNG images (*.png)"));
     if (selected.isEmpty()) {
         return;
@@ -885,6 +912,25 @@ QString MainWindow::normalizedPath(
         return filePath;
     }
     return filePath + QStringLiteral(".") + extension;
+}
+
+QString MainWindow::saveDialogStartPath(const QString &extension) const
+{
+    if (!m_currentFilePath.isEmpty()) {
+        const QFileInfo currentFile(m_currentFilePath);
+        if (extension.compare(
+                QStringLiteral("wobble"),
+                Qt::CaseInsensitive) == 0) {
+            return currentFile.absoluteFilePath();
+        }
+        return QDir(currentFile.absolutePath()).filePath(
+            currentFile.completeBaseName()
+            + QStringLiteral(".")
+            + extension);
+    }
+    return QDir(SettingsDialog::defaultSaveFolder()).filePath(
+        QStringLiteral("Untitled.")
+        + extension);
 }
 
 }

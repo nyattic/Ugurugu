@@ -2,6 +2,7 @@
 
 #include "document/DocumentController.hpp"
 
+#include <QList>
 #include <QMainWindow>
 
 class QAction;
@@ -49,6 +50,7 @@ private:
     QString normalizedPath(
         const QString &filePath,
         const QString &extension) const;
+    QString saveDialogStartPath(const QString &extension) const;
 
     DocumentController m_controller;
     CanvasWidget *m_canvas = nullptr;
@@ -62,6 +64,7 @@ private:
     QAction *m_lassoAction = nullptr;
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
+    QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;
     QSpinBox *m_brushSizeSpin = nullptr;

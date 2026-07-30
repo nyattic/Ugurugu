@@ -23,7 +23,8 @@ enum class IconGlyph {
     FitView,
     Lasso,
     Wand,
-    Bucket
+    Bucket,
+    Settings
 };
 
 struct Icons final

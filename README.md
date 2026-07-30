@@ -1,6 +1,7 @@
 # WobblePaint
 
 ![Last Commit](https://img.shields.io/github/last-commit/nyattic/WobblePaint?style=for-the-badge&logo=git&logoColor=white&labelColor=1e1b2e&color=ffc94a)
+[![Downloads](https://img.shields.io/github/downloads/nyattic/WobblePaint/total?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WobblePaint/releases)
 ![License](https://img.shields.io/badge/license-MIT-ffc94a?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 

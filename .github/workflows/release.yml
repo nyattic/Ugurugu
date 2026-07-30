@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  QT_VERSION: 6.10.3
+
+jobs:
+  macos:
+    name: Build macOS DMG
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install dependencies
+        run: brew install cmake ninja qt spdlog fmt
+
+      - name: Configure
+        run: |
+          export CMAKE_PREFIX_PATH="$(brew --prefix qt);$(brew --prefix spdlog);$(brew --prefix fmt)"
+          cmake --preset macos-release
+
+      - name: Build DMG
+        run: cmake --build --preset macos-release --target package --parallel
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          package=$(find out/build/macos-release -maxdepth 1 -name '*.dmg' -print -quit)
+          if [[ -z "$package" ]]; then
+            echo "DMG package was not created" >&2
+            exit 1
+          fi
+          version=$(sed -nE 's/project\(WobblePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          architecture=$(uname -m)
+          mkdir -p artifacts
+          cp "$package" "artifacts/WobblePaint-${version}-macOS-${architecture}.dmg"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-dmg
+          path: artifacts/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Build Windows ZIP
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install spdlog:x64-windows fmt:x64-windows
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-release `
+            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            "-DVCPKG_TARGET_TRIPLET=x64-windows"
+
+      - name: Build ZIP
+        shell: pwsh
+        run: cmake --build --preset windows-release --target package --parallel
+
+      - name: Stage artifact
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem out/build/windows-release -Filter *.zip -File | Select-Object -First 1
+          if (-not $package) { throw "ZIP package was not created" }
+          $match = [regex]::Match((Get-Content CMakeLists.txt -Raw), 'project\(WobblePaint VERSION ([0-9.]+)')
+          if (-not $match.Success) { throw "Project version was not found" }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item $package.FullName "artifacts/WobblePaint-$($match.Groups[1].Value)-Windows-x64.zip"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-zip
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [macos, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
+        with:
+          generate_release_notes: true
+          files: artifacts/**/*

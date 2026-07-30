@@ -56,6 +56,14 @@
         <source>Click an empty area surrounded by lines to select it.</source>
         <translation>선으로 둘러싸인 빈 영역을 클릭하면 선택됩니다.</translation>
     </message>
+    <message>
+        <source>Select area</source>
+        <translation>영역 선택</translation>
+    </message>
+    <message>
+        <source>Deselect</source>
+        <translation>선택 해제</translation>
+    </message>
 </context>
 <context>
     <name>wobble::ColorSwatchRow</name>
@@ -219,6 +227,10 @@
     <message>
         <source>&amp;Settings…</source>
         <translation>설정(&amp;S)…</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>설정</translation>
     </message>
     <message>
         <source>&amp;Undo</source>
@@ -458,6 +470,42 @@
     <message>
         <source>Drawing</source>
         <translation>그리기</translation>
+    </message>
+    <message>
+        <source>Default save folder</source>
+        <translation>기본 저장 폴더</translation>
+    </message>
+    <message>
+        <source>New projects and exports start in this folder.</source>
+        <translation>새 프로젝트와 내보내기는 이 폴더에서 시작합니다.</translation>
+    </message>
+    <message>
+        <source>Choose…</source>
+        <translation>선택…</translation>
+    </message>
+    <message>
+        <source>Use system default</source>
+        <translation>시스템 기본값 사용</translation>
+    </message>
+    <message>
+        <source>Files</source>
+        <translation>파일</translation>
+    </message>
+    <message>
+        <source>Choose default save folder</source>
+        <translation>기본 저장 폴더 선택</translation>
+    </message>
+    <message>
+        <source>Click a shortcut field, then press the new key combination.</source>
+        <translation>단축키 입력란을 클릭한 다음 새 키 조합을 누르세요.</translation>
+    </message>
+    <message>
+        <source>Shortcuts</source>
+        <translation>단축키</translation>
+    </message>
+    <message>
+        <source>This shortcut is already assigned to %1.</source>
+        <translation>이 단축키는 이미 %1에 할당되어 있습니다.</translation>
     </message>
 </context>
 <context>

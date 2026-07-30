@@ -1,17 +1,52 @@
 #include "ui/CanvasWidget.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/MainWindow.hpp"
+#include "ui/SettingsDialog.hpp"
 
 #include <QAction>
 #include <QApplication>
+#include <QDialogButtonBox>
 #include <QFileInfo>
+#include <QKeySequenceEdit>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPushButton>
+#include <QSettings>
 #include <QSpinBox>
+#include <QTemporaryDir>
 #include <QToolButton>
+#include <QVariant>
 #include <QtTest>
 
+#include <utility>
+
 namespace wobble {
+
+class SettingValueGuard final
+{
+public:
+    explicit SettingValueGuard(QString key)
+        : m_key(std::move(key))
+        , m_existed(m_settings.contains(m_key))
+        , m_value(m_settings.value(m_key))
+    {
+    }
+
+    ~SettingValueGuard()
+    {
+        if (m_existed) {
+            m_settings.setValue(m_key, m_value);
+        } else {
+            m_settings.remove(m_key);
+        }
+    }
+
+private:
+    QSettings m_settings;
+    QString m_key;
+    bool m_existed = false;
+    QVariant m_value;
+};
 
 class UiTests final : public QObject
 {
@@ -81,6 +116,142 @@ private slots:
         undoAction->trigger();
         QTRY_COMPARE(layerList->count(), 1);
 
+        QAction *settingsAction =
+            window.findChild<QAction *>(QStringLiteral("settingsAction"));
+        QToolButton *settingsButton =
+            window.findChild<QToolButton *>(QStringLiteral("settingsButton"));
+        QVERIFY(settingsAction);
+        QVERIFY(settingsButton);
+        QCOMPARE(settingsButton->defaultAction(), settingsAction);
+    }
+
+    void editsAndRestoresShortcuts()
+    {
+        const QString brushKey = QStringLiteral("shortcuts/brushAction");
+        const QString eraserKey = QStringLiteral("shortcuts/eraserAction");
+        const QString folderKey = QStringLiteral("files/defaultSaveFolder");
+        SettingValueGuard brushGuard(brushKey);
+        SettingValueGuard eraserGuard(eraserKey);
+        SettingValueGuard folderGuard(folderKey);
+        QTemporaryDir saveFolder;
+        QVERIFY(saveFolder.isValid());
+        QSettings settings;
+        settings.remove(brushKey);
+        settings.remove(eraserKey);
+        settings.setValue(folderKey, saveFolder.path());
+
+        QAction brushAction(QStringLiteral("Brush"));
+        brushAction.setObjectName(QStringLiteral("brushAction"));
+        brushAction.setProperty("defaultShortcut", QStringLiteral("B"));
+        brushAction.setShortcut(QKeySequence(QStringLiteral("B")));
+
+        QAction eraserAction(QStringLiteral("Eraser"));
+        eraserAction.setObjectName(QStringLiteral("eraserAction"));
+        eraserAction.setProperty("defaultShortcut", QStringLiteral("E"));
+        eraserAction.setShortcut(QKeySequence(QStringLiteral("E")));
+
+        SettingsDialog dialog(
+            nullptr,
+            {&brushAction, &eraserAction});
+        QLineEdit *folderEdit =
+            dialog.findChild<QLineEdit *>(
+                QStringLiteral("defaultSaveFolderEdit"));
+        QKeySequenceEdit *brushEditor =
+            dialog.findChild<QKeySequenceEdit *>(
+                QStringLiteral("brushActionShortcutEdit"));
+        QVERIFY(folderEdit);
+        QVERIFY(brushEditor);
+        QCOMPARE(folderEdit->text(), saveFolder.path());
+        QCOMPARE(SettingsDialog::defaultSaveFolder(), saveFolder.path());
+
+        brushEditor->setKeySequence(QKeySequence(QStringLiteral("V")));
+        QTRY_COMPARE(
+            brushAction.shortcut(),
+            QKeySequence(QStringLiteral("V")));
+        QCOMPARE(
+            settings.value(brushKey).toString(),
+            QStringLiteral("V"));
+
+        brushEditor->setKeySequence(QKeySequence(QStringLiteral("E")));
+        QTRY_COMPARE(
+            brushEditor->keySequence(),
+            QKeySequence(QStringLiteral("V")));
+        QCOMPARE(
+            brushAction.shortcut(),
+            QKeySequence(QStringLiteral("V")));
+
+        QDialogButtonBox *buttons =
+            dialog.findChild<QDialogButtonBox *>();
+        QVERIFY(buttons);
+        QPushButton *restoreButton =
+            buttons->button(QDialogButtonBox::RestoreDefaults);
+        QVERIFY(restoreButton);
+        QTest::mouseClick(restoreButton, Qt::LeftButton);
+        QCOMPARE(
+            brushAction.shortcut(),
+            QKeySequence(QStringLiteral("B")));
+        QVERIFY(!settings.contains(brushKey));
+        QVERIFY(!settings.contains(folderKey));
+        QCOMPARE(
+            folderEdit->text(),
+            SettingsDialog::defaultSaveFolder());
+    }
+
+    void selectionParticipatesInUndoHistory()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *redoAction =
+            window.findChild<QAction *>(QStringLiteral("redoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(undoAction);
+        QVERIFY(redoAction);
+        QVERIFY(!window.isWindowModified());
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        const QPoint topLeft = center - QPoint(80, 60);
+        const QPoint topRight = center + QPoint(80, -60);
+        const QPoint bottomRight = center + QPoint(80, 60);
+        const QPoint bottomLeft = center + QPoint(-80, 60);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+        QTest::mouseMove(canvas, topRight, 5);
+        QTest::mouseMove(canvas, bottomRight, 5);
+        QTest::mouseMove(canvas, bottomLeft, 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            topLeft);
+
+        QTRY_VERIFY(canvas->hasSelection());
+        QVERIFY(undoAction->isEnabled());
+        QVERIFY(!window.isWindowModified());
+
+        const QString screenshotPath =
+            qEnvironmentVariable("WOBBLEPAINT_SELECTION_SCREENSHOT");
+        if (!screenshotPath.isEmpty()) {
+            QVERIFY(window.grab().save(screenshotPath, "PNG"));
+            QVERIFY(QFileInfo(screenshotPath).size() > 0);
+        }
+
+        undoAction->trigger();
+        QTRY_VERIFY(!canvas->hasSelection());
+        QVERIFY(redoAction->isEnabled());
+        QVERIFY(!window.isWindowModified());
+
+        redoAction->trigger();
+        QTRY_VERIFY(canvas->hasSelection());
+        QVERIFY(!window.isWindowModified());
     }
 
     void globalPanModifierPreservesTextInput()
