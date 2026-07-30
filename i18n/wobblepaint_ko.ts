@@ -4,8 +4,8 @@
 <context>
     <name>QObject</name>
     <message>
-        <source>WobblePaint</source>
-        <translation>WobblePaint</translation>
+        <source>WagleWaglePaint</source>
+        <translation>WagleWaglePaint</translation>
     </message>
     <message>
         <source>The application encountered an unexpected error.</source>
@@ -233,6 +233,10 @@
         <translation>설정</translation>
     </message>
     <message>
+        <source>Check for &amp;Updates…</source>
+        <translation>업데이트 확인(&amp;U)…</translation>
+    </message>
+    <message>
         <source>&amp;Undo</source>
         <translation>실행 취소(&amp;U)</translation>
     </message>
@@ -289,6 +293,10 @@
         <translation>도구(&amp;T)</translation>
     </message>
     <message>
+        <source>&amp;Help</source>
+        <translation>도움말(&amp;H)</translation>
+    </message>
+    <message>
         <source>Tools</source>
         <translation>도구</translation>
     </message>
@@ -333,8 +341,8 @@
         <translation>제목 없음</translation>
     </message>
     <message>
-        <source>%1[*] — WobblePaint</source>
-        <translation>%1[*] — WobblePaint</translation>
+        <source>%1[*] — WagleWaglePaint</source>
+        <translation>%1[*] — WagleWaglePaint</translation>
     </message>
     <message>
         <source>Unsaved changes</source>
@@ -361,8 +369,8 @@
         <translation>프로젝트 저장</translation>
     </message>
     <message>
-        <source>WobblePaint projects (*.wobble)</source>
-        <translation>WobblePaint 프로젝트 (*.wobble)</translation>
+        <source>WagleWaglePaint projects (*.wobble)</source>
+        <translation>WagleWaglePaint 프로젝트 (*.wobble)</translation>
     </message>
     <message>
         <source>Save failed</source>
@@ -385,8 +393,8 @@
         <translation>프로젝트 열기</translation>
     </message>
     <message>
-        <source>WobblePaint projects (*.wobble);;All files (*)</source>
-        <translation>WobblePaint 프로젝트 (*.wobble);;모든 파일 (*)</translation>
+        <source>WagleWaglePaint projects (*.wobble);;All files (*)</source>
+        <translation>WagleWaglePaint 프로젝트 (*.wobble);;모든 파일 (*)</translation>
     </message>
     <message>
         <source>Animation is too large</source>
@@ -454,6 +462,22 @@
     <message>
         <source>Settings</source>
         <translation>설정</translation>
+    </message>
+    <message>
+        <source>System default</source>
+        <translation>시스템 기본값</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>언어</translation>
+    </message>
+    <message>
+        <source>Restart WagleWaglePaint to apply language changes.</source>
+        <translation>언어 변경 사항을 적용하려면 WagleWaglePaint를 다시 시작하세요.</translation>
+    </message>
+    <message>
+        <source>General</source>
+        <translation>일반</translation>
     </message>
     <message>
         <source>Wobble preview while drawing a stroke</source>
@@ -545,6 +569,61 @@
     <message>
         <source>/ %1</source>
         <translation>/ %1</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::UpdateController</name>
+    <message>
+        <source>Update failed</source>
+        <translation>업데이트 실패</translation>
+    </message>
+    <message>
+        <source>Could not check for updates.
+
+%1</source>
+        <translation>업데이트를 확인할 수 없습니다.
+
+%1</translation>
+    </message>
+    <message>
+        <source>You&apos;re up to date</source>
+        <translation>최신 버전입니다</translation>
+    </message>
+    <message>
+        <source>WagleWaglePaint %1 is the latest version.</source>
+        <translation>WagleWaglePaint %1이 최신 버전입니다.</translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation>업데이트가 있습니다</translation>
+    </message>
+    <message>
+        <source>WagleWaglePaint %1 is available. Download and install it now?</source>
+        <translation>WagleWaglePaint %1을 사용할 수 있습니다. 지금 다운로드하고 설치할까요?</translation>
+    </message>
+    <message>
+        <source>Downloading update…</source>
+        <translation>업데이트 다운로드 중…</translation>
+    </message>
+    <message>
+        <source>WagleWaglePaint update</source>
+        <translation>WagleWaglePaint 업데이트</translation>
+    </message>
+    <message>
+        <source>Could not download the update.
+
+%1</source>
+        <translation>업데이트를 다운로드할 수 없습니다.
+
+%1</translation>
+    </message>
+    <message>
+        <source>The update was downloaded but could not be installed.
+
+%1</source>
+        <translation>업데이트를 다운로드했지만 설치할 수 없습니다.
+
+%1</translation>
     </message>
 </context>
 </TS>

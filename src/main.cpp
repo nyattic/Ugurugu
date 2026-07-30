@@ -1,7 +1,10 @@
 #include "app/Logging.hpp"
+#include "app/UpdateController.hpp"
 #include "ui/MainWindow.hpp"
+#include "ui/SettingsDialog.hpp"
 #include "ui/Theme.hpp"
 
+#include <QAction>
 #include <QApplication>
 #include <QFileOpenEvent>
 #include <QFileInfo>
@@ -9,6 +12,7 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QObject>
+#include <QSettings>
 #include <QTranslator>
 
 #include <spdlog/spdlog.h>
@@ -17,6 +21,41 @@
 #include <exception>
 
 namespace {
+
+void configureApplicationMetadata()
+{
+    QApplication::setApplicationName(QStringLiteral("WagleWaglePaint"));
+    QApplication::setApplicationDisplayName(QStringLiteral("WagleWaglePaint"));
+    QApplication::setApplicationVersion(
+        QStringLiteral(WAGLEWAGLEPAINT_VERSION));
+    QApplication::setOrganizationName(QStringLiteral("WagleWaglePaint"));
+    QApplication::setOrganizationDomain(
+        QStringLiteral("waglewaglepaint.dev"));
+}
+
+void migrateLegacySettings()
+{
+    QSettings currentSettings;
+    const QString migrationKey =
+        QStringLiteral("migration/wobblePaintSettingsImported");
+    if (currentSettings.value(migrationKey).toBool()) {
+        return;
+    }
+
+    QApplication::setApplicationName(QStringLiteral("WobblePaint"));
+    QApplication::setOrganizationName(QStringLiteral("WobblePaint"));
+    QApplication::setOrganizationDomain(QStringLiteral("wobblepaint.dev"));
+    const QSettings legacySettings;
+    configureApplicationMetadata();
+
+    for (const QString &key : legacySettings.allKeys()) {
+        if (!currentSettings.contains(key)) {
+            currentSettings.setValue(key, legacySettings.value(key));
+        }
+    }
+    currentSettings.setValue(migrationKey, true);
+    currentSettings.sync();
+}
 
 class FileOpenEventFilter final : public QObject
 {
@@ -47,17 +86,21 @@ private:
 
 int main(int argc, char *argv[])
 {
+    wobble::UpdateController::initialize();
     QApplication application(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("WobblePaint"));
-    QApplication::setApplicationDisplayName(QStringLiteral("WobblePaint"));
-    QApplication::setApplicationVersion(QStringLiteral(WOBBLEPAINT_VERSION));
-    QApplication::setOrganizationName(QStringLiteral("WobblePaint"));
-    QApplication::setOrganizationDomain(QStringLiteral("wobblepaint.dev"));
+    configureApplicationMetadata();
+    migrateLegacySettings();
     wobble::Theme::apply(application);
 
     QTranslator qtBaseTranslator;
+    const QString configuredLanguage =
+        wobble::SettingsDialog::uiLanguage();
+    const QLocale interfaceLocale =
+        configuredLanguage == QStringLiteral("system")
+        ? QLocale::system()
+        : QLocale(configuredLanguage);
     if (qtBaseTranslator.load(
-            QLocale::system(),
+            interfaceLocale,
             QStringLiteral("qtbase"),
             QStringLiteral("_"),
             QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
@@ -65,7 +108,7 @@ int main(int argc, char *argv[])
     }
     QTranslator appTranslator;
     if (appTranslator.load(
-            QLocale::system(),
+            interfaceLocale,
             QStringLiteral("wobblepaint"),
             QStringLiteral("_"),
             QStringLiteral(":/i18n"))) {
@@ -73,11 +116,22 @@ int main(int argc, char *argv[])
     }
 
     wobble::Logging::initialize();
-    spdlog::info("WobblePaint {} starting", QApplication::applicationVersion().toStdString());
+    spdlog::info(
+        "WagleWaglePaint {} starting",
+        QApplication::applicationVersion().toStdString());
 
     int result = EXIT_FAILURE;
     try {
         wobble::MainWindow window;
+        wobble::UpdateController updateController(&window);
+        QAction *checkForUpdatesAction =
+            window.findChild<QAction *>(
+                QStringLiteral("checkForUpdatesAction"));
+        QObject::connect(
+            checkForUpdatesAction,
+            &QAction::triggered,
+            &updateController,
+            &wobble::UpdateController::checkForUpdates);
         FileOpenEventFilter fileOpenFilter(&window);
         application.installEventFilter(&fileOpenFilter);
         if (application.arguments().size() > 1) {
@@ -87,12 +141,12 @@ int main(int argc, char *argv[])
         }
         window.show();
         result = application.exec();
-        spdlog::info("WobblePaint exiting with code {}", result);
+        spdlog::info("WagleWaglePaint exiting with code {}", result);
     } catch (const std::exception &error) {
         spdlog::critical("Unhandled exception: {}", error.what());
         QMessageBox::critical(
             nullptr,
-            QObject::tr("WobblePaint"),
+            QObject::tr("WagleWaglePaint"),
             QObject::tr("The application encountered an unexpected error."));
     }
 

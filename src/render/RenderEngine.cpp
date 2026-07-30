@@ -476,7 +476,7 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
     const int normalizedFrame = ((frameIndex % frameCount) + frameCount) % frameCount;
 
     QPainter compositor(&result);
-    compositor.setRenderHint(QPainter::Antialiasing, true);
+    compositor.setRenderHint(QPainter::Antialiasing, false);
 
     for (const Layer &layer : document.layers) {
         if (!layer.visible
@@ -491,7 +491,7 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
         }
         layerImage.fill(Qt::transparent);
         QPainter painter(&layerImage);
-        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::Antialiasing, false);
 
         for (const Stroke &stroke : layer.strokes) {
             if (stroke.points.isEmpty()) {
@@ -502,7 +502,7 @@ QImage RenderEngine::render(const Document &document, int frameIndex)
                 painter.end();
                 applyFillStroke(layerImage, stroke);
                 painter.begin(&layerImage);
-                painter.setRenderHint(QPainter::Antialiasing, true);
+                painter.setRenderHint(QPainter::Antialiasing, false);
                 continue;
             }
 

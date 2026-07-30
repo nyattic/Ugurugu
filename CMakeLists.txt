@@ -1,8 +1,18 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(WobblePaint VERSION 0.1.0 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.2.0 LANGUAGES CXX)
 
+include(FetchContent)
 include(GNUInstallDirs)
+
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(
+        CMAKE_OSX_DEPLOYMENT_TARGET
+        "13.0"
+        CACHE STRING
+        "Minimum supported macOS version"
+    )
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,11 +21,83 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets LinguistTools)
+find_package(
+    Qt6 6.10
+    REQUIRED
+    COMPONENTS
+    Core
+    Gui
+    Widgets
+    LinguistTools
+)
 find_package(spdlog 1.13 REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
 
 qt_standard_project_setup()
+
+set(WAGLEWAGLEPAINT_UPDATE_SOURCE src/app/UpdateControllerStub.cpp)
+set(WAGLEWAGLEPAINT_UPDATE_LIBRARIES)
+
+if(APPLE)
+    enable_language(OBJCXX)
+    FetchContent_Declare(
+        sparkle
+        URL
+        "https://github.com/sparkle-project/Sparkle/releases/download/2.9.4/Sparkle-2.9.4.tar.xz"
+        URL_HASH
+        "SHA256=ce89daf967db1e1893ed3ebd67575ed82d3902563e3191ca92aaec9164fbdef9"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(sparkle)
+    find_library(
+        WAGLEWAGLEPAINT_SPARKLE_FRAMEWORK
+        Sparkle
+        PATHS "${sparkle_SOURCE_DIR}"
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    set(
+        WAGLEWAGLEPAINT_UPDATE_SOURCE
+        src/app/UpdateControllerMac.mm
+    )
+    list(
+        APPEND
+        WAGLEWAGLEPAINT_UPDATE_LIBRARIES
+        "${WAGLEWAGLEPAINT_SPARKLE_FRAMEWORK}"
+    )
+elseif(WIN32)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS Concurrent)
+    FetchContent_Declare(
+        velopack
+        URL
+        "https://github.com/velopack/velopack/releases/download/1.2.0/velopack_libc_1.2.0.zip"
+        URL_HASH
+        "SHA256=547262ed7a1ab1ff62f580aa53851ede2f1a451ac61b8974eb7bc01117488835"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(velopack)
+    add_library(velopack_libc SHARED IMPORTED GLOBAL)
+    set_target_properties(
+        velopack_libc
+        PROPERTIES
+        IMPORTED_LOCATION
+        "${velopack_SOURCE_DIR}/lib/velopack_libc_win_x64_msvc.dll"
+        IMPORTED_IMPLIB
+        "${velopack_SOURCE_DIR}/lib/velopack_libc_win_x64_msvc.dll.lib"
+        INTERFACE_INCLUDE_DIRECTORIES
+        "${velopack_SOURCE_DIR}/include"
+    )
+    set(
+        WAGLEWAGLEPAINT_UPDATE_SOURCE
+        src/app/UpdateControllerWindows.cpp
+    )
+    list(
+        APPEND
+        WAGLEWAGLEPAINT_UPDATE_LIBRARIES
+        Qt6::Concurrent
+        velopack_libc
+    )
+endif()
 
 function(wobblepaint_target_defaults target)
     target_compile_features(${target} PUBLIC cxx_std_23)
@@ -103,7 +185,12 @@ wobblepaint_target_defaults(wobblepaint_ui)
 target_include_directories(wobblepaint_ui PUBLIC src)
 target_link_libraries(wobblepaint_ui PUBLIC wobblepaint_core Qt6::Widgets)
 
-qt_add_executable(WobblePaint src/main.cpp)
+qt_add_executable(
+    WagleWaglePaint
+    src/app/UpdateController.hpp
+    ${WAGLEWAGLEPAINT_UPDATE_SOURCE}
+    src/main.cpp
+)
 
 if(APPLE)
     set_source_files_properties(
@@ -111,46 +198,76 @@ if(APPLE)
         PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources
     )
-    target_sources(WobblePaint PRIVATE resources/icons/WobblePaint.icns)
+    target_sources(
+        WagleWaglePaint
+        PRIVATE
+        resources/icons/WobblePaint.icns
+    )
+    set_source_files_properties(
+        src/app/UpdateControllerMac.mm
+        PROPERTIES
+        COMPILE_OPTIONS "-fobjc-arc"
+    )
+    configure_file(
+        resources/macos/Info.plist.in
+        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint-Info.plist"
+        @ONLY
+    )
 elseif(WIN32)
     configure_file(
         resources/icons/WobblePaint.rc.in
-        "${CMAKE_CURRENT_BINARY_DIR}/WobblePaint.rc"
+        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint.rc"
         @ONLY
     )
     target_sources(
-        WobblePaint
+        WagleWaglePaint
         PRIVATE
-        "${CMAKE_CURRENT_BINARY_DIR}/WobblePaint.rc"
+        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint.rc"
     )
 endif()
 
 qt_add_translation(WOBBLEPAINT_QM_FILES i18n/wobblepaint_ko.ts)
-qt_add_resources(WobblePaint "wobblepaint_translations"
+qt_add_resources(WagleWaglePaint "wobblepaint_translations"
     PREFIX "/i18n"
     BASE "${CMAKE_CURRENT_BINARY_DIR}"
     FILES ${WOBBLEPAINT_QM_FILES}
 )
 
-target_link_libraries(WobblePaint PRIVATE wobblepaint_ui)
-target_compile_definitions(
-    WobblePaint
+target_link_libraries(
+    WagleWaglePaint
     PRIVATE
-    WOBBLEPAINT_VERSION="${PROJECT_VERSION}"
+    wobblepaint_ui
+    ${WAGLEWAGLEPAINT_UPDATE_LIBRARIES}
 )
-wobblepaint_target_defaults(WobblePaint)
+target_compile_definitions(
+    WagleWaglePaint
+    PRIVATE
+    WAGLEWAGLEPAINT_VERSION="${PROJECT_VERSION}"
+)
+wobblepaint_target_defaults(WagleWaglePaint)
 
-set_target_properties(WobblePaint PROPERTIES
+set_target_properties(WagleWaglePaint PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "WobblePaint"
+    MACOSX_BUNDLE_BUNDLE_NAME "WagleWaglePaint"
     MACOSX_BUNDLE_ICON_FILE "WobblePaint.icns"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "dev.wobblepaint.app"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "dev.waglewaglepaint.app"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
 )
 
-install(TARGETS WobblePaint
+if(APPLE)
+    set_target_properties(
+        WagleWaglePaint
+        PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST
+        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint-Info.plist"
+        INSTALL_RPATH
+        "@executable_path/../Frameworks"
+    )
+endif()
+
+install(TARGETS WagleWaglePaint
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -164,6 +281,11 @@ if(WIN32)
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
+    install(
+        FILES
+        "${velopack_SOURCE_DIR}/lib/velopack_libc_win_x64_msvc.dll"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
 endif()
 
 set(WOBBLEPAINT_DEPLOY_TOOL_OPTIONS)
@@ -178,6 +300,7 @@ if(APPLE)
         APPEND
         WOBBLEPAINT_DEPLOY_TOOL_OPTIONS
         "-libpath=${WOBBLEPAINT_QT_PREFIX}/lib"
+        "-libpath=${sparkle_SOURCE_DIR}"
     )
     set(WOBBLEPAINT_DEPLOY_PLUGIN_OPTIONS NO_PLUGINS)
     set(
@@ -204,18 +327,25 @@ if(APPLE)
         "${WOBBLEPAINT_COCOA_PLUGIN}"
         "${WOBBLEPAINT_OFFSCREEN_PLUGIN}"
         DESTINATION
-        "WobblePaint.app/Contents/PlugIns/platforms"
+        "WagleWaglePaint.app/Contents/PlugIns/platforms"
     )
     install(
         FILES
         "${WOBBLEPAINT_MAC_STYLE_PLUGIN}"
         DESTINATION
-        "WobblePaint.app/Contents/PlugIns/styles"
+        "WagleWaglePaint.app/Contents/PlugIns/styles"
+    )
+    install(
+        DIRECTORY
+        "${sparkle_SOURCE_DIR}/Sparkle.framework"
+        DESTINATION
+        "WagleWaglePaint.app/Contents/Frameworks"
+        USE_SOURCE_PERMISSIONS
     )
 endif()
 
 qt_generate_deploy_app_script(
-    TARGET WobblePaint
+    TARGET WagleWaglePaint
     OUTPUT_SCRIPT wobblepaint_deploy_script
     DEPLOY_TOOL_OPTIONS ${WOBBLEPAINT_DEPLOY_TOOL_OPTIONS}
     ${WOBBLEPAINT_DEPLOY_PLUGIN_OPTIONS}
@@ -257,48 +387,3 @@ if(BUILD_TESTING)
         )
     endif()
 endif()
-
-set(CPACK_PACKAGE_NAME "WobblePaint")
-set(CPACK_PACKAGE_VENDOR "WobblePaint")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Animated drawing tool")
-set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/nyattic/WobblePaint")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "WobblePaint")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_VERBATIM_VARIABLES TRUE)
-if(APPLE)
-    set(CPACK_GENERATOR "DragNDrop")
-    set(
-        CPACK_PACKAGE_FILE_NAME
-        "WobblePaint-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}"
-    )
-elseif(WIN32)
-    set(CPACK_GENERATOR "NSIS")
-    set(
-        CPACK_PACKAGE_FILE_NAME
-        "WobblePaint-${PROJECT_VERSION}-Windows-x64-Setup"
-    )
-    set(CPACK_PACKAGE_EXECUTABLES "WobblePaint" "WobblePaint")
-    set(CPACK_CREATE_DESKTOP_LINKS "WobblePaint")
-    set(CPACK_NSIS_DISPLAY_NAME "WobblePaint")
-    set(CPACK_NSIS_PACKAGE_NAME "WobblePaint")
-    set(CPACK_NSIS_EXECUTABLES_DIRECTORY "bin")
-    set(
-        CPACK_NSIS_INSTALLED_ICON_NAME
-        "bin\\\\WobblePaint.exe"
-    )
-    set(
-        CPACK_NSIS_MUI_ICON
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/WobblePaint.ico"
-    )
-    set(
-        CPACK_NSIS_MUI_UNIICON
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/WobblePaint.ico"
-    )
-    set(CPACK_NSIS_MUI_FINISHPAGE_RUN "WobblePaint.exe")
-    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
-    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/nyattic/WobblePaint")
-    set(CPACK_NSIS_HELP_LINK "https://github.com/nyattic/WobblePaint/issues")
-endif()
-include(CPack)

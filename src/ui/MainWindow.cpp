@@ -313,6 +313,11 @@ void MainWindow::createActions()
         dialog.exec();
     });
 
+    auto *checkForUpdatesAction =
+        new QAction(tr("Check for &Updates…"), this);
+    checkForUpdatesAction->setObjectName(
+        QStringLiteral("checkForUpdatesAction"));
+
     QAction *undoAction = m_controller.undoStack()->createUndoAction(this);
     undoAction->setText(tr("&Undo"));
     undoAction->setObjectName(QStringLiteral("undoAction"));
@@ -421,6 +426,7 @@ void MainWindow::createActions()
     addAction(clearLayerAction);
     addAction(fitAction);
     addAction(m_playAction);
+    addAction(checkForUpdatesAction);
 }
 
 void MainWindow::createMenus()
@@ -457,6 +463,11 @@ void MainWindow::createMenus()
     toolMenu->addAction(m_lassoAction);
     toolMenu->addAction(m_wandAction);
     toolMenu->addAction(m_bucketAction);
+
+    QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
+    helpMenu->addAction(
+        findChild<QAction *>(
+            QStringLiteral("checkForUpdatesAction")));
 }
 
 void MainWindow::createToolBars()
@@ -627,7 +638,7 @@ void MainWindow::updateWindowTitle()
     const QString name = m_currentFilePath.isEmpty()
         ? tr("Untitled")
         : QFileInfo(m_currentFilePath).fileName();
-    setWindowTitle(tr("%1[*] — WobblePaint").arg(name));
+    setWindowTitle(tr("%1[*] — WagleWaglePaint").arg(name));
     setWindowFilePath(m_currentFilePath);
 }
 
@@ -699,7 +710,7 @@ bool MainWindow::saveAs()
         this,
         tr("Save project"),
         saveDialogStartPath(QStringLiteral("wobble")),
-        tr("WobblePaint projects (*.wobble)"));
+        tr("WagleWaglePaint projects (*.wobble)"));
     if (selected.isEmpty()) {
         return false;
     }
@@ -750,7 +761,7 @@ void MainWindow::chooseOpenFile()
         this,
         tr("Open project"),
         QString(),
-        tr("WobblePaint projects (*.wobble);;All files (*)"));
+        tr("WagleWaglePaint projects (*.wobble);;All files (*)"));
     if (!filePath.isEmpty()) {
         openFile(filePath);
     }

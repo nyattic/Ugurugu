@@ -97,6 +97,39 @@ private slots:
         }
     }
 
+    void rendersCrispPixelEdges()
+    {
+        Document document = Document::createDefault(QSize(64, 64));
+        document.wobbleAmount = 0.0;
+        const QColor strokeColor(255, 120, 120);
+        document.layers.first().strokes.append(makeStroke(
+            StrokeMode::Paint,
+            strokeColor,
+            3.0,
+            45,
+            {
+                QPointF(7.25, 51.75),
+                QPointF(22.5, 11.25),
+                QPointF(55.75, 44.5)
+            }));
+
+        const QImage image = RenderEngine::render(document, 0);
+        QVERIFY(!image.isNull());
+        int paintedPixels = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor pixel = image.pixelColor(x, y);
+                QVERIFY(
+                    pixel == document.background
+                    || pixel == strokeColor);
+                if (pixel == strokeColor) {
+                    ++paintedPixels;
+                }
+            }
+        }
+        QVERIFY(paintedPixels > 0);
+    }
+
     void rejectsUnallocatableCanvas()
     {
         Document document = Document::createDefault(QSize(

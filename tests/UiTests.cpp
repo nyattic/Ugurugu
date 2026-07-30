@@ -5,6 +5,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QKeySequenceEdit>
@@ -118,11 +119,17 @@ private slots:
 
         QAction *settingsAction =
             window.findChild<QAction *>(QStringLiteral("settingsAction"));
+        QAction *checkForUpdatesAction =
+            window.findChild<QAction *>(
+                QStringLiteral("checkForUpdatesAction"));
         QToolButton *settingsButton =
             window.findChild<QToolButton *>(QStringLiteral("settingsButton"));
         QVERIFY(settingsAction);
+        QVERIFY(checkForUpdatesAction);
         QVERIFY(settingsButton);
         QCOMPARE(settingsButton->defaultAction(), settingsAction);
+        QVERIFY(window.windowTitle().contains(
+            QStringLiteral("WagleWaglePaint")));
     }
 
     void editsAndRestoresShortcuts()
@@ -130,15 +137,19 @@ private slots:
         const QString brushKey = QStringLiteral("shortcuts/brushAction");
         const QString eraserKey = QStringLiteral("shortcuts/eraserAction");
         const QString folderKey = QStringLiteral("files/defaultSaveFolder");
+        const QString languageKey =
+            QStringLiteral("appearance/language");
         SettingValueGuard brushGuard(brushKey);
         SettingValueGuard eraserGuard(eraserKey);
         SettingValueGuard folderGuard(folderKey);
+        SettingValueGuard languageGuard(languageKey);
         QTemporaryDir saveFolder;
         QVERIFY(saveFolder.isValid());
         QSettings settings;
         settings.remove(brushKey);
         settings.remove(eraserKey);
         settings.setValue(folderKey, saveFolder.path());
+        settings.remove(languageKey);
 
         QAction brushAction(QStringLiteral("Brush"));
         brushAction.setObjectName(QStringLiteral("brushAction"));
@@ -159,10 +170,19 @@ private slots:
         QKeySequenceEdit *brushEditor =
             dialog.findChild<QKeySequenceEdit *>(
                 QStringLiteral("brushActionShortcutEdit"));
+        QComboBox *languageCombo =
+            dialog.findChild<QComboBox *>(
+                QStringLiteral("languageCombo"));
         QVERIFY(folderEdit);
         QVERIFY(brushEditor);
+        QVERIFY(languageCombo);
         QCOMPARE(folderEdit->text(), saveFolder.path());
         QCOMPARE(SettingsDialog::defaultSaveFolder(), saveFolder.path());
+        QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("system"));
+
+        languageCombo->setCurrentIndex(
+            languageCombo->findData(QStringLiteral("ko")));
+        QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("ko"));
 
         brushEditor->setKeySequence(QKeySequence(QStringLiteral("V")));
         QTRY_COMPARE(
@@ -192,9 +212,11 @@ private slots:
             QKeySequence(QStringLiteral("B")));
         QVERIFY(!settings.contains(brushKey));
         QVERIFY(!settings.contains(folderKey));
+        QVERIFY(!settings.contains(languageKey));
         QCOMPARE(
             folderEdit->text(),
             SettingsDialog::defaultSaveFolder());
+        QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("system"));
     }
 
     void selectionParticipatesInUndoHistory()

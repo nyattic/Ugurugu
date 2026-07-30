@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.hpp"
 
 #include <QAction>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -19,6 +20,7 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <utility>
 
 namespace wobble {
@@ -29,6 +31,8 @@ const QString animateWhileDrawingKey =
     QStringLiteral("canvas/animateWhileDrawing");
 const QString defaultSaveFolderKey =
     QStringLiteral("files/defaultSaveFolder");
+const QString uiLanguageKey =
+    QStringLiteral("appearance/language");
 
 QString systemDefaultSaveFolder()
 {
@@ -83,6 +87,17 @@ QString SettingsDialog::defaultSaveFolder()
         : systemDefaultSaveFolder();
 }
 
+QString SettingsDialog::uiLanguage()
+{
+    const QString language =
+        QSettings().value(uiLanguageKey, QStringLiteral("system")).toString();
+    if (language == QStringLiteral("en")
+        || language == QStringLiteral("ko")) {
+        return language;
+    }
+    return QStringLiteral("system");
+}
+
 QKeySequence SettingsDialog::shortcutForAction(
     const QString &actionName,
     const QKeySequence &defaultShortcut)
@@ -116,6 +131,35 @@ SettingsDialog::SettingsDialog(
 
     auto *tabs = new QTabWidget(this);
     layout->addWidget(tabs);
+
+    auto *generalTab = new QWidget(tabs);
+    auto *generalLayout = new QFormLayout(generalTab);
+    generalLayout->setContentsMargins(14, 14, 14, 14);
+    generalLayout->setHorizontalSpacing(18);
+    generalLayout->setVerticalSpacing(10);
+
+    m_languageCombo = new QComboBox(generalTab);
+    m_languageCombo->setObjectName(QStringLiteral("languageCombo"));
+    m_languageCombo->addItem(
+        tr("System default"),
+        QStringLiteral("system"));
+    m_languageCombo->addItem(
+        QStringLiteral("English"),
+        QStringLiteral("en"));
+    m_languageCombo->addItem(
+        QStringLiteral("한국어"),
+        QStringLiteral("ko"));
+    const int languageIndex =
+        m_languageCombo->findData(uiLanguage());
+    m_languageCombo->setCurrentIndex(std::max(0, languageIndex));
+    generalLayout->addRow(tr("Language"), m_languageCombo);
+
+    auto *restartLabel = new QLabel(
+        tr("Restart WagleWaglePaint to apply language changes."),
+        generalTab);
+    restartLabel->setWordWrap(true);
+    generalLayout->addRow(QString(), restartLabel);
+    tabs->addTab(generalTab, tr("General"));
 
     auto *drawingTab = new QWidget(tabs);
     auto *drawingLayout = new QVBoxLayout(drawingTab);
@@ -260,6 +304,20 @@ SettingsDialog::SettingsDialog(
             settings.setValue(animateWhileDrawingKey, keepWobbling);
             emit animateWhileDrawingChanged(keepWobbling);
         });
+    connect(
+        m_languageCombo,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this](int index) {
+            QSettings settings;
+            const QString language =
+                m_languageCombo->itemData(index).toString();
+            if (language == QStringLiteral("system")) {
+                settings.remove(uiLanguageKey);
+            } else {
+                settings.setValue(uiLanguageKey, language);
+            }
+        });
 
     resize(520, 520);
 }
@@ -345,6 +403,12 @@ void SettingsDialog::restoreDefaults()
     }
     settings.remove(animateWhileDrawingKey);
     emit animateWhileDrawingChanged(false);
+    {
+        const QSignalBlocker languageBlocker(m_languageCombo);
+        m_languageCombo->setCurrentIndex(
+            m_languageCombo->findData(QStringLiteral("system")));
+    }
+    settings.remove(uiLanguageKey);
     resetDefaultSaveFolder();
     m_shortcutMessage->clear();
 }

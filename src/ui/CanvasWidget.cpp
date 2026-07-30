@@ -313,7 +313,7 @@ void CanvasWidget::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.fillRect(rect(), Theme::canvasBackground());
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
     const Document &document = m_controller->document();
     const QTransform transform = documentTransform();

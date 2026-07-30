@@ -51,7 +51,8 @@ void Logging::initialize()
     const QString directory =
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(directory);
-    currentLogFilePath = QDir(directory).filePath(QStringLiteral("WobblePaint.log"));
+    currentLogFilePath =
+        QDir(directory).filePath(QStringLiteral("WagleWaglePaint.log"));
 
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(
@@ -76,7 +77,7 @@ void Logging::initialize()
     }
 
     auto logger = std::make_shared<spdlog::logger>(
-        "wobblepaint",
+        "waglewaglepaint",
         sinks.begin(),
         sinks.end());
     logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
