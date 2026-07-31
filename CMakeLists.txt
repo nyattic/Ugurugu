@@ -10,7 +10,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     )
 endif()
 
-project(WagleWaglePaint VERSION 0.4.0 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.5.0 LANGUAGES CXX)
 
 include(FetchContent)
 if(WIN32)
