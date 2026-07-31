@@ -264,7 +264,11 @@ elseif(WIN32)
     )
 endif()
 
-qt_add_translation(WOBBLEPAINT_QM_FILES i18n/wobblepaint_ko.ts)
+qt_add_translation(
+    WOBBLEPAINT_QM_FILES
+    i18n/wobblepaint_ko.ts
+    i18n/wobblepaint_ja.ts
+)
 qt_add_resources(WagleWaglePaint "wobblepaint_translations"
     PREFIX "/i18n"
     BASE "${CMAKE_CURRENT_BINARY_DIR}"

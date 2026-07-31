@@ -74,7 +74,7 @@ necessary.
 - `.wagle` project files with undo and redo
 - Automatic recovery of unsaved work after an interrupted session
 - Persistent recent colors and a configurable default save folder
-- Customizable shortcuts and English or Korean interface
+- Customizable shortcuts and an English, Korean, or Japanese interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
 
 ## Controls

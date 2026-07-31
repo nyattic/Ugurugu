@@ -92,7 +92,8 @@ QString SettingsDialog::uiLanguage()
     const QString language =
         QSettings().value(uiLanguageKey, QStringLiteral("system")).toString();
     if (language == QStringLiteral("en")
-        || language == QStringLiteral("ko")) {
+        || language == QStringLiteral("ko")
+        || language == QStringLiteral("ja")) {
         return language;
     }
     return QStringLiteral("system");
@@ -149,6 +150,9 @@ SettingsDialog::SettingsDialog(
     m_languageCombo->addItem(
         QStringLiteral("한국어"),
         QStringLiteral("ko"));
+    m_languageCombo->addItem(
+        QStringLiteral("日本語"),
+        QStringLiteral("ja"));
     const int languageIndex =
         m_languageCombo->findData(uiLanguage());
     m_languageCombo->setCurrentIndex(std::max(0, languageIndex));
