@@ -68,6 +68,24 @@ private slots:
         QVERIFY(first == second);
     }
 
+    void rendersTheBackgroundWithoutLayers()
+    {
+        Document document = Document::createDefault(QSize(32, 24));
+        document.background = QColor(12, 34, 56);
+        document.layers.clear();
+        document.activeLayerId = {};
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QVERIFY(!rendered.isNull());
+        QCOMPARE(rendered.size(), document.size);
+        QCOMPARE(rendered.pixelColor(0, 0), document.background);
+        QCOMPARE(
+            rendered.pixelColor(
+                rendered.width() - 1,
+                rendered.height() - 1),
+            document.background);
+    }
+
     void rendersScaledPreview()
     {
         const Document document = animatedDocument();

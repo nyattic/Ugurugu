@@ -9,7 +9,7 @@ namespace wobble {
 class UpdateController::Impl
 {
 public:
-    void start()
+    void start(bool checkInBackground)
     {
         if (controller) {
             return;
@@ -20,6 +20,13 @@ public:
             updaterDelegate:nil
             userDriverDelegate:nil
         ];
+        SPUUpdater *updater = controller.updater;
+        if (checkInBackground && updater.automaticallyChecksForUpdates) {
+            // A scheduled check may still be hours away when a release is
+            // published. Sparkle permits one background check immediately
+            // after the updater starts.
+            [updater checkForUpdatesInBackground];
+        }
     }
 
     SPUStandardUpdaterController *controller = nil;
@@ -34,7 +41,7 @@ UpdateController::UpdateController(QWidget *, QObject *parent)
     , m_impl(std::make_unique<Impl>())
 {
     QTimer::singleShot(0, this, [this]() {
-        m_impl->start();
+        m_impl->start(true);
     });
 }
 
@@ -42,7 +49,7 @@ UpdateController::~UpdateController() = default;
 
 void UpdateController::checkForUpdates()
 {
-    m_impl->start();
+    m_impl->start(false);
     [m_impl->controller checkForUpdates:nil];
 }
 

@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -310,6 +311,32 @@ SettingsDialog::SettingsDialog(
         m_shortcutMessage->fontMetrics().lineSpacing());
     shortcutsLayout->addWidget(m_shortcutMessage);
     tabs->addTab(shortcutsTab, tr("Shortcuts"));
+
+    auto *aboutTab = new QWidget(tabs);
+    aboutTab->setObjectName(QStringLiteral("aboutTab"));
+    auto *aboutLayout = new QVBoxLayout(aboutTab);
+    aboutLayout->setContentsMargins(14, 14, 14, 14);
+    aboutLayout->setSpacing(8);
+
+    auto *applicationNameLabel = new QLabel(
+        QStringLiteral("WagleWaglePaint"),
+        aboutTab);
+    QFont applicationNameFont = applicationNameLabel->font();
+    applicationNameFont.setBold(true);
+    applicationNameFont.setPointSize(
+        applicationNameFont.pointSize() + 3);
+    applicationNameLabel->setFont(applicationNameFont);
+    aboutLayout->addWidget(applicationNameLabel);
+
+    auto *versionLabel = new QLabel(
+        tr("Version %1").arg(QApplication::applicationVersion()),
+        aboutTab);
+    versionLabel->setObjectName(
+        QStringLiteral("applicationVersionLabel"));
+    versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    aboutLayout->addWidget(versionLabel);
+    aboutLayout->addStretch(1);
+    tabs->addTab(aboutTab, tr("About"));
 
     auto *buttons = new QDialogButtonBox(
         QDialogButtonBox::RestoreDefaults | QDialogButtonBox::Close,

@@ -153,6 +153,10 @@
             <translation>ブラシサイズ</translation>
         </message>
         <message>
+            <source>Eraser size</source>
+            <translation>消しゴムサイズ</translation>
+        </message>
+        <message>
             <source> px</source>
             <translation> px</translation>
         </message>
@@ -166,6 +170,10 @@
         <message>
             <source>The active layer is hidden. Make it visible to draw.</source>
             <translation>アクティブレイヤーが非表示です。描画するには表示してください。</translation>
+        </message>
+        <message>
+            <source>Add a layer before using this tool.</source>
+            <translation>このツールを使う前にレイヤーを追加してください。</translation>
         </message>
         <message>
             <source>The active layer opacity is 0%. Increase it to draw.</source>
@@ -792,6 +800,14 @@
         <source>Wobble animation</source>
         <translation>ウォブルアニメーション</translation>
     </message>
+    <message>
+        <source>Version %1</source>
+        <translation>バージョン %1</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <translation>情報</translation>
+    </message>
 </context>
     <context>
         <name>wobble::TimelineBar</name>
@@ -934,6 +950,10 @@
             <translation>ストロークに無効なフィールドが含まれています。</translation>
         </message>
         <message>
+            <source>A stroke contains a legacy clip mask in a current project.</source>
+            <translation>現在のプロジェクトのストロークに旧形式のクリップマスクが含まれています。</translation>
+        </message>
+        <message>
             <source>A stroke entry is not an object.</source>
             <translation>ストロークの項目がオブジェクトではありません。</translation>
         </message>
@@ -952,6 +972,10 @@
         <message>
             <source>A stroke has an invalid clip mask.</source>
             <translation>ストロークのクリップマスクが無効です。</translation>
+        </message>
+        <message>
+            <source>A stroke has an invalid clip mask reference.</source>
+            <translation>ストロークのクリップマスク参照が無効です。</translation>
         </message>
         <message>
             <source>A stroke has an invalid color.</source>
@@ -976,6 +1000,10 @@
         <message>
             <source>A stroke has invalid brush settings.</source>
             <translation>ストロークのブラシ設定が無効です。</translation>
+        </message>
+        <message>
+            <source>A stroke references a missing clip mask.</source>
+            <translation>ストロークが存在しないクリップマスクを参照しています。</translation>
         </message>
         <message>
             <source>The active layer ID is invalid.</source>
@@ -1016,6 +1044,18 @@
         <message>
             <source>The project contains invalid stroke IDs.</source>
             <translation>プロジェクトに無効なストロークIDが含まれています。</translation>
+        </message>
+        <message>
+            <source>The project contains an invalid selection mask.</source>
+            <translation>プロジェクトに無効な選択マスクが含まれています。</translation>
+        </message>
+        <message>
+            <source>The project contains an invalid selection mask table.</source>
+            <translation>プロジェクトの選択マスクテーブルが無効です。</translation>
+        </message>
+        <message>
+            <source>The project contains too many selection masks.</source>
+            <translation>プロジェクトの選択マスクが多すぎます。</translation>
         </message>
         <message>
             <source>The project contains too many points.</source>

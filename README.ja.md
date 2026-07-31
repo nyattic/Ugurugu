@@ -130,6 +130,8 @@ Windows SmartScreenやmacOS Gatekeeperが警告を表示することが
   を指定します。
 - **ショートカット:** すべてのショートカットを好きなキーに変更
   でき、必要ならデフォルトに戻せます。
+- **情報:** 現在インストールされているWagleWaglePaintのバージョン
+  を確認します。
 
 ## 自動アップデート
 
@@ -146,4 +148,7 @@ macOSではSparkle、WindowsではVelopackを通じてダウンロード・
 
 ## ライセンス
 
-[GPL-3.0](LICENSE)
+WagleWaglePaintは[GNU General Public License v3.0](LICENSE)のもとで
+配布されています。
+
+Copyright (C) 2026 Nyabi (nyattic)

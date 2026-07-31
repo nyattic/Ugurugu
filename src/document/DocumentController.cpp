@@ -676,6 +676,11 @@ bool DocumentController::transformStrokes(
         || widthScale <= 0.0) {
         return false;
     }
+    bool invertible = false;
+    const QTransform inverse = transform.inverted(&invertible);
+    if (!invertible) {
+        return false;
+    }
 
     const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
     if (!selectionMask.isNull()) {
@@ -684,30 +689,143 @@ bool DocumentController::transformStrokes(
             return false;
         }
 
-        QVector<Stroke> before = layer->strokes;
+        const QVector<Stroke> before = layer->strokes;
         QVector<Stroke> after;
         after.reserve(before.size() + requested.size());
         QVector<QUuid> transformedIds;
+        QSet<qint64> distinctAfterMaskKeys;
+        quint64 distinctAfterMaskBytes = 0;
+        for (const Layer &otherLayer : m_document.layers) {
+            if (otherLayer.id == layerId) {
+                continue;
+            }
+            for (const Stroke &otherStroke : otherLayer.strokes) {
+                if (otherStroke.clipMask.isNull()) {
+                    continue;
+                }
+                const qint64 key = otherStroke.clipMask.cacheKey();
+                if (distinctAfterMaskKeys.contains(key)) {
+                    continue;
+                }
+                const quint64 bytes =
+                    otherStroke.clipMask.sizeInBytes();
+                if (bytes
+                    > DocumentLimits::maximumDistinctClipMaskBytes
+                        - distinctAfterMaskBytes) {
+                    return false;
+                }
+                distinctAfterMaskKeys.insert(key);
+                distinctAfterMaskBytes += bytes;
+            }
+        }
+        const qsizetype currentStrokeCount =
+            totalStrokeCount(m_document);
+        const qsizetype currentPointCount =
+            totalPointCount(m_document);
+        const qsizetype currentLayerPointCount =
+            layerPointCount(*layer);
+        if (currentStrokeCount > DocumentLimits::maximumTotalStrokes
+            || currentPointCount > DocumentLimits::maximumTotalPoints
+            || currentLayerPointCount > currentPointCount) {
+            return false;
+        }
+        const qsizetype strokesOutsideLayer =
+            currentStrokeCount - before.size();
+        const qsizetype pointsOutsideLayer =
+            currentPointCount - currentLayerPointCount;
+        qsizetype afterPointCount = 0;
+        auto appendStroke = [
+            &after,
+            &afterPointCount,
+            &distinctAfterMaskKeys,
+            &distinctAfterMaskBytes,
+            strokesOutsideLayer,
+            pointsOutsideLayer
+        ](Stroke stroke) {
+            if (after.size()
+                    >= DocumentLimits::maximumStrokesPerLayer
+                || strokesOutsideLayer + after.size()
+                    >= DocumentLimits::maximumTotalStrokes
+                || stroke.points.size()
+                    > DocumentLimits::maximumTotalPoints
+                        - pointsOutsideLayer
+                        - afterPointCount) {
+                return false;
+            }
+            if (!stroke.clipMask.isNull()) {
+                const qint64 key = stroke.clipMask.cacheKey();
+                if (!distinctAfterMaskKeys.contains(key)) {
+                    const quint64 bytes = stroke.clipMask.sizeInBytes();
+                    if (bytes
+                        > DocumentLimits::maximumDistinctClipMaskBytes
+                            - distinctAfterMaskBytes) {
+                        return false;
+                    }
+                    distinctAfterMaskKeys.insert(key);
+                    distinctAfterMaskBytes += bytes;
+                }
+            }
+            afterPointCount += stroke.points.size();
+            after.append(std::move(stroke));
+            return true;
+        };
+        struct PartialMaskTransform {
+            QImage selected;
+            QImage remainder;
+            QImage transformed;
+            bool hasSelectedContent = false;
+            bool transformedReady = false;
+        };
+        QHash<qint64, PartialMaskTransform> partialMasks;
         for (const Stroke &stroke : before) {
             if (!requested.contains(stroke.id)) {
-                after.append(stroke);
+                if (!appendStroke(stroke)) {
+                    return false;
+                }
                 continue;
             }
 
-            const QImage selectedMask =
-                maskedPart(stroke.clipMask, selectionMask, true);
-            if (!maskHasContent(selectedMask)) {
-                after.append(stroke);
+            const qint64 sourceMaskKey =
+                stroke.clipMask.isNull()
+                ? 0
+                : stroke.clipMask.cacheKey();
+            auto masks = partialMasks.find(sourceMaskKey);
+            if (masks == partialMasks.end()) {
+                PartialMaskTransform parts;
+                parts.selected =
+                    maskedPart(stroke.clipMask, selectionMask, true);
+                parts.hasSelectedContent =
+                    maskHasContent(parts.selected);
+                if (!parts.hasSelectedContent) {
+                    parts.selected = {};
+                } else {
+                    parts.remainder =
+                        maskedPart(
+                            stroke.clipMask,
+                            selectionMask,
+                            false);
+                    if (!maskHasContent(parts.remainder)) {
+                        parts.remainder = {};
+                    }
+                }
+                masks = partialMasks.insert(
+                    sourceMaskKey,
+                    std::move(parts));
+            }
+            if (!masks->hasSelectedContent) {
+                if (!appendStroke(stroke)) {
+                    return false;
+                }
                 continue;
             }
 
-            const QImage remainderMask =
-                maskedPart(stroke.clipMask, selectionMask, false);
-            if (maskHasContent(remainderMask)) {
+            if (!masks->remainder.isNull()) {
                 Stroke remainder = stroke;
                 remainder.id = QUuid::createUuid();
-                remainder.clipMask = remainderMask;
-                after.append(std::move(remainder));
+                remainder.clipMask = masks->remainder;
+                if (!appendStroke(std::move(remainder))) {
+                    return false;
+                }
             }
 
             Stroke transformed = stroke;
@@ -731,31 +849,25 @@ bool DocumentController::transformStrokes(
                 transformed.width * widthScale,
                 DocumentLimits::minimumStrokeWidth,
                 DocumentLimits::maximumStrokeWidth);
-            transformed.clipMask = transformedMask(
-                selectedMask,
-                m_document.size,
-                transform);
-            if (transformed.clipMask.isNull()) {
+            if (!masks->transformedReady) {
+                masks->transformed = transformedMask(
+                    masks->selected,
+                    m_document.size,
+                    transform);
+                masks->transformedReady = true;
+                masks->selected = {};
+                if (masks->transformed.isNull()) {
+                    return false;
+                }
+            }
+            transformed.clipMask = masks->transformed;
+            transformedIds.append(transformed.id);
+            if (!appendStroke(std::move(transformed))) {
                 return false;
             }
-            transformedIds.append(transformed.id);
-            after.append(std::move(transformed));
         }
 
-        if (transformedIds.isEmpty()
-            || after.size() > DocumentLimits::maximumStrokesPerLayer) {
-            return false;
-        }
-        Document transformedDocument = m_document;
-        if (Layer *target = transformedDocument.layer(layerId)) {
-            target->strokes = after;
-        }
-        if (totalStrokeCount(transformedDocument)
-                > DocumentLimits::maximumTotalStrokes
-            || totalPointCount(transformedDocument)
-                > DocumentLimits::maximumTotalPoints
-            || distinctClipMaskBytes(transformedDocument)
-                > DocumentLimits::maximumDistinctClipMaskBytes) {
+        if (transformedIds.isEmpty()) {
             return false;
         }
 
@@ -774,11 +886,6 @@ bool DocumentController::transformStrokes(
                 emit layerThumbnailChanged(layerId);
             }
         };
-        bool invertible = false;
-        const QTransform inverse = transform.inverted(&invertible);
-        if (!invertible) {
-            return false;
-        }
         pushDocumentCommand(
             text,
             [replace, after, transform]() { replace(after, transform); },
@@ -861,11 +968,6 @@ bool DocumentController::transformStrokes(
             emit layerThumbnailChanged(layerId);
         }
     };
-    bool invertible = false;
-    const QTransform inverse = transform.inverted(&invertible);
-    if (!invertible) {
-        return false;
-    }
     pushDocumentCommand(
         text,
         [replace, after, transform]() { replace(after, transform); },
@@ -1027,13 +1129,16 @@ void DocumentController::duplicateLayer(const QUuid &id)
 void DocumentController::removeLayer(const QUuid &id)
 {
     const int index = m_document.layerIndex(id);
-    if (index < 0 || m_document.layers.size() <= 1) {
+    if (index < 0) {
         return;
     }
     const Layer removedLayer = m_document.layers[index];
     const QUuid previousActive = m_document.activeLayerId;
-    const int nextIndex = index > 0 ? index - 1 : 1;
-    const QUuid nextActive = m_document.layers[nextIndex].id;
+    QUuid nextActive;
+    if (m_document.layers.size() > 1) {
+        const int nextIndex = index > 0 ? index - 1 : 1;
+        nextActive = m_document.layers[nextIndex].id;
+    }
     auto redoAction = [this, id, nextActive]() {
         const int currentIndex = m_document.layerIndex(id);
         if (currentIndex >= 0) {
@@ -1318,9 +1423,8 @@ void DocumentController::ensureActiveLayer()
         return;
     }
     if (m_document.layers.isEmpty()) {
-        Layer layer;
-        layer.name = QStringLiteral("Layer 1");
-        m_document.layers.append(layer);
+        m_document.activeLayerId = {};
+        return;
     }
     m_document.activeLayerId = m_document.layers.constLast().id;
 }

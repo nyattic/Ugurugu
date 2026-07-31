@@ -103,7 +103,11 @@ BrushPopoverPanel::BrushPopoverPanel(
     layout->addLayout(tabRow);
     layout->addWidget(m_stack);
     layout->addWidget(
-        new BrushSizeRow(canvas, QStringLiteral("brushSize"), this));
+        new BrushSizeRow(
+            canvas,
+            BrushSizeRow::Target::Brush,
+            QStringLiteral("brushSize"),
+            this));
 
     auto *roughnessRow = new QWidget(this);
     auto *roughnessLayout = new QHBoxLayout(roughnessRow);

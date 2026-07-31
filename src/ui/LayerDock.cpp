@@ -390,8 +390,7 @@ void LayerDock::updateControls()
 
     m_addButton->setEnabled(m_controller && hasCapacity);
     m_duplicateButton->setEnabled(hasLayer && hasCapacity);
-    m_deleteButton->setEnabled(
-        hasLayer && document->layers.size() > 1);
+    m_deleteButton->setEnabled(hasLayer);
     m_moveUpButton->setEnabled(
         hasLayer && index < document->layers.size() - 1);
     m_moveDownButton->setEnabled(hasLayer && index > 0);

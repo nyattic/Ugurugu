@@ -39,6 +39,7 @@ public:
     Tool tool() const;
     QColor brushColor() const;
     qreal brushWidth() const;
+    qreal eraserWidth() const;
     qreal brushRoughness() const;
     bool brushAntialiasing() const;
     QString brushPresetId() const;
@@ -57,6 +58,7 @@ public slots:
     void setTool(Tool tool);
     void setBrushColor(const QColor &color);
     void setBrushWidth(qreal width);
+    void setEraserWidth(qreal width);
     void setBrushRoughness(qreal roughness);
     void setBrushAntialiasing(bool antialiasing);
     void setWobbleAnimationEnabled(bool enabled);
@@ -71,11 +73,13 @@ public slots:
     void toggleCanvasMirrored();
     void setCurrentFrame(int frame);
     void setPanModifierActive(bool active);
+    void cancelActiveInteraction();
 
 signals:
     void toolChanged(Tool tool);
     void brushColorChanged(const QColor &color);
     void brushWidthChanged(qreal width);
+    void eraserWidthChanged(qreal width);
     void brushRoughnessChanged(qreal roughness);
     void brushAntialiasingChanged(bool antialiasing);
     void brushPresetChanged(const QString &presetId);
@@ -88,6 +92,7 @@ signals:
     void selectionTransformAvailabilityChanged(bool available);
 
 protected:
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
@@ -171,6 +176,7 @@ private:
     void beginSelectionMove(const QPointF &documentPosition);
     void continueSelectionMove(const QPointF &documentPosition);
     void commitSelectionMove();
+    void cancelSelectionMove();
     void clearSelection();
     void pruneSelection();
     void transformSelectionOverlay(
@@ -199,6 +205,7 @@ private:
     Tool m_tool = Tool::Brush;
     QColor m_brushColor = Qt::black;
     qreal m_brushWidth = 6.0;
+    qreal m_eraserWidth = 6.0;
     qreal m_brushRoughness = 1.0;
     bool m_brushAntialiasing = false;
     bool m_wobbleAnimationEnabled = true;
@@ -224,6 +231,7 @@ private:
     bool m_panning = false;
     bool m_spacePressed = false;
     bool m_tabletSequence = false;
+    bool m_tabletPointerEraser = false;
     bool m_zoomDragging = false;
     bool m_pickingColor = false;
     QPointF m_zoomDragStart;

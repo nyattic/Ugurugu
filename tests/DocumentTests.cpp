@@ -8,6 +8,9 @@
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -18,6 +21,7 @@ namespace wobble {
 
 int runRenderEngineTests(int argc, char **argv);
 int runGifWriterTests(int argc, char **argv);
+int runMaskRegressionTests(int argc, char **argv);
 int runReleaseNotesTests(int argc, char **argv);
 int runUiTests(int argc, char **argv);
 
@@ -227,6 +231,61 @@ private slots:
         QCOMPARE(controller.document().layers.size(), 2);
         QCOMPARE(controller.document().activeLayerId, addedId);
         QCOMPARE(controller.document().layers.constLast().id, addedId);
+    }
+
+    void supportsDocumentsWithoutLayers()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(256, 256));
+        const Layer originalLayer = controller.document().layers.first();
+
+        controller.removeLayer(originalLayer.id);
+        QVERIFY(controller.document().layers.isEmpty());
+        QVERIFY(controller.document().activeLayerId.isNull());
+        QVERIFY(controller.isModified());
+
+        QString error;
+        const QByteArray serialized =
+            DocumentSerializer::toJson(controller.document());
+        QVERIFY(!serialized.isEmpty());
+        const QJsonObject root =
+            QJsonDocument::fromJson(serialized).object();
+        QVERIFY(root.value(QStringLiteral("activeLayerId")).isNull());
+        const std::optional<Document> loaded =
+            DocumentSerializer::fromJson(serialized, &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        QVERIFY(loaded->layers.isEmpty());
+        QVERIFY(loaded->activeLayerId.isNull());
+
+        DocumentController loadedController;
+        loadedController.loadDocument(*loaded);
+        QVERIFY(loadedController.document().layers.isEmpty());
+        QVERIFY(loadedController.document().activeLayerId.isNull());
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.size(), 1);
+        QCOMPARE(controller.document().layers.first().id, originalLayer.id);
+        QCOMPARE(controller.document().activeLayerId, originalLayer.id);
+
+        controller.undoStack()->redo();
+        QVERIFY(controller.document().layers.isEmpty());
+        QVERIFY(controller.document().activeLayerId.isNull());
+
+        controller.addLayer();
+        QCOMPARE(controller.document().layers.size(), 1);
+        const QUuid addedId = controller.document().activeLayerId;
+        QVERIFY(!addedId.isNull());
+        QCOMPARE(
+            controller.document().layers.first().name,
+            QStringLiteral("Layer 1"));
+
+        controller.undoStack()->undo();
+        QVERIFY(controller.document().layers.isEmpty());
+        QVERIFY(controller.document().activeLayerId.isNull());
+
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().layers.size(), 1);
+        QCOMPARE(controller.document().activeLayerId, addedId);
     }
 
     void activatesAdjacentLayerWhenRemovingFirstLayer()
@@ -897,7 +956,7 @@ private slots:
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version")
             << QByteArrayLiteral(
-                   R"({"schemaVersion":4,"canvas":{"width":10,"height":10},"layers":[{}]})");
+                   R"({"schemaVersion":5,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("unsupported-algorithm")
             << QByteArrayLiteral(
                    R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
@@ -922,6 +981,12 @@ private slots:
         QTest::newRow("invalid-active-layer")
             << QByteArrayLiteral(
                    R"({"schemaVersion":1,"algorithmVersion":1,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"22222222-2222-2222-2222-222222222222","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":true,"opacity":1,"strokes":[]}]})");
+        QTest::newRow("active-layer-without-layers")
+            << QByteArrayLiteral(
+                   R"({"schemaVersion":4,"algorithmVersion":2,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[],"clipMasks":[]})");
+        QTest::newRow("malformed-active-layer-without-layers")
+            << QByteArrayLiteral(
+                   R"({"schemaVersion":4,"algorithmVersion":2,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"garbage","layers":[],"clipMasks":[]})");
         QTest::newRow("outside-point")
             << QByteArrayLiteral(
                    R"({"schemaVersion":1,"algorithmVersion":1,"canvas":{"width":10,"height":10,"background":"#ffffffff"},"animation":{"frames":2,"fps":25,"wobble":1},"activeLayerId":"11111111-1111-1111-1111-111111111111","layers":[{"id":"11111111-1111-1111-1111-111111111111","name":"Layer","visible":true,"opacity":1,"strokes":[{"id":"22222222-2222-2222-2222-222222222222","seed":"1","mode":"paint","color":"#ff000000","width":1,"points":[[11,5,1]]}]}]})");
@@ -955,12 +1020,38 @@ private slots:
 
 int main(int argc, char **argv)
 {
+    QTemporaryDir settingsDirectory;
+    if (!settingsDirectory.isValid()) {
+        qCritical("Could not create an isolated test settings directory.");
+        return 1;
+    }
+
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(
+        QSettings::IniFormat,
+        QSettings::UserScope,
+        settingsDirectory.path());
+    QSettings::setPath(
+        QSettings::IniFormat,
+        QSettings::SystemScope,
+        settingsDirectory.path());
+
     QApplication application(argc, argv);
+    QApplication::setApplicationName(QStringLiteral("WagleWaglePaint"));
+    QApplication::setApplicationDisplayName(
+        QStringLiteral("WagleWaglePaint"));
+    QApplication::setApplicationVersion(
+        QStringLiteral(WAGLEWAGLEPAINT_VERSION));
+    QApplication::setOrganizationName(QStringLiteral("WagleWaglePaint"));
+    QApplication::setOrganizationDomain(
+        QStringLiteral("waglewaglepaint.dev"));
+
     wobble::Theme::apply(application);
     wobble::DocumentTests documentTests;
     int result = QTest::qExec(&documentTests, argc, argv);
     result |= wobble::runRenderEngineTests(argc, argv);
     result |= wobble::runGifWriterTests(argc, argv);
+    result |= wobble::runMaskRegressionTests(argc, argv);
     result |= wobble::runReleaseNotesTests(argc, argv);
     result |= wobble::runUiTests(argc, argv);
     return result;

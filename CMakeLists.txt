@@ -10,7 +10,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     )
 endif()
 
-project(WagleWaglePaint VERSION 0.6.0 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.6.1 LANGUAGES CXX)
 
 include(FetchContent)
 if(WIN32)
@@ -316,6 +316,28 @@ install(TARGETS WagleWaglePaint
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+if(APPLE)
+    set(
+        WOBBLEPAINT_DOCUMENTATION_DESTINATION
+        "WagleWaglePaint.app/Contents/Resources"
+    )
+elseif(WIN32)
+    set(WOBBLEPAINT_DOCUMENTATION_DESTINATION ".")
+else()
+    set(
+        WOBBLEPAINT_DOCUMENTATION_DESTINATION
+        "${CMAKE_INSTALL_DATADIR}/WagleWaglePaint"
+    )
+endif()
+install(
+    FILES
+    LICENSE
+    README.md
+    README.en.md
+    README.ja.md
+    DESTINATION "${WOBBLEPAINT_DOCUMENTATION_DESTINATION}"
+)
+
 if(WIN32)
     install(
         FILES
@@ -351,8 +373,8 @@ if(APPLE)
         REALPATH
     )
     get_filename_component(
-        WOBBLEPAINT_OFFSCREEN_PLUGIN
-        "${WOBBLEPAINT_QT_PLUGIN_ROOT}/platforms/libqoffscreen.dylib"
+        WOBBLEPAINT_JPEG_PLUGIN
+        "${WOBBLEPAINT_QT_PLUGIN_ROOT}/imageformats/libqjpeg.dylib"
         REALPATH
     )
     get_filename_component(
@@ -363,9 +385,14 @@ if(APPLE)
     install(
         FILES
         "${WOBBLEPAINT_COCOA_PLUGIN}"
-        "${WOBBLEPAINT_OFFSCREEN_PLUGIN}"
         DESTINATION
         "WagleWaglePaint.app/Contents/PlugIns/platforms"
+    )
+    install(
+        FILES
+        "${WOBBLEPAINT_JPEG_PLUGIN}"
+        DESTINATION
+        "WagleWaglePaint.app/Contents/PlugIns/imageformats"
     )
     install(
         FILES
@@ -399,6 +426,7 @@ if(BUILD_TESTING)
     qt_add_executable(wobblepaint_tests
         tests/DocumentTests.cpp
         tests/GifWriterTests.cpp
+        tests/MaskRegressionTests.cpp
         tests/ReleaseNotesTests.cpp
         tests/RenderEngineTests.cpp
         tests/UiTests.cpp
@@ -409,6 +437,7 @@ if(BUILD_TESTING)
         wobblepaint_tests
         PRIVATE
         WOBBLEPAINT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        WAGLEWAGLEPAINT_VERSION="${PROJECT_VERSION}"
     )
     wobblepaint_target_defaults(wobblepaint_tests)
     add_test(NAME wobblepaint_tests COMMAND wobblepaint_tests)
@@ -425,4 +454,48 @@ if(BUILD_TESTING)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
         )
     endif()
+
+    if(APPLE)
+        add_executable(
+            wobblepaint_package_smoke
+            tests/PackageSmoke.cpp
+        )
+        target_link_libraries(
+            wobblepaint_package_smoke
+            PRIVATE
+            Qt6::Core
+            Qt6::Gui
+        )
+        set_target_properties(
+            wobblepaint_package_smoke
+            PROPERTIES
+            SKIP_BUILD_RPATH TRUE
+        )
+        wobblepaint_target_defaults(wobblepaint_package_smoke)
+        add_custom_command(
+            TARGET wobblepaint_package_smoke
+            POST_BUILD
+            COMMAND
+            "${CMAKE_COMMAND}"
+            "-DSMOKE_EXECUTABLE=$<TARGET_FILE:wobblepaint_package_smoke>"
+            "-DSMOKE_BUILD_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
+            -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/PreparePackageSmoke.cmake"
+            VERBATIM
+        )
+    endif()
+endif()
+
+if(APPLE)
+    add_executable(
+        wobblepaint_render_release_notes
+        tools/RenderReleaseNotes.cpp
+    )
+    target_link_libraries(
+        wobblepaint_render_release_notes
+        PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    wobblepaint_target_defaults(wobblepaint_render_release_notes)
 endif()

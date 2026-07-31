@@ -184,6 +184,10 @@
         <translation>브러시 크기</translation>
     </message>
     <message>
+        <source>Eraser size</source>
+        <translation>지우개 크기</translation>
+    </message>
+    <message>
         <location filename="../src/ui/BrushSizeRow.cpp" line="47"/>
         <source> px</source>
         <translation> px</translation>
@@ -201,6 +205,10 @@
         <location filename="../src/ui/CanvasWidget.cpp" line="1460"/>
         <source>The active layer is hidden. Make it visible to draw.</source>
         <translation>활성 레이어가 숨겨져 있습니다. 표시한 후 그릴 수 있습니다.</translation>
+    </message>
+    <message>
+        <source>Add a layer before using this tool.</source>
+        <translation>이 도구를 사용하기 전에 레이어를 추가하세요.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="1024"/>
@@ -977,6 +985,14 @@
         <source>Wobble animation</source>
         <translation>와글거림 애니메이션</translation>
     </message>
+    <message>
+        <source>Version %1</source>
+        <translation>버전 %1</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <translation>정보</translation>
+    </message>
 </context>
 <context>
     <name>wobble::TimelineBar</name>
@@ -1143,6 +1159,10 @@
         <translation>스트로크에 잘못된 필드가 있습니다.</translation>
     </message>
     <message>
+        <source>A stroke contains a legacy clip mask in a current project.</source>
+        <translation>현재 프로젝트의 스트로크에 이전 형식의 클립 마스크가 있습니다.</translation>
+    </message>
+    <message>
         <source>A stroke entry is not an object.</source>
         <translation>스트로크 항목이 객체가 아닙니다.</translation>
     </message>
@@ -1161,6 +1181,10 @@
     <message>
         <source>A stroke has an invalid clip mask.</source>
         <translation>스트로크의 클립 마스크가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid clip mask reference.</source>
+        <translation>스트로크의 클립 마스크 참조가 잘못되었습니다.</translation>
     </message>
     <message>
         <source>A stroke has an invalid color.</source>
@@ -1185,6 +1209,10 @@
     <message>
         <source>A stroke has invalid brush settings.</source>
         <translation>스트로크의 브러시 설정이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke references a missing clip mask.</source>
+        <translation>스트로크가 존재하지 않는 클립 마스크를 참조합니다.</translation>
     </message>
     <message>
         <source>The active layer ID is invalid.</source>
@@ -1225,6 +1253,18 @@
     <message>
         <source>The project contains invalid stroke IDs.</source>
         <translation>프로젝트에 잘못된 스트로크 ID가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains an invalid selection mask.</source>
+        <translation>프로젝트에 잘못된 선택 영역 마스크가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains an invalid selection mask table.</source>
+        <translation>프로젝트의 선택 영역 마스크 테이블이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains too many selection masks.</source>
+        <translation>프로젝트에 선택 영역 마스크가 너무 많습니다.</translation>
     </message>
     <message>
         <source>The project contains too many points.</source>

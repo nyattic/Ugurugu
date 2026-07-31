@@ -69,6 +69,7 @@ QImage maskedPart(
     if (result.isNull()) {
         return {};
     }
+    result.fill(0);
     for (int y = 0; y < selection.height(); ++y) {
         const uchar *sourceLine =
             source.isNull() ? nullptr : source.constScanLine(y);

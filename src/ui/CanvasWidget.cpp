@@ -166,6 +166,7 @@ CanvasWidget::CanvasWidget(
     setAttribute(Qt::WA_AcceptTouchEvents, false);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    setTabletTracking(true);
     setCursor(Qt::BlankCursor);
     m_frameCache.setMaxCost(96 * 1024);
     const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
@@ -258,6 +259,11 @@ QColor CanvasWidget::brushColor() const
 qreal CanvasWidget::brushWidth() const
 {
     return m_brushWidth;
+}
+
+qreal CanvasWidget::eraserWidth() const
+{
+    return m_eraserWidth;
 }
 
 qreal CanvasWidget::brushRoughness() const
@@ -431,6 +437,20 @@ void CanvasWidget::setBrushWidth(qreal width)
     update();
 }
 
+void CanvasWidget::setEraserWidth(qreal width)
+{
+    const qreal normalized = std::clamp(
+        width,
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+    if (qFuzzyCompare(m_eraserWidth, normalized)) {
+        return;
+    }
+    m_eraserWidth = normalized;
+    emit eraserWidthChanged(normalized);
+    update();
+}
+
 void CanvasWidget::setBrushRoughness(qreal roughness)
 {
     const qreal normalized = std::clamp(
@@ -579,6 +599,49 @@ void CanvasWidget::setPanModifierActive(bool active)
     update();
 }
 
+void CanvasWidget::cancelActiveInteraction()
+{
+    const bool restoreLassoSelection =
+        m_lassoActive && m_hasSelectionBeforeLasso;
+    const SelectionState selectionBeforeLasso =
+        restoreLassoSelection
+        ? m_selectionBeforeLasso
+        : SelectionState();
+
+    // Focus/proximity loss must never turn a gesture preview into a document
+    // edit. Strokes and selection moves are therefore discarded, while an
+    // unfinished lasso restores the selection that existed before it began.
+    cancelStroke();
+    cancelSelectionMove();
+    cancelLasso();
+    if (restoreLassoSelection) {
+        restoreSelectionState(selectionBeforeLasso);
+    }
+    endPan();
+    endZoomDrag();
+    endColorPick();
+    m_tabletSequence = false;
+    m_tabletPointerEraser = false;
+    setPanModifierActive(false);
+    updateCursor();
+    update();
+}
+
+bool CanvasWidget::event(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::FocusOut:
+    case QEvent::UngrabMouse:
+    case QEvent::TabletLeaveProximity:
+    case QEvent::WindowDeactivate:
+        cancelActiveInteraction();
+        break;
+    default:
+        break;
+    }
+    return QWidget::event(event);
+}
+
 void CanvasWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
@@ -725,14 +788,20 @@ void CanvasWidget::paintEvent(QPaintEvent *)
 
     drawSelectionOverlay(painter, transform);
 
+    const bool pointerUsesEraser =
+        m_tabletPointerEraser || m_tool == Tool::Eraser;
     if (m_pointerOverWidget
         && !m_panning
         && !m_spacePressed
         && !m_pickingColor
-        && (m_tool == Tool::Brush || m_tool == Tool::Eraser)) {
+        && (m_tabletPointerEraser
+            || m_tool == Tool::Brush
+            || m_tool == Tool::Eraser)) {
+        const qreal toolWidth =
+            pointerUsesEraser ? m_eraserWidth : m_brushWidth;
         const qreal radius = std::max(
             1.0,
-            m_brushWidth * std::abs(transform.m11()) * 0.5);
+            toolWidth * std::abs(transform.m11()) * 0.5);
         const QRectF footprint(
             m_pointerWidgetPosition.x() - radius,
             m_pointerWidgetPosition.y() - radius,
@@ -742,7 +811,7 @@ void CanvasWidget::paintEvent(QPaintEvent *)
         painter.setPen(QPen(QColor(20, 20, 20, 220), 3.0));
         painter.drawEllipse(footprint);
         QPen innerPen(QColor(250, 250, 250, 235), 1.0);
-        if (m_tool == Tool::Eraser) {
+        if (pointerUsesEraser) {
             innerPen.setStyle(Qt::DashLine);
         }
         painter.setPen(innerPen);
@@ -766,6 +835,10 @@ void CanvasWidget::enterEvent(QEnterEvent *event)
 
 void CanvasWidget::mousePressEvent(QMouseEvent *event)
 {
+    if (!m_tabletSequence && m_tabletPointerEraser) {
+        m_tabletPointerEraser = false;
+        updateCursor();
+    }
     updatePointerPosition(event->position());
     setFocus(Qt::MouseFocusReason);
     if (event->button() == Qt::LeftButton
@@ -791,6 +864,13 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
     }
     if (event->button() == Qt::LeftButton && !m_tabletSequence) {
         const QPointF documentPosition = mapToDocument(event->position());
+        const Document &document = m_controller->document();
+        if (!document.layer(document.activeLayerId)) {
+            emit interactionMessage(
+                tr("Add a layer before using this tool."));
+            event->accept();
+            return;
+        }
         switch (m_tool) {
         case Tool::Brush:
         case Tool::Eraser:
@@ -822,6 +902,10 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
 
 void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 {
+    if (!m_tabletSequence && m_tabletPointerEraser) {
+        m_tabletPointerEraser = false;
+        updateCursor();
+    }
     updatePointerPosition(event->position());
     if (m_zoomDragging) {
         continueZoomDrag(event->position());
@@ -864,6 +948,10 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 
 void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (!m_tabletSequence && m_tabletPointerEraser) {
+        m_tabletPointerEraser = false;
+        updateCursor();
+    }
     updatePointerPosition(event->position());
     if (m_zoomDragging && event->button() == Qt::LeftButton) {
         endZoomDrag();
@@ -928,7 +1016,15 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
 {
     const bool eraser =
         event->pointerType() == QPointingDevice::PointerType::Eraser;
+    m_tabletPointerEraser = eraser;
+    updatePointerPosition(event->position());
+    updateCursor();
     if (event->type() == QEvent::TabletPress) {
+        if (m_tabletSequence) {
+            cancelActiveInteraction();
+            m_tabletPointerEraser = eraser;
+            updateCursor();
+        }
         if (event->button() != Qt::LeftButton) {
             QWidget::tabletEvent(event);
             return;
@@ -959,8 +1055,11 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         event->accept();
         return;
     }
-    if (event->type() == QEvent::TabletMove && m_tabletSequence) {
-        updatePointerPosition(event->position());
+    if (event->type() == QEvent::TabletMove) {
+        if (!m_tabletSequence) {
+            event->accept();
+            return;
+        }
         if (m_zoomDragging) {
             continueZoomDrag(event->position());
         } else if (m_pickingColor) {
@@ -1003,11 +1102,13 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
             ? m_selectionBeforeLasso
             : currentSelectionState();
         cancelStroke();
+        cancelSelectionMove();
         cancelLasso();
         pushSelectionChange(previousSelection, {}, tr("Deselect"));
         endPan();
         endZoomDrag();
         endColorPick();
+        m_tabletSequence = false;
         event->accept();
         return;
     }
@@ -1199,7 +1300,11 @@ void CanvasWidget::beginStroke(
         mapToDocument(widgetPosition, &inside);
     const Document &document = m_controller->document();
     const Layer *layer = document.layer(document.activeLayerId);
-    if (!inside || !layer) {
+    if (!inside) {
+        return;
+    }
+    if (!layer) {
+        emit interactionMessage(tr("Add a layer before using this tool."));
         return;
     }
     if (!layer->visible) {
@@ -1215,12 +1320,10 @@ void CanvasWidget::beginStroke(
 
     m_activeStroke = Stroke();
     m_activeStroke.seed = QRandomGenerator::global()->generate64();
-    m_activeStroke.mode =
-        tabletEraser || m_tool == Tool::Eraser
-        ? StrokeMode::Erase
-        : StrokeMode::Paint;
+    const bool erasing = tabletEraser || m_tool == Tool::Eraser;
+    m_activeStroke.mode = erasing ? StrokeMode::Erase : StrokeMode::Paint;
     m_activeStroke.color = m_brushColor;
-    m_activeStroke.width = m_brushWidth;
+    m_activeStroke.width = erasing ? m_eraserWidth : m_brushWidth;
     m_activeStroke.brush = m_brushSettings;
     m_activeStroke.brush.wobbleScale = m_brushRoughness;
     m_activeStroke.brush.antialiasing = m_brushAntialiasing;
@@ -1470,7 +1573,9 @@ void CanvasWidget::updateCursor()
         return;
     }
     const bool drawsWithRing =
-        m_tool == Tool::Brush || m_tool == Tool::Eraser;
+        m_tabletPointerEraser
+        || m_tool == Tool::Brush
+        || m_tool == Tool::Eraser;
     setCursor(drawsWithRing ? Qt::BlankCursor : Qt::CrossCursor);
 }
 
@@ -1773,7 +1878,11 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
     const Document &document = m_controller->document();
     const QRectF bounds(QPointF(0.0, 0.0), QSizeF(document.size));
     const Layer *layer = document.layer(document.activeLayerId);
-    if (!layer || !bounds.contains(documentPosition)) {
+    if (!bounds.contains(documentPosition)) {
+        return;
+    }
+    if (!layer) {
+        emit interactionMessage(tr("Add a layer before using this tool."));
         return;
     }
     if (!m_selectionMask.isNull()
@@ -1883,6 +1992,21 @@ void CanvasWidget::commitSelectionMove()
                 tr("The selection could not be moved."));
         }
     }
+    update();
+}
+
+void CanvasWidget::cancelSelectionMove()
+{
+    if (!m_movingSelection
+        && m_moveDelta.isNull()
+        && m_moveInsideMasks.isEmpty()
+        && m_moveRemainderMasks.isEmpty()) {
+        return;
+    }
+    m_movingSelection = false;
+    m_moveDelta = QPointF();
+    m_moveInsideMasks.clear();
+    m_moveRemainderMasks.clear();
     update();
 }
 

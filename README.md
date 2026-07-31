@@ -119,6 +119,7 @@ macOS에서는 앱을 Control-클릭한 뒤 **열기**를 선택하고, 필요�
 - **파일:** 저장·내보내기 대화 상자가 사용할 기본 폴더를 지정합니다.
 - **단축키:** 모든 단축키를 원하는 키로 바꾸고, 필요하면 기본값으로
   되돌릴 수 있습니다.
+- **정보:** 현재 설치된 WagleWaglePaint 버전을 확인합니다.
 
 ## 자동 업데이트
 
@@ -133,4 +134,7 @@ macOS에서는 Sparkle, Windows에서는 Velopack을 통해 다운로드·설치
 
 ## 라이선스
 
-[GPL-3.0](LICENSE)
+WagleWaglePaint는 [GNU General Public License v3.0](LICENSE)으로
+배포됩니다.
+
+Copyright (C) 2026 Nyabi (nyattic)

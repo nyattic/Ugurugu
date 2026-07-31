@@ -33,11 +33,9 @@
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSaveFile>
@@ -47,7 +45,6 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
-#include <QTextEdit>
 #include <QVBoxLayout>
 
 #include <spdlog/spdlog.h>
@@ -275,13 +272,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    const auto *widget = qobject_cast<QWidget *>(watched);
-    const bool belongsToWindow = widget && widget->window() == this;
-    const bool acceptsText =
-        qobject_cast<QLineEdit *>(watched)
-        || qobject_cast<QPlainTextEdit *>(watched)
-        || qobject_cast<QTextEdit *>(watched);
-    if (belongsToWindow
+    if (watched == m_canvas
         && (event->type() == QEvent::KeyPress
             || event->type() == QEvent::KeyRelease)) {
         const auto *keyEvent = static_cast<QKeyEvent *>(event);
@@ -289,21 +280,20 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             && !keyEvent->isAutoRepeat()) {
             if (event->type() == QEvent::KeyRelease) {
                 m_canvas->setPanModifierActive(false);
-                return !acceptsText;
-            }
-            if (!acceptsText) {
-                m_canvas->setPanModifierActive(true);
                 return true;
             }
-            return false;
+            m_canvas->setPanModifierActive(true);
+            return true;
         }
     }
 
     if (event->type() == QEvent::ApplicationDeactivate
         || (event->type() == QEvent::WindowDeactivate
             && watched == this)) {
-        m_canvas->setPanModifierActive(false);
+        m_canvas->cancelActiveInteraction();
         writeAutosave();
+    } else if (event->type() == QEvent::TabletLeaveProximity) {
+        m_canvas->cancelActiveInteraction();
     }
 
     return QMainWindow::eventFilter(watched, event);
@@ -466,10 +456,19 @@ void MainWindow::createActions()
 
     auto *clearLayerAction = new QAction(tr("Clear active layer"), this);
     clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
+    clearLayerAction->setEnabled(
+        !m_controller.document().activeLayerId.isNull());
     registerShortcut(clearLayerAction, {});
     connect(clearLayerAction, &QAction::triggered, this, [this]() {
         m_controller.clearLayer(m_controller.document().activeLayerId);
     });
+    connect(
+        &m_controller,
+        &DocumentController::activeLayerChanged,
+        clearLayerAction,
+        [clearLayerAction](const QUuid &id) {
+            clearLayerAction->setEnabled(!id.isNull());
+        });
 
     auto *zoomInAction = new QAction(tr("Zoom &in"), this);
     zoomInAction->setObjectName(QStringLiteral("zoomInAction"));
@@ -706,7 +705,10 @@ void MainWindow::createToolBars()
 
     auto *eraserPopover = new ToolPopover(this);
     eraserPopover->setContentWidget(
-        new BrushSizeRow(m_canvas, QStringLiteral("eraserSize")));
+        new BrushSizeRow(
+            m_canvas,
+            BrushSizeRow::Target::Eraser,
+            QStringLiteral("eraserSize")));
     eraserButton->setPopover(eraserPopover);
 
     connect(

@@ -2,11 +2,13 @@
 
 #include "document/DocumentLimits.hpp"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QSaveFile>
 #include <QSet>
 
@@ -19,7 +21,7 @@ namespace wobble {
 
 namespace {
 
-constexpr int schemaVersion = 3;
+constexpr int schemaVersion = 4;
 constexpr int algorithmVersion = 2;
 
 std::optional<int> integerFromJson(const QJsonValue &value);
@@ -29,6 +31,142 @@ void setError(QString *error, const QString &message)
     if (error) {
         *error = message;
     }
+}
+
+QByteArray canonicalMaskBytes(const QImage &mask)
+{
+    if (mask.isNull()
+        || mask.format() != QImage::Format_Grayscale8) {
+        return {};
+    }
+    const qint64 byteCount =
+        static_cast<qint64>(mask.width()) * mask.height();
+    if (byteCount <= 0
+        || byteCount > std::numeric_limits<int>::max()) {
+        return {};
+    }
+    QByteArray bytes(static_cast<qsizetype>(byteCount), '\0');
+    for (int y = 0; y < mask.height(); ++y) {
+        std::memcpy(
+            bytes.data()
+                + static_cast<qsizetype>(y) * mask.width(),
+            mask.constScanLine(y),
+            static_cast<std::size_t>(mask.width()));
+    }
+    return bytes;
+}
+
+QString maskContentId(
+    int width,
+    int height,
+    const QByteArray &canonicalBytes)
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    hash.addData(QByteArray::number(width));
+    hash.addData(QByteArrayLiteral("x"));
+    hash.addData(QByteArray::number(height));
+    hash.addData(QByteArrayLiteral(":"));
+    hash.addData(canonicalBytes);
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+struct SerializedClipMask {
+    QString id;
+    QImage image;
+    QString encodedData;
+};
+
+struct ClipMaskTable {
+    QHash<qint64, QString> idByCacheKey;
+    QMap<QString, SerializedClipMask> entries;
+    qint64 serializedEntryBytes = 0;
+    bool tooLarge = false;
+    bool invalid = false;
+};
+
+QJsonObject serializedClipMaskToJson(
+    const SerializedClipMask &entry)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), entry.id);
+    object.insert(QStringLiteral("width"), entry.image.width());
+    object.insert(QStringLiteral("height"), entry.image.height());
+    object.insert(QStringLiteral("data"), entry.encodedData);
+    return object;
+}
+
+QString registerClipMask(
+    const QImage &mask,
+    ClipMaskTable &table,
+    qint64 maximumBytes)
+{
+    if (mask.isNull()) {
+        return {};
+    }
+    const qint64 cacheKey = mask.cacheKey();
+    const auto cachedId = table.idByCacheKey.constFind(cacheKey);
+    if (cachedId != table.idByCacheKey.cend()) {
+        return cachedId.value();
+    }
+
+    const QByteArray bytes = canonicalMaskBytes(mask);
+    if (bytes.isEmpty()) {
+        table.invalid = true;
+        return {};
+    }
+    const QString id =
+        maskContentId(mask.width(), mask.height(), bytes);
+    const auto existing = table.entries.constFind(id);
+    if (existing != table.entries.cend()) {
+        if (existing->image.size() != mask.size()
+            || existing->image != mask) {
+            table.invalid = true;
+            return {};
+        }
+        table.idByCacheKey.insert(cacheKey, id);
+        return id;
+    }
+
+    SerializedClipMask entry;
+    entry.id = id;
+    entry.image = mask;
+    entry.encodedData =
+        QString::fromLatin1(qCompress(bytes, 6).toBase64());
+    const qint64 entryBytes =
+        QJsonDocument(serializedClipMaskToJson(entry))
+            .toJson(QJsonDocument::Compact)
+            .size();
+    if (entryBytes > maximumBytes
+        || table.serializedEntryBytes
+            > maximumBytes - entryBytes) {
+        table.tooLarge = true;
+        return {};
+    }
+    table.serializedEntryBytes += entryBytes;
+    table.idByCacheKey.insert(cacheKey, id);
+    table.entries.insert(id, std::move(entry));
+    return id;
+}
+
+ClipMaskTable buildClipMaskTable(
+    const Document &document,
+    qint64 maximumBytes)
+{
+    ClipMaskTable table;
+    for (const Layer &layer : document.layers) {
+        for (const Stroke &stroke : layer.strokes) {
+            if (stroke.clipMask.isNull()) {
+                continue;
+            }
+            if (registerClipMask(
+                    stroke.clipMask,
+                    table,
+                    maximumBytes).isEmpty()) {
+                return table;
+            }
+        }
+    }
+    return table;
 }
 
 QJsonArray pointToJson(const StrokePoint &point)
@@ -179,7 +317,9 @@ std::optional<BrushSettings> brushFromJson(
     return brush;
 }
 
-QJsonObject strokeToJson(const Stroke &stroke)
+QJsonObject strokeToJson(
+    const Stroke &stroke,
+    const ClipMaskTable &clipMasks)
 {
     QJsonArray points;
     for (const StrokePoint &point : stroke.points) {
@@ -203,21 +343,16 @@ QJsonObject strokeToJson(const Stroke &stroke)
     object.insert(QStringLiteral("brush"), brushToJson(stroke.brush));
     object.insert(QStringLiteral("points"), points);
     if (!stroke.clipMask.isNull()) {
-        const QByteArray bytes(
-            reinterpret_cast<const char *>(stroke.clipMask.constBits()),
-            stroke.clipMask.sizeInBytes());
-        QJsonObject clipMask;
-        clipMask.insert(QStringLiteral("width"), stroke.clipMask.width());
-        clipMask.insert(QStringLiteral("height"), stroke.clipMask.height());
-        clipMask.insert(
-            QStringLiteral("data"),
-            QString::fromLatin1(qCompress(bytes, 6).toBase64()));
-        object.insert(QStringLiteral("clipMask"), clipMask);
+        const auto id =
+            clipMasks.idByCacheKey.constFind(stroke.clipMask.cacheKey());
+        if (id != clipMasks.idByCacheKey.cend()) {
+            object.insert(QStringLiteral("clipMaskId"), id.value());
+        }
     }
     return object;
 }
 
-std::optional<QImage> clipMaskFromJson(
+std::optional<QImage> legacyClipMaskFromJson(
     const QJsonValue &value,
     QHash<QByteArray, QImage> &maskCache,
     quint64 &distinctMaskBytes,
@@ -243,11 +378,6 @@ std::optional<QImage> clipMaskFromJson(
         return std::nullopt;
     }
 
-    QImage mask(QSize(*width, *height), QImage::Format_Grayscale8);
-    if (mask.isNull()) {
-        setError(error, DocumentSerializer::tr("A stroke clip mask is too large."));
-        return std::nullopt;
-    }
     const QByteArray compressed = QByteArray::fromBase64(
         object.value(QStringLiteral("data")).toString().toLatin1());
     if (compressed.size() < 4) {
@@ -261,7 +391,11 @@ std::optional<QImage> clipMaskFromJson(
         | (static_cast<quint32>(header[1]) << 16U)
         | (static_cast<quint32>(header[2]) << 8U)
         | static_cast<quint32>(header[3]);
-    if (declaredSize != static_cast<quint32>(mask.sizeInBytes())) {
+    const quint64 expectedSize =
+        static_cast<quint64>((*width + 3) & ~3)
+        * static_cast<quint64>(*height);
+    if (expectedSize > std::numeric_limits<quint32>::max()
+        || declaredSize != expectedSize) {
         setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
@@ -281,6 +415,12 @@ std::optional<QImage> clipMaskFromJson(
         setError(error, DocumentSerializer::tr("The project contains too much selection data."));
         return std::nullopt;
     }
+    QImage mask(QSize(*width, *height), QImage::Format_Grayscale8);
+    if (mask.isNull()
+        || static_cast<quint64>(mask.sizeInBytes()) != expectedSize) {
+        setError(error, DocumentSerializer::tr("A stroke clip mask is too large."));
+        return std::nullopt;
+    }
     const QByteArray bytes = qUncompress(compressed);
     if (bytes.size() != mask.sizeInBytes()) {
         setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
@@ -290,15 +430,160 @@ std::optional<QImage> clipMaskFromJson(
         mask.bits(),
         bytes.constData(),
         static_cast<std::size_t>(bytes.size()));
+    for (int y = 0; y < mask.height(); ++y) {
+        std::fill(
+            mask.scanLine(y) + mask.width(),
+            mask.scanLine(y) + mask.bytesPerLine(),
+            0);
+    }
     distinctMaskBytes += declaredSize;
     maskCache.insert(std::move(cacheKey), mask);
     return mask;
+}
+
+bool isValidMaskContentId(const QString &id)
+{
+    return id.size() == 64
+        && std::all_of(
+            id.cbegin(),
+            id.cend(),
+            [](QChar character) {
+                return (character >= QLatin1Char('0')
+                        && character <= QLatin1Char('9'))
+                    || (character >= QLatin1Char('a')
+                        && character <= QLatin1Char('f'));
+            });
+}
+
+std::optional<QHash<QString, QImage>> clipMaskTableFromJson(
+    const QJsonValue &value,
+    const QSize &canvasSize,
+    QString *error)
+{
+    if (!value.isArray()) {
+        setError(
+            error,
+            DocumentSerializer::tr(
+                "The project contains an invalid selection mask table."));
+        return std::nullopt;
+    }
+    const QJsonArray entries = value.toArray();
+    if (entries.size() > DocumentLimits::maximumTotalStrokes) {
+        setError(
+            error,
+            DocumentSerializer::tr(
+                "The project contains too many selection masks."));
+        return std::nullopt;
+    }
+
+    QHash<QString, QImage> masks;
+    masks.reserve(entries.size());
+    quint64 distinctMaskBytes = 0;
+    for (const QJsonValue &entryValue : entries) {
+        if (!entryValue.isObject()) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask table."));
+            return std::nullopt;
+        }
+        const QJsonObject entry = entryValue.toObject();
+        const QString id = entry.value(QStringLiteral("id")).toString();
+        const std::optional<int> width =
+            integerFromJson(entry.value(QStringLiteral("width")));
+        const std::optional<int> height =
+            integerFromJson(entry.value(QStringLiteral("height")));
+        if (!entry.value(QStringLiteral("id")).isString()
+            || !isValidMaskContentId(id)
+            || !width
+            || !height
+            || QSize(*width, *height) != canvasSize
+            || !entry.value(QStringLiteral("data")).isString()
+            || masks.contains(id)) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask table."));
+            return std::nullopt;
+        }
+
+        const QByteArray compressed = QByteArray::fromBase64(
+            entry.value(QStringLiteral("data")).toString().toLatin1());
+        if (compressed.size() < 4) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask."));
+            return std::nullopt;
+        }
+        const auto *header =
+            reinterpret_cast<const uchar *>(compressed.constData());
+        const quint32 declaredSize =
+            (static_cast<quint32>(header[0]) << 24U)
+            | (static_cast<quint32>(header[1]) << 16U)
+            | (static_cast<quint32>(header[2]) << 8U)
+            | static_cast<quint32>(header[3]);
+        const quint64 canonicalSize =
+            static_cast<quint64>(*width)
+            * static_cast<quint64>(*height);
+        const quint64 paddedSize =
+            static_cast<quint64>((*width + 3) & ~3)
+            * static_cast<quint64>(*height);
+        if (canonicalSize > std::numeric_limits<quint32>::max()
+            || declaredSize != canonicalSize) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask."));
+            return std::nullopt;
+        }
+
+        if (paddedSize
+            > DocumentLimits::maximumDistinctClipMaskBytes
+                - distinctMaskBytes) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains too much selection data."));
+            return std::nullopt;
+        }
+        QImage mask(canvasSize, QImage::Format_Grayscale8);
+        if (mask.isNull()
+            || static_cast<quint64>(mask.sizeInBytes()) != paddedSize) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask."));
+            return std::nullopt;
+        }
+        const QByteArray bytes = qUncompress(compressed);
+        if (static_cast<quint64>(bytes.size()) != canonicalSize
+            || maskContentId(*width, *height, bytes) != id) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid selection mask."));
+            return std::nullopt;
+        }
+        mask.fill(0);
+        for (int y = 0; y < *height; ++y) {
+            std::memcpy(
+                mask.scanLine(y),
+                bytes.constData()
+                    + static_cast<qsizetype>(y) * *width,
+                static_cast<std::size_t>(*width));
+        }
+        distinctMaskBytes += mask.sizeInBytes();
+        masks.insert(id, std::move(mask));
+    }
+    return masks;
 }
 
 std::optional<Stroke> strokeFromJson(
     const QJsonValue &value,
     int fileSchemaVersion,
     QHash<QByteArray, QImage> &maskCache,
+    const QHash<QString, QImage> &referencedMasks,
     quint64 &distinctMaskBytes,
     QString *error)
 {
@@ -395,9 +680,38 @@ std::optional<Stroke> strokeFromJson(
         }
         stroke.points.append(*point);
     }
-    if (fileSchemaVersion >= 3
+    if (fileSchemaVersion >= 4) {
+        if (object.contains(QStringLiteral("clipMask"))) {
+            setError(
+                error,
+                DocumentSerializer::tr(
+                    "A stroke contains a legacy clip mask in a current project."));
+            return std::nullopt;
+        }
+        const QJsonValue clipMaskId =
+            object.value(QStringLiteral("clipMaskId"));
+        if (!clipMaskId.isUndefined()) {
+            if (!clipMaskId.isString()) {
+                setError(
+                    error,
+                    DocumentSerializer::tr(
+                        "A stroke has an invalid clip mask reference."));
+                return std::nullopt;
+            }
+            const auto mask =
+                referencedMasks.constFind(clipMaskId.toString());
+            if (mask == referencedMasks.cend()) {
+                setError(
+                    error,
+                    DocumentSerializer::tr(
+                        "A stroke references a missing clip mask."));
+                return std::nullopt;
+            }
+            stroke.clipMask = mask.value();
+        }
+    } else if (fileSchemaVersion >= 3
         && object.contains(QStringLiteral("clipMask"))) {
-        const std::optional<QImage> clipMask = clipMaskFromJson(
+        const std::optional<QImage> clipMask = legacyClipMaskFromJson(
             object.value(QStringLiteral("clipMask")),
             maskCache,
             distinctMaskBytes,
@@ -410,11 +724,13 @@ std::optional<Stroke> strokeFromJson(
     return stroke;
 }
 
-QJsonObject layerToJson(const Layer &layer)
+QJsonObject layerToJson(
+    const Layer &layer,
+    const ClipMaskTable &clipMasks)
 {
     QJsonArray strokes;
     for (const Stroke &stroke : layer.strokes) {
-        strokes.append(strokeToJson(stroke));
+        strokes.append(strokeToJson(stroke, clipMasks));
     }
 
     QJsonObject object;
@@ -426,10 +742,156 @@ QJsonObject layerToJson(const Layer &layer)
     return object;
 }
 
+QJsonObject layerSkeletonToJson(const Layer &layer)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("id"), layer.id.toString(QUuid::WithoutBraces));
+    object.insert(QStringLiteral("name"), layer.name);
+    object.insert(QStringLiteral("visible"), layer.visible);
+    object.insert(QStringLiteral("opacity"), layer.opacity);
+    object.insert(QStringLiteral("strokes"), QJsonArray());
+    return object;
+}
+
+QJsonObject rootToJson(
+    const Document &document,
+    const QJsonArray &layers,
+    const QJsonArray &clipMasks)
+{
+    QJsonObject canvas;
+    canvas.insert(QStringLiteral("width"), document.size.width());
+    canvas.insert(QStringLiteral("height"), document.size.height());
+    canvas.insert(
+        QStringLiteral("background"),
+        document.background.name(QColor::HexArgb));
+
+    QJsonObject animation;
+    animation.insert(QStringLiteral("frames"), document.animationFrames);
+    animation.insert(QStringLiteral("fps"), document.framesPerSecond);
+    animation.insert(QStringLiteral("wobble"), document.wobbleAmount);
+
+    QJsonObject root;
+    root.insert(QStringLiteral("schemaVersion"), schemaVersion);
+    root.insert(QStringLiteral("algorithmVersion"), algorithmVersion);
+    root.insert(QStringLiteral("canvas"), canvas);
+    root.insert(QStringLiteral("animation"), animation);
+    root.insert(
+        QStringLiteral("activeLayerId"),
+        document.activeLayerId.isNull()
+            ? QJsonValue(QJsonValue::Null)
+            : QJsonValue(
+                  document.activeLayerId.toString(QUuid::WithoutBraces)));
+    root.insert(QStringLiteral("layers"), layers);
+    root.insert(QStringLiteral("clipMasks"), clipMasks);
+    return root;
+}
+
+bool addSerializedBytes(
+    qint64 &total,
+    qint64 amount,
+    qint64 maximumBytes)
+{
+    if (amount < 0
+        || amount > maximumBytes
+        || total > maximumBytes - amount) {
+        return false;
+    }
+    total += amount;
+    return true;
+}
+
+bool serializedSizeWithinLimit(
+    const Document &document,
+    const ClipMaskTable &clipMasks,
+    qint64 maximumBytes)
+{
+    qint64 serializedLayerBytes = 0;
+    for (const Layer &layer : document.layers) {
+        qint64 serializedStrokeBytes = 0;
+        for (const Stroke &stroke : layer.strokes) {
+            const qint64 bytes =
+                QJsonDocument(strokeToJson(stroke, clipMasks))
+                    .toJson(QJsonDocument::Compact)
+                    .size();
+            if (!addSerializedBytes(
+                    serializedStrokeBytes,
+                    bytes,
+                    maximumBytes)) {
+                return false;
+            }
+        }
+        const qint64 strokeArrayBytes =
+            2
+            + serializedStrokeBytes
+            + std::max<qint64>(0, layer.strokes.size() - 1);
+        const qint64 skeletonBytes =
+            QJsonDocument(layerSkeletonToJson(layer))
+                .toJson(QJsonDocument::Compact)
+                .size();
+        const qint64 layerBytes =
+            skeletonBytes - 2 + strokeArrayBytes;
+        if (!addSerializedBytes(
+                serializedLayerBytes,
+                layerBytes,
+                maximumBytes)) {
+            return false;
+        }
+    }
+
+    const qint64 layerArrayBytes =
+        2
+        + serializedLayerBytes
+        + std::max<qint64>(0, document.layers.size() - 1);
+    const qint64 maskArrayBytes =
+        2
+        + clipMasks.serializedEntryBytes
+        + std::max<qint64>(0, clipMasks.entries.size() - 1);
+    const qint64 rootSkeletonBytes =
+        QJsonDocument(rootToJson(document, {}, {}))
+            .toJson(QJsonDocument::Compact)
+            .size();
+    qint64 total = rootSkeletonBytes - 4;
+    return addSerializedBytes(total, layerArrayBytes, maximumBytes)
+        && addSerializedBytes(total, maskArrayBytes, maximumBytes);
+}
+
+std::optional<QByteArray> serializeDocument(
+    const Document &document,
+    qint64 maximumBytes)
+{
+    const ClipMaskTable clipMasks =
+        buildClipMaskTable(document, maximumBytes);
+    if (clipMasks.invalid
+        || clipMasks.tooLarge
+        || !serializedSizeWithinLimit(
+            document,
+            clipMasks,
+            maximumBytes)) {
+        return std::nullopt;
+    }
+
+    QJsonArray layers;
+    for (const Layer &layer : document.layers) {
+        layers.append(layerToJson(layer, clipMasks));
+    }
+    QJsonArray masks;
+    for (const SerializedClipMask &entry : clipMasks.entries) {
+        masks.append(serializedClipMaskToJson(entry));
+    }
+    QByteArray data =
+        QJsonDocument(rootToJson(document, layers, masks))
+            .toJson(QJsonDocument::Compact);
+    if (data.size() > maximumBytes) {
+        return std::nullopt;
+    }
+    return data;
+}
+
 std::optional<Layer> layerFromJson(
     const QJsonValue &value,
     int fileSchemaVersion,
     QHash<QByteArray, QImage> &maskCache,
+    const QHash<QString, QImage> &referencedMasks,
     quint64 &distinctMaskBytes,
     QString *error)
 {
@@ -481,6 +943,7 @@ std::optional<Layer> layerFromJson(
                 strokeValue,
                 fileSchemaVersion,
                 maskCache,
+                referencedMasks,
                 distinctMaskBytes,
                 error);
         if (!stroke) {
@@ -575,8 +1038,7 @@ bool validateDocument(const Document &document, QString *error)
         setError(error, DocumentSerializer::tr("The animation settings are invalid."));
         return false;
     }
-    if (document.layers.isEmpty()
-        || document.layers.size() > DocumentLimits::maximumLayers) {
+    if (document.layers.size() > DocumentLimits::maximumLayers) {
         setError(error, DocumentSerializer::tr("The layer count is invalid."));
         return false;
     }
@@ -665,7 +1127,11 @@ bool validateDocument(const Document &document, QString *error)
             }
         }
     }
-    if (document.activeLayerId.isNull() || !activeLayerFound) {
+    const bool validActiveLayer =
+        document.layers.isEmpty()
+        ? document.activeLayerId.isNull()
+        : !document.activeLayerId.isNull() && activeLayerFound;
+    if (!validActiveLayer) {
         setError(error, DocumentSerializer::tr("The active layer ID is invalid."));
         return false;
     }
@@ -682,8 +1148,10 @@ bool DocumentSerializer::save(
     if (!validateDocument(document, error)) {
         return false;
     }
-    const QByteArray data = toJson(document);
-    if (data.size() > DocumentLimits::maximumProjectBytes) {
+    const std::optional<QByteArray> data = serializeDocument(
+        document,
+        DocumentLimits::maximumProjectBytes);
+    if (!data) {
         setError(error, DocumentSerializer::tr("The project is too large to save."));
         return false;
     }
@@ -692,7 +1160,7 @@ bool DocumentSerializer::save(
         setError(error, file.errorString());
         return false;
     }
-    if (file.write(data) != data.size()) {
+    if (file.write(*data) != data->size()) {
         setError(error, file.errorString());
         file.cancelWriting();
         return false;
@@ -723,33 +1191,10 @@ std::optional<Document> DocumentSerializer::load(
 
 QByteArray DocumentSerializer::toJson(const Document &document)
 {
-    QJsonArray layers;
-    for (const Layer &layer : document.layers) {
-        layers.append(layerToJson(layer));
-    }
-
-    QJsonObject canvas;
-    canvas.insert(QStringLiteral("width"), document.size.width());
-    canvas.insert(QStringLiteral("height"), document.size.height());
-    canvas.insert(
-        QStringLiteral("background"),
-        document.background.name(QColor::HexArgb));
-
-    QJsonObject animation;
-    animation.insert(QStringLiteral("frames"), document.animationFrames);
-    animation.insert(QStringLiteral("fps"), document.framesPerSecond);
-    animation.insert(QStringLiteral("wobble"), document.wobbleAmount);
-
-    QJsonObject root;
-    root.insert(QStringLiteral("schemaVersion"), schemaVersion);
-    root.insert(QStringLiteral("algorithmVersion"), algorithmVersion);
-    root.insert(QStringLiteral("canvas"), canvas);
-    root.insert(QStringLiteral("animation"), animation);
-    root.insert(
-        QStringLiteral("activeLayerId"),
-        document.activeLayerId.toString(QUuid::WithoutBraces));
-    root.insert(QStringLiteral("layers"), layers);
-    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    const std::optional<QByteArray> data = serializeDocument(
+        document,
+        DocumentLimits::maximumProjectBytes);
+    return data.value_or(QByteArray());
 }
 
 std::optional<Document> DocumentSerializer::fromJson(
@@ -787,10 +1232,15 @@ std::optional<Document> DocumentSerializer::fromJson(
         return std::nullopt;
     }
 
+    const QJsonValue activeLayerIdValue =
+        root.value(QStringLiteral("activeLayerId"));
     if (!root.value(QStringLiteral("canvas")).isObject()
         || !root.value(QStringLiteral("animation")).isObject()
-        || !root.value(QStringLiteral("activeLayerId")).isString()
-        || !root.value(QStringLiteral("layers")).isArray()) {
+        || (!activeLayerIdValue.isString()
+            && !activeLayerIdValue.isNull())
+        || !root.value(QStringLiteral("layers")).isArray()
+        || (*fileSchemaVersion >= 4
+            && !root.value(QStringLiteral("clipMasks")).isArray())) {
         setError(error, DocumentSerializer::tr("The project contains invalid fields."));
         return std::nullopt;
     }
@@ -814,15 +1264,31 @@ std::optional<Document> DocumentSerializer::fromJson(
         setError(error, DocumentSerializer::tr("The canvas background is invalid."));
         return std::nullopt;
     }
-
     const QJsonArray layers = root.value(QStringLiteral("layers")).toArray();
-    if (layers.isEmpty()
-        || layers.size() > DocumentLimits::maximumLayers) {
+    if (layers.size() > DocumentLimits::maximumLayers) {
         setError(error, DocumentSerializer::tr("The layer count is invalid."));
+        return std::nullopt;
+    }
+    if ((layers.isEmpty() && !activeLayerIdValue.isNull())
+        || (!layers.isEmpty() && !activeLayerIdValue.isString())) {
+        setError(error, DocumentSerializer::tr("The active layer ID is invalid."));
         return std::nullopt;
     }
     if (!validateCollectionBudgets(layers, error)) {
         return std::nullopt;
+    }
+
+    QHash<QString, QImage> referencedMasks;
+    if (*fileSchemaVersion >= 4) {
+        const std::optional<QHash<QString, QImage>> parsedMasks =
+            clipMaskTableFromJson(
+                root.value(QStringLiteral("clipMasks")),
+                QSize(*width, *height),
+                error);
+        if (!parsedMasks) {
+            return std::nullopt;
+        }
+        referencedMasks = *parsedMasks;
     }
 
     const QJsonObject animation =
@@ -870,6 +1336,7 @@ std::optional<Document> DocumentSerializer::fromJson(
                 layerValue,
                 *fileSchemaVersion,
                 maskCache,
+                referencedMasks,
                 distinctMaskBytes,
                 error);
         if (!layer) {
@@ -898,8 +1365,9 @@ std::optional<Document> DocumentSerializer::fromJson(
         document.layers.append(*layer);
     }
 
-    document.activeLayerId = QUuid(
-        root.value(QStringLiteral("activeLayerId")).toString());
+    document.activeLayerId = activeLayerIdValue.isNull()
+        ? QUuid()
+        : QUuid(activeLayerIdValue.toString());
     if (!validateDocument(document, error)) {
         return std::nullopt;
     }

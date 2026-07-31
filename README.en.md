@@ -118,6 +118,7 @@ on macOS.
 - **Files:** choose the default folder used by save and export dialogs.
 - **Shortcuts:** replace any application shortcut and restore the
   defaults when needed.
+- **About:** view the currently installed WagleWaglePaint version.
 
 ## Automatic updates
 
@@ -132,4 +133,7 @@ See [BUILDING.md](BUILDING.md) for source-build and test instructions.
 
 ## License
 
-[GPL-3.0](LICENSE)
+WagleWaglePaint is distributed under the
+[GNU General Public License v3.0](LICENSE).
+
+Copyright (C) 2026 Nyabi (nyattic)

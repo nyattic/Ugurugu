@@ -38,12 +38,26 @@ jobs:
       - name: Build
         run: cmake --build --preset macos-release --parallel
 
+      - name: Test
+        run: ctest --preset macos-release
+
       - name: Install
         run: cmake --install out/build/macos-release --prefix "$RUNNER_TEMP/install"
 
-      - name: Package DMG and Sparkle update
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      - name: Verify installed package
+        run: |
+          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          smoke_root="$RUNNER_TEMP/package-smoke"
+          mkdir -p "$smoke_root/MacOS"
+          ln -s "$application/Contents/Frameworks" "$smoke_root/Frameworks"
+          cp \
+            out/build/macos-release/wobblepaint_package_smoke \
+            "$smoke_root/MacOS/"
+          "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
+          codesign --verify --deep --strict "$application"
+
+      - name: Package DMG and prepare Sparkle update
+        id: package
         run: |
           version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           architecture=$(uname -m)
@@ -78,37 +92,42 @@ jobs:
             --keepParent \
             "$RUNNER_TEMP/install/WagleWaglePaint.app" \
             "$RUNNER_TEMP/sparkle-updates/$archive"
-          python3 -m pip install --quiet --user markdown
-          render_notes() {
-            {
-              printf '%s' '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
-              python3 -m markdown -x extra "$1"
-              printf '%s' '</body></html>'
-            } > "$2"
-          }
-          render_notes \
+          out/build/macos-release/wobblepaint_render_release_notes \
             "release-notes/${version}.en.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
-          render_notes \
+          out/build/macos-release/wobblepaint_render_release_notes \
             "release-notes/${version}.ko.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html"
-          render_notes \
+          out/build/macos-release/wobblepaint_render_release_notes \
             "release-notes/${version}.ja.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Sign Sparkle update and generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          RELEASE_TAG: ${{ steps.package.outputs.release_tag }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "SPARKLE_PRIVATE_KEY is not configured"
+            exit 1
+          fi
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
             out/build/macos-release/_deps/sparkle-src/bin/generate_appcast \
               --ed-key-file - \
-              --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${release_tag}/" \
-              --release-notes-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${release_tag}/" \
+              --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
+              --release-notes-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
               --link "https://github.com/nyattic/WagleWaglePaint" \
               --embed-release-notes \
               --maximum-versions 1 \
               --maximum-deltas 0 \
               "$RUNNER_TEMP/sparkle-updates"
-          cp "$RUNNER_TEMP/sparkle-updates/$archive" artifacts/
+          cp "$RUNNER_TEMP/sparkle-updates/$ARCHIVE" artifacts/
           cp "$RUNNER_TEMP/sparkle-updates/appcast.xml" artifacts/
-          cp "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html" artifacts/
-          cp "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html" artifacts/
+          cp "$RUNNER_TEMP/sparkle-updates/${ARCHIVE%.zip}.ko.html" artifacts/
+          cp "$RUNNER_TEMP/sparkle-updates/${ARCHIVE%.zip}.ja.html" artifacts/
 
       - name: Verify macOS compatibility
         run: |
@@ -132,10 +151,38 @@ jobs:
                 failed=1
               fi
             done < <(otool -l "$binary" | awk '$1 == "minos" { print $2 }')
-            if otool -L "$binary" | grep -E -q '/opt/homebrew|/usr/local/Cellar'; then
-              echo "$binary contains a Homebrew runtime dependency"
-              failed=1
-            fi
+            while IFS= read -r dependency; do
+              case "$dependency" in
+                @rpath/*|@loader_path/*|@executable_path/*|/System/Library/*|/usr/lib/*)
+                  ;;
+                *)
+                  echo "$binary contains external runtime dependency $dependency"
+                  failed=1
+                  ;;
+              esac
+            done < <(
+              dyld_info -dependents "$binary" | awk '
+                /\[[^]]+\]:$/ { linked = 0 }
+                $1 == "-linked_dylibs:" { linked = 1; next }
+                $1 == "-rpaths:" { linked = 0 }
+                linked && $1 != "attributes" { print $NF }
+              '
+            )
+            while IFS= read -r rpath; do
+              case "$rpath" in
+                @loader_path/*|@executable_path/*)
+                  ;;
+                *)
+                  echo "$binary contains non-portable runtime search path $rpath"
+                  failed=1
+                  ;;
+              esac
+            done < <(
+              otool -l "$binary" | awk '
+                $1 == "cmd" && $2 == "LC_RPATH" { rpath = 1; next }
+                rpath && $1 == "path" { print $2; rpath = 0 }
+              '
+            )
           done < <(find "$application" -type f)
           exit "$failed"
 
@@ -178,6 +225,10 @@ jobs:
       - name: Build
         shell: pwsh
         run: cmake --build --preset windows-release --config Release --parallel
+
+      - name: Test
+        shell: pwsh
+        run: ctest --preset windows-release
 
       - name: Install
         shell: pwsh
@@ -272,5 +323,4 @@ jobs:
         with:
           name: WagleWaglePaint ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.path }}
-          generate_release_notes: true
           files: artifacts/*

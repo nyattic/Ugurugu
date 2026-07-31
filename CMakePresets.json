@@ -42,7 +42,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
-        "BUILD_TESTING": "OFF"
+        "BUILD_TESTING": "ON"
       }
     },
     {
@@ -72,7 +72,7 @@
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "BUILD_TESTING": "OFF"
+        "BUILD_TESTING": "ON"
       }
     }
   ],
@@ -105,9 +105,24 @@
       }
     },
     {
+      "name": "macos-release",
+      "configurePreset": "macos-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "windows-debug",
       "configurePreset": "windows-debug",
       "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "configuration": "Release",
       "output": {
         "outputOnFailure": true
       }
