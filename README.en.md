@@ -75,6 +75,8 @@ necessary.
 - Looping GIF export and current-frame PNG or JPG export
 - `.wagle` project files with undo and redo
 - Automatic recovery of unsaved work after an interrupted session
+- Last-used tool, color, brush preset, per-preset brush sizes, eraser size,
+  roughness, and anti-aliasing restored after restarting the app
 - Persistent recent colors and a configurable default save folder
 - Customizable shortcuts and an English, Korean, or Japanese interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
