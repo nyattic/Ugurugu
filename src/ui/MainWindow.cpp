@@ -1,5 +1,6 @@
 #include "ui/MainWindow.hpp"
 
+#include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
@@ -36,6 +37,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMetaType>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSaveFile>
@@ -45,6 +47,7 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include <spdlog/spdlog.h>
@@ -57,6 +60,98 @@
 namespace wobble {
 
 namespace {
+
+constexpr auto activeToolKey = "drawingTools/activeTool";
+constexpr auto activePresetKey = "drawingTools/brush/presetId";
+constexpr auto activeColorKey = "drawingTools/brush/color";
+constexpr auto recentColorsKey = "brush/recentColors";
+constexpr auto roughnessKey = "drawingTools/brush/roughness";
+constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
+constexpr auto eraserWidthKey = "drawingTools/eraser/width";
+constexpr qreal minimumRememberedStrokeWidth = 1.0;
+
+QString presetWidthKey(const QString &presetId)
+{
+    return QStringLiteral("drawingTools/brush/presetWidths/%1")
+        .arg(presetId);
+}
+
+qreal realSetting(
+    const QSettings &settings,
+    const QString &key,
+    qreal fallback,
+    qreal minimum,
+    qreal maximum)
+{
+    bool converted = false;
+    const qreal value = settings.value(key).toDouble(&converted);
+    if (!converted || !std::isfinite(value)) {
+        return fallback;
+    }
+    return std::clamp(value, minimum, maximum);
+}
+
+bool boolSetting(
+    const QSettings &settings,
+    const QString &key,
+    bool fallback)
+{
+    if (!settings.contains(key)) {
+        return fallback;
+    }
+    const QVariant value = settings.value(key);
+    if (value.metaType().id() == QMetaType::Bool) {
+        return value.toBool();
+    }
+    const QString text = value.toString().trimmed().toLower();
+    if (text == QStringLiteral("true")
+        || text == QStringLiteral("1")) {
+        return true;
+    }
+    if (text == QStringLiteral("false")
+        || text == QStringLiteral("0")) {
+        return false;
+    }
+    return fallback;
+}
+
+QString toolSettingsId(CanvasWidget::Tool tool)
+{
+    switch (tool) {
+    case CanvasWidget::Tool::Brush:
+        return QStringLiteral("brush");
+    case CanvasWidget::Tool::Eraser:
+        return QStringLiteral("eraser");
+    case CanvasWidget::Tool::Lasso:
+        return QStringLiteral("lasso");
+    case CanvasWidget::Tool::Wand:
+        return QStringLiteral("wand");
+    case CanvasWidget::Tool::Bucket:
+        return QStringLiteral("bucket");
+    }
+    return QStringLiteral("brush");
+}
+
+std::optional<CanvasWidget::Tool> toolFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("brush")) {
+        return CanvasWidget::Tool::Brush;
+    }
+    if (id == QStringLiteral("eraser")) {
+        return CanvasWidget::Tool::Eraser;
+    }
+    if (id == QStringLiteral("lasso")) {
+        return CanvasWidget::Tool::Lasso;
+    }
+    if (id == QStringLiteral("wand")) {
+        return CanvasWidget::Tool::Wand;
+    }
+    if (id == QStringLiteral("bucket")) {
+        return CanvasWidget::Tool::Bucket;
+    }
+    return std::nullopt;
+}
 
 QSize requestCanvasSize(
     QWidget *parent,
@@ -142,6 +237,7 @@ MainWindow::MainWindow(QWidget *parent)
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
     m_canvas = new CanvasWidget(&m_controller, central);
+    restoreDrawingToolSettings();
     centralLayout->addWidget(m_canvas, 1);
     m_timeline = new TimelineBar(&m_controller, m_canvas, central);
     centralLayout->addWidget(m_timeline);
@@ -155,6 +251,14 @@ MainWindow::MainWindow(QWidget *parent)
     createToolBars();
     createStatusBar();
     connectDocument();
+    m_drawingToolSettingsSaveTimer.setSingleShot(true);
+    m_drawingToolSettingsSaveTimer.setInterval(200);
+    connect(
+        &m_drawingToolSettingsSaveTimer,
+        &QTimer::timeout,
+        this,
+        &MainWindow::saveDrawingToolSettings);
+    connectDrawingToolSettings();
     m_autosaveTimer.setInterval(30000);
     connect(
         &m_autosaveTimer,
@@ -266,6 +370,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("window/state"), saveState());
+    saveDrawingToolSettings();
     clearAutosave();
     event->accept();
 }
@@ -291,6 +396,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         || (event->type() == QEvent::WindowDeactivate
             && watched == this)) {
         m_canvas->cancelActiveInteraction();
+        saveDrawingToolSettings();
         writeAutosave();
     } else if (event->type() == QEvent::TabletLeaveProximity) {
         m_canvas->cancelActiveInteraction();
@@ -537,7 +643,6 @@ void MainWindow::createActions()
 
     m_brushAction = new QAction(tr("&Brush"), this);
     m_brushAction->setCheckable(true);
-    m_brushAction->setChecked(true);
     m_brushAction->setIcon(Icons::toggleIcon(IconGlyph::Brush));
     m_brushAction->setObjectName(QStringLiteral("brushAction"));
     registerShortcut(m_brushAction, QKeySequence(QStringLiteral("B")));
@@ -588,6 +693,31 @@ void MainWindow::createActions()
     connect(m_bucketAction, &QAction::triggered, this, [this]() {
         m_canvas->setTool(CanvasWidget::Tool::Bucket);
     });
+    const auto syncToolAction = [this](CanvasWidget::Tool tool) {
+        switch (tool) {
+        case CanvasWidget::Tool::Brush:
+            m_brushAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Eraser:
+            m_eraserAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Lasso:
+            m_lassoAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Wand:
+            m_wandAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Bucket:
+            m_bucketAction->setChecked(true);
+            break;
+        }
+    };
+    syncToolAction(m_canvas->tool());
+    connect(
+        m_canvas,
+        &CanvasWidget::toolChanged,
+        this,
+        syncToolAction);
 
     addAction(newAction);
     addAction(openAction);
@@ -788,6 +918,140 @@ void MainWindow::createToolBars()
             m_swatchRow->setActiveColor(color);
         });
     updateColorButton();
+}
+
+void MainWindow::restoreDrawingToolSettings()
+{
+    const QSettings settings;
+    for (const BrushPreset &preset : BrushPresetCatalog::builtIns()) {
+        m_canvas->setBrushPresetWidth(
+            preset.id,
+            realSetting(
+                settings,
+                presetWidthKey(preset.id),
+                preset.defaultSize,
+                minimumRememberedStrokeWidth,
+                DocumentLimits::maximumStrokeWidth));
+    }
+
+    const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
+    const QString storedPresetId =
+        settings.value(activePresetKey, defaultPreset.id).toString();
+    m_canvas->setBrushPreset(
+        BrushPresetCatalog::find(storedPresetId)
+            ? storedPresetId
+            : defaultPreset.id);
+
+    m_canvas->setEraserWidth(
+        realSetting(
+            settings,
+            QString::fromLatin1(eraserWidthKey),
+            6.0,
+            minimumRememberedStrokeWidth,
+            DocumentLimits::maximumStrokeWidth));
+    m_canvas->setBrushRoughness(
+        realSetting(
+            settings,
+            QString::fromLatin1(roughnessKey),
+            1.0,
+            DocumentLimits::minimumBrushWobbleScale,
+            DocumentLimits::maximumBrushWobbleScale));
+    m_canvas->setBrushAntialiasing(
+        boolSetting(
+            settings,
+            QString::fromLatin1(antialiasingKey),
+            false));
+
+    QColor storedColor(settings.value(activeColorKey).toString());
+    if (!storedColor.isValid()) {
+        const QStringList recentColors =
+            settings.value(recentColorsKey).toStringList();
+        for (const QString &name : recentColors) {
+            const QColor recentColor(name);
+            if (recentColor.isValid()) {
+                storedColor = recentColor;
+                break;
+            }
+        }
+    }
+    m_canvas->setBrushColor(
+        storedColor.isValid() ? storedColor : QColor(Qt::black));
+
+    const std::optional<CanvasWidget::Tool> storedTool =
+        toolFromSettingsId(settings.value(activeToolKey).toString());
+    m_canvas->setTool(
+        storedTool.value_or(CanvasWidget::Tool::Brush));
+}
+
+void MainWindow::connectDrawingToolSettings()
+{
+    const auto schedule = [this]() {
+        scheduleDrawingToolSettingsSave();
+    };
+    connect(
+        m_canvas,
+        &CanvasWidget::toolChanged,
+        this,
+        [schedule](CanvasWidget::Tool) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushColorChanged,
+        this,
+        [schedule](const QColor &) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushWidthChanged,
+        this,
+        [schedule](qreal) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::eraserWidthChanged,
+        this,
+        [schedule](qreal) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushRoughnessChanged,
+        this,
+        [schedule](qreal) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushAntialiasingChanged,
+        this,
+        [schedule](bool) { schedule(); });
+    connect(
+        m_canvas,
+        &CanvasWidget::brushPresetChanged,
+        this,
+        [schedule](const QString &) { schedule(); });
+}
+
+void MainWindow::scheduleDrawingToolSettingsSave()
+{
+    m_drawingToolSettingsSaveTimer.start();
+}
+
+void MainWindow::saveDrawingToolSettings()
+{
+    m_drawingToolSettingsSaveTimer.stop();
+    QSettings settings;
+    settings.setValue(
+        activeToolKey,
+        toolSettingsId(m_canvas->tool()));
+    settings.setValue(activePresetKey, m_canvas->brushPresetId());
+    settings.setValue(
+        activeColorKey,
+        m_canvas->brushColor().name(QColor::HexArgb));
+    settings.setValue(roughnessKey, m_canvas->brushRoughness());
+    settings.setValue(
+        antialiasingKey,
+        m_canvas->brushAntialiasing());
+    settings.setValue(eraserWidthKey, m_canvas->eraserWidth());
+    for (const BrushPreset &preset : BrushPresetCatalog::builtIns()) {
+        settings.setValue(
+            presetWidthKey(preset.id),
+            m_canvas->brushPresetWidth(preset.id));
+    }
+    settings.sync();
 }
 
 void MainWindow::createStatusBar()

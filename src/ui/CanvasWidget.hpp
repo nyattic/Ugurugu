@@ -39,6 +39,7 @@ public:
     Tool tool() const;
     QColor brushColor() const;
     qreal brushWidth() const;
+    qreal brushPresetWidth(const QString &presetId) const;
     qreal eraserWidth() const;
     qreal brushRoughness() const;
     bool brushAntialiasing() const;
@@ -58,6 +59,7 @@ public slots:
     void setTool(Tool tool);
     void setBrushColor(const QColor &color);
     void setBrushWidth(qreal width);
+    void setBrushPresetWidth(const QString &presetId, qreal width);
     void setEraserWidth(qreal width);
     void setBrushRoughness(qreal roughness);
     void setBrushAntialiasing(bool antialiasing);

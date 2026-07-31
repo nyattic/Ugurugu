@@ -1,4 +1,5 @@
 #include "brush/BrushPreset.hpp"
+#include "document/DocumentLimits.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"
@@ -11,6 +12,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFile>
@@ -31,6 +33,7 @@
 #include <QVariant>
 #include <QtTest>
 
+#include <limits>
 #include <utility>
 
 namespace wobble {
@@ -108,6 +111,22 @@ class UiTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void init()
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("drawingTools"));
+        settings.remove(QStringLiteral("brush/recentColors"));
+        settings.sync();
+    }
+
+    void cleanup()
+    {
+        QSettings settings;
+        settings.remove(QStringLiteral("drawingTools"));
+        settings.remove(QStringLiteral("brush/recentColors"));
+        settings.sync();
+    }
+
     void launchesAndEdits()
     {
         MainWindow window;
@@ -812,6 +831,188 @@ private slots:
         QCOMPARE(strokes.at(1).width, 57.0);
         QVERIFY(strokes.at(2).mode == StrokeMode::Erase);
         QCOMPARE(strokes.at(2).width, 57.0);
+    }
+
+    void persistsDrawingToolSettings()
+    {
+        const QColor rememberedColor(18, 52, 86, 120);
+        {
+            MainWindow window;
+            CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+            QVERIFY(canvas);
+
+            canvas->setBrushPreset(QStringLiteral("monoline"));
+            canvas->setBrushWidth(23.0);
+            canvas->setBrushPreset(QStringLiteral("soft-airbrush"));
+            canvas->setBrushWidth(47.0);
+            canvas->setEraserWidth(57.0);
+            canvas->setBrushRoughness(0.37);
+            canvas->setBrushAntialiasing(true);
+            canvas->setBrushColor(rememberedColor);
+            canvas->setTool(CanvasWidget::Tool::Eraser);
+
+            QVERIFY(window.close());
+            QCOMPARE(
+                QSettings()
+                    .value(QStringLiteral(
+                        "drawingTools/brush/presetId"))
+                    .toString(),
+                QStringLiteral("soft-airbrush"));
+        }
+
+        QSettings persistedSettings;
+        persistedSettings.sync();
+        QCOMPARE(
+            persistedSettings.status(),
+            QSettings::NoError);
+        MainWindow restoredWindow;
+        CanvasWidget *restored =
+            restoredWindow.findChild<CanvasWidget *>();
+        QVERIFY(restored);
+        QCOMPARE(
+            restored->brushPresetId(),
+            QStringLiteral("soft-airbrush"));
+        QCOMPARE(restored->brushWidth(), 47.0);
+        QCOMPARE(restored->eraserWidth(), 57.0);
+        QCOMPARE(restored->brushRoughness(), 0.37);
+        QVERIFY(restored->brushAntialiasing());
+        QCOMPARE(restored->brushColor(), rememberedColor);
+        QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
+
+        QAction *eraserAction = restoredWindow.findChild<QAction *>(
+            QStringLiteral("eraserAction"));
+        QSpinBox *brushSizeSpin =
+            restoredWindow.findChild<QSpinBox *>(
+                QStringLiteral("brushSizeSpin"));
+        QSpinBox *eraserSizeSpin =
+            restoredWindow.findChild<QSpinBox *>(
+                QStringLiteral("eraserSizeSpin"));
+        QSpinBox *roughnessSpin =
+            restoredWindow.findChild<QSpinBox *>(
+                QStringLiteral("brushRoughnessSpin"));
+        QCheckBox *antialiasingToggle =
+            restoredWindow.findChild<QCheckBox *>(
+                QStringLiteral("brushAntialiasingToggle"));
+        QVERIFY(eraserAction);
+        QVERIFY(brushSizeSpin);
+        QVERIFY(eraserSizeSpin);
+        QVERIFY(roughnessSpin);
+        QVERIFY(antialiasingToggle);
+        QVERIFY(eraserAction->isChecked());
+        QCOMPARE(brushSizeSpin->value(), 47);
+        QCOMPARE(eraserSizeSpin->value(), 57);
+        QCOMPARE(roughnessSpin->value(), 37);
+        QVERIFY(antialiasingToggle->isChecked());
+
+        restored->setBrushPreset(QStringLiteral("monoline"));
+        QCOMPARE(restored->brushWidth(), 23.0);
+        QCOMPARE(brushSizeSpin->value(), 23);
+        restored->setBrushPreset(QStringLiteral("soft-airbrush"));
+        QCOMPARE(restored->brushWidth(), 47.0);
+        QCOMPARE(brushSizeSpin->value(), 47);
+
+        BrushPresetButton *selectedPresetButton = nullptr;
+        for (BrushPresetButton *button :
+             restoredWindow.findChildren<BrushPresetButton *>()) {
+            if (button->presetId() == QStringLiteral("soft-airbrush")) {
+                selectedPresetButton = button;
+                break;
+            }
+        }
+        QVERIFY(selectedPresetButton);
+        QVERIFY(selectedPresetButton->isChecked());
+    }
+
+    void migratesActiveColorFromRecentColors()
+    {
+        const QColor recentColor(42, 91, 137, 173);
+        QSettings settings;
+        settings.setValue(
+            QStringLiteral("brush/recentColors"),
+            QStringList {
+                QStringLiteral("not-a-color"),
+                recentColor.name(QColor::HexArgb)
+            });
+        settings.sync();
+
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QCOMPARE(canvas->brushColor(), recentColor);
+        QVERIFY(window.close());
+        settings.sync();
+        QCOMPARE(settings.status(), QSettings::NoError);
+        QCOMPARE(
+            settings
+                .value(QStringLiteral("drawingTools/brush/color"))
+                .toString(),
+            recentColor.name(QColor::HexArgb));
+    }
+
+    void sanitizesInvalidDrawingToolSettings()
+    {
+        QSettings settings;
+        settings.setValue(
+            QStringLiteral("drawingTools/activeTool"),
+            QStringLiteral("transform"));
+        settings.setValue(
+            QStringLiteral("drawingTools/brush/presetId"),
+            QStringLiteral("missing-brush"));
+        settings.setValue(
+            QStringLiteral("drawingTools/brush/color"),
+            QStringLiteral("not-a-color"));
+        settings.setValue(
+            QStringLiteral("drawingTools/brush/roughness"),
+            std::numeric_limits<double>::infinity());
+        settings.setValue(
+            QStringLiteral("drawingTools/brush/antialiasing"),
+            QStringLiteral("sometimes"));
+        settings.setValue(
+            QStringLiteral(
+                "drawingTools/brush/presetWidths/ink-pen"),
+            9999.0);
+        settings.setValue(
+            QStringLiteral(
+                "drawingTools/brush/presetWidths/g-pen"),
+            std::numeric_limits<double>::quiet_NaN());
+        settings.setValue(
+            QStringLiteral("drawingTools/eraser/width"),
+            -100.0);
+        settings.sync();
+
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QCOMPARE(canvas->tool(), CanvasWidget::Tool::Brush);
+        QCOMPARE(
+            canvas->brushPresetId(),
+            BrushPresetCatalog::defaultPreset().id);
+        QCOMPARE(
+            canvas->brushWidth(),
+            DocumentLimits::maximumStrokeWidth);
+        QCOMPARE(canvas->eraserWidth(), 1.0);
+        QCOMPARE(canvas->brushRoughness(), 1.0);
+        QVERIFY(!canvas->brushAntialiasing());
+        QCOMPARE(canvas->brushColor(), QColor(Qt::black));
+
+        canvas->setBrushPreset(QStringLiteral("g-pen"));
+        QCOMPARE(
+            canvas->brushWidth(),
+            BrushPresetCatalog::find(
+                QStringLiteral("g-pen"))->defaultSize);
+
+        const qreal brushWidth = canvas->brushWidth();
+        const qreal eraserWidth = canvas->eraserWidth();
+        const qreal roughness = canvas->brushRoughness();
+        canvas->setBrushWidth(
+            std::numeric_limits<qreal>::quiet_NaN());
+        canvas->setEraserWidth(
+            std::numeric_limits<qreal>::infinity());
+        canvas->setBrushRoughness(
+            std::numeric_limits<qreal>::quiet_NaN());
+        QCOMPARE(canvas->brushWidth(), brushWidth);
+        QCOMPARE(canvas->eraserWidth(), eraserWidth);
+        QCOMPARE(canvas->brushRoughness(), roughness);
     }
 
     void deletesTheLastLayerAndAddsOneBack()

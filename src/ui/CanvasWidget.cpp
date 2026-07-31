@@ -261,6 +261,18 @@ qreal CanvasWidget::brushWidth() const
     return m_brushWidth;
 }
 
+qreal CanvasWidget::brushPresetWidth(const QString &presetId) const
+{
+    const BrushPreset *preset = BrushPresetCatalog::find(presetId);
+    if (!preset) {
+        return 0.0;
+    }
+    return std::clamp(
+        m_presetWidths.value(preset->id, preset->defaultSize),
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+}
+
 qreal CanvasWidget::eraserWidth() const
 {
     return m_eraserWidth;
@@ -422,6 +434,9 @@ void CanvasWidget::setBrushColor(const QColor &color)
 
 void CanvasWidget::setBrushWidth(qreal width)
 {
+    if (!std::isfinite(width)) {
+        return;
+    }
     const qreal normalized = std::clamp(
         width,
         DocumentLimits::minimumStrokeWidth,
@@ -437,8 +452,30 @@ void CanvasWidget::setBrushWidth(qreal width)
     update();
 }
 
+void CanvasWidget::setBrushPresetWidth(
+    const QString &presetId,
+    qreal width)
+{
+    const BrushPreset *preset = BrushPresetCatalog::find(presetId);
+    if (!preset || !std::isfinite(width)) {
+        return;
+    }
+    const qreal normalized = std::clamp(
+        width,
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+    if (m_brushPresetId == preset->id) {
+        setBrushWidth(normalized);
+        return;
+    }
+    m_presetWidths.insert(preset->id, normalized);
+}
+
 void CanvasWidget::setEraserWidth(qreal width)
 {
+    if (!std::isfinite(width)) {
+        return;
+    }
     const qreal normalized = std::clamp(
         width,
         DocumentLimits::minimumStrokeWidth,
@@ -453,6 +490,9 @@ void CanvasWidget::setEraserWidth(qreal width)
 
 void CanvasWidget::setBrushRoughness(qreal roughness)
 {
+    if (!std::isfinite(roughness)) {
+        return;
+    }
     const qreal normalized = std::clamp(
         roughness,
         DocumentLimits::minimumBrushWobbleScale,

@@ -38,6 +38,10 @@ private:
     void createToolBars();
     void createStatusBar();
     void connectDocument();
+    void restoreDrawingToolSettings();
+    void connectDrawingToolSettings();
+    void scheduleDrawingToolSettingsSave();
+    void saveDrawingToolSettings();
     void updateWindowTitle();
     void updateColorButton();
     bool maybeSave();
@@ -82,6 +86,7 @@ private:
     QLabel *m_pointerLabel = nullptr;
     QLabel *m_zoomLabel = nullptr;
     QTimer m_autosaveTimer;
+    QTimer m_drawingToolSettingsSaveTimer;
     bool m_autosavePending = false;
 };
 
