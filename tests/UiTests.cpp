@@ -217,6 +217,7 @@ private slots:
         settings.remove(eraserKey);
         settings.setValue(folderKey, saveFolder.path());
         settings.remove(languageKey);
+        settings.sync();
 
         QAction brushAction(QStringLiteral("Brush"));
         brushAction.setObjectName(QStringLiteral("brushAction"));
