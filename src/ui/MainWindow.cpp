@@ -42,6 +42,7 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSettings>
+#include <QShortcut>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -1168,12 +1169,19 @@ bool MainWindow::maybeSave()
     auto *buttonLayout = new QHBoxLayout;
     buttonLayout->setSpacing(8);
     buttonLayout->addStretch(1);
-    auto *saveButton = new QPushButton(tr("Save"), &dialog);
+    auto *saveButton = new QPushButton(tr("Save (S)"), &dialog);
+    saveButton->setObjectName(
+        QStringLiteral("unsavedChangesSaveButton"));
     saveButton->setDefault(true);
     buttonLayout->addWidget(saveButton);
-    auto *discardButton = new QPushButton(tr("Don't Save"), &dialog);
+    auto *discardButton =
+        new QPushButton(tr("Don't Save (N)"), &dialog);
+    discardButton->setObjectName(
+        QStringLiteral("unsavedChangesDiscardButton"));
     buttonLayout->addWidget(discardButton);
-    auto *cancelButton = new QPushButton(tr("Cancel"), &dialog);
+    auto *cancelButton = new QPushButton(tr("Cancel (ESC)"), &dialog);
+    cancelButton->setObjectName(
+        QStringLiteral("unsavedChangesCancelButton"));
     buttonLayout->addWidget(cancelButton);
     layout->addLayout(buttonLayout);
 
@@ -1184,6 +1192,30 @@ bool MainWindow::maybeSave()
         dialog.done(2);
     });
     connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+    auto *saveShortcut =
+        new QShortcut(QKeySequence(QStringLiteral("S")), &dialog);
+    auto *discardShortcut =
+        new QShortcut(QKeySequence(QStringLiteral("N")), &dialog);
+    auto *cancelShortcut =
+        new QShortcut(QKeySequence(QStringLiteral("Esc")), &dialog);
+    saveShortcut->setContext(Qt::ApplicationShortcut);
+    discardShortcut->setContext(Qt::ApplicationShortcut);
+    cancelShortcut->setContext(Qt::ApplicationShortcut);
+    connect(
+        saveShortcut,
+        &QShortcut::activated,
+        saveButton,
+        &QPushButton::click);
+    connect(
+        discardShortcut,
+        &QShortcut::activated,
+        discardButton,
+        &QPushButton::click);
+    connect(
+        cancelShortcut,
+        &QShortcut::activated,
+        cancelButton,
+        &QPushButton::click);
 
     const int choice = dialog.exec();
     if (choice == 1) {

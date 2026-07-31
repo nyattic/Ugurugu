@@ -570,16 +570,20 @@
             <translation>ドキュメントに未保存の変更があります。</translation>
         </message>
         <message>
-            <source>Save</source>
-            <translation>保存</translation>
+            <source>Save (S)</source>
+            <translation>保存(S)</translation>
         </message>
         <message>
-            <source>Don't Save</source>
-            <translation>保存しない</translation>
+            <source>Don't Save (N)</source>
+            <translation>保存しない(N)</translation>
         </message>
         <message>
             <source>Cancel</source>
             <translation>キャンセル</translation>
+        </message>
+        <message>
+            <source>Cancel (ESC)</source>
+            <translation>キャンセル(ESC)</translation>
         </message>
         <message>
             <source>Save project</source>

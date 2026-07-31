@@ -704,19 +704,23 @@
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="869"/>
-        <source>Save</source>
-        <translation>저장</translation>
+        <source>Save (S)</source>
+        <translation>저장(S)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="872"/>
-        <source>Don&apos;t Save</source>
-        <translation>저장 안 함</translation>
+        <source>Don&apos;t Save (N)</source>
+        <translation>저장 안 함(N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="874"/>
         <location filename="../src/ui/MainWindow.cpp" line="1107"/>
         <source>Cancel</source>
         <translation>취소</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1182"/>
+        <source>Cancel (ESC)</source>
+        <translation>취소(ESC)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="904"/>

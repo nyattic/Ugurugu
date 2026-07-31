@@ -14,6 +14,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QFileInfo>
@@ -29,6 +30,7 @@
 #include <QTabWidget>
 #include <QTabletEvent>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
 #include <QVariant>
 #include <QtTest>
@@ -350,6 +352,122 @@ private slots:
         QCOMPARE(
             tabs->tabText(tabs->indexOf(aboutTab)),
             QStringLiteral("About"));
+    }
+
+    void handlesUnsavedChangesDialogShortcuts_data()
+    {
+        QTest::addColumn<int>("key");
+        QTest::addColumn<bool>("closesWindow");
+        QTest::addColumn<bool>("savesDocument");
+
+        QTest::newRow("save")
+            << int(Qt::Key_S)
+            << true
+            << true;
+        QTest::newRow("discard")
+            << int(Qt::Key_N)
+            << true
+            << false;
+        QTest::newRow("cancel")
+            << int(Qt::Key_Escape)
+            << false
+            << false;
+    }
+
+    void handlesUnsavedChangesDialogShortcuts()
+    {
+        QFETCH(int, key);
+        QFETCH(bool, closesWindow);
+        QFETCH(bool, savesDocument);
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("shortcuts.wagle"));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(
+                filePath,
+                Document::createDefault(QSize(100, 100)),
+                &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        QToolButton *addLayerButton =
+            window.findChild<QToolButton *>(
+                QStringLiteral("layerAddButton"));
+        QVERIFY(addLayerButton);
+        addLayerButton->click();
+        QTRY_VERIFY(window.isWindowModified());
+
+        bool dialogInspected = false;
+        QString saveText;
+        QString discardText;
+        QString cancelText;
+        QTimer::singleShot(0, &window, [&]() {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(
+                    QApplication::activeModalWidget());
+            if (!dialog) {
+                return;
+            }
+            QPushButton *saveButton =
+                dialog->findChild<QPushButton *>(
+                    QStringLiteral("unsavedChangesSaveButton"));
+            QPushButton *discardButton =
+                dialog->findChild<QPushButton *>(
+                    QStringLiteral("unsavedChangesDiscardButton"));
+            QPushButton *cancelButton =
+                dialog->findChild<QPushButton *>(
+                    QStringLiteral("unsavedChangesCancelButton"));
+            if (!saveButton || !discardButton || !cancelButton) {
+                QTest::keyClick(dialog, Qt::Key_Escape);
+                return;
+            }
+            saveText = saveButton->text();
+            discardText = discardButton->text();
+            cancelText = cancelButton->text();
+            dialogInspected = true;
+            QWidget *keyTarget = QApplication::focusWidget();
+            QTest::keyClick(
+                keyTarget ? keyTarget : dialog,
+                static_cast<Qt::Key>(key));
+        });
+        QTimer::singleShot(1000, &window, []() {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(
+                    QApplication::activeModalWidget());
+            if (dialog) {
+                dialog->reject();
+            }
+        });
+
+        QCOMPARE(window.close(), closesWindow);
+        QVERIFY(dialogInspected);
+        QCOMPARE(saveText, QStringLiteral("Save (S)"));
+        QCOMPARE(discardText, QStringLiteral("Don't Save (N)"));
+        QCOMPARE(cancelText, QStringLiteral("Cancel (ESC)"));
+
+        const std::optional<Document> savedDocument =
+            DocumentSerializer::load(filePath, &error);
+        QVERIFY2(savedDocument.has_value(), qPrintable(error));
+        QCOMPARE(
+            savedDocument->layers.size(),
+            savesDocument ? 2 : 1);
+        if (!closesWindow) {
+            QVERIFY(window.isVisible());
+            QVERIFY(window.isWindowModified());
+        }
     }
 
     void selectionParticipatesInUndoHistory()
