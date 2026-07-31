@@ -34,6 +34,7 @@ constexpr qreal minimumZoom = 0.01;
 constexpr qreal maximumZoom = 16.0;
 constexpr qreal keyboardZoomStep = 1.25;
 constexpr qreal dragZoomDoublingDistance = 120.0;
+constexpr int frameCacheBudgetKiB = 256 * 1024;
 
 bool fuzzyIdentity(const QTransform &transform)
 {
@@ -173,7 +174,7 @@ CanvasWidget::CanvasWidget(
     setMouseTracking(true);
     setTabletTracking(true);
     setCursor(Qt::BlankCursor);
-    m_frameCache.setMaxCost(96 * 1024);
+    m_frameCache.setMaxCost(frameCacheBudgetKiB);
     const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
     m_brushPresetId = defaultPreset.id;
     m_brushSettings = defaultPreset.settings;
@@ -937,11 +938,16 @@ void CanvasWidget::paintEvent(QPaintEvent *)
 
     painter.save();
     painter.setClipRect(canvasRect);
+    const QRectF visibleCanvasRect = canvasRect.intersected(QRectF(rect()));
     const int checkerSize = 12;
-    const int left = static_cast<int>(std::floor(canvasRect.left() / checkerSize));
-    const int top = static_cast<int>(std::floor(canvasRect.top() / checkerSize));
-    const int right = static_cast<int>(std::ceil(canvasRect.right() / checkerSize));
-    const int bottom = static_cast<int>(std::ceil(canvasRect.bottom() / checkerSize));
+    const int left =
+        static_cast<int>(std::floor(visibleCanvasRect.left() / checkerSize));
+    const int top =
+        static_cast<int>(std::floor(visibleCanvasRect.top() / checkerSize));
+    const int right =
+        static_cast<int>(std::ceil(visibleCanvasRect.right() / checkerSize));
+    const int bottom =
+        static_cast<int>(std::ceil(visibleCanvasRect.bottom() / checkerSize));
     for (int y = top; y <= bottom; ++y) {
         for (int x = left; x <= right; ++x) {
             painter.fillRect(
@@ -1503,8 +1509,18 @@ QSize CanvasWidget::previewRenderSize() const
     const qreal edgeScale = std::min(
         maximumPreviewEdge / documentSize.width(),
         maximumPreviewEdge / documentSize.height());
+    qreal scaleLimit = std::min(displayScale, edgeScale);
+    const int frameCount =
+        std::max(1, m_controller->document().animationFrames);
+    if (m_animating && frameCount > 1) {
+        const qreal animationBytes = static_cast<qreal>(frameCount) * 4.0
+            * documentSize.width() * documentSize.height();
+        const qreal budgetScale = std::sqrt(
+            frameCacheBudgetKiB * 1024.0 * 0.9 / animationBytes);
+        scaleLimit = std::min(scaleLimit, budgetScale);
+    }
     const qreal scale = std::clamp(
-        std::min(displayScale, edgeScale),
+        scaleLimit,
         1.0 / std::max(documentSize.width(), documentSize.height()),
         1.0);
     return QSize(
