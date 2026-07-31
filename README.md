@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/icons/WobblePaint.png" width="128" alt="WagleWaglePaint app icon">
+  <img src="resources/icons/WobblePaint.png" width="128" alt="WagleWaglePaint 앱 아이콘">
 </p>
 
 # WagleWaglePaint
@@ -9,112 +9,124 @@
 ![License](https://img.shields.io/badge/license-MIT-ffc94a?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
-A native drawing app where every line wobbles. Draw once and your
-sketch comes alive as a crisp, boiling-line animation ready to export
-as a looping GIF.
+**English speakers: see the [English README](README.en.md).**
 
-Inspired by Shake Art DELUXE and PS1-style vertex jitter, with layers,
-tablet pressure, selections, project files, and automatic updates.
+모든 선이 꿈틀거리는 네이티브 드로잉 앱입니다. 한 번만 그리면
+스케치가 살아 있는 듯한 보일링 라인 애니메이션으로 깨어나고,
+반복 재생되는 GIF로 바로 내보낼 수 있습니다.
 
-## Download
+Shake Art DELUXE와 PS1 스타일 버텍스 지터에서 영감을 받았으며,
+레이어, 타블렛 필압, 선택 도구, 프로젝트 파일, 자동 업데이트를
+지원합니다.
 
-Get the newest version from
-[GitHub Releases](https://github.com/nyattic/WagleWaglePaint/releases/latest).
+> [!WARNING]
+> WagleWaglePaint는 현재 베타 버전입니다. 사용 중 버그나 다듬어지지
+> 않은 부분을 만날 수 있습니다. 버그 리포트는 언제나 환영합니다 —
+> [GitHub 이슈](https://github.com/nyattic/WagleWaglePaint/issues)에
+> 어떤 작업을 했는지, 어떤 결과를 기대했는지, 실제로는 어떻게
+> 동작했는지 적어 주세요. `.wagle` 프로젝트 파일을 함께 첨부해 주시면
+> 원인을 찾는 데 큰 도움이 됩니다.
 
-| Platform | Supported systems | Download this file |
+## 다운로드
+
+아래 파일 이름을 누르면 최신 버전이 바로 다운로드됩니다. 전체 목록은
+[GitHub Releases](https://github.com/nyattic/WagleWaglePaint/releases/latest)에서
+볼 수 있습니다.
+
+| 플랫폼 | 지원 환경 | 다운로드 |
 | --- | --- | --- |
-| Windows | Windows 10 or later, x64 | `WagleWaglePaint-<version>-Windows-x64-Setup.exe` |
-| macOS | macOS 14 or later, Apple Silicon | `WagleWaglePaint-<version>-macOS-arm64.dmg` |
+| Windows | Windows 10 이상, x64 | [WagleWaglePaint-Windows-x64-Setup.exe](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-Windows-x64-Setup.exe) |
+| macOS | macOS 14 이상, Apple Silicon | [WagleWaglePaint-macOS-arm64.dmg](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-macOS-arm64.dmg) |
 
-The `.zip`, `.nupkg`, `appcast.xml`, and `.json` files on the release
-page are used by the automatic updaters. They are not needed for a
-normal installation.
+릴리즈 페이지의 `.zip`, `.nupkg`, `appcast.xml`, `.json` 파일은 자동
+업데이트에 사용되는 파일입니다. 일반 설치에는 필요하지 않습니다.
 
-## Install
+## 설치
 
 ### Windows
 
-Run the downloaded Setup file. WagleWaglePaint installs for the current
-user and opens when installation is complete.
+다운로드한 Setup 파일을 실행하세요. WagleWaglePaint가 현재 사용자
+계정에 설치되고, 설치가 끝나면 자동으로 실행됩니다.
 
 ### macOS
 
-Open the DMG and drag WagleWaglePaint into the Applications folder.
+DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요.
 
-The current builds are not signed with a trusted developer certificate
-or notarized, so Windows SmartScreen or macOS Gatekeeper may show a
-warning. Only download the app from the official Releases page. On
-macOS, Control-click the app, choose **Open**, and confirm the prompt if
-necessary.
+현재 빌드는 신뢰할 수 있는 개발자 인증서로 서명되거나 공증되지
+않아, Windows SmartScreen이나 macOS Gatekeeper가 경고를 표시할 수
+있습니다. 앱은 반드시 공식 Releases 페이지에서만 다운로드하세요.
+macOS에서는 앱을 Control-클릭한 뒤 **열기**를 선택하고, 필요하면
+확인 창을 승인하세요.
 
-## Features
+## 기능
 
-- Brush and eraser with drawing-tablet pressure support
-- 17 built-in pen, marker, airbrush, and spray presets
-- Crisp pixel-edged strokes inspired by hand-drawn animation tools
-- Boiling-line wobble with independently redrawn, fully loopable frames
-- Persistent lasso and auto selection with move, scale, rotate, duplicate,
-  delete, and undo support
-- Selection-aware brush, eraser, and paint bucket edits
-- Resizable canvases that scale existing artwork and brush sizes
-- Layers with thumbnails, visibility, opacity, and drag reordering
-- Adjustable wobble strength, frame count, and FPS
-- Per-stroke roughness control layered on top of the global wobble
-- Looping GIF export and current-frame PNG export
-- `.wagle` project files with undo and redo
-- Automatic recovery of unsaved work after an interrupted session
-- Persistent recent colors and a configurable default save folder
-- Customizable shortcuts and English or Korean interface
-- Automatic updates through Sparkle on macOS and Velopack on Windows
+- 타블렛 필압을 지원하는 브러시와 지우개
+- 펜, 마커, 에어브러시, 스프레이 내장 프리셋 17종
+- 손그림 애니메이션 도구에서 영감을 받은 또렷한 픽셀 경계 스트로크
+- 프레임마다 독립적으로 다시 그려지는, 완전히 반복 가능한 보일링
+  라인 워블
+- 이동·확대/축소·회전·복제·삭제·실행 취소를 지원하는 올가미 선택과
+  자동 선택
+- 선택 영역을 인식하는 브러시, 지우개, 페인트 통 편집
+- 기존 그림과 브러시 크기를 함께 스케일하는 캔버스 크기 조절
+- 섬네일, 표시 여부, 불투명도, 드래그 순서 변경을 지원하는 레이어
+- 워블 강도, 프레임 수, FPS 조절
+- 전역 워블 위에 얹는 스트로크별 거칠기 조절
+- 반복 GIF 내보내기와 현재 프레임 PNG 내보내기
+- 실행 취소·다시 실행을 지원하는 `.wagle` 프로젝트 파일
+- 비정상 종료 후 저장하지 않은 작업 자동 복구
+- 최근 색상 유지와 기본 저장 폴더 설정
+- 단축키 사용자화, 한국어·영어 인터페이스
+- macOS는 Sparkle, Windows는 Velopack을 통한 자동 업데이트
 
-## Controls
+## 조작법
 
-These are the default shortcuts. They can be changed in **Settings →
-Shortcuts**.
+아래는 기본 단축키입니다. **설정 → 단축키**에서 변경할 수 있습니다.
 
-| Key | Action |
+| 키 | 동작 |
 | --- | --- |
-| `B` | Brush |
-| `E` | Eraser |
-| `L` | Lasso select |
-| `W` | Auto select |
-| `G` | Paint bucket |
-| `P` | Play or pause the preview |
-| `M` | Flip the canvas horizontally (view only) |
-| `Space` + drag | Pan the canvas |
-| Scroll | Zoom |
-| `Ctrl/Cmd++` / `Ctrl/Cmd+-` | Zoom in / out |
-| `Ctrl/Cmd+Space` + drag | Zoom with the pen or mouse (drag right to zoom in) |
-| `Alt` + click | Pick a color from the canvas (brush, eraser, and bucket tools) |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
-| `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
-| `Ctrl/Cmd+E` | Export an animated GIF |
-| `Ctrl/Cmd+D` | Duplicate the selection |
-| `Ctrl/Cmd+0` | Fit the canvas to the window |
-| `Esc` | Cancel the current stroke or selection |
+| `B` | 브러시 |
+| `E` | 지우개 |
+| `L` | 올가미 선택 |
+| `W` | 자동 선택 |
+| `G` | 페인트 통 |
+| `P` | 미리보기 재생/일시정지 |
+| `M` | 캔버스 좌우 반전 (보기 전용) |
+| `Space` + 드래그 | 캔버스 이동 |
+| 스크롤 | 확대/축소 |
+| `Ctrl/Cmd++` / `Ctrl/Cmd+-` | 확대 / 축소 |
+| `Ctrl/Cmd+Space` + 드래그 | 펜이나 마우스로 확대/축소 (오른쪽으로 드래그하면 확대) |
+| `Alt` + 클릭 | 캔버스에서 색상 추출 (브러시, 지우개, 페인트 통 도구) |
+| `Ctrl+Z` / `Ctrl+Y` | 실행 취소 / 다시 실행 (Windows) |
+| `Cmd+Z` / `Cmd+Shift+Z` | 실행 취소 / 다시 실행 (macOS) |
+| `Ctrl/Cmd+E` | 애니메이션 GIF 내보내기 |
+| `Ctrl/Cmd+D` | 선택 영역 복제 |
+| `Ctrl/Cmd+0` | 캔버스를 창에 맞추기 |
+| `Esc` | 현재 스트로크 또는 선택 취소 |
 
-## Settings
+## 설정
 
-Open Settings with the gear button in the toolbar. It is also available
-from **Edit → Settings** on Windows and **WagleWaglePaint → Settings**
-on macOS.
+툴바의 톱니바퀴 버튼으로 설정을 열 수 있습니다. Windows에서는
+**편집 → 설정**, macOS에서는 **WagleWaglePaint → 설정**에서도 열 수
+있습니다.
 
-- **General:** choose the interface language and drawing animation
-  behavior. Restart the app after changing the language.
-- **Files:** choose the default folder used by save and export dialogs.
-- **Shortcuts:** replace any application shortcut and restore the
-  defaults when needed.
+- **일반:** 인터페이스 언어와 그리는 동안의 애니메이션 동작을
+  선택합니다. 언어를 변경한 뒤에는 앱을 다시 시작하세요.
+- **파일:** 저장·내보내기 대화 상자가 사용할 기본 폴더를 지정합니다.
+- **단축키:** 모든 단축키를 원하는 키로 바꾸고, 필요하면 기본값으로
+  되돌릴 수 있습니다.
 
-## Automatic updates
+## 자동 업데이트
 
-WagleWaglePaint checks for updates after launch. You can also use
-**Help → Check for Updates** at any time. Updates are downloaded and
-installed through Sparkle on macOS and Velopack on Windows.
+WagleWaglePaint는 실행 후 업데이트를 확인합니다. **도움말 →
+업데이트 확인**으로 언제든 직접 확인할 수도 있습니다. 업데이트는
+macOS에서는 Sparkle, Windows에서는 Velopack을 통해 다운로드·설치되며,
+업데이트 알림에서 새 버전의 릴리즈 노트를 확인할 수 있습니다.
 
-## For developers
+## 개발자를 위한 안내
 
-See [BUILDING.md](BUILDING.md) for source-build and test instructions.
+소스 빌드와 테스트 방법은 [BUILDING.md](BUILDING.md)를 참고하세요.
 
-## License
+## 라이선스
 
 [MIT](LICENSE)
