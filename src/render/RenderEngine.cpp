@@ -753,6 +753,161 @@ void applyFillStroke(
     }
 }
 
+void renderLayerStrokes(
+    QImage &layerImage,
+    const Document &document,
+    const QVector<Stroke> &strokes,
+    int normalizedFrame,
+    int frameCount,
+    qreal horizontalScale,
+    qreal verticalScale,
+    QHash<qint64, QPainterPath> &clipPaths,
+    QHash<qint64, QImage> &scaledClipMasks)
+{
+    const QSize outputSize = layerImage.size();
+    QPainter painter(&layerImage);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.scale(horizontalScale, verticalScale);
+
+    for (const Stroke &stroke : strokes) {
+        if (stroke.points.isEmpty()
+            || !isValidBrushSettings(stroke.brush)) {
+            continue;
+        }
+
+        if (stroke.mode == StrokeMode::Fill) {
+            QImage scaledClipMask;
+            if (!stroke.clipMask.isNull()) {
+                const qint64 key = stroke.clipMask.cacheKey();
+                const auto cached = scaledClipMasks.constFind(key);
+                if (cached != scaledClipMasks.cend()) {
+                    scaledClipMask = cached.value();
+                } else {
+                    scaledClipMask = stroke.clipMask.size() == outputSize
+                        ? stroke.clipMask
+                        : stroke.clipMask.scaled(
+                            outputSize,
+                            Qt::IgnoreAspectRatio,
+                            Qt::FastTransformation);
+                    if (scaledClipMask.isNull()) {
+                        continue;
+                    }
+                    scaledClipMasks.insert(key, scaledClipMask);
+                }
+            }
+            painter.end();
+            applyFillStroke(
+                layerImage,
+                stroke,
+                scaledClipMask,
+                horizontalScale,
+                verticalScale);
+            painter.begin(&layerImage);
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            painter.scale(horizontalScale, verticalScale);
+            continue;
+        }
+
+        painter.save();
+        if (!stroke.clipMask.isNull()) {
+            const qint64 key = stroke.clipMask.cacheKey();
+            auto cached = clipPaths.constFind(key);
+            if (cached == clipPaths.cend()) {
+                cached = clipPaths.insert(
+                    key,
+                    maskPath(stroke.clipMask));
+            }
+            painter.setClipPath(
+                cached.value(),
+                Qt::IntersectClip);
+        }
+        painter.setCompositionMode(
+            stroke.mode == StrokeMode::Erase
+                ? QPainter::CompositionMode_DestinationOut
+                : QPainter::CompositionMode_SourceOver);
+
+        const qreal strokeWobble =
+            document.wobbleAmount * stroke.brush.wobbleScale;
+        const qreal widthNoiseScale = std::clamp(
+            strokeWobble / 1.6,
+            0.0,
+            1.0);
+        const qreal frameWidthNoise =
+            widthNoiseScale
+            * signedNoise(
+                stroke.seed,
+                normalizedFrame,
+                0,
+                0x1a67d3c4ULL);
+        const qreal width = std::max(
+            0.5,
+            stroke.width * (1.0 + frameWidthNoise * 0.025));
+        painter.setBrush(Qt::NoBrush);
+        const QColor strokeColor =
+            stroke.mode == StrokeMode::Erase ? Qt::black : stroke.color;
+        const qreal brushSpacing =
+            stroke.brush.engine == BrushEngine::Line
+            ? -1.0
+            : std::max(0.5, width * stroke.brush.spacing);
+        const qsizetype maximumPoints =
+            stroke.brush.engine == BrushEngine::Line
+            ? maximumResampledPoints
+            : maximumBrushDabs;
+        const QVector<StrokePoint> points = displacedStrokePoints(
+            stroke,
+            normalizedFrame,
+            frameCount,
+            strokeWobble,
+            brushSpacing,
+            maximumPoints);
+        if (points.isEmpty()) {
+            painter.restore();
+            continue;
+        }
+
+        switch (stroke.brush.engine) {
+        case BrushEngine::Line:
+            if (points.size() == 1) {
+                drawLineDot(
+                    painter,
+                    points.first(),
+                    strokeColor,
+                    width,
+                    stroke.brush);
+            } else {
+                drawLineStroke(
+                    painter,
+                    points,
+                    strokeColor,
+                    width,
+                    stroke.brush);
+            }
+            break;
+        case BrushEngine::Airbrush:
+            drawAirbrushStroke(
+                painter,
+                points,
+                strokeColor,
+                width,
+                stroke.brush);
+            break;
+        case BrushEngine::Spray:
+            drawSprayStroke(
+                painter,
+                points,
+                strokeColor,
+                width,
+                stroke.brush,
+                stroke.seed,
+                normalizedFrame);
+            break;
+        }
+        painter.restore();
+    }
+
+    painter.end();
+}
+
 QImage renderAtSize(
     const Document &document,
     int frameIndex,
@@ -773,7 +928,8 @@ QImage renderAtSize(
         static_cast<qreal>(outputSize.height()) / document.size.height();
 
     const int frameCount = std::max(1, document.animationFrames);
-    const int normalizedFrame = ((frameIndex % frameCount) + frameCount) % frameCount;
+    const int normalizedFrame =
+        ((frameIndex % frameCount) + frameCount) % frameCount;
 
     QPainter compositor(&result);
     compositor.setRenderHint(QPainter::Antialiasing, false);
@@ -792,147 +948,16 @@ QImage renderAtSize(
             return {};
         }
         layerImage.fill(Qt::transparent);
-        QPainter painter(&layerImage);
-        painter.setRenderHint(QPainter::Antialiasing, false);
-        painter.scale(horizontalScale, verticalScale);
-
-        for (const Stroke &stroke : layer.strokes) {
-            if (stroke.points.isEmpty()
-                || !isValidBrushSettings(stroke.brush)) {
-                continue;
-            }
-
-            if (stroke.mode == StrokeMode::Fill) {
-                QImage scaledClipMask;
-                if (!stroke.clipMask.isNull()) {
-                    const qint64 key = stroke.clipMask.cacheKey();
-                    const auto cached = scaledClipMasks.constFind(key);
-                    if (cached != scaledClipMasks.cend()) {
-                        scaledClipMask = cached.value();
-                    } else {
-                        scaledClipMask = stroke.clipMask.size() == outputSize
-                            ? stroke.clipMask
-                            : stroke.clipMask.scaled(
-                                outputSize,
-                                Qt::IgnoreAspectRatio,
-                                Qt::FastTransformation);
-                        if (scaledClipMask.isNull()) {
-                            continue;
-                        }
-                        scaledClipMasks.insert(key, scaledClipMask);
-                    }
-                }
-                painter.end();
-                applyFillStroke(
-                    layerImage,
-                    stroke,
-                    scaledClipMask,
-                    horizontalScale,
-                    verticalScale);
-                painter.begin(&layerImage);
-                painter.setRenderHint(QPainter::Antialiasing, false);
-                painter.scale(horizontalScale, verticalScale);
-                continue;
-            }
-
-            painter.save();
-            if (!stroke.clipMask.isNull()) {
-                const qint64 key = stroke.clipMask.cacheKey();
-                auto cached = clipPaths.constFind(key);
-                if (cached == clipPaths.cend()) {
-                    cached = clipPaths.insert(
-                        key,
-                        maskPath(stroke.clipMask));
-                }
-                painter.setClipPath(
-                    cached.value(),
-                    Qt::IntersectClip);
-            }
-            painter.setCompositionMode(
-                stroke.mode == StrokeMode::Erase
-                    ? QPainter::CompositionMode_DestinationOut
-                    : QPainter::CompositionMode_SourceOver);
-
-            const qreal strokeWobble =
-                document.wobbleAmount * stroke.brush.wobbleScale;
-            const qreal widthNoiseScale = std::clamp(
-                strokeWobble / 1.6,
-                0.0,
-                1.0);
-            const qreal frameWidthNoise =
-                widthNoiseScale
-                * signedNoise(
-                    stroke.seed,
-                    normalizedFrame,
-                    0,
-                    0x1a67d3c4ULL);
-            const qreal width = std::max(
-                0.5,
-                stroke.width * (1.0 + frameWidthNoise * 0.025));
-            painter.setBrush(Qt::NoBrush);
-            const QColor strokeColor =
-                stroke.mode == StrokeMode::Erase ? Qt::black : stroke.color;
-            const qreal brushSpacing =
-                stroke.brush.engine == BrushEngine::Line
-                ? -1.0
-                : std::max(0.5, width * stroke.brush.spacing);
-            const qsizetype maximumPoints =
-                stroke.brush.engine == BrushEngine::Line
-                ? maximumResampledPoints
-                : maximumBrushDabs;
-            const QVector<StrokePoint> points = displacedStrokePoints(
-                stroke,
-                normalizedFrame,
-                frameCount,
-                strokeWobble,
-                brushSpacing,
-                maximumPoints);
-            if (points.isEmpty()) {
-                painter.restore();
-                continue;
-            }
-
-            switch (stroke.brush.engine) {
-            case BrushEngine::Line:
-                if (points.size() == 1) {
-                    drawLineDot(
-                        painter,
-                        points.first(),
-                        strokeColor,
-                        width,
-                        stroke.brush);
-                } else {
-                    drawLineStroke(
-                        painter,
-                        points,
-                        strokeColor,
-                        width,
-                        stroke.brush);
-                }
-                break;
-            case BrushEngine::Airbrush:
-                drawAirbrushStroke(
-                    painter,
-                    points,
-                    strokeColor,
-                    width,
-                    stroke.brush);
-                break;
-            case BrushEngine::Spray:
-                drawSprayStroke(
-                    painter,
-                    points,
-                    strokeColor,
-                    width,
-                    stroke.brush,
-                    stroke.seed,
-                    normalizedFrame);
-                break;
-            }
-            painter.restore();
-        }
-
-        painter.end();
+        renderLayerStrokes(
+            layerImage,
+            document,
+            layer.strokes,
+            normalizedFrame,
+            frameCount,
+            horizontalScale,
+            verticalScale,
+            clipPaths,
+            scaledClipMasks);
         compositor.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
         compositor.drawImage(QPoint(0, 0), layerImage);
     }
@@ -953,6 +978,164 @@ QImage RenderEngine::renderScaled(
     const QSize &outputSize)
 {
     return renderAtSize(document, frameIndex, outputSize);
+}
+
+RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
+    const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    const QUuid &layerId)
+{
+    LayerSplitFrame split;
+    if (!document.size.isValid()
+        || !outputSize.isValid()
+        || document.layerIndex(layerId) < 0) {
+        return split;
+    }
+
+    QImage below(outputSize, QImage::Format_ARGB32_Premultiplied);
+    QImage layerBase(outputSize, QImage::Format_ARGB32_Premultiplied);
+    if (below.isNull() || layerBase.isNull()) {
+        return split;
+    }
+    below.fill(document.background);
+    layerBase.fill(Qt::transparent);
+    QImage above;
+
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
+    const int frameCount = std::max(1, document.animationFrames);
+    const int normalizedFrame =
+        ((frameIndex % frameCount) + frameCount) % frameCount;
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
+
+    bool afterTarget = false;
+    for (const Layer &layer : document.layers) {
+        if (layer.id == layerId) {
+            split.layerVisible = layer.visible && layer.opacity > 0.0;
+            split.layerOpacity = std::clamp(layer.opacity, 0.0, 1.0);
+            if (split.layerVisible && !layer.strokes.isEmpty()) {
+                renderLayerStrokes(
+                    layerBase,
+                    document,
+                    layer.strokes,
+                    normalizedFrame,
+                    frameCount,
+                    horizontalScale,
+                    verticalScale,
+                    clipPaths,
+                    scaledClipMasks);
+            }
+            afterTarget = true;
+            continue;
+        }
+        if (!layer.visible
+            || layer.opacity <= 0.0
+            || layer.strokes.isEmpty()) {
+            continue;
+        }
+
+        QImage layerImage(outputSize, QImage::Format_ARGB32_Premultiplied);
+        if (layerImage.isNull()) {
+            return split;
+        }
+        layerImage.fill(Qt::transparent);
+        renderLayerStrokes(
+            layerImage,
+            document,
+            layer.strokes,
+            normalizedFrame,
+            frameCount,
+            horizontalScale,
+            verticalScale,
+            clipPaths,
+            scaledClipMasks);
+        if (afterTarget && above.isNull()) {
+            above = QImage(outputSize, QImage::Format_ARGB32_Premultiplied);
+            if (above.isNull()) {
+                return split;
+            }
+            above.fill(Qt::transparent);
+        }
+        QPainter compositor(afterTarget ? &above : &below);
+        compositor.setRenderHint(QPainter::Antialiasing, false);
+        compositor.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+        compositor.drawImage(QPoint(0, 0), layerImage);
+    }
+
+    split.below = std::move(below);
+    split.layerBase = std::move(layerBase);
+    split.above = std::move(above);
+    split.valid = true;
+    return split;
+}
+
+bool RenderEngine::renderStrokesOnLayer(
+    QImage &layerImage,
+    const Document &document,
+    const QVector<Stroke> &strokes,
+    int frameIndex,
+    const QSize &outputSize)
+{
+    if (!document.size.isValid() || !outputSize.isValid()) {
+        return false;
+    }
+    if (layerImage.isNull()) {
+        layerImage = QImage(outputSize, QImage::Format_ARGB32_Premultiplied);
+        if (layerImage.isNull()) {
+            return false;
+        }
+        layerImage.fill(Qt::transparent);
+    }
+    if (layerImage.size() != outputSize
+        || layerImage.format() != QImage::Format_ARGB32_Premultiplied) {
+        return false;
+    }
+
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
+    const int frameCount = std::max(1, document.animationFrames);
+    const int normalizedFrame =
+        ((frameIndex % frameCount) + frameCount) % frameCount;
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
+    renderLayerStrokes(
+        layerImage,
+        document,
+        strokes,
+        normalizedFrame,
+        frameCount,
+        horizontalScale,
+        verticalScale,
+        clipPaths,
+        scaledClipMasks);
+    return true;
+}
+
+QImage RenderEngine::composeLayerSplit(
+    const LayerSplitFrame &split,
+    const QImage &layerImage)
+{
+    if (!split.valid || split.below.isNull()) {
+        return {};
+    }
+    QImage result = split.below;
+    QPainter compositor(&result);
+    compositor.setRenderHint(QPainter::Antialiasing, false);
+    if (split.layerVisible && !layerImage.isNull()) {
+        compositor.setOpacity(split.layerOpacity);
+        compositor.drawImage(QPoint(0, 0), layerImage);
+        compositor.setOpacity(1.0);
+    }
+    if (!split.above.isNull()) {
+        compositor.drawImage(QPoint(0, 0), split.above);
+    }
+    return result;
 }
 
 QPainterPath RenderEngine::strokePath(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/DocumentController.hpp"
+#include "render/RenderEngine.hpp"
 
 #include <QByteArray>
 #include <QCache>
@@ -114,6 +115,9 @@ private:
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
     QImage frameImage(int frame);
+    const RenderEngine::LayerSplitFrame &previewSplit(
+        const QUuid &layerId,
+        const QSize &renderSize);
     void invalidateFrames();
     void updateTimerInterval();
     void advanceFrame();
@@ -201,6 +205,9 @@ private:
     bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
+    RenderEngine::LayerSplitFrame m_previewSplit;
+    QUuid m_previewSplitLayer;
+    int m_previewSplitFrame = -1;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;

@@ -574,20 +574,28 @@ void CanvasWidget::paintEvent(QPaintEvent *)
     const QSize renderSize = previewRenderSize();
     QImage displayedFrame;
     if (m_drawing && !m_activeStroke.points.isEmpty()) {
-        Document previewDocument = document;
-        if (Layer *layer = previewDocument.layer(m_activeStrokeLayer)) {
-            layer->strokes.append(m_activeStroke);
-            displayedFrame = RenderEngine::renderScaled(
-                previewDocument,
-                m_currentFrame,
-                renderSize);
+        if (document.layer(m_activeStrokeLayer)) {
+            const RenderEngine::LayerSplitFrame &split =
+                previewSplit(m_activeStrokeLayer, renderSize);
+            if (split.valid) {
+                QImage layerImage = split.layerBase;
+                if (RenderEngine::renderStrokesOnLayer(
+                        layerImage,
+                        document,
+                        {m_activeStroke},
+                        m_currentFrame,
+                        renderSize)) {
+                    displayedFrame = RenderEngine::composeLayerSplit(
+                        split,
+                        layerImage);
+                }
+            }
         }
     } else if (m_movingSelection
                && !m_selectedStrokes.isEmpty()
                && (!qFuzzyIsNull(m_moveDelta.x())
                    || !qFuzzyIsNull(m_moveDelta.y()))) {
-        Document previewDocument = document;
-        if (Layer *layer = previewDocument.layer(m_selectionLayer)) {
+        if (const Layer *layer = document.layer(m_selectionLayer)) {
             QTransform shift;
             shift.translate(m_moveDelta.x(), m_moveDelta.y());
             QHash<qint64, QImage> movedMasks;
@@ -630,11 +638,21 @@ void CanvasWidget::paintEvent(QPaintEvent *)
                 moved.clipMask = movedMask.value();
                 previewStrokes.append(std::move(moved));
             }
-            layer->strokes = std::move(previewStrokes);
-            displayedFrame = RenderEngine::renderScaled(
-                previewDocument,
-                m_currentFrame,
-                renderSize);
+            const RenderEngine::LayerSplitFrame &split =
+                previewSplit(m_selectionLayer, renderSize);
+            if (split.valid) {
+                QImage layerImage;
+                if (RenderEngine::renderStrokesOnLayer(
+                        layerImage,
+                        document,
+                        previewStrokes,
+                        m_currentFrame,
+                        renderSize)) {
+                    displayedFrame = RenderEngine::composeLayerSplit(
+                        split,
+                        layerImage);
+                }
+            }
         }
     }
     if (displayedFrame.isNull()) {
@@ -1056,6 +1074,25 @@ QImage CanvasWidget::frameImage(int frame)
     return image;
 }
 
+const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
+    const QUuid &layerId,
+    const QSize &renderSize)
+{
+    if (!m_previewSplit.valid
+        || m_previewSplitLayer != layerId
+        || m_previewSplitFrame != m_currentFrame
+        || m_previewSplit.below.size() != renderSize) {
+        m_previewSplit = RenderEngine::renderLayerSplit(
+            m_controller->document(),
+            m_currentFrame,
+            renderSize,
+            layerId);
+        m_previewSplitLayer = layerId;
+        m_previewSplitFrame = m_currentFrame;
+    }
+    return m_previewSplit;
+}
+
 QSize CanvasWidget::previewRenderSize() const
 {
     const QSize documentSize = m_controller->document().size;
@@ -1081,6 +1118,9 @@ void CanvasWidget::invalidateFrames()
 {
     m_frameCache.clear();
     m_cachedRenderSize = {};
+    m_previewSplit = {};
+    m_previewSplitLayer = {};
+    m_previewSplitFrame = -1;
     const int frames = std::max(1, m_controller->document().animationFrames);
     m_currentFrame %= frames;
     updateTimerInterval();

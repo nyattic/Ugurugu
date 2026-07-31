@@ -145,6 +145,88 @@ private slots:
         QVERIFY(normal != rough);
     }
 
+    void composesLayerSplitLikeFullRender()
+    {
+        Document document = Document::createDefault(QSize(96, 72));
+        document.animationFrames = 6;
+        document.wobbleAmount = 3.0;
+        document.layers.first().strokes.append(makeStroke(
+            StrokeMode::Paint,
+            QColor(200, 40, 40),
+            8.0,
+            11,
+            {QPointF(10.0, 10.0), QPointF(80.0, 60.0)}));
+        Layer middle;
+        middle.name = QStringLiteral("Middle");
+        middle.strokes.append(makeStroke(
+            StrokeMode::Paint,
+            QColor(40, 200, 40),
+            7.0,
+            22,
+            {QPointF(10.0, 60.0), QPointF(80.0, 10.0)}));
+        document.layers.append(middle);
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.opacity = 0.65;
+        top.strokes.append(makeStroke(
+            StrokeMode::Paint,
+            QColor(40, 40, 200),
+            9.0,
+            33,
+            {QPointF(48.0, 6.0), QPointF(48.0, 66.0)}));
+        document.layers.append(top);
+        const QUuid middleId = document.layers[1].id;
+
+        const QVector<Stroke> activeStrokes = {
+            makeStroke(
+                StrokeMode::Paint,
+                QColor(250, 210, 60),
+                5.0,
+                44,
+                {QPointF(20.0, 20.0), QPointF(70.0, 50.0)}),
+            makeStroke(
+                StrokeMode::Erase,
+                QColor(Qt::black),
+                12.0,
+                55,
+                {QPointF(30.0, 50.0), QPointF(60.0, 20.0)})
+        };
+        for (const Stroke &active : activeStrokes) {
+            Document full = document;
+            full.layer(middleId)->strokes.append(active);
+            const QImage expected = RenderEngine::render(full, 2);
+
+            const RenderEngine::LayerSplitFrame split =
+                RenderEngine::renderLayerSplit(
+                    document,
+                    2,
+                    document.size,
+                    middleId);
+            QVERIFY(split.valid);
+            QImage layerImage = split.layerBase;
+            QVERIFY(RenderEngine::renderStrokesOnLayer(
+                layerImage,
+                document,
+                {active},
+                2,
+                document.size));
+            const QImage actual =
+                RenderEngine::composeLayerSplit(split, layerImage);
+
+            QCOMPARE(actual.size(), expected.size());
+            for (int y = 0; y < expected.height(); ++y) {
+                for (int x = 0; x < expected.width(); ++x) {
+                    const QColor a = actual.pixelColor(x, y);
+                    const QColor b = expected.pixelColor(x, y);
+                    QVERIFY(std::abs(a.red() - b.red()) <= 2);
+                    QVERIFY(std::abs(a.green() - b.green()) <= 2);
+                    QVERIFY(std::abs(a.blue() - b.blue()) <= 2);
+                    QVERIFY(std::abs(a.alpha() - b.alpha()) <= 2);
+                }
+            }
+        }
+    }
+
     void displacesWobbleLinearlyWithAmount()
     {
         QVector<QPointF> positions;
