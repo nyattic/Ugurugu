@@ -219,13 +219,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           path: artifacts
           merge-multiple: true
 
+      - name: Locate release notes
+        id: notes
+        run: echo "path=release-notes/${GITHUB_REF_NAME#v}.md" >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
           name: WagleWaglePaint ${{ github.ref_name }}
+          body_path: ${{ steps.notes.outputs.path }}
           generate_release_notes: true
           files: artifacts/*
