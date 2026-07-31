@@ -356,6 +356,24 @@ QTransform CanvasWidget::pendingSelectionTransform() const
         : QTransform();
 }
 
+Document CanvasWidget::documentWithPendingSelectionTransform() const
+{
+    Document document = m_controller->document();
+    if (!hasPendingSelectionTransform()) {
+        return document;
+    }
+    Layer *layer = document.layer(m_selectionTransformSession.layer);
+    if (!layer) {
+        return document;
+    }
+    Stroke stroke;
+    stroke.mode = StrokeMode::PixelSelection;
+    stroke.pixelSelectionOp =
+        m_selectionTransformSession.previewOperation;
+    layer->strokes.append(std::move(stroke));
+    return document;
+}
+
 bool CanvasWidget::scaleSelection(qreal factor)
 {
     if (!std::isfinite(factor)
@@ -2635,21 +2653,26 @@ void CanvasWidget::updateSelectionActionBar()
     const QSize barSize = m_selectionActionBar->size();
     constexpr int edgeMargin = 8;
     constexpr int selectionGap = 4;
-    const int maximumX =
-        std::max(edgeMargin, width() - barSize.width() - edgeMargin);
-    const int x = std::clamp(
-        qRound(widgetBounds.center().x() - barSize.width() * 0.5),
-        edgeMargin,
-        maximumX);
+    const int x = barSize.width() + 2 * edgeMargin <= width()
+        ? std::clamp(
+              qRound(
+                  widgetBounds.center().x()
+                  - barSize.width() * 0.5),
+              edgeMargin,
+              width() - barSize.width() - edgeMargin)
+        : (width() - barSize.width()) / 2;
     int y = qCeil(widgetBounds.bottom()) + selectionGap;
     if (y + barSize.height() > height() - edgeMargin) {
         y = qFloor(widgetBounds.top())
             - barSize.height()
             - selectionGap;
     }
-    const int maximumY =
-        std::max(edgeMargin, height() - barSize.height() - edgeMargin);
-    y = std::clamp(y, edgeMargin, maximumY);
+    y = barSize.height() + 2 * edgeMargin <= height()
+        ? std::clamp(
+              y,
+              edgeMargin,
+              height() - barSize.height() - edgeMargin)
+        : (height() - barSize.height()) / 2;
     m_selectionActionBar->move(x, y);
     m_selectionActionBar->show();
     m_selectionActionBar->raise();

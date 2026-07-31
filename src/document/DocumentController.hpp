@@ -32,6 +32,7 @@ public:
         qsizetype entryCount = 0;
         qsizetype stagedPreparedDocuments = 0;
         qsizetype peakTransientPreparedDocuments = 0;
+        qsizetype macroPreparedDocuments = 0;
         qint64 retainedBytes = 0;
         bool residentBudgetSoftExceeded = false;
     };

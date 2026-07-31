@@ -475,6 +475,56 @@ private slots:
         QVERIFY(qAbs(uniform.verticalScale - 2.0) < 0.0001);
     }
 
+    void unlocksImageSizeDialogForExtremeAspectRatios()
+    {
+        ImageSizeDialog dialog(QSize(4096, 1));
+        QSpinBox *widthSpin = dialog.findChild<QSpinBox *>(
+            QStringLiteral("imageWidthSpin"));
+        QSpinBox *heightSpin = dialog.findChild<QSpinBox *>(
+            QStringLiteral("imageHeightSpin"));
+        QCheckBox *keepAspectCheck = dialog.findChild<QCheckBox *>(
+            QStringLiteral("imageKeepAspectCheck"));
+        QDialogButtonBox *buttons =
+            dialog.findChild<QDialogButtonBox *>();
+        QVERIFY(widthSpin);
+        QVERIFY(heightSpin);
+        QVERIFY(keepAspectCheck);
+        QVERIFY(buttons);
+        QVERIFY(!keepAspectCheck->isChecked());
+        QVERIFY(!keepAspectCheck->isEnabled());
+        QCOMPARE(widthSpin->minimum(), 1);
+        QCOMPARE(widthSpin->maximum(), 4096);
+        QCOMPARE(heightSpin->minimum(), 1);
+        QCOMPARE(heightSpin->maximum(), 4096);
+
+        widthSpin->setValue(2048);
+        QCOMPARE(dialog.imageSize(), QSize(2048, 1));
+        QVERIFY(
+            buttons->button(QDialogButtonBox::Ok)->isEnabled());
+
+        ImageSizeDialog tallDialog(QSize(1, 4096));
+        QCheckBox *tallKeepAspect =
+            tallDialog.findChild<QCheckBox *>(
+                QStringLiteral("imageKeepAspectCheck"));
+        QVERIFY(tallKeepAspect);
+        QVERIFY(!tallKeepAspect->isChecked());
+        QVERIFY(!tallKeepAspect->isEnabled());
+
+        ImageSizeDialog narrowDialog(QSize(100, 1));
+        QCheckBox *narrowKeepAspect =
+            narrowDialog.findChild<QCheckBox *>(
+                QStringLiteral("imageKeepAspectCheck"));
+        QSpinBox *narrowWidthSpin =
+            narrowDialog.findChild<QSpinBox *>(
+                QStringLiteral("imageWidthSpin"));
+        QVERIFY(narrowKeepAspect);
+        QVERIFY(narrowWidthSpin);
+        QVERIFY(narrowKeepAspect->isChecked());
+        QVERIFY(narrowKeepAspect->isEnabled());
+        narrowWidthSpin->setValue(400);
+        QCOMPARE(narrowDialog.imageSize(), QSize(400, 4));
+    }
+
     void handlesUnsavedChangesDialogShortcuts_data()
     {
         QTest::addColumn<int>("key");
@@ -934,6 +984,833 @@ private slots:
         QTRY_VERIFY(!window.isWindowModified());
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QCOMPARE(undoAction->text(), undoTextBeforeTransform);
+    }
+
+    void marksPendingTransformUnsavedAndPromptsBeforeClose()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-close.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QVERIFY(!window.isWindowModified());
+
+        QVERIFY(canvas->rotateSelection(15.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QTRY_VERIFY(window.isWindowModified());
+
+        bool promptShown = false;
+        QTimer::singleShot(0, &window, [&promptShown]() {
+            QDialog *dialog = qobject_cast<QDialog *>(
+                QApplication::activeModalWidget());
+            if (!dialog) {
+                return;
+            }
+            QPushButton *cancelButton =
+                dialog->findChild<QPushButton *>(
+                    QStringLiteral("unsavedChangesCancelButton"));
+            if (!cancelButton) {
+                QTest::keyClick(dialog, Qt::Key_Escape);
+                return;
+            }
+            promptShown = true;
+            cancelButton->click();
+        });
+        QTimer::singleShot(1000, &window, []() {
+            QDialog *dialog = qobject_cast<QDialog *>(
+                QApplication::activeModalWidget());
+            if (dialog) {
+                dialog->reject();
+            }
+        });
+        QVERIFY(!window.close());
+        QVERIFY(promptShown);
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QVERIFY(window.isWindowModified());
+
+        canvas->cancelSelectionTransform();
+        QTRY_VERIFY(!window.isWindowModified());
+        QTimer::singleShot(1000, &window, []() {
+            QDialog *dialog = qobject_cast<QDialog *>(
+                QApplication::activeModalWidget());
+            if (dialog) {
+                dialog->reject();
+            }
+        });
+        QVERIFY(window.close());
+    }
+
+    void savesPendingTransformAtomicallyAndBecomesClean()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-save.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.color = QColor(35, 95, 225);
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *saveAction = window.findChild<QAction *>(
+            QStringLiteral("saveAction"));
+        QAction *stackUndoAction = window.findChild<QAction *>(
+            QStringLiteral("undoStackAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(saveAction);
+        QVERIFY(stackUndoAction);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        QVERIFY(canvas->scaleSelection(0.8));
+        QVERIFY(canvas->rotateSelection(20.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        const QImage preview = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+        const QString stackTextBeforeSave = stackUndoAction->text();
+
+        saveAction->trigger();
+        QTRY_VERIFY(!window.isWindowModified());
+        QVERIFY(!canvas->hasPendingSelectionTransform());
+        QVERIFY(!canvas->hasSelectionTransformSession());
+        QVERIFY(stackUndoAction->isEnabled());
+        QVERIFY(stackUndoAction->text() != stackTextBeforeSave);
+
+        const std::optional<Document> saved =
+            DocumentSerializer::load(filePath, &error);
+        QVERIFY2(saved.has_value(), qPrintable(error));
+        QCOMPARE(saved->layers.first().strokes.size(), 2);
+        const Stroke &committed = saved->layers.first().strokes.last();
+        QCOMPARE(committed.mode, StrokeMode::PixelSelection);
+        QVERIFY(committed.pixelSelectionOp.has_value());
+        QCOMPARE(RenderEngine::render(*saved, 0), preview);
+        QCOMPARE(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0),
+            preview);
+    }
+
+    void abortsSaveWhenPendingTransformCannotBeApplied()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-abort.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+        QFile savedFile(filePath);
+        QVERIFY(savedFile.open(QIODevice::ReadOnly));
+        const QByteArray savedBytes = savedFile.readAll();
+        savedFile.close();
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *saveAction = window.findChild<QAction *>(
+            QStringLiteral("saveAction"));
+        QAction *stackUndoAction = window.findChild<QAction *>(
+            QStringLiteral("undoStackAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(saveAction);
+        QVERIFY(stackUndoAction);
+        canvas->setZoomPercent(100);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(30, 30));
+        QTest::mouseMove(canvas, center + QPoint(30, -30), 5);
+        QTest::mouseMove(canvas, center + QPoint(30, 30), 5);
+        QTest::mouseMove(canvas, center + QPoint(-30, 30), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(30, 30));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        canvas->setSelectionMoveMode(true);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, center);
+        QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
+        QTest::mouseMove(canvas, center + QPoint(250, 0), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center + QPoint(250, 0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        const QTransform rejected = canvas->pendingSelectionTransform();
+        QVERIFY(rejected.dx() > 89.0);
+        const QString stackTextBeforeSave = stackUndoAction->text();
+        const bool stackEnabledBeforeSave =
+            stackUndoAction->isEnabled();
+
+        bool failureShown = false;
+        QTimer::singleShot(0, &window, [&failureShown]() {
+            QDialog *dialog = qobject_cast<QDialog *>(
+                QApplication::activeModalWidget());
+            if (!dialog) {
+                return;
+            }
+            failureShown = true;
+            QTest::keyClick(dialog, Qt::Key_Escape);
+        });
+        QTimer::singleShot(1000, &window, []() {
+            QDialog *dialog = qobject_cast<QDialog *>(
+                QApplication::activeModalWidget());
+            if (dialog) {
+                dialog->reject();
+            }
+        });
+        saveAction->trigger();
+
+        QVERIFY(failureShown);
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QCOMPARE(canvas->pendingSelectionTransform(), rejected);
+        QVERIFY(window.isWindowModified());
+        QCOMPARE(stackUndoAction->text(), stackTextBeforeSave);
+        QCOMPARE(
+            stackUndoAction->isEnabled(),
+            stackEnabledBeforeSave);
+        QFile unchangedFile(filePath);
+        QVERIFY(unchangedFile.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedFile.readAll(), savedBytes);
+    }
+
+    void autosavesPendingTransformSnapshotWithoutTouchingHistory()
+    {
+        const QString recoveryKey =
+            QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            recoveryPath.toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-autosave.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *stackUndoAction = window.findChild<QAction *>(
+            QStringLiteral("undoStackAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(stackUndoAction);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        QVERIFY(canvas->rotateSelection(25.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        const QString stackTextBefore = stackUndoAction->text();
+        const QImage preview = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+
+        QEvent deactivate(QEvent::ApplicationDeactivate);
+        QApplication::sendEvent(qApp, &deactivate);
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QCOMPARE(stackUndoAction->text(), stackTextBefore);
+
+        const std::optional<Document> recovered =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(recovered.has_value(), qPrintable(error));
+        QCOMPARE(recovered->layers.first().strokes.size(), 2);
+        QCOMPARE(
+            recovered->layers.first().strokes.last().mode,
+            StrokeMode::PixelSelection);
+        QCOMPARE(RenderEngine::render(*recovered, 0), preview);
+
+        canvas->cancelSelectionTransform();
+        QTRY_VERIFY(!QFileInfo::exists(recoveryPath));
+        QVERIFY(!window.isWindowModified());
+    }
+
+    void routesUndoToPendingSessionBeforeHistory()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("undo-routing.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *saveAction = window.findChild<QAction *>(
+            QStringLiteral("saveAction"));
+        QAction *undoAction = window.findChild<QAction *>(
+            QStringLiteral("undoAction"));
+        QAction *redoAction = window.findChild<QAction *>(
+            QStringLiteral("redoAction"));
+        QAction *stackUndoAction = window.findChild<QAction *>(
+            QStringLiteral("undoStackAction"));
+        QAction *stackRedoAction = window.findChild<QAction *>(
+            QStringLiteral("redoStackAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(saveAction);
+        QVERIFY(undoAction);
+        QVERIFY(redoAction);
+        QVERIFY(stackUndoAction);
+        QVERIFY(stackRedoAction);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        QVERIFY(canvas->rotateSelection(12.0));
+        QVERIFY(canvas->applySelectionTransform());
+        saveAction->trigger();
+        QTRY_VERIFY(!window.isWindowModified());
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        const QString stackUndoTextClean = stackUndoAction->text();
+        const bool stackUndoEnabledClean =
+            stackUndoAction->isEnabled();
+        const bool stackRedoEnabledClean =
+            stackRedoAction->isEnabled();
+        const QByteArray cleanDocument = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+
+        QVERIFY(canvas->rotateSelection(10.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QVERIFY(undoAction->isEnabled());
+        QVERIFY(!redoAction->isEnabled());
+        QVERIFY(undoAction->text() != stackUndoAction->text());
+        QTRY_VERIFY(window.isWindowModified());
+
+        undoAction->trigger();
+        QVERIFY(!canvas->hasPendingSelectionTransform());
+        QVERIFY(canvas->hasTransformableSelection());
+        QCOMPARE(stackUndoAction->text(), stackUndoTextClean);
+        QCOMPARE(
+            stackUndoAction->isEnabled(),
+            stackUndoEnabledClean);
+        QCOMPARE(
+            stackRedoAction->isEnabled(),
+            stackRedoEnabledClean);
+        QCOMPARE(
+            DocumentSerializer::toJson(
+                canvas->documentWithPendingSelectionTransform()),
+            cleanDocument);
+        QTRY_VERIFY(!window.isWindowModified());
+        QCOMPARE(undoAction->text(), stackUndoAction->text());
+
+        undoAction->trigger();
+        QTRY_VERIFY(window.isWindowModified());
+        QVERIFY(stackRedoAction->isEnabled());
+        QVERIFY(redoAction->isEnabled());
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        QVERIFY(canvas->rotateSelection(8.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QVERIFY(!redoAction->isEnabled());
+        redoAction->trigger();
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QVERIFY(stackRedoAction->isEnabled());
+
+        undoAction->trigger();
+        QVERIFY(!canvas->hasPendingSelectionTransform());
+        QVERIFY(stackRedoAction->isEnabled());
+        QVERIFY(redoAction->isEnabled());
+    }
+
+    void enablesPendingUndoTextAndSingleUndoAfterApply()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-undo-text.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *undoAction = window.findChild<QAction *>(
+            QStringLiteral("undoAction"));
+        QAction *stackUndoAction = window.findChild<QAction *>(
+            QStringLiteral("undoStackAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(undoAction);
+        QVERIFY(stackUndoAction);
+        QVERIFY(!undoAction->isEnabled());
+
+        const QImage originalFrame = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QVERIFY(!window.isWindowModified());
+
+        QVERIFY(canvas->rotateSelection(30.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        QVERIFY(undoAction->isEnabled());
+        QVERIFY(undoAction->text() != stackUndoAction->text());
+
+        undoAction->trigger();
+        QVERIFY(!canvas->hasPendingSelectionTransform());
+        QVERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(!window.isWindowModified());
+        QCOMPARE(undoAction->text(), stackUndoAction->text());
+        QCOMPARE(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0),
+            originalFrame);
+
+        QVERIFY(canvas->rotateSelection(30.0));
+        QVERIFY(canvas->applySelectionTransform());
+        QTRY_VERIFY(window.isWindowModified());
+        QVERIFY(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0)
+            != originalFrame);
+
+        undoAction->trigger();
+        QTRY_VERIFY(!window.isWindowModified());
+        QCOMPARE(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0),
+            originalFrame);
+    }
+
+    void commitsPendingTransformBeforeResizingCanvas()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        EnvironmentVariableGuard recoveryGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        qputenv(
+            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString filePath =
+            directory.filePath(QStringLiteral("pending-resize.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction = window.findChild<QAction *>(
+            QStringLiteral("lassoAction"));
+        QAction *resizeCanvasAction = window.findChild<QAction *>(
+            QStringLiteral("resizeCanvasAction"));
+        QAction *undoAction = window.findChild<QAction *>(
+            QStringLiteral("undoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(resizeCanvasAction);
+        QVERIFY(undoAction);
+
+        const QImage originalFrame = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
+        QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
+        QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
+        QTest::mouseRelease(
+            canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(100, 70));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        QVERIFY(canvas->rotateSelection(20.0));
+        QVERIFY(canvas->hasPendingSelectionTransform());
+        const QImage pendingFrame = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+
+        bool dialogHandled = false;
+        QTimer::singleShot(0, &window, [&]() {
+            CanvasSizeDialog *dialog =
+                window.findChild<CanvasSizeDialog *>();
+            if (!dialog) {
+                return;
+            }
+            QSpinBox *width = dialog->findChild<QSpinBox *>(
+                QStringLiteral("canvasWidthSpin"));
+            if (!width) {
+                return;
+            }
+            width->setValue(width->value() + 20);
+            dialogHandled = true;
+            dialog->accept();
+        });
+        resizeCanvasAction->trigger();
+        QVERIFY(dialogHandled);
+        QVERIFY(!canvas->hasPendingSelectionTransform());
+        QVERIFY(!canvas->hasSelectionTransformSession());
+        QCOMPARE(
+            canvas->documentWithPendingSelectionTransform().size,
+            QSize(120, 100));
+        const QImage resizedFrame = RenderEngine::render(
+            canvas->documentWithPendingSelectionTransform(),
+            0);
+        QCOMPARE(
+            resizedFrame.copy(QRect(10, 0, 100, 100)),
+            pendingFrame);
+
+        undoAction->trigger();
+        QCOMPARE(
+            canvas->documentWithPendingSelectionTransform().size,
+            QSize(100, 100));
+        QCOMPARE(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0),
+            pendingFrame);
+
+        undoAction->trigger();
+        QCOMPARE(
+            RenderEngine::render(
+                canvas->documentWithPendingSelectionTransform(),
+                0),
+            originalFrame);
+        QTRY_VERIFY(!window.isWindowModified());
+    }
+
+    void keepsSelectionActionBarReachableInNarrowWindows()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(30.0, 50.0), 1.0},
+            {QPointF(70.0, 50.0), 1.0}
+        };
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(300, 400);
+        canvas.setAnimating(false);
+
+        auto *bar = new SelectionActionBar(&canvas);
+        const QStringList actionNames = {
+            QStringLiteral("moveSelectionAction"),
+            QStringLiteral("scaleSelectionAction"),
+            QStringLiteral("rotateSelectionAction"),
+            QStringLiteral("flipSelectionHorizontalAction"),
+            QStringLiteral("flipSelectionVerticalAction"),
+            QStringLiteral("applySelectionTransformAction"),
+            QStringLiteral("cancelSelectionTransformAction"),
+            QStringLiteral("duplicateSelectionAction"),
+            QStringLiteral("deleteSelectionAction"),
+            QStringLiteral("deselectSelectionAction"),
+        };
+        for (int index = 0; index < actionNames.size(); ++index) {
+            auto *action = new QAction(actionNames[index], &canvas);
+            action->setObjectName(actionNames[index]);
+            bar->addAction(action);
+            if (index == 2 || index == 4 || index == 6
+                || index == 8) {
+                bar->addSeparator();
+            }
+        }
+        canvas.setSelectionActionBar(bar);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(60, 60));
+        QTest::mouseMove(&canvas, center + QPoint(60, -60), 5);
+        QTest::mouseMove(&canvas, center + QPoint(60, 60), 5);
+        QTest::mouseMove(&canvas, center + QPoint(-60, 60), 5);
+        QTest::mouseRelease(
+            &canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(60, 60));
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(bar->isVisible());
+
+        QVERIFY(bar->width() > canvas.width());
+        QCOMPARE(bar->x(), (canvas.width() - bar->width()) / 2);
+
+        QToolButton *applyButton = bar->findChild<QToolButton *>(
+            QStringLiteral("applySelectionTransformButton"));
+        QToolButton *cancelButton = bar->findChild<QToolButton *>(
+            QStringLiteral("cancelSelectionTransformButton"));
+        QVERIFY(applyButton);
+        QVERIFY(cancelButton);
+        QVERIFY(canvas.rect().contains(
+            applyButton->mapTo(
+                &canvas,
+                applyButton->rect().center())));
+        QVERIFY(canvas.rect().contains(
+            cancelButton->mapTo(
+                &canvas,
+                cancelButton->rect().center())));
     }
 
     void floatingSelectionTransformCommitsOnceAndCancelsLosslessly()

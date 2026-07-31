@@ -46,6 +46,8 @@ private:
     void saveDrawingToolSettings();
     void updateWindowTitle();
     void updateColorButton();
+    bool hasUnsavedWork() const;
+    void refreshUnsavedState();
     bool maybeSave();
     bool save();
     bool saveAs();

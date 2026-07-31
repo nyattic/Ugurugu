@@ -219,7 +219,35 @@ ImageSizeDialog::ImageSizeDialog(
     m_keepAspectCheck->setObjectName(
         QStringLiteral("imageKeepAspectCheck"));
     m_keepAspectCheck->setAccessibleName(tr("Keep image aspect ratio"));
-    m_keepAspectCheck->setChecked(true);
+    const qreal aspectRatio =
+        static_cast<qreal>(m_currentSize.width())
+        / m_currentSize.height();
+    const int smallestAspectWidth = std::clamp(
+        qCeil(minimumDialogEdge * aspectRatio),
+        minimumDialogEdge,
+        DocumentLimits::maximumCanvasEdge);
+    const int largestAspectWidth = std::clamp(
+        qFloor(DocumentLimits::maximumCanvasEdge * aspectRatio),
+        minimumDialogEdge,
+        DocumentLimits::maximumCanvasEdge);
+    const int smallestAspectHeight = std::clamp(
+        qCeil(minimumDialogEdge / aspectRatio),
+        minimumDialogEdge,
+        DocumentLimits::maximumCanvasEdge);
+    const int largestAspectHeight = std::clamp(
+        qFloor(DocumentLimits::maximumCanvasEdge / aspectRatio),
+        minimumDialogEdge,
+        DocumentLimits::maximumCanvasEdge);
+    const bool aspectResizable =
+        smallestAspectWidth != largestAspectWidth
+        || smallestAspectHeight != largestAspectHeight;
+    m_keepAspectCheck->setChecked(aspectResizable);
+    m_keepAspectCheck->setEnabled(aspectResizable);
+    if (!aspectResizable) {
+        m_keepAspectCheck->setToolTip(
+            tr("No other size can keep this aspect ratio within the "
+               "canvas size limits."));
+    }
     controlsLayout->addWidget(m_keepAspectCheck);
     controlsLayout->addStretch(1);
 

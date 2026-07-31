@@ -1995,6 +1995,11 @@ DocumentUndoStack::StorageStats DocumentUndoStack::storageStats() const
     total.entryCount = static_cast<qsizetype>(m_impl->entries.size());
     total.peakTransientPreparedDocuments =
         m_impl->peakTransientPreparedDocuments;
+    if (m_owner && m_owner->m_macroTransaction) {
+        total.macroPreparedDocuments =
+            (m_owner->m_macroTransaction->startState ? 1 : 0)
+            + (m_owner->m_macroTransaction->workingState ? 1 : 0);
+    }
     for (const std::unique_ptr<QUndoCommand> &entry : m_impl->entries) {
         const auto *logical =
             dynamic_cast<const LogicalHistoryCommand *>(entry.get());
@@ -2306,7 +2311,7 @@ bool DocumentController::saveDocument(
     const QString &filePath,
     QString *error)
 {
-    if (hasOpenHistoryMacro()) {
+    if (m_undoStack.m_moving || hasOpenHistoryMacro()) {
         failHistoryMacro();
         if (error) {
             *error = tr("Cannot save an unfinished history transaction.");

@@ -536,17 +536,66 @@ void MainWindow::createActions()
     checkForUpdatesAction->setObjectName(
         QStringLiteral("checkForUpdatesAction"));
 
-    QAction *undoAction = m_controller.undoStack()->createUndoAction(this);
-    undoAction->setText(tr("&Undo"));
+    QAction *stackUndoAction =
+        m_controller.undoStack()->createUndoAction(this);
+    stackUndoAction->setObjectName(QStringLiteral("undoStackAction"));
+    QAction *stackRedoAction =
+        m_controller.undoStack()->createRedoAction(this);
+    stackRedoAction->setObjectName(QStringLiteral("redoStackAction"));
+
+    QAction *undoAction = new QAction(tr("&Undo"), this);
     undoAction->setObjectName(QStringLiteral("undoAction"));
     undoAction->setIcon(Icons::icon(IconGlyph::Undo));
     registerShortcut(undoAction, QKeySequence(QKeySequence::Undo));
 
-    QAction *redoAction = m_controller.undoStack()->createRedoAction(this);
-    redoAction->setText(tr("&Redo"));
+    QAction *redoAction = new QAction(tr("&Redo"), this);
     redoAction->setObjectName(QStringLiteral("redoAction"));
     redoAction->setIcon(Icons::icon(IconGlyph::Redo));
     registerShortcut(redoAction, QKeySequence(QKeySequence::Redo));
+
+    const auto syncHistoryActions =
+        [this, undoAction, redoAction, stackUndoAction, stackRedoAction]() {
+            const bool pending =
+                m_canvas->hasPendingSelectionTransform();
+            undoAction->setEnabled(
+                pending || stackUndoAction->isEnabled());
+            undoAction->setText(
+                pending
+                    ? tr("Undo Selection Transform")
+                    : stackUndoAction->text());
+            redoAction->setEnabled(
+                !pending && stackRedoAction->isEnabled());
+            redoAction->setText(stackRedoAction->text());
+        };
+    connect(
+        stackUndoAction,
+        &QAction::changed,
+        this,
+        syncHistoryActions);
+    connect(
+        stackRedoAction,
+        &QAction::changed,
+        this,
+        syncHistoryActions);
+    connect(
+        m_canvas,
+        &CanvasWidget::selectionTransformSessionChanged,
+        this,
+        syncHistoryActions);
+    connect(undoAction, &QAction::triggered, this, [this]() {
+        if (m_canvas->hasPendingSelectionTransform()) {
+            m_canvas->cancelSelectionTransform();
+            return;
+        }
+        m_controller.undoStack()->undo();
+    });
+    connect(redoAction, &QAction::triggered, this, [this]() {
+        if (m_canvas->hasPendingSelectionTransform()) {
+            return;
+        }
+        m_controller.undoStack()->redo();
+    });
+    syncHistoryActions();
 
     auto *resizeCanvasAction =
         new QAction(tr("Change canvas size…"), this);
@@ -1419,9 +1468,22 @@ void MainWindow::connectDocument()
         &DocumentController::modifiedChanged,
         this,
         [this](bool modified) {
-            setWindowModified(modified);
+            refreshUnsavedState();
             updateWindowTitle();
-            if (!modified) {
+            if (!modified
+                && !m_canvas->hasPendingSelectionTransform()) {
+                clearAutosave();
+            }
+        });
+    connect(
+        m_canvas,
+        &CanvasWidget::selectionTransformSessionChanged,
+        this,
+        [this](bool, bool dirty) {
+            refreshUnsavedState();
+            if (dirty || m_controller.isModified()) {
+                m_autosavePending = true;
+            } else {
                 clearAutosave();
             }
         });
@@ -1451,9 +1513,20 @@ void MainWindow::updateColorButton()
             .arg(color.name(QColor::HexArgb), Theme::accent().name()));
 }
 
+bool MainWindow::hasUnsavedWork() const
+{
+    return m_controller.isModified()
+        || m_canvas->hasPendingSelectionTransform();
+}
+
+void MainWindow::refreshUnsavedState()
+{
+    setWindowModified(hasUnsavedWork());
+}
+
 bool MainWindow::maybeSave()
 {
-    if (!m_controller.isModified()) {
+    if (!hasUnsavedWork()) {
         return true;
     }
 
@@ -1545,6 +1618,20 @@ bool MainWindow::saveAs()
 
 bool MainWindow::saveToFile(const QString &filePath)
 {
+    if (m_canvas->hasPendingSelectionTransform()
+        && !m_canvas->applySelectionTransform()) {
+        spdlog::error(
+            "Aborted saving {}: the pending selection transform "
+            "could not be applied",
+            filePath.toUtf8().constData());
+        QMessageBox::critical(
+            this,
+            tr("Save failed"),
+            tr("The pending selection transform could not be "
+               "applied. Adjust or cancel the transform, then save "
+               "again."));
+        return false;
+    }
     QString error;
     if (!m_controller.saveDocument(filePath, &error)) {
         spdlog::error(
@@ -1597,6 +1684,16 @@ void MainWindow::resizeCanvas()
         && requested.contentOffset.isNull()) {
         return;
     }
+    if (m_canvas->hasPendingSelectionTransform()
+        && !m_canvas->applySelectionTransform()) {
+        QMessageBox::critical(
+            this,
+            tr("Canvas size"),
+            tr("The pending selection transform could not be "
+               "applied. Adjust or cancel the transform, then "
+               "change the size again."));
+        return;
+    }
     m_canvas->setSelectionMoveMode(false);
     m_canvas->cancelActiveInteraction();
     const bool hadSelection = m_canvas->hasSelection();
@@ -1627,6 +1724,16 @@ void MainWindow::resizeImage()
     }
     const QSize requested = dialog.imageSize();
     if (requested == m_controller.document().size) {
+        return;
+    }
+    if (m_canvas->hasPendingSelectionTransform()
+        && !m_canvas->applySelectionTransform()) {
+        QMessageBox::critical(
+            this,
+            tr("Image size"),
+            tr("The pending selection transform could not be "
+               "applied. Adjust or cancel the transform, then "
+               "change the size again."));
         return;
     }
     m_canvas->setSelectionMoveMode(false);
@@ -1685,7 +1792,7 @@ void MainWindow::rotateSelection()
 
 void MainWindow::writeAutosave()
 {
-    if (!m_controller.isModified() || !m_autosavePending) {
+    if (!hasUnsavedWork() || !m_autosavePending) {
         return;
     }
     const QString filePath = autosavePath();
@@ -1697,7 +1804,13 @@ void MainWindow::writeAutosave()
     }
 
     QString error;
-    if (!m_controller.saveDocument(filePath, &error)) {
+    const bool saved = m_canvas->hasPendingSelectionTransform()
+        ? DocumentSerializer::save(
+              filePath,
+              m_canvas->documentWithPendingSelectionTransform(),
+              &error)
+        : m_controller.saveDocument(filePath, &error);
+    if (!saved) {
         spdlog::warn(
             "Failed to write recovery file {}: {}",
             filePath.toUtf8().constData(),
@@ -1745,7 +1858,8 @@ void MainWindow::chooseOpenFile()
 
 void MainWindow::exportGif()
 {
-    const Document &document = m_controller.document();
+    const Document document =
+        m_canvas->documentWithPendingSelectionTransform();
     const long double workingBytes =
         static_cast<long double>(document.size.width())
         * static_cast<long double>(document.size.height())
@@ -1864,7 +1978,8 @@ void MainWindow::exportImage()
         : normalizedPath(
               selected,
               jpeg ? QStringLiteral("jpg") : QStringLiteral("png"));
-    Document exportDocument = m_controller.document();
+    Document exportDocument =
+        m_canvas->documentWithPendingSelectionTransform();
     if (!m_canvas->isWobbleAnimationEnabled()) {
         exportDocument.wobbleAmount = 0.0;
     }

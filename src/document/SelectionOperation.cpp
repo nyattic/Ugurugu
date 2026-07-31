@@ -77,20 +77,34 @@ SamplingMode samplingForTransformImpl(const QTransform &transform)
 
 QRect selectionBounds(const QImage &mask)
 {
-    int left = mask.width();
-    int top = mask.height();
+    const int width = mask.width();
+    const int height = mask.height();
+    int left = width;
+    int top = height;
     int right = -1;
     int bottom = -1;
-    for (int y = 0; y < mask.height(); ++y) {
+    for (int y = 0; y < height; ++y) {
         const uchar *line = mask.constScanLine(y);
-        for (int x = 0; x < mask.width(); ++x) {
-            if (line[x] < 128) {
-                continue;
-            }
-            left = std::min(left, x);
-            top = std::min(top, y);
-            right = std::max(right, x);
-            bottom = std::max(bottom, y);
+        int first = 0;
+        while (first < width && line[first] < 128) {
+            ++first;
+        }
+        if (first == width) {
+            continue;
+        }
+        int last = width - 1;
+        while (line[last] < 128) {
+            --last;
+        }
+        if (top == height) {
+            top = y;
+        }
+        bottom = y;
+        if (first < left) {
+            left = first;
+        }
+        if (last > right) {
+            right = last;
         }
     }
     return right < left || bottom < top
@@ -423,13 +437,18 @@ std::optional<PackedMaskRegion> packBinaryMask(
     region.bounds = bounds;
     region.packedMask =
         QByteArray(stride * bounds.height(), '\0');
-    for (int y = 0; y < bounds.height(); ++y) {
+    const int boundsWidth = bounds.width();
+    const int boundsHeight = bounds.height();
+    const int boundsX = bounds.x();
+    const int boundsY = bounds.y();
+    uchar *packed =
+        reinterpret_cast<uchar *>(region.packedMask.data());
+    for (int y = 0; y < boundsHeight; ++y) {
         const uchar *source =
-            mask.constScanLine(bounds.y() + y) + bounds.x();
-        auto *target = reinterpret_cast<uchar *>(
-            region.packedMask.data()
-            + static_cast<qsizetype>(y) * stride);
-        for (int x = 0; x < bounds.width(); ++x) {
+            mask.constScanLine(boundsY + y) + boundsX;
+        uchar *target =
+            packed + static_cast<qsizetype>(y) * stride;
+        for (int x = 0; x < boundsWidth; ++x) {
             if (source[x] >= 128) {
                 target[x / 8] |=
                     static_cast<uchar>(0x80U >> (x % 8));
@@ -517,14 +536,20 @@ QImage unpackBinaryMask(
         return {};
     }
     mask.fill(0);
-    for (int y = region.bounds.top();
-         y <= region.bounds.bottom();
-         ++y) {
-        uchar *line = mask.scanLine(y);
-        for (int x = region.bounds.left();
-             x <= region.bounds.right();
-             ++x) {
-            if (packedMaskContains(region, x, y)) {
+    const int boundsWidth = region.bounds.width();
+    const int boundsHeight = region.bounds.height();
+    const int boundsX = region.bounds.x();
+    const int boundsY = region.bounds.y();
+    const qsizetype stride = packedStride(boundsWidth);
+    const auto *packed = reinterpret_cast<const uchar *>(
+        region.packedMask.constData());
+    for (int y = 0; y < boundsHeight; ++y) {
+        const uchar *source =
+            packed + static_cast<qsizetype>(y) * stride;
+        uchar *line = mask.scanLine(boundsY + y) + boundsX;
+        for (int x = 0; x < boundsWidth; ++x) {
+            if (source[x / 8]
+                & static_cast<uchar>(0x80U >> (x % 8))) {
                 line[x] = 255;
             }
         }

@@ -408,6 +408,101 @@ private slots:
         QVERIFY(!redoAction->isEnabled());
     }
 
+    void evictsRedoTailWhenLimitShrinksNearCursor()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        for (int index = 0; index < 6; ++index) {
+            controller.setLayerVisible(layerId, (index % 2) != 0);
+        }
+        controller.markSaved();
+        QVERIFY(controller.undoStack()->isClean());
+        QCOMPARE(controller.undoStack()->count(), 6);
+
+        for (int index = 0; index < 4; ++index) {
+            controller.undoStack()->undo();
+        }
+        QCOMPARE(controller.undoStack()->index(), 2);
+        QVERIFY(controller.document().layer(layerId)->visible);
+
+        controller.undoStack()->setUndoLimit(3);
+
+        QCOMPARE(controller.undoStack()->count(), 3);
+        QCOMPARE(controller.undoStack()->index(), 1);
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.undoStack()->canUndo());
+        QVERIFY(controller.undoStack()->canRedo());
+        QVERIFY(controller.document().layer(layerId)->visible);
+
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(layerId)->visible);
+        QVERIFY(!controller.undoStack()->canUndo());
+
+        controller.undoStack()->redo();
+        controller.undoStack()->redo();
+        controller.undoStack()->redo();
+        QVERIFY(!controller.undoStack()->canRedo());
+        QVERIFY(controller.document().layer(layerId)->visible);
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+    }
+
+    void invalidatesCleanMarkerInsideDeletedRedoTail()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        controller.renameLayer(layerId, QStringLiteral("First"));
+        controller.setLayerVisible(layerId, false);
+        controller.markSaved();
+        QVERIFY(controller.undoStack()->isClean());
+        QVERIFY(!controller.isModified());
+        QCOMPARE(controller.undoStack()->count(), 2);
+
+        controller.undoStack()->undo();
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+
+        controller.setLayerOpacity(layerId, 0.5);
+        QCOMPARE(controller.undoStack()->count(), 2);
+        QCOMPARE(controller.undoStack()->index(), 2);
+        QVERIFY(!controller.undoStack()->canRedo());
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+
+        controller.undoStack()->undo();
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+        controller.undoStack()->undo();
+        QCOMPARE(
+            controller.document().layer(layerId)->name,
+            QStringLiteral("Layer 1"));
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+        controller.undoStack()->redo();
+        controller.undoStack()->redo();
+        QCOMPARE(
+            controller.document().layer(layerId)->name,
+            QStringLiteral("First"));
+        QCOMPARE(
+            controller.document().layer(layerId)->opacity,
+            0.5);
+        QVERIFY(!controller.undoStack()->isClean());
+        QVERIFY(controller.isModified());
+
+        controller.markSaved();
+        QVERIFY(controller.undoStack()->isClean());
+        QVERIFY(!controller.isModified());
+        controller.undoStack()->undo();
+        QVERIFY(controller.isModified());
+        controller.undoStack()->redo();
+        QVERIFY(controller.undoStack()->isClean());
+        QVERIFY(!controller.isModified());
+    }
+
     void reusesTrustedBackingsWhenRestoringClearedAndRemovedLayers()
     {
         Document source = Document::createDefault(QSize(64, 64));
@@ -425,6 +520,23 @@ private slots:
         }
         source.layers.first().strokes.append(stroke);
 
+        QImage selection(source.size, QImage::Format_Grayscale8);
+        selection.fill(0);
+        for (int y = 16; y < 32; ++y) {
+            std::fill_n(selection.scanLine(y) + 16, 8, 255);
+        }
+        const std::optional<PixelSelectionOp> selectionOp =
+            makePixelSelectionOp(
+                selection,
+                QTransform::fromTranslate(4.0, 2.0),
+                true,
+                true);
+        QVERIFY(selectionOp.has_value());
+        Stroke selectionStroke;
+        selectionStroke.mode = StrokeMode::PixelSelection;
+        selectionStroke.pixelSelectionOp = *selectionOp;
+        source.layers.first().strokes.append(selectionStroke);
+
         DocumentController controller;
         controller.loadDocument(source);
         const QUuid layerId = controller.document().activeLayerId;
@@ -432,6 +544,11 @@ private slots:
             controller.document().layer(layerId)->strokes.first();
         const qint64 maskKey = prepared.clipMask.cacheKey();
         const StrokePoint *pointBacking = prepared.points.constData();
+        const Stroke &preparedSelection =
+            controller.document().layer(layerId)->strokes.last();
+        QVERIFY(preparedSelection.pixelSelectionOp.has_value());
+        const char *selectionBacking =
+            preparedSelection.pixelSelectionOp->packedMask.constData();
 
         controller.clearLayer(layerId);
         controller.undoStack()->undo();
@@ -439,6 +556,14 @@ private slots:
             controller.document().layer(layerId)->strokes.first();
         QCOMPARE(clearRestored.clipMask.cacheKey(), maskKey);
         QCOMPARE(clearRestored.points.constData(), pointBacking);
+        const Stroke &clearRestoredSelection =
+            controller.document().layer(layerId)->strokes.last();
+        QVERIFY(clearRestoredSelection.pixelSelectionOp.has_value());
+        QCOMPARE(
+            static_cast<const void *>(
+                clearRestoredSelection.pixelSelectionOp->packedMask
+                    .constData()),
+            static_cast<const void *>(selectionBacking));
 
         controller.loadDocument(source);
         const Stroke &removePrepared =
@@ -447,6 +572,15 @@ private slots:
             removePrepared.clipMask.cacheKey();
         const StrokePoint *removePointBacking =
             removePrepared.points.constData();
+        QVERIFY(controller.document()
+                    .layer(layerId)
+                    ->strokes.last()
+                    .pixelSelectionOp.has_value());
+        const char *removeSelectionBacking =
+            controller.document()
+                .layer(layerId)
+                ->strokes.last()
+                .pixelSelectionOp->packedMask.constData();
         controller.removeLayer(layerId);
         QVERIFY(controller.document().layers.isEmpty());
         controller.undoStack()->undo();
@@ -456,6 +590,71 @@ private slots:
         QCOMPARE(
             removeRestored.points.constData(),
             removePointBacking);
+        QVERIFY(controller.document()
+                    .layer(layerId)
+                    ->strokes.last()
+                    .pixelSelectionOp.has_value());
+        QCOMPARE(
+            static_cast<const void *>(
+                controller.document()
+                    .layer(layerId)
+                    ->strokes.last()
+                    .pixelSelectionOp->packedMask.constData()),
+            static_cast<const void *>(removeSelectionBacking));
+    }
+
+    void refusesTrustedLeaseForExternalAliases()
+    {
+        Document source = Document::createDefault(QSize(64, 64));
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(4.0, 4.0), 1.0},
+            {QPointF(40.0, 40.0), 1.0}
+        };
+        stroke.clipMask = QImage(
+            source.size,
+            QImage::Format_Grayscale8);
+        stroke.clipMask.fill(0);
+        for (int y = 4; y < 20; ++y) {
+            std::fill_n(stroke.clipMask.scanLine(y) + 4, 16, 255);
+        }
+        source.layers.first().strokes.append(stroke);
+
+        DocumentSerializer::SerializationCache cache;
+        const std::optional<DocumentSerializer::PreparedDocument>
+            prepared = DocumentSerializer::prepare(source, cache);
+        QVERIFY(prepared.has_value());
+        const Stroke &trusted =
+            prepared->document().layers.first().strokes.first();
+
+        QVERIFY(DocumentSerializer::retainImmutableBackings(
+                    *prepared,
+                    {trusted})
+                    .isValid());
+
+        Stroke pointAlias = trusted;
+        pointAlias.points.detach();
+        QVERIFY(!DocumentSerializer::retainImmutableBackings(
+                     *prepared,
+                     {pointAlias})
+                     .isValid());
+
+        Stroke maskAlias = trusted;
+        maskAlias.clipMask = trusted.clipMask.copy();
+        QVERIFY(!DocumentSerializer::retainImmutableBackings(
+                     *prepared,
+                     {maskAlias})
+                     .isValid());
+
+        Stroke foreign = trusted;
+        foreign.id = QUuid::createUuid();
+        QVERIFY(!DocumentSerializer::retainImmutableBackings(
+                     *prepared,
+                     {foreign})
+                     .isValid());
+
+        QVERIFY(
+            !DocumentSerializer::ImmutableBackingLease().isValid());
     }
 
     void commitsLargeDocumentMacroAsOnePreparedStage()
@@ -473,8 +672,18 @@ private slots:
             controller.renameLayer(
                 layerId,
                 QStringLiteral("Large layer %1").arg(index));
+            QVERIFY(
+                controller.undoStack()
+                    ->storageStats()
+                    .macroPreparedDocuments
+                <= qsizetype(2));
         }
         QCOMPARE(documentChangedSpy.count(), 0);
+        QCOMPARE(
+            controller.undoStack()
+                ->storageStats()
+                .macroPreparedDocuments,
+            qsizetype(2));
         controller.undoStack()->endMacro();
 
         QCOMPARE(controller.undoStack()->count(), 1);
@@ -482,6 +691,7 @@ private slots:
         DocumentUndoStack::StorageStats stats =
             controller.undoStack()->storageStats();
         QCOMPARE(stats.entryCount, qsizetype(1));
+        QCOMPARE(stats.macroPreparedDocuments, qsizetype(0));
         QCOMPARE(stats.retainedPreparedDocuments, qsizetype(0));
         QCOMPARE(stats.stagedPreparedDocuments, qsizetype(0));
         QCOMPARE(stats.peakTransientPreparedDocuments, qsizetype(0));
@@ -553,6 +763,117 @@ private slots:
         QCOMPARE(observedLastPixel, 0);
         QCOMPARE(controller.undoStack()->index(), retainedCount);
         QCOMPARE(observedLastPixel, 0);
+    }
+
+    void boundsProductionBudgetForSixtyFourUniqueFourKMasks()
+    {
+        constexpr int edge = 4096;
+        constexpr int editCount = 64;
+        QImage state(edge, edge, QImage::Format_Grayscale8);
+        QVERIFY(!state.isNull());
+        state.fill(255);
+
+        DocumentController controller;
+        controller.newDocument(state.size());
+        const QUuid layerId = controller.document().activeLayerId;
+        int observedLastPixel = -1;
+        QObject::connect(
+            &controller,
+            &DocumentController::selectionHistoryStateRequested,
+            &controller,
+            [&observedLastPixel](const QUuid &, const QImage &mask) {
+                observedLastPixel = mask.isNull()
+                    ? -1
+                    : mask.constScanLine(edge - 1)[editCount - 1];
+            });
+
+        for (int index = 0; index < editCount; ++index) {
+            const QImage before = state;
+            state.detach();
+            state.scanLine(edge - 1)[index] = 0;
+            controller.pushSelectionStateCommand(
+                QStringLiteral("Native 4K selection %1").arg(index),
+                layerId,
+                before,
+                layerId,
+                state);
+        }
+
+        const DocumentUndoStack::StorageStats stats =
+            controller.undoStack()->storageStats();
+        QCOMPARE(
+            stats.entryCount,
+            qsizetype(controller.undoStack()->count()));
+        QVERIFY(
+            stats.retainedBytes
+            <= DocumentUndoStack::maximumResidentBytes);
+        QVERIFY(!stats.residentBudgetSoftExceeded);
+        QVERIFY(controller.undoStack()->count() >= editCount / 2);
+        QCOMPARE(
+            controller.undoStack()->index(),
+            controller.undoStack()->count());
+        QCOMPARE(observedLastPixel, 0);
+
+        const int retainedCount = controller.undoStack()->count();
+        controller.undoStack()->undo();
+        QCOMPARE(observedLastPixel, 255);
+        controller.undoStack()->redo();
+        QCOMPARE(observedLastPixel, 0);
+        QCOMPARE(controller.undoStack()->index(), retainedCount);
+    }
+
+    void softRetainsSingleOversizedHistoryEntry()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(256, 256));
+        DocumentControllerTestAccess::setHistoryResidentLimit(
+            controller,
+            4LL * 1024LL);
+        const QUuid layerId = controller.document().activeLayerId;
+        int observedWidth = -2;
+        QObject::connect(
+            &controller,
+            &DocumentController::selectionHistoryStateRequested,
+            &controller,
+            [&observedWidth](const QUuid &, const QImage &mask) {
+                observedWidth = mask.isNull() ? -1 : mask.width();
+            });
+
+        QImage oversized(256, 256, QImage::Format_Grayscale8);
+        oversized.fill(255);
+        controller.pushSelectionStateCommand(
+            QStringLiteral("Oversized selection"),
+            layerId,
+            {},
+            layerId,
+            oversized);
+
+        DocumentUndoStack::StorageStats stats =
+            controller.undoStack()->storageStats();
+        QCOMPARE(controller.undoStack()->count(), 1);
+        QVERIFY(stats.retainedBytes > 4LL * 1024LL);
+        QVERIFY(stats.residentBudgetSoftExceeded);
+        QVERIFY(controller.undoStack()->canUndo());
+
+        controller.undoStack()->undo();
+        QCOMPARE(observedWidth, -1);
+        controller.undoStack()->redo();
+        QCOMPARE(observedWidth, 256);
+
+        QImage second(192, 256, QImage::Format_Grayscale8);
+        second.fill(255);
+        controller.pushSelectionStateCommand(
+            QStringLiteral("Second oversized selection"),
+            layerId,
+            oversized,
+            layerId,
+            second);
+        stats = controller.undoStack()->storageStats();
+        QCOMPARE(controller.undoStack()->count(), 1);
+        QCOMPARE(controller.undoStack()->index(), 1);
+        QVERIFY(stats.residentBudgetSoftExceeded);
+        controller.undoStack()->undo();
+        QCOMPARE(observedWidth, 256);
     }
 
     void retainsOnlyChangedPayloadForLargeDocumentHistory()
@@ -803,10 +1124,15 @@ private slots:
 
         DocumentController controller;
         controller.loadDocument(std::move(document));
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString rejectedSavePath =
+            tempDir.filePath(QStringLiteral("rejected-save.wagle"));
         int phase = 0;
         int transientState = 0;
         bool pushStateWasAtomic = false;
         bool undoStateWasAtomic = false;
+        bool reentrantSaveSucceeded = true;
         QObject::connect(
             &controller,
             &DocumentController::documentChanged,
@@ -840,6 +1166,12 @@ private slots:
                         firstLayerId,
                         selected);
                     controller.newDocument(QSize(32, 32));
+                    controller.loadDocument(
+                        Document::createDefault(QSize(48, 48)));
+                    controller.loadRecoveredDocument(
+                        Document::createDefault(QSize(48, 48)));
+                    reentrantSaveSucceeded =
+                        controller.saveDocument(rejectedSavePath);
                     controller.markSaved();
                     // Active-layer selection is deliberately non-history UI
                     // state and remains legal after the target is installed.
@@ -885,6 +1217,8 @@ private slots:
         QCOMPARE(controller.document().activeLayerId, secondLayerId);
         QCOMPARE(transientState, 0);
         QVERIFY(controller.isModified());
+        QVERIFY(!reentrantSaveSucceeded);
+        QVERIFY(!QFile::exists(rejectedSavePath));
 
         phase = 2;
         controller.undoStack()->undo();
