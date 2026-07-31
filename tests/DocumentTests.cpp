@@ -277,6 +277,7 @@ private slots:
         paint.brush =
             BrushPresetCatalog::find(QStringLiteral("soft-airbrush"))->settings;
         paint.brush.wobbleScale = 0.35;
+        paint.brush.antialiasing = true;
         paint.points = {
             {QPointF(1.25, 2.5), 0.2},
             {QPointF(30.0, 40.0), 0.9}

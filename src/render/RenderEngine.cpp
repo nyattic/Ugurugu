@@ -809,6 +809,9 @@ void renderLayerStrokes(
         }
 
         painter.save();
+        painter.setRenderHint(
+            QPainter::Antialiasing,
+            stroke.brush.antialiasing);
         if (!stroke.clipMask.isNull()) {
             const qint64 key = stroke.clipMask.cacheKey();
             auto cached = clipPaths.constFind(key);

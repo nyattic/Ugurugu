@@ -94,6 +94,7 @@ QJsonObject brushToJson(const BrushSettings &brush)
     object.insert(QStringLiteral("sizeJitter"), brush.sizeJitter);
     object.insert(QStringLiteral("animatedJitter"), brush.animatedJitter);
     object.insert(QStringLiteral("wobbleScale"), brush.wobbleScale);
+    object.insert(QStringLiteral("antialiasing"), brush.antialiasing);
     return object;
 }
 
@@ -125,6 +126,12 @@ std::optional<BrushSettings> brushFromJson(
     const QJsonValue wobbleScaleValue =
         object.value(QStringLiteral("wobbleScale"));
     if (!wobbleScaleValue.isUndefined() && !wobbleScaleValue.isDouble()) {
+        setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
+        return std::nullopt;
+    }
+    const QJsonValue antialiasingValue =
+        object.value(QStringLiteral("antialiasing"));
+    if (!antialiasingValue.isUndefined() && !antialiasingValue.isBool()) {
         setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;
     }
@@ -164,6 +171,7 @@ std::optional<BrushSettings> brushFromJson(
         object.value(QStringLiteral("animatedJitter")).toBool();
     brush.wobbleScale =
         wobbleScaleValue.isDouble() ? wobbleScaleValue.toDouble() : 1.0;
+    brush.antialiasing = antialiasingValue.toBool();
     if (!isValidBrushSettings(brush)) {
         setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;

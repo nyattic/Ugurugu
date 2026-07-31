@@ -354,10 +354,16 @@ void MainWindow::createActions()
         QKeySequence(QStringLiteral("Ctrl+E")));
     connect(exportGifAction, &QAction::triggered, this, &MainWindow::exportGif);
 
-    auto *exportPngAction = new QAction(tr("Export current frame as &PNG…"), this);
+    auto *exportPngAction = new QAction(
+        tr("Export current frame as &image…"),
+        this);
     exportPngAction->setObjectName(QStringLiteral("exportPngAction"));
     registerShortcut(exportPngAction, {});
-    connect(exportPngAction, &QAction::triggered, this, &MainWindow::exportPng);
+    connect(
+        exportPngAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::exportImage);
 
     auto *quitAction = new QAction(tr("&Quit"), this);
     quitAction->setObjectName(QStringLiteral("quitAction"));
@@ -523,6 +529,27 @@ void MainWindow::createActions()
         m_playAction,
         &QAction::setChecked);
 
+    m_wobbleAnimationAction = new QAction(tr("&Wobble animation"), this);
+    m_wobbleAnimationAction->setCheckable(true);
+    m_wobbleAnimationAction->setObjectName(
+        QStringLiteral("wobbleAnimationAction"));
+    registerShortcut(m_wobbleAnimationAction, {});
+    const bool wobbleAnimationEnabled = QSettings()
+        .value(QStringLiteral("view/wobbleAnimation"), true)
+        .toBool();
+    m_wobbleAnimationAction->setChecked(wobbleAnimationEnabled);
+    applyWobbleAnimationEnabled(wobbleAnimationEnabled);
+    connect(
+        m_wobbleAnimationAction,
+        &QAction::toggled,
+        this,
+        [this](bool enabled) {
+            QSettings().setValue(
+                QStringLiteral("view/wobbleAnimation"),
+                enabled);
+            applyWobbleAnimationEnabled(enabled);
+        });
+
     m_brushAction = new QAction(tr("&Brush"), this);
     m_brushAction->setCheckable(true);
     m_brushAction->setChecked(true);
@@ -634,6 +661,7 @@ void MainWindow::createMenus()
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
+    viewMenu->addAction(m_wobbleAnimationAction);
     viewMenu->addSeparator();
     viewMenu->addAction(m_layerDock->toggleViewAction());
 
@@ -1184,25 +1212,43 @@ void MainWindow::exportGif()
         frames.size());
 }
 
-void MainWindow::exportPng()
+void MainWindow::exportImage()
 {
     const int frame = m_canvas->currentFrame();
+    const QString pngFilter = tr("PNG images (*.png)");
+    const QString jpegFilter = tr("JPEG images (*.jpg *.jpeg)");
+    QString selectedFilter = pngFilter;
     const QString selected = QFileDialog::getSaveFileName(
         this,
         tr("Export current frame"),
         saveDialogStartPath(QStringLiteral("png")),
-        tr("PNG images (*.png)"));
+        pngFilter + QStringLiteral(";;") + jpegFilter,
+        &selectedFilter);
     if (selected.isEmpty()) {
         return;
     }
-    const QString filePath = normalizedPath(selected, QStringLiteral("png"));
-    const QImage image =
-        RenderEngine::render(m_controller.document(), frame);
+    const QString suffix = QFileInfo(selected).suffix().toLower();
+    const bool jpeg = suffix == QStringLiteral("jpg")
+        || suffix == QStringLiteral("jpeg")
+        || (suffix.isEmpty() && selectedFilter == jpegFilter);
+    const QString filePath = suffix == QStringLiteral("jpeg")
+        ? selected
+        : normalizedPath(
+              selected,
+              jpeg ? QStringLiteral("jpg") : QStringLiteral("png"));
+    Document exportDocument = m_controller.document();
+    if (!m_canvas->isWobbleAnimationEnabled()) {
+        exportDocument.wobbleAmount = 0.0;
+    }
+    const QImage image = RenderEngine::render(exportDocument, frame);
     QSaveFile file(filePath);
     QString error;
     bool saved = !image.isNull() && file.open(QIODevice::WriteOnly);
     if (saved) {
-        QImageWriter writer(&file, "PNG");
+        QImageWriter writer(&file, jpeg ? "JPEG" : "PNG");
+        if (jpeg) {
+            writer.setQuality(92);
+        }
         saved = writer.write(image);
         if (!saved) {
             error = writer.errorString();
@@ -1218,19 +1264,30 @@ void MainWindow::exportPng()
     }
     if (!saved) {
         spdlog::error(
-            "Failed to export PNG {}: {}",
+            "Failed to export image {}: {}",
             filePath.toUtf8().constData(),
             error.toUtf8().constData());
         QMessageBox::critical(
             this,
             tr("Export failed"),
             error.isEmpty()
-                ? tr("Could not export the PNG.")
-                : tr("Could not export the PNG.\n\n%1").arg(error));
+                ? tr("Could not export the image.")
+                : tr("Could not export the image.\n\n%1").arg(error));
         return;
     }
     statusBar()->showMessage(tr("Exported %1").arg(filePath), 5000);
-    spdlog::info("Exported PNG {}", filePath.toUtf8().constData());
+    spdlog::info("Exported image {}", filePath.toUtf8().constData());
+}
+
+void MainWindow::applyWobbleAnimationEnabled(bool enabled)
+{
+    m_canvas->setWobbleAnimationEnabled(enabled);
+    m_timeline->setEnabled(enabled);
+    m_playAction->setEnabled(enabled);
+    if (auto *exportGifAction =
+            findChild<QAction *>(QStringLiteral("exportGifAction"))) {
+        exportGifAction->setEnabled(enabled);
+    }
 }
 
 QString MainWindow::normalizedPath(

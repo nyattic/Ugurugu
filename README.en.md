@@ -62,6 +62,8 @@ necessary.
 - Brush and eraser with drawing-tablet pressure support
 - 17 built-in pen, marker, airbrush, and spray presets
 - Crisp pixel-edged strokes inspired by hand-drawn animation tools
+- Optional per-stroke anti-aliasing for smooth lines
+- A wobble-off mode for using the app as a regular drawing tool
 - Boiling-line wobble with independently redrawn, fully loopable frames
 - Persistent lasso and auto selection with move, scale, rotate, duplicate,
   delete, and undo support
@@ -70,7 +72,7 @@ necessary.
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - Adjustable wobble strength, frame count, and FPS
 - Per-stroke roughness control layered on top of the global wobble
-- Looping GIF export and current-frame PNG export
+- Looping GIF export and current-frame PNG or JPG export
 - `.wagle` project files with undo and redo
 - Automatic recovery of unsaved work after an interrupted session
 - Persistent recent colors and a configurable default save folder

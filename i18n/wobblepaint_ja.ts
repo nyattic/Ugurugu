@@ -129,7 +129,19 @@
             <source>%</source>
             <translation>%</translation>
         </message>
-    </context>
+        <message>
+        <source>ANTI-ALIASING</source>
+        <translation>アンチエイリアス</translation>
+    </message>
+    <message>
+        <source>Smooth stroke edges</source>
+        <translation>線の縁を滑らかにします</translation>
+    </message>
+    <message>
+        <source>Anti-aliasing</source>
+        <translation>アンチエイリアス</translation>
+    </message>
+</context>
     <context>
         <name>wobble::BrushSizeRow</name>
         <message>
@@ -681,7 +693,31 @@
 
 %1</translation>
         </message>
-    </context>
+        <message>
+        <source>&amp;Wobble animation</source>
+        <translation>ウォブルアニメーション(&amp;W)</translation>
+    </message>
+    <message>
+        <source>Export current frame as &amp;image…</source>
+        <translation>現在のフレームを画像で書き出す(&amp;I)…</translation>
+    </message>
+    <message>
+        <source>JPEG images (*.jpg *.jpeg)</source>
+        <translation>JPEG画像 (*.jpg *.jpeg)</translation>
+    </message>
+    <message>
+        <source>Could not export the image.</source>
+        <translation>画像を書き出せませんでした。</translation>
+    </message>
+    <message>
+        <source>Could not export the image.
+
+%1</source>
+        <translation>画像を書き出せませんでした。
+
+%1</translation>
+    </message>
+</context>
     <context>
         <name>wobble::SettingsDialog</name>
         <message>

@@ -43,6 +43,7 @@ struct BrushSettings {
     qreal sizeJitter = 0.0;
     bool animatedJitter = false;
     qreal wobbleScale = 1.0;
+    bool antialiasing = false;
 
     bool operator==(const BrushSettings &) const = default;
 };

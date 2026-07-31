@@ -265,6 +265,25 @@ qreal CanvasWidget::brushRoughness() const
     return m_brushRoughness;
 }
 
+bool CanvasWidget::brushAntialiasing() const
+{
+    return m_brushAntialiasing;
+}
+
+bool CanvasWidget::isWobbleAnimationEnabled() const
+{
+    return m_wobbleAnimationEnabled;
+}
+
+Document CanvasWidget::displayDocument() const
+{
+    Document document = m_controller->document();
+    if (!m_wobbleAnimationEnabled) {
+        document.wobbleAmount = 0.0;
+    }
+    return document;
+}
+
 QString CanvasWidget::brushPresetId() const
 {
     return m_brushPresetId;
@@ -426,6 +445,28 @@ void CanvasWidget::setBrushRoughness(qreal roughness)
     update();
 }
 
+void CanvasWidget::setBrushAntialiasing(bool antialiasing)
+{
+    if (m_brushAntialiasing == antialiasing) {
+        return;
+    }
+    m_brushAntialiasing = antialiasing;
+    emit brushAntialiasingChanged(antialiasing);
+    update();
+}
+
+void CanvasWidget::setWobbleAnimationEnabled(bool enabled)
+{
+    if (m_wobbleAnimationEnabled == enabled) {
+        return;
+    }
+    m_wobbleAnimationEnabled = enabled;
+    if (!enabled) {
+        setAnimating(false);
+    }
+    invalidateFrames();
+}
+
 void CanvasWidget::setBrushPreset(const QString &presetId)
 {
     const BrushPreset *preset = BrushPresetCatalog::find(presetId);
@@ -450,6 +491,9 @@ void CanvasWidget::setBrushPreset(const QString &presetId)
 
 void CanvasWidget::setAnimating(bool animating)
 {
+    if (animating && !m_wobbleAnimationEnabled) {
+        return;
+    }
     if (m_animating == animating) {
         return;
     }
@@ -542,7 +586,7 @@ void CanvasWidget::paintEvent(QPaintEvent *)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
-    const Document &document = m_controller->document();
+    const Document document = displayDocument();
     const QTransform transform = documentTransform();
     const QRectF canvasRect =
         transform.mapRect(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)));
@@ -1061,7 +1105,7 @@ QImage CanvasWidget::frameImage(int frame)
         return *cached;
     }
     QImage image = RenderEngine::renderScaled(
-        m_controller->document(),
+        displayDocument(),
         frame,
         renderSize);
     if (image.isNull()) {
@@ -1083,7 +1127,7 @@ const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
         || m_previewSplitFrame != m_currentFrame
         || m_previewSplit.below.size() != renderSize) {
         m_previewSplit = RenderEngine::renderLayerSplit(
-            m_controller->document(),
+            displayDocument(),
             m_currentFrame,
             renderSize,
             layerId);
@@ -1179,6 +1223,7 @@ void CanvasWidget::beginStroke(
     m_activeStroke.width = m_brushWidth;
     m_activeStroke.brush = m_brushSettings;
     m_activeStroke.brush.wobbleScale = m_brushRoughness;
+    m_activeStroke.brush.antialiasing = m_brushAntialiasing;
     if (!m_selectionMask.isNull()
         && m_selectionLayer == document.activeLayerId) {
         m_activeStroke.clipMask = m_selectionMask;
@@ -1759,6 +1804,7 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         DocumentLimits::maximumStrokeWidth);
     fillStroke.brush = m_brushSettings;
     fillStroke.brush.wobbleScale = m_brushRoughness;
+    fillStroke.brush.antialiasing = m_brushAntialiasing;
     if (!m_selectionMask.isNull()) {
         fillStroke.clipMask = m_selectionMask;
     }
@@ -2102,7 +2148,7 @@ QPointF CanvasWidget::clampedSelectionDelta(const QPointF &delta) const
 
 QImage CanvasWidget::renderActiveLayerImage() const
 {
-    const Document &document = m_controller->document();
+    const Document document = displayDocument();
     const Layer *layer = document.layer(document.activeLayerId);
     if (!layer) {
         return {};

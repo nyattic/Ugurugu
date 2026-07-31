@@ -40,8 +40,10 @@ public:
     QColor brushColor() const;
     qreal brushWidth() const;
     qreal brushRoughness() const;
+    bool brushAntialiasing() const;
     QString brushPresetId() const;
     bool isAnimating() const;
+    bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
     qreal zoom() const;
     bool isCanvasMirrored() const;
@@ -56,6 +58,8 @@ public slots:
     void setBrushColor(const QColor &color);
     void setBrushWidth(qreal width);
     void setBrushRoughness(qreal roughness);
+    void setBrushAntialiasing(bool antialiasing);
+    void setWobbleAnimationEnabled(bool enabled);
     void setBrushPreset(const QString &presetId);
     void setAnimating(bool animating);
     void toggleAnimating();
@@ -73,6 +77,7 @@ signals:
     void brushColorChanged(const QColor &color);
     void brushWidthChanged(qreal width);
     void brushRoughnessChanged(qreal roughness);
+    void brushAntialiasingChanged(bool antialiasing);
     void brushPresetChanged(const QString &presetId);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
@@ -111,6 +116,7 @@ private:
     };
 
     QTransform documentTransform() const;
+    Document displayDocument() const;
     QPointF mapToDocument(const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
@@ -194,6 +200,8 @@ private:
     QColor m_brushColor = Qt::black;
     qreal m_brushWidth = 6.0;
     qreal m_brushRoughness = 1.0;
+    bool m_brushAntialiasing = false;
+    bool m_wobbleAnimationEnabled = true;
     QString m_brushPresetId;
     BrushSettings m_brushSettings;
     QHash<QString, qreal> m_presetWidths;

@@ -156,6 +156,18 @@
         <source>%</source>
         <translation>%</translation>
     </message>
+    <message>
+        <source>ANTI-ALIASING</source>
+        <translation>안티앨리어싱</translation>
+    </message>
+    <message>
+        <source>Smooth stroke edges</source>
+        <translation>선 가장자리를 부드럽게</translation>
+    </message>
+    <message>
+        <source>Anti-aliasing</source>
+        <translation>안티앨리어싱</translation>
+    </message>
 </context>
 <context>
     <name>wobble::BrushSizeRow</name>
@@ -845,6 +857,30 @@
 
 %1</source>
         <translation>PNG를 내보낼 수 없습니다.
+
+%1</translation>
+    </message>
+    <message>
+        <source>&amp;Wobble animation</source>
+        <translation>와글거림 애니메이션(&amp;W)</translation>
+    </message>
+    <message>
+        <source>Export current frame as &amp;image…</source>
+        <translation>현재 프레임을 이미지로 내보내기(&amp;I)…</translation>
+    </message>
+    <message>
+        <source>JPEG images (*.jpg *.jpeg)</source>
+        <translation>JPEG 이미지 (*.jpg *.jpeg)</translation>
+    </message>
+    <message>
+        <source>Could not export the image.</source>
+        <translation>이미지를 내보낼 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Could not export the image.
+
+%1</source>
+        <translation>이미지를 내보낼 수 없습니다.
 
 %1</translation>
     </message>

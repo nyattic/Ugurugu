@@ -7,6 +7,7 @@
 #include "ui/CanvasWidget.hpp"
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -164,6 +165,42 @@ BrushPopoverPanel::BrushPopoverPanel(
         });
 
     layout->addWidget(roughnessRow);
+
+    auto *antialiasRow = new QWidget(this);
+    auto *antialiasLayout = new QHBoxLayout(antialiasRow);
+    antialiasLayout->setContentsMargins(0, 0, 0, 0);
+    antialiasLayout->setSpacing(8);
+
+    auto *antialiasLabel = new QLabel(tr("ANTI-ALIASING"), antialiasRow);
+    antialiasLabel->setProperty("fieldLabel", true);
+    antialiasLayout->addWidget(antialiasLabel);
+    antialiasLayout->addStretch(1);
+
+    auto *antialiasToggle = new QCheckBox(antialiasRow);
+    antialiasToggle->setObjectName(
+        QStringLiteral("brushAntialiasingToggle"));
+    antialiasToggle->setToolTip(tr("Smooth stroke edges"));
+    antialiasToggle->setAccessibleName(tr("Anti-aliasing"));
+    antialiasToggle->setChecked(canvas->brushAntialiasing());
+    antialiasLayout->addWidget(antialiasToggle);
+
+    connect(
+        antialiasToggle,
+        &QCheckBox::toggled,
+        this,
+        [this](bool checked) {
+            m_canvas->setBrushAntialiasing(checked);
+        });
+    connect(
+        canvas,
+        &CanvasWidget::brushAntialiasingChanged,
+        this,
+        [antialiasToggle](bool antialiasing) {
+            QSignalBlocker blocker(antialiasToggle);
+            antialiasToggle->setChecked(antialiasing);
+        });
+
+    layout->addWidget(antialiasRow);
 
     m_previewTimer.setInterval(120);
     connect(

@@ -53,7 +53,8 @@ private:
     void rotateSelection();
     void chooseOpenFile();
     void exportGif();
-    void exportPng();
+    void exportImage();
+    void applyWobbleAnimationEnabled(bool enabled);
     QString normalizedPath(
         const QString &filePath,
         const QString &extension) const;
@@ -75,6 +76,7 @@ private:
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
     QAction *m_mirrorCanvasAction = nullptr;
+    QAction *m_wobbleAnimationAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;
