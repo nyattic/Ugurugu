@@ -15,6 +15,7 @@ concurrency:
 
 env:
   QT_VERSION: 6.10.3
+  QT_FORCE_STDERR_LOGGING: 1
 
 jobs:
   build:
@@ -62,6 +63,5 @@ jobs:
           Get-Content out/build/windows-debug/Testing/Temporary/LastTest.log -ErrorAction SilentlyContinue
           $env:QT_QPA_PLATFORM = "offscreen"
           $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
-          & out\build\windows-debug\Debug\wobblepaint_tests.exe -o testlog.txt,txt
+          & out\build\windows-debug\Debug\wobblepaint_tests.exe 2>&1
           "direct run exit code: $LASTEXITCODE"
-          Get-Content testlog.txt -ErrorAction SilentlyContinue
