@@ -154,6 +154,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentController.cpp
     src/document/DocumentController.hpp
     src/document/DocumentLimits.hpp
+    src/document/StrokeMask.cpp
+    src/document/StrokeMask.hpp
     src/io/DocumentSerializer.cpp
     src/io/DocumentSerializer.hpp
     src/io/GifWriter.cpp

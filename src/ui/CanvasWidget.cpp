@@ -2,6 +2,7 @@
 
 #include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/StrokeMask.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/Theme.hpp"
 
@@ -144,65 +145,13 @@ void drawSelectionPath(
     painter.drawPath(path);
 }
 
-QImage maskedPart(
+QImage maskedPartOrNull(
     const QImage &source,
     const QImage &selection,
     bool insideSelection)
 {
-    if (selection.isNull()
-        || selection.format() != QImage::Format_Grayscale8
-        || (!source.isNull()
-            && (source.size() != selection.size()
-                || source.format() != QImage::Format_Grayscale8))) {
-        return {};
-    }
-
-    QImage result(selection.size(), QImage::Format_Grayscale8);
-    if (result.isNull()) {
-        return {};
-    }
-    bool hasContent = false;
-    for (int y = 0; y < selection.height(); ++y) {
-        const uchar *sourceLine =
-            source.isNull() ? nullptr : source.constScanLine(y);
-        const uchar *selectionLine = selection.constScanLine(y);
-        uchar *resultLine = result.scanLine(y);
-        for (int x = 0; x < selection.width(); ++x) {
-            const bool sourceContains =
-                !sourceLine || sourceLine[x] >= 128;
-            const bool selectionContains =
-                selectionLine[x] >= 128;
-            const bool contained =
-                sourceContains
-                && (insideSelection
-                        ? selectionContains
-                        : !selectionContains);
-            resultLine[x] = contained ? 255 : 0;
-            hasContent = hasContent || contained;
-        }
-    }
-    return hasContent ? result : QImage();
-}
-
-QImage transformedMask(
-    const QImage &source,
-    const QSize &targetSize,
-    const QTransform &transform)
-{
-    if (source.isNull()) {
-        return {};
-    }
-    QImage target(targetSize, QImage::Format_Grayscale8);
-    if (target.isNull()) {
-        return {};
-    }
-    target.fill(0);
-    QPainter painter(&target);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    painter.setTransform(transform);
-    painter.drawImage(QPointF(), source);
-    painter.end();
-    return target;
+    QImage result = maskedPart(source, selection, insideSelection);
+    return maskHasContent(result) ? result : QImage();
 }
 
 }
@@ -1803,10 +1752,10 @@ void CanvasWidget::beginSelectionMove(const QPointF &documentPosition)
         }
         m_moveInsideMasks.insert(
             key,
-            maskedPart(stroke.clipMask, m_selectionMask, true));
+            maskedPartOrNull(stroke.clipMask, m_selectionMask, true));
         m_moveRemainderMasks.insert(
             key,
-            maskedPart(stroke.clipMask, m_selectionMask, false));
+            maskedPartOrNull(stroke.clipMask, m_selectionMask, false));
     }
 }
 
