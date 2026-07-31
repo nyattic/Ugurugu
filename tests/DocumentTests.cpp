@@ -386,6 +386,43 @@ private slots:
         QVERIFY(!controller.resizeCanvas(QSize(0, 100)));
     }
 
+    void clampsEdgePointsWhenResizingCanvas()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        Stroke stroke;
+        stroke.width = 6.0;
+        stroke.points = {
+            {QPointF(50.0, 50.0), 1.0},
+            {QPointF(100.0, 100.0), 1.0}
+        };
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        QVERIFY(controller.resizeCanvas(QSize(109, 109)));
+
+        const QSize size = controller.document().size;
+        for (const StrokePoint &point :
+            controller.document().layers.first().strokes.first().points) {
+            QVERIFY(point.position.x() >= 0.0);
+            QVERIFY(point.position.y() >= 0.0);
+            QVERIFY(point.position.x() <= size.width());
+            QVERIFY(point.position.y() <= size.height());
+        }
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString filePath = directory.filePath(
+            QStringLiteral("resized.wagle"));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(
+                filePath,
+                controller.document(),
+                &error),
+            qPrintable(error));
+    }
+
     void transformsAndDuplicatesStrokesUndoably()
     {
         Document document = Document::createDefault(QSize(100, 100));

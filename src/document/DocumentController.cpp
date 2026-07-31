@@ -398,7 +398,16 @@ bool DocumentController::resizeCanvas(const QSize &size)
     for (Layer &layer : resized->layers) {
         for (Stroke &stroke : layer.strokes) {
             for (StrokePoint &point : stroke.points) {
-                point.position = transform.map(point.position);
+                const QPointF mapped = transform.map(point.position);
+                point.position = QPointF(
+                    std::clamp(
+                        mapped.x(),
+                        0.0,
+                        static_cast<qreal>(size.width())),
+                    std::clamp(
+                        mapped.y(),
+                        0.0,
+                        static_cast<qreal>(size.height())));
             }
             stroke.width = std::clamp(
                 stroke.width * widthScale,
