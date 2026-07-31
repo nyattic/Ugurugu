@@ -147,6 +147,8 @@ endfunction()
 set(WOBBLEPAINT_CORE_SOURCES
     src/app/Logging.cpp
     src/app/Logging.hpp
+    src/app/ReleaseNotes.cpp
+    src/app/ReleaseNotes.hpp
     src/brush/BrushPreset.cpp
     src/brush/BrushPreset.hpp
     src/document/Document.cpp
@@ -397,6 +399,7 @@ if(BUILD_TESTING)
     qt_add_executable(wobblepaint_tests
         tests/DocumentTests.cpp
         tests/GifWriterTests.cpp
+        tests/ReleaseNotesTests.cpp
         tests/RenderEngineTests.cpp
         tests/UiTests.cpp
     )

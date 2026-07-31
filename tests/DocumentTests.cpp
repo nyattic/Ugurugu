@@ -18,6 +18,7 @@ namespace wobble {
 
 int runRenderEngineTests(int argc, char **argv);
 int runGifWriterTests(int argc, char **argv);
+int runReleaseNotesTests(int argc, char **argv);
 int runUiTests(int argc, char **argv);
 
 QByteArray pointArray(int count)
@@ -959,6 +960,7 @@ int main(int argc, char **argv)
     int result = QTest::qExec(&documentTests, argc, argv);
     result |= wobble::runRenderEngineTests(argc, argv);
     result |= wobble::runGifWriterTests(argc, argv);
+    result |= wobble::runReleaseNotesTests(argc, argv);
     result |= wobble::runUiTests(argc, argv);
     return result;
 }

@@ -1,6 +1,10 @@
 #include "app/UpdateController.hpp"
 
+#include "app/ReleaseNotes.hpp"
+#include "ui/SettingsDialog.hpp"
+
 #include <QApplication>
+#include <QLocale>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QPointer>
@@ -135,8 +139,15 @@ public:
             window);
         message.setDefaultButton(QMessageBox::Yes);
         if (!update.TargetFullRelease.NotesMarkdown.empty()) {
-            message.setDetailedText(QString::fromStdString(
-                update.TargetFullRelease.NotesMarkdown));
+            const QString configured = SettingsDialog::uiLanguage();
+            const QString language =
+                configured == QStringLiteral("system")
+                    ? QLocale::system().name()
+                    : configured;
+            message.setDetailedText(localizedReleaseNotes(
+                QString::fromStdString(
+                    update.TargetFullRelease.NotesMarkdown),
+                language));
         }
         if (message.exec() == QMessageBox::Yes) {
             startDownload(update);

@@ -55,11 +55,12 @@ jobs:
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
             release_tag="v${version}"
           fi
-          release_notes="release-notes/${version}.md"
-          if [[ ! -f "$release_notes" ]]; then
-            echo "Missing release notes: $release_notes"
-            exit 1
-          fi
+          for language in ko en ja; do
+            if [[ ! -f "release-notes/${version}.${language}.md" ]]; then
+              echo "Missing release notes: release-notes/${version}.${language}.md"
+              exit 1
+            fi
+          done
           mkdir -p artifacts "$RUNNER_TEMP/dmg" "$RUNNER_TEMP/sparkle-updates"
           cp -R "$RUNNER_TEMP/install/WagleWaglePaint.app" "$RUNNER_TEMP/dmg/"
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
@@ -78,15 +79,27 @@ jobs:
             "$RUNNER_TEMP/install/WagleWaglePaint.app" \
             "$RUNNER_TEMP/sparkle-updates/$archive"
           python3 -m pip install --quiet --user markdown
-          {
-            printf '%s' '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
-            python3 -m markdown -x extra "$release_notes"
-            printf '%s' '</body></html>'
-          } > "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
+          render_notes() {
+            {
+              printf '%s' '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+              python3 -m markdown -x extra "$1"
+              printf '%s' '</body></html>'
+            } > "$2"
+          }
+          render_notes \
+            "release-notes/${version}.en.md" \
+            "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
+          render_notes \
+            "release-notes/${version}.ko.md" \
+            "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html"
+          render_notes \
+            "release-notes/${version}.ja.md" \
+            "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
             out/build/macos-release/_deps/sparkle-src/bin/generate_appcast \
               --ed-key-file - \
               --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${release_tag}/" \
+              --release-notes-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${release_tag}/" \
               --link "https://github.com/nyattic/WagleWaglePaint" \
               --embed-release-notes \
               --maximum-versions 1 \
@@ -94,6 +107,8 @@ jobs:
               "$RUNNER_TEMP/sparkle-updates"
           cp "$RUNNER_TEMP/sparkle-updates/$archive" artifacts/
           cp "$RUNNER_TEMP/sparkle-updates/appcast.xml" artifacts/
+          cp "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html" artifacts/
+          cp "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html" artifacts/
 
       - name: Verify macOS compatibility
         run: |
@@ -182,10 +197,16 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
             throw "Release tag $env:GITHUB_REF_NAME does not match project version $version"
           }
-          $releaseNotes = "release-notes/$version.md"
-          if (-not (Test-Path $releaseNotes)) {
-            throw "Missing release notes: $releaseNotes"
+          $releaseNotes = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          $sections = foreach ($language in @('ko', 'en', 'ja')) {
+            $file = "release-notes/$version.$language.md"
+            if (-not (Test-Path $file)) {
+              throw "Missing release notes: $file"
+            }
+            "<!-- lang:$language -->"
+            Get-Content $file -Raw
           }
+          Set-Content -Path $releaseNotes -Value ($sections -join "`n")
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           vpk pack `
             --packId WagleWaglePaint `
@@ -226,9 +247,26 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Locate release notes
+      - name: Assemble release notes
         id: notes
-        run: echo "path=release-notes/${GITHUB_REF_NAME#v}.md" >> "$GITHUB_OUTPUT"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            cat "release-notes/${version}.ko.md"
+            echo
+            echo "<details><summary>English</summary>"
+            echo
+            cat "release-notes/${version}.en.md"
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>日本語</summary>"
+            echo
+            cat "release-notes/${version}.ja.md"
+            echo
+            echo "</details>"
+          } > "$RUNNER_TEMP/release-body.md"
+          echo "path=$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
 
       - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
