@@ -1134,14 +1134,16 @@ void DocumentController::removeLayer(const QUuid &id)
     }
     const Layer removedLayer = m_document.layers[index];
     const QUuid previousActive = m_document.activeLayerId;
-    const int nextIndex = std::max(0, index - 1);
+    const int nextIndex = index > 0 ? index - 1 : 1;
     const QUuid nextActive = m_document.layers[nextIndex].id;
     auto redoAction = [this, id, nextActive]() {
         const int currentIndex = m_document.layerIndex(id);
         if (currentIndex >= 0) {
             m_document.layers.removeAt(currentIndex);
         }
-        m_document.activeLayerId = nextActive;
+        if (m_document.activeLayerId == id) {
+            m_document.activeLayerId = nextActive;
+        }
         ensureActiveLayer();
         notifyDocumentChanged();
         emit layerThumbnailChanged(id);

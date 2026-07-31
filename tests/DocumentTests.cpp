@@ -228,6 +228,32 @@ private slots:
         QCOMPARE(controller.document().layers.constLast().id, addedId);
     }
 
+    void activatesAdjacentLayerWhenRemovingFirstLayer()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        controller.addLayer();
+        controller.addLayer();
+        QCOMPARE(controller.document().layers.size(), 3);
+        const QUuid first = controller.document().layers[0].id;
+        const QUuid second = controller.document().layers[1].id;
+        const QUuid third = controller.document().layers[2].id;
+
+        controller.setActiveLayer(first);
+        controller.removeLayer(first);
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(controller.document().activeLayerId, second);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.size(), 3);
+        QCOMPARE(controller.document().activeLayerId, first);
+
+        controller.setActiveLayer(third);
+        controller.removeLayer(second);
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(controller.document().activeLayerId, third);
+    }
+
     void roundTripsJson()
     {
         Document source = Document::createDefault(QSize(321, 123));
