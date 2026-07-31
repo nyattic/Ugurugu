@@ -188,6 +188,11 @@ QVector<StrokePoint> displacedStrokePoints(
         : std::clamp(stroke.width * 0.55, 2.0, 5.0);
     QVector<StrokePoint> samples =
         resample(stroke.points, spacing, maximumPoints);
+    QVector<QPointF> basePositions;
+    basePositions.reserve(samples.size());
+    for (const StrokePoint &sample : samples) {
+        basePositions.append(sample.position);
+    }
     const qreal amplitude =
         std::max(0.0, wobbleAmount)
         * (0.82 + std::min(stroke.width, 40.0) * 0.018);
@@ -196,12 +201,12 @@ QVector<StrokePoint> displacedStrokePoints(
 
     qreal arcLength = 0.0;
     for (int index = 0; index < samples.size(); ++index) {
-        const QPointF before = samples[std::max(0, index - 1)].position;
-        const QPointF after = samples[
-            std::min(static_cast<int>(samples.size()) - 1, index + 1)].position;
+        const QPointF before = basePositions[std::max(0, index - 1)];
+        const QPointF after = basePositions[
+            std::min(static_cast<int>(basePositions.size()) - 1, index + 1)];
         if (index > 0) {
             const QPointF step =
-                samples[index].position - samples[index - 1].position;
+                basePositions[index] - basePositions[index - 1];
             arcLength += std::hypot(step.x(), step.y());
         }
         const QPointF tangent = normalized(after - before);

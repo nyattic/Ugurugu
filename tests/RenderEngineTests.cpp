@@ -145,6 +145,50 @@ private slots:
         QVERIFY(normal != rough);
     }
 
+    void displacesWobbleLinearlyWithAmount()
+    {
+        QVector<QPointF> positions;
+        for (int index = 0; index <= 20; ++index) {
+            positions.append(QPointF(10.0 + index * 9.0, 60.0));
+        }
+        const Stroke stroke = makeStroke(
+            StrokeMode::Paint,
+            QColor(10, 20, 30),
+            6.0,
+            0xfeedbeefULL,
+            positions);
+
+        const QPainterPath still =
+            RenderEngine::strokePath(stroke, 3, 12, 0.0);
+        const QPainterPath single =
+            RenderEngine::strokePath(stroke, 3, 12, 2.0);
+        const QPainterPath doubled =
+            RenderEngine::strokePath(stroke, 3, 12, 4.0);
+
+        QCOMPARE(single.elementCount(), still.elementCount());
+        QCOMPARE(doubled.elementCount(), still.elementCount());
+        qreal largestOffset = 0.0;
+        for (int index = 0; index < still.elementCount(); ++index) {
+            const QPointF base(
+                still.elementAt(index).x,
+                still.elementAt(index).y);
+            const QPointF offsetSingle =
+                QPointF(single.elementAt(index).x, single.elementAt(index).y)
+                - base;
+            const QPointF offsetDouble =
+                QPointF(doubled.elementAt(index).x, doubled.elementAt(index).y)
+                - base;
+            largestOffset = std::max(
+                largestOffset,
+                std::hypot(offsetSingle.x(), offsetSingle.y()));
+            QVERIFY(
+                std::abs(offsetDouble.x() - offsetSingle.x() * 2.0) < 1e-6);
+            QVERIFY(
+                std::abs(offsetDouble.y() - offsetSingle.y() * 2.0) < 1e-6);
+        }
+        QVERIFY(largestOffset > 0.05);
+    }
+
     void rendersCrispPixelEdges()
     {
         Document document = Document::createDefault(QSize(64, 64));
