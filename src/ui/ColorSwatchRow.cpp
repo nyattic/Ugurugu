@@ -68,6 +68,7 @@ void ColorSwatchRow::setActiveColor(const QColor &color)
     if (!color.isValid()) {
         return;
     }
+    m_activeColor = color;
     m_recentColors.removeAll(color);
     m_recentColors.prepend(color);
     while (m_recentColors.size() > swatchCount) {
@@ -88,15 +89,24 @@ void ColorSwatchRow::refreshButtons()
             continue;
         }
         const QColor color = m_recentColors[index];
+        const bool active = color == m_activeColor;
         button->setToolTip(color.name(QColor::HexArgb));
         button->setAccessibleName(
             tr("Recent color %1").arg(color.name(QColor::HexArgb)));
         button->setStyleSheet(
             QStringLiteral(
-                "QToolButton { background: %1; border: 1px solid "
-                "rgba(255, 255, 255, 60); border-radius: 5px; }"
-                "QToolButton:hover { border-color: %2; }")
-                .arg(color.name(QColor::HexArgb), Theme::accent().name()));
+                "QToolButton { background: %1; border: %2; "
+                "border-radius: 5px; }"
+                "QToolButton:hover { border-color: %3; }"
+                "QToolButton:focus { border-color: %3; }")
+                .arg(
+                    color.name(QColor::HexArgb),
+                    active
+                        ? QStringLiteral("2px solid %1")
+                              .arg(Theme::accent().name())
+                        : QStringLiteral(
+                              "1px solid rgba(255, 255, 255, 60)"),
+                    Theme::accent().name()));
     }
 }
 

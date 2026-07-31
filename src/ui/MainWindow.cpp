@@ -17,6 +17,10 @@
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolPopover.hpp"
 
+#ifdef Q_OS_MACOS
+#include "ui/MacWindowChrome.hpp"
+#endif
+
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -280,6 +284,10 @@ MainWindow::MainWindow(QWidget *parent)
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     qApp->installEventFilter(this);
+
+#ifdef Q_OS_MACOS
+    applySeamlessTitleBar(this);
+#endif
 }
 
 bool MainWindow::openFile(const QString &filePath)
@@ -801,19 +809,23 @@ void MainWindow::createToolBars()
     rail->setIconSize(QSize(24, 24));
     addToolBar(Qt::LeftToolBarArea, rail);
 
-    const auto addRailButton = [rail](QAction *action) {
-        auto *button = new PopoverToolButton(rail);
-        button->setDefaultAction(action);
-        button->setIconSize(rail->iconSize());
-        rail->addWidget(button);
-        return button;
-    };
+    const auto addRailButton =
+        [rail](QAction *action, IconGlyph glyph) {
+            auto *button = new PopoverToolButton(rail);
+            button->setDefaultAction(action);
+            button->setIconSize(rail->iconSize());
+            button->setHoverGlyph(glyph);
+            rail->addWidget(button);
+            return button;
+        };
 
-    PopoverToolButton *brushButton = addRailButton(m_brushAction);
-    PopoverToolButton *eraserButton = addRailButton(m_eraserAction);
-    addRailButton(m_lassoAction);
-    addRailButton(m_wandAction);
-    addRailButton(m_bucketAction);
+    PopoverToolButton *brushButton =
+        addRailButton(m_brushAction, IconGlyph::Brush);
+    PopoverToolButton *eraserButton =
+        addRailButton(m_eraserAction, IconGlyph::Eraser);
+    addRailButton(m_lassoAction, IconGlyph::Lasso);
+    addRailButton(m_wandAction, IconGlyph::Wand);
+    addRailButton(m_bucketAction, IconGlyph::Bucket);
 
     auto *brushPopover = new ToolPopover(this);
     auto *brushPanel = new BrushPopoverPanel(m_canvas);
@@ -852,13 +864,12 @@ void MainWindow::createToolBars()
             }
         });
 
-    auto *railSpacer = new QWidget(rail);
-    railSpacer->setSizePolicy(
-        QSizePolicy::Preferred,
-        QSizePolicy::Expanding);
-    rail->addWidget(railSpacer);
+    QToolBar *quick = addToolBar(tr("Quick access"));
+    quick->setObjectName(QStringLiteral("PaintTools"));
+    quick->setMovable(false);
+    quick->setIconSize(QSize(22, 22));
 
-    m_colorButton = new QPushButton(rail);
+    m_colorButton = new QPushButton(quick);
     m_colorButton->setFixedSize(28, 28);
     m_colorButton->setToolTip(tr("Choose brush color"));
     m_colorButton->setAccessibleName(tr("Brush color"));
@@ -873,16 +884,12 @@ void MainWindow::createToolBars()
             m_canvas->setBrushColor(color);
         }
     });
-    auto *colorHolder = new QWidget(rail);
+    auto *colorHolder = new QWidget(quick);
     auto *colorLayout = new QHBoxLayout(colorHolder);
-    colorLayout->setContentsMargins(0, 2, 0, 8);
-    colorLayout->addWidget(m_colorButton, 0, Qt::AlignHCenter);
-    rail->addWidget(colorHolder);
-
-    QToolBar *quick = addToolBar(tr("Quick access"));
-    quick->setObjectName(QStringLiteral("PaintTools"));
-    quick->setMovable(false);
-    quick->setIconSize(QSize(22, 22));
+    colorLayout->setContentsMargins(4, 0, 6, 0);
+    colorLayout->addWidget(m_colorButton, 0, Qt::AlignVCenter);
+    quick->addWidget(colorHolder);
+    quick->addSeparator();
 
     m_swatchRow = new ColorSwatchRow(quick);
     connect(
@@ -919,6 +926,7 @@ void MainWindow::createToolBars()
             m_swatchRow->setActiveColor(color);
         });
     updateColorButton();
+    m_swatchRow->setActiveColor(m_canvas->brushColor());
 }
 
 void MainWindow::restoreDrawingToolSettings()
@@ -1148,7 +1156,8 @@ void MainWindow::updateColorButton()
         QStringLiteral(
             "QPushButton { background: %1; border: 2px solid "
             "rgba(255, 255, 255, 70); border-radius: 14px; }"
-            "QPushButton:hover { border-color: %2; }")
+            "QPushButton:hover { border-color: %2; }"
+            "QPushButton:focus { border-color: %2; }")
             .arg(color.name(QColor::HexArgb), Theme::accent().name()));
 }
 
@@ -1570,6 +1579,14 @@ void MainWindow::applyWobbleAnimationEnabled(bool enabled)
     if (auto *exportGifAction =
             findChild<QAction *>(QStringLiteral("exportGifAction"))) {
         exportGifAction->setEnabled(enabled);
+    }
+    if (auto *exportImageAction =
+            findChild<QAction *>(QStringLiteral("exportPngAction"))) {
+        const QString label = enabled
+            ? tr("Export current frame as &image…")
+            : tr("Export &image…");
+        exportImageAction->setText(label);
+        exportImageAction->setProperty("shortcutLabel", label);
     }
 }
 

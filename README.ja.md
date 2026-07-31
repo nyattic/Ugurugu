@@ -81,7 +81,8 @@ Windows SmartScreenやmacOS Gatekeeperが警告を表示することが
 - 既存の絵とブラシサイズを一緒にスケールするキャンバスサイズ変更
 - サムネイル・表示切り替え・不透明度・ドラッグ並べ替えに対応した
   レイヤー
-- ウォブルの強さ・フレーム数・FPSの調整
+- フレームスクラバーとリアルタイムウォブルプレビューを備えた
+  タイムラインで、ウォブルの強さ・フレーム数・FPSを調整
 - グローバルウォブルに重ねるストローク別の粗さ調整
 - ループGIF書き出しと現在フレームのPNG・JPG書き出し
 - 取り消し・やり直しに対応した`.wagle`プロジェクトファイル
@@ -152,6 +153,7 @@ macOSではSparkle、WindowsではVelopackを通じてダウンロード・
 ## ライセンス
 
 WagleWaglePaintは[GNU General Public License v3.0](LICENSE)のもとで
-配布されています。
+配布されています。同梱のPretendard JPフォントは
+[SIL Open Font License 1.1](resources/fonts/OFL.txt)に従います。
 
 Copyright (C) 2026 Nyabi (nyattic)

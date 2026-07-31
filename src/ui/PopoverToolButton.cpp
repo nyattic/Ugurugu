@@ -7,6 +7,8 @@
 #include <QPainter>
 #include <QPainterPath>
 
+#include <numbers>
+
 namespace wobble {
 
 PopoverToolButton::PopoverToolButton(QWidget *parent)
@@ -24,12 +26,62 @@ PopoverToolButton::PopoverToolButton(QWidget *parent)
         }
         openPopover();
     });
+
+    m_hoverAnimation.setDuration(420);
+    m_hoverAnimation.setStartValue(0.0);
+    m_hoverAnimation.setEndValue(2.0 * std::numbers::pi_v<qreal>);
+    connect(
+        &m_hoverAnimation,
+        &QVariantAnimation::valueChanged,
+        this,
+        [this](const QVariant &value) {
+            applyWobbleFrame(value.toReal());
+        });
+    connect(
+        &m_hoverAnimation,
+        &QVariantAnimation::finished,
+        this,
+        [this]() {
+            if (defaultAction()) {
+                setIcon(defaultAction()->icon());
+            }
+        });
 }
 
 void PopoverToolButton::setPopover(ToolPopover *popover)
 {
     m_popover = popover;
     update();
+}
+
+void PopoverToolButton::setHoverGlyph(IconGlyph glyph)
+{
+    m_hoverGlyph = glyph;
+    m_hasHoverGlyph = true;
+}
+
+void PopoverToolButton::enterEvent(QEnterEvent *event)
+{
+    if (m_hasHoverGlyph
+        && m_hoverAnimation.state() != QAbstractAnimation::Running) {
+        m_hoverAnimation.start();
+    }
+    QToolButton::enterEvent(event);
+}
+
+void PopoverToolButton::applyWobbleFrame(qreal phase)
+{
+    const QColor color =
+        isChecked() ? Theme::accentText() : Theme::textPrimary();
+    const int size = iconSize().width();
+    setIcon(
+        QIcon(
+            Icons::pixmap(
+                m_hoverGlyph,
+                size,
+                color,
+                phase,
+                devicePixelRatio())));
 }
 
 void PopoverToolButton::mousePressEvent(QMouseEvent *event)

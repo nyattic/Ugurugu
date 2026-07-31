@@ -10,7 +10,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     )
 endif()
 
-project(WagleWaglePaint VERSION 0.6.1 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.6.2 LANGUAGES CXX)
 
 include(FetchContent)
 if(WIN32)
@@ -197,6 +197,8 @@ add_library(wobblepaint_ui STATIC
     src/ui/CanvasWidget.hpp
     src/ui/ColorSwatchRow.cpp
     src/ui/ColorSwatchRow.hpp
+    src/ui/FrameScrubber.cpp
+    src/ui/FrameScrubber.hpp
     src/ui/Icons.cpp
     src/ui/Icons.hpp
     src/ui/LayerDock.cpp
@@ -219,11 +221,28 @@ add_library(wobblepaint_ui STATIC
     src/ui/ToolPopover.hpp
     src/ui/WobblePlayButton.cpp
     src/ui/WobblePlayButton.hpp
+    src/ui/WobblePreview.cpp
+    src/ui/WobblePreview.hpp
 )
 
 wobblepaint_target_defaults(wobblepaint_ui)
 target_include_directories(wobblepaint_ui PUBLIC src)
 target_link_libraries(wobblepaint_ui PUBLIC wobblepaint_core Qt6::Widgets)
+
+if(APPLE)
+    target_sources(
+        wobblepaint_ui
+        PRIVATE
+        src/ui/MacWindowChrome.hpp
+        src/ui/MacWindowChrome.mm
+    )
+    set_source_files_properties(
+        src/ui/MacWindowChrome.mm
+        PROPERTIES
+        COMPILE_OPTIONS "-fobjc-arc"
+    )
+    target_link_libraries(wobblepaint_ui PUBLIC "-framework AppKit")
+endif()
 
 qt_add_executable(
     WagleWaglePaint
@@ -275,6 +294,11 @@ qt_add_resources(WagleWaglePaint "wobblepaint_translations"
     PREFIX "/i18n"
     BASE "${CMAKE_CURRENT_BINARY_DIR}"
     FILES ${WOBBLEPAINT_QM_FILES}
+)
+qt_add_resources(WagleWaglePaint "wobblepaint_fonts"
+    PREFIX "/fonts"
+    BASE "resources/fonts"
+    FILES resources/fonts/PretendardJP-Medium.otf
 )
 
 target_link_libraries(

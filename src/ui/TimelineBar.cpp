@@ -3,7 +3,9 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/FrameScrubber.hpp"
 #include "ui/WobblePlayButton.hpp"
+#include "ui/WobblePreview.hpp"
 
 #include <QApplication>
 #include <QDoubleSpinBox>
@@ -90,14 +92,33 @@ void TimelineBar::buildLayout()
     m_currentFrameSpin->setFixedWidth(46);
     layout->addWidget(m_currentFrameSpin);
 
-    m_frameCountLabel = new QLabel(this);
-    layout->addWidget(m_frameCountLabel);
+    auto *frameSeparator = new QLabel(QStringLiteral("/"), this);
+    layout->addWidget(frameSeparator);
 
-    layout->addStretch(1);
+    m_framesSpin = new QSpinBox(this);
+    m_framesSpin->setObjectName(QStringLiteral("framesSpin"));
+    m_framesSpin->setRange(
+        DocumentLimits::minimumAnimationFrames,
+        DocumentLimits::maximumAnimationFrames);
+    m_framesSpin->setAccessibleName(tr("Animation frames"));
+    m_framesSpin->setToolTip(tr("Animation frames"));
+    m_framesSpin->setAlignment(Qt::AlignCenter);
+    m_framesSpin->setFixedWidth(46);
+    layout->addWidget(m_framesSpin);
+
+    layout->addSpacing(4);
+
+    m_scrubber = new FrameScrubber(m_controller, m_canvas, this);
+    layout->addWidget(m_scrubber, 1);
+
+    layout->addSpacing(12);
 
     auto *wobbleLabel = new QLabel(tr("WOBBLE"), this);
     wobbleLabel->setProperty("fieldLabel", true);
     layout->addWidget(wobbleLabel);
+
+    m_wobblePreview = new WobblePreview(m_controller, this);
+    layout->addWidget(m_wobblePreview);
 
     m_wobbleSlider = new QSlider(Qt::Horizontal, this);
     m_wobbleSlider->setObjectName(QStringLiteral("wobbleSlider"));
@@ -122,18 +143,6 @@ void TimelineBar::buildLayout()
 
     layout->addSpacing(12);
 
-    auto *framesLabel = new QLabel(tr("FRAMES"), this);
-    framesLabel->setProperty("fieldLabel", true);
-    layout->addWidget(framesLabel);
-
-    m_framesSpin = new QSpinBox(this);
-    m_framesSpin->setObjectName(QStringLiteral("framesSpin"));
-    m_framesSpin->setRange(
-        DocumentLimits::minimumAnimationFrames,
-        DocumentLimits::maximumAnimationFrames);
-    framesLabel->setBuddy(m_framesSpin);
-    layout->addWidget(m_framesSpin);
-
     auto *fpsLabel = new QLabel(tr("FPS"), this);
     fpsLabel->setProperty("fieldLabel", true);
     layout->addWidget(fpsLabel);
@@ -143,6 +152,8 @@ void TimelineBar::buildLayout()
     m_fpsSpin->setRange(
         qRound(DocumentLimits::minimumFramesPerSecond),
         qRound(DocumentLimits::maximumFramesPerSecond));
+    m_fpsSpin->setToolTip(tr("Playback speed (frames per second)"));
+    m_fpsSpin->setAccessibleName(tr("Playback speed"));
     fpsLabel->setBuddy(m_fpsSpin);
     layout->addWidget(m_fpsSpin);
 }
@@ -236,7 +247,6 @@ void TimelineBar::syncFromDocument()
     if (!m_canvas->isAnimating()) {
         m_currentFrameSpin->setValue(m_canvas->currentFrame() + 1);
     }
-    m_frameCountLabel->setText(tr("/ %1").arg(frames));
 
     m_wobbleSlider->setValue(qRound(document.wobbleAmount * 10.0));
     m_wobbleSpin->setValue(document.wobbleAmount);

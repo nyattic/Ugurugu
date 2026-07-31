@@ -26,6 +26,7 @@ private:
 
     QVector<QColor> m_recentColors;
     QVector<QToolButton *> m_buttons;
+    QColor m_activeColor;
 };
 
 }

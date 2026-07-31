@@ -12,7 +12,9 @@ namespace wobble {
 
 class CanvasWidget;
 class DocumentController;
+class FrameScrubber;
 class WobblePlayButton;
+class WobblePreview;
 
 class TimelineBar final : public QWidget
 {
@@ -37,7 +39,8 @@ private:
     CanvasWidget *m_canvas;
     WobblePlayButton *m_playButton = nullptr;
     QSpinBox *m_currentFrameSpin = nullptr;
-    QLabel *m_frameCountLabel = nullptr;
+    FrameScrubber *m_scrubber = nullptr;
+    WobblePreview *m_wobblePreview = nullptr;
     QSlider *m_wobbleSlider = nullptr;
     QDoubleSpinBox *m_wobbleSpin = nullptr;
     QSpinBox *m_framesSpin = nullptr;

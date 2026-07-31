@@ -1,7 +1,10 @@
 #include "ui/Theme.hpp"
 
 #include <QApplication>
+#include <QFont>
+#include <QFontDatabase>
 #include <QPalette>
+#include <QStringList>
 #include <QStyleFactory>
 
 namespace wobble {
@@ -80,6 +83,19 @@ void Theme::apply(QApplication &application)
 {
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
+    const int fontId = QFontDatabase::addApplicationFont(
+        QStringLiteral(":/fonts/PretendardJP-Medium.otf"));
+    if (fontId >= 0) {
+        const QStringList families =
+            QFontDatabase::applicationFontFamilies(fontId);
+        if (!families.isEmpty()) {
+            QFont font = application.font();
+            font.setFamilies({families.first()});
+            font.setWeight(QFont::Medium);
+            application.setFont(font);
+        }
+    }
+
     QPalette palette;
     palette.setColor(QPalette::Window, chromeBackground());
     palette.setColor(QPalette::WindowText, textPrimary());
@@ -137,12 +153,15 @@ QLabel[fieldLabel="true"] {
 QToolButton {
     background: transparent;
     color: %TEXT%;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 7px;
-    padding: 5px;
+    padding: 4px;
 }
 QToolButton:hover {
     background: %HOVER%;
+}
+QToolButton:focus {
+    border-color: %ACCENT%;
 }
 QToolButton:pressed {
     background: %CONTROL%;
@@ -160,9 +179,9 @@ QToolButton:disabled {
 QToolButton[categoryTab="true"] {
     background: transparent;
     color: %MUTED%;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 3px 9px;
     font-size: 11px;
     font-weight: 600;
 }
@@ -183,7 +202,12 @@ QSpinBox, QDoubleSpinBox {
     selection-background-color: %ACCENT%;
     selection-color: %ACCENTTEXT%;
 }
+QSpinBox:hover, QDoubleSpinBox:hover {
+    background: %CONTROL%;
+    border-color: %DISABLED%;
+}
 QSpinBox:focus, QDoubleSpinBox:focus {
+    background: %BASE%;
     border-color: %ACCENT%;
 }
 QSpinBox::up-button, QSpinBox::down-button,
@@ -214,6 +238,9 @@ QSlider::handle:horizontal {
 }
 QSlider::handle:horizontal:hover {
     background: %ACCENT%;
+}
+QSlider::handle:horizontal:focus {
+    border-color: %ACCENT%;
 }
 QSlider::handle:horizontal:disabled {
     background: %DISABLED%;

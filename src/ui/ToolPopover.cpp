@@ -11,12 +11,23 @@
 
 namespace wobble {
 
+namespace {
+
+constexpr int shadowMargin = 18;
+constexpr qreal frameRadius = 12.0;
+
+}
+
 ToolPopover::ToolPopover(QWidget *parent)
     : QWidget(parent, Qt::Popup | Qt::FramelessWindowHint)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(14, 12, 14, 12);
+    layout->setContentsMargins(
+        shadowMargin + 14,
+        shadowMargin + 12,
+        shadowMargin + 14,
+        shadowMargin + 12);
 }
 
 void ToolPopover::setContentWidget(QWidget *content)
@@ -31,8 +42,8 @@ void ToolPopover::popupBeside(QWidget *anchor)
         return;
     }
     adjustSize();
-    QPoint target =
-        anchor->mapToGlobal(QPoint(anchor->width() + 6, -6));
+    QPoint target = anchor->mapToGlobal(
+        QPoint(anchor->width() + 6 - shadowMargin, -6 - shadowMargin));
     if (const QScreen *screen = anchor->screen()) {
         const QRect available = screen->availableGeometry();
         target.setX(std::clamp(
@@ -53,10 +64,32 @@ void ToolPopover::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF frame =
-        QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    const QRectF frame = QRectF(rect()).adjusted(
+        shadowMargin + 0.5,
+        shadowMargin + 0.5,
+        -shadowMargin - 0.5,
+        -shadowMargin - 0.5);
+
+    painter.setPen(Qt::NoPen);
+    for (int step = shadowMargin - 3; step > 0; --step) {
+        QColor shadow(Qt::black);
+        shadow.setAlphaF(
+            0.030
+            * (1.0 - static_cast<qreal>(step) / (shadowMargin - 3)));
+        QPainterPath blur;
+        blur.addRoundedRect(
+            frame.adjusted(
+                -step,
+                -step + 2.0,
+                step,
+                step + 2.0),
+            frameRadius + step,
+            frameRadius + step);
+        painter.fillPath(blur, shadow);
+    }
+
     QPainterPath path;
-    path.addRoundedRect(frame, 10.0, 10.0);
+    path.addRoundedRect(frame, frameRadius, frameRadius);
     painter.fillPath(path, Theme::panelBackground());
     painter.setPen(QPen(Theme::border(), 1.0));
     painter.drawPath(path);

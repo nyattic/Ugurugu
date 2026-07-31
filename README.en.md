@@ -70,7 +70,8 @@ necessary.
 - Selection-aware brush, eraser, and paint bucket edits
 - Resizable canvases that scale existing artwork and brush sizes
 - Layers with thumbnails, visibility, opacity, and drag reordering
-- Adjustable wobble strength, frame count, and FPS
+- A timeline with a frame scrubber, a live wobble preview, and
+  adjustable wobble strength, frame count, and FPS
 - Per-stroke roughness control layered on top of the global wobble
 - Looping GIF export and current-frame PNG or JPG export
 - `.wagle` project files with undo and redo
@@ -136,6 +137,8 @@ See [BUILDING.md](BUILDING.md) for source-build and test instructions.
 ## License
 
 WagleWaglePaint is distributed under the
-[GNU General Public License v3.0](LICENSE).
+[GNU General Public License v3.0](LICENSE). The bundled Pretendard JP
+font is licensed under the
+[SIL Open Font License 1.1](resources/fonts/OFL.txt).
 
 Copyright (C) 2026 Nyabi (nyattic)

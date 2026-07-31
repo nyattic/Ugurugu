@@ -694,6 +694,18 @@ void CanvasWidget::paintEvent(QPaintEvent *)
     const QRectF canvasRect =
         transform.mapRect(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)));
 
+    painter.setPen(Qt::NoPen);
+    for (int step = 14; step > 0; --step) {
+        QColor shadow(Qt::black);
+        shadow.setAlphaF(0.020 * (1.0 - step / 14.0));
+        painter.setBrush(shadow);
+        painter.drawRoundedRect(
+            canvasRect.adjusted(-step, -step + 2.0, step, step + 2.0),
+            step * 0.9,
+            step * 0.9);
+    }
+    painter.setBrush(Qt::NoBrush);
+
     painter.save();
     painter.setClipRect(canvasRect);
     const int checkerSize = 12;

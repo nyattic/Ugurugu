@@ -72,7 +72,8 @@ macOS에서는 앱을 Control-클릭한 뒤 **열기**를 선택하고, 필요�
 - 선택 영역을 인식하는 브러시, 지우개, 페인트 통 편집
 - 기존 그림과 브러시 크기를 함께 스케일하는 캔버스 크기 조절
 - 섬네일, 표시 여부, 불투명도, 드래그 순서 변경을 지원하는 레이어
-- 워블 강도, 프레임 수, FPS 조절
+- 프레임 스크러버와 실시간 워블 미리보기가 있는 타임라인에서 워블
+  강도, 프레임 수, FPS 조절
 - 전역 워블 위에 얹는 스트로크별 거칠기 조절
 - 반복 GIF 내보내기와 현재 프레임 PNG·JPG 내보내기
 - 실행 취소·다시 실행을 지원하는 `.wagle` 프로젝트 파일
@@ -137,6 +138,7 @@ macOS에서는 Sparkle, Windows에서는 Velopack을 통해 다운로드·설치
 ## 라이선스
 
 WagleWaglePaint는 [GNU General Public License v3.0](LICENSE)으로
-배포됩니다.
+배포됩니다. 내장된 Pretendard JP 폰트는
+[SIL Open Font License 1.1](resources/fonts/OFL.txt)을 따릅니다.
 
 Copyright (C) 2026 Nyabi (nyattic)
