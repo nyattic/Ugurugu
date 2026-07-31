@@ -9,7 +9,7 @@
 ![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
-**한국어 사용자이신가요? [한국어 README](README.md)를 확인하세요.**
+<p align="center"><a href="README.md">KR</a> · <b>EN</b> · <a href="README.ja.md">JP</a></p>
 
 A native drawing app where every line wobbles. Draw once and your
 sketch comes alive as a crisp, boiling-line animation ready to export
@@ -111,8 +111,10 @@ Open Settings with the gear button in the toolbar. It is also available
 from **Edit → Settings** on Windows and **WagleWaglePaint → Settings**
 on macOS.
 
-- **General:** choose the interface language and drawing animation
-  behavior. Restart the app after changing the language.
+- **General:** choose the interface language. Restart the app after
+  changing the language.
+- **Drawing:** turn the wobble animation on or off and choose how it
+  behaves while drawing.
 - **Files:** choose the default folder used by save and export dialogs.
 - **Shortcuts:** replace any application shortcut and restore the
   defaults when needed.

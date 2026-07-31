@@ -9,7 +9,7 @@
 ![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
-**English speakers: see the [English README](README.en.md).**
+<p align="center"><b>KR</b> · <a href="README.en.md">EN</a> · <a href="README.ja.md">JP</a></p>
 
 모든 선이 꿈틀거리는 네이티브 드로잉 앱입니다. 한 번만 그리면
 스케치가 살아 있는 듯한 보일링 라인 애니메이션으로 깨어나고,
@@ -112,8 +112,10 @@ macOS에서는 앱을 Control-클릭한 뒤 **열기**를 선택하고, 필요�
 **편집 → 설정**, macOS에서는 **WagleWaglePaint → 설정**에서도 열 수
 있습니다.
 
-- **일반:** 인터페이스 언어와 그리는 동안의 애니메이션 동작을
-  선택합니다. 언어를 변경한 뒤에는 앱을 다시 시작하세요.
+- **일반:** 인터페이스 언어를 선택합니다. 언어를 변경한 뒤에는 앱을
+  다시 시작하세요.
+- **그리기:** 와글거림 애니메이션을 켜고 끄고, 그리는 동안의
+  애니메이션 동작을 선택합니다.
 - **파일:** 저장·내보내기 대화 상자가 사용할 기본 폴더를 지정합니다.
 - **단축키:** 모든 단축키를 원하는 키로 바꾸고, 필요하면 기본값으로
   되돌릴 수 있습니다.
