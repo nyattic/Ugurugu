@@ -1,6 +1,7 @@
 #include "ui/SettingsDialog.hpp"
 
 #include <QAction>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -29,6 +30,8 @@ namespace {
 
 const QString animateWhileDrawingKey =
     QStringLiteral("canvas/animateWhileDrawing");
+const QString wobbleAnimationKey =
+    QStringLiteral("canvas/wobbleAnimation");
 const QString defaultSaveFolderKey =
     QStringLiteral("files/defaultSaveFolder");
 const QString uiLanguageKey =
@@ -68,6 +71,13 @@ QKeySequence defaultShortcut(const QAction *action)
         QKeySequence::PortableText);
 }
 
+}
+
+bool SettingsDialog::wobbleAnimationEnabled()
+{
+    return QSettings()
+        .value(wobbleAnimationKey, true)
+        .toBool();
 }
 
 bool SettingsDialog::animateWhileDrawing()
@@ -170,10 +180,18 @@ SettingsDialog::SettingsDialog(
     drawingLayout->setContentsMargins(14, 14, 14, 14);
     drawingLayout->setSpacing(8);
 
-    auto *previewLabel = new QLabel(
+    m_wobbleAnimation = new QCheckBox(
+        tr("Wobble animation"),
+        drawingTab);
+    m_wobbleAnimation->setObjectName(
+        QStringLiteral("wobbleAnimationCheck"));
+    m_wobbleAnimation->setChecked(wobbleAnimationEnabled());
+    drawingLayout->addWidget(m_wobbleAnimation);
+
+    m_drawingOptionsLabel = new QLabel(
         tr("Wobble preview while drawing a stroke"),
         drawingTab);
-    drawingLayout->addWidget(previewLabel);
+    drawingLayout->addWidget(m_drawingOptionsLabel);
 
     m_pauseWhileDrawing = new QRadioButton(
         tr("Pause the wobble until the stroke is finished"),
@@ -184,6 +202,17 @@ SettingsDialog::SettingsDialog(
         tr("Keep wobbling while drawing"),
         drawingTab);
     drawingLayout->addWidget(m_keepWobbling);
+
+    updateDrawingOptionsEnabled();
+    connect(
+        m_wobbleAnimation,
+        &QCheckBox::toggled,
+        this,
+        [this](bool enabled) {
+            QSettings().setValue(wobbleAnimationKey, enabled);
+            emit wobbleAnimationEnabledChanged(enabled);
+            updateDrawingOptionsEnabled();
+        });
 
     drawingLayout->addStretch(1);
     tabs->addTab(drawingTab, tr("Drawing"));
@@ -384,6 +413,14 @@ void SettingsDialog::resetDefaultSaveFolder()
     m_defaultSaveFolderEdit->setText(defaultSaveFolder());
 }
 
+void SettingsDialog::updateDrawingOptionsEnabled()
+{
+    const bool enabled = m_wobbleAnimation->isChecked();
+    m_drawingOptionsLabel->setEnabled(enabled);
+    m_pauseWhileDrawing->setEnabled(enabled);
+    m_keepWobbling->setEnabled(enabled);
+}
+
 void SettingsDialog::restoreDefaults()
 {
     QSettings settings;
@@ -407,6 +444,13 @@ void SettingsDialog::restoreDefaults()
     }
     settings.remove(animateWhileDrawingKey);
     emit animateWhileDrawingChanged(false);
+    {
+        const QSignalBlocker wobbleAnimationBlocker(m_wobbleAnimation);
+        m_wobbleAnimation->setChecked(true);
+    }
+    settings.remove(wobbleAnimationKey);
+    emit wobbleAnimationEnabledChanged(true);
+    updateDrawingOptionsEnabled();
     {
         const QSignalBlocker languageBlocker(m_languageCombo);
         m_languageCombo->setCurrentIndex(

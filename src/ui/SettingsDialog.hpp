@@ -6,6 +6,7 @@
 #include <QList>
 
 class QAction;
+class QCheckBox;
 class QComboBox;
 class QKeySequenceEdit;
 class QLabel;
@@ -20,6 +21,7 @@ class SettingsDialog final : public QDialog
 
 public:
     static bool animateWhileDrawing();
+    static bool wobbleAnimationEnabled();
     static QString defaultSaveFolder();
     static QString uiLanguage();
     static QKeySequence shortcutForAction(
@@ -32,13 +34,17 @@ public:
 
 signals:
     void animateWhileDrawingChanged(bool animate);
+    void wobbleAnimationEnabledChanged(bool enabled);
 
 private:
+    void updateDrawingOptionsEnabled();
     void setShortcut(QAction *action, const QKeySequence &shortcut);
     void chooseDefaultSaveFolder();
     void resetDefaultSaveFolder();
     void restoreDefaults();
 
+    QCheckBox *m_wobbleAnimation = nullptr;
+    QLabel *m_drawingOptionsLabel = nullptr;
     QRadioButton *m_pauseWhileDrawing = nullptr;
     QRadioButton *m_keepWobbling = nullptr;
     QComboBox *m_languageCombo = nullptr;

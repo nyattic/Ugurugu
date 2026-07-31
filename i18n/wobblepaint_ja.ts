@@ -694,10 +694,6 @@
 %1</translation>
         </message>
         <message>
-        <source>&amp;Wobble animation</source>
-        <translation>ウォブルアニメーション(&amp;W)</translation>
-    </message>
-    <message>
         <source>Export current frame as &amp;image…</source>
         <translation>現在のフレームを画像で書き出す(&amp;I)…</translation>
     </message>
@@ -792,7 +788,11 @@
             <source>This shortcut is already assigned to %1.</source>
             <translation>このショートカットはすでに %1 に割り当てられています。</translation>
         </message>
-    </context>
+        <message>
+        <source>Wobble animation</source>
+        <translation>ウォブルアニメーション</translation>
+    </message>
+</context>
     <context>
         <name>wobble::TimelineBar</name>
         <message>

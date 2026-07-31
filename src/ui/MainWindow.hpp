@@ -76,7 +76,6 @@ private:
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
     QAction *m_mirrorCanvasAction = nullptr;
-    QAction *m_wobbleAnimationAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;

@@ -861,10 +861,6 @@
 %1</translation>
     </message>
     <message>
-        <source>&amp;Wobble animation</source>
-        <translation>와글거림 애니메이션(&amp;W)</translation>
-    </message>
-    <message>
         <source>Export current frame as &amp;image…</source>
         <translation>현재 프레임을 이미지로 내보내기(&amp;I)…</translation>
     </message>
@@ -976,6 +972,10 @@
         <location filename="../src/ui/SettingsDialog.cpp" line="339"/>
         <source>This shortcut is already assigned to %1.</source>
         <translation>이 단축키는 이미 %1에 할당되어 있습니다.</translation>
+    </message>
+    <message>
+        <source>Wobble animation</source>
+        <translation>와글거림 애니메이션</translation>
     </message>
 </context>
 <context>

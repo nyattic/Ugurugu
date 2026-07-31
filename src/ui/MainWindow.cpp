@@ -385,6 +385,11 @@ void MainWindow::createActions()
             &SettingsDialog::animateWhileDrawingChanged,
             m_canvas,
             &CanvasWidget::setAnimateWhileDrawing);
+        connect(
+            &dialog,
+            &SettingsDialog::wobbleAnimationEnabledChanged,
+            this,
+            &MainWindow::applyWobbleAnimationEnabled);
         dialog.exec();
     });
 
@@ -529,26 +534,7 @@ void MainWindow::createActions()
         m_playAction,
         &QAction::setChecked);
 
-    m_wobbleAnimationAction = new QAction(tr("&Wobble animation"), this);
-    m_wobbleAnimationAction->setCheckable(true);
-    m_wobbleAnimationAction->setObjectName(
-        QStringLiteral("wobbleAnimationAction"));
-    registerShortcut(m_wobbleAnimationAction, {});
-    const bool wobbleAnimationEnabled = QSettings()
-        .value(QStringLiteral("view/wobbleAnimation"), true)
-        .toBool();
-    m_wobbleAnimationAction->setChecked(wobbleAnimationEnabled);
-    applyWobbleAnimationEnabled(wobbleAnimationEnabled);
-    connect(
-        m_wobbleAnimationAction,
-        &QAction::toggled,
-        this,
-        [this](bool enabled) {
-            QSettings().setValue(
-                QStringLiteral("view/wobbleAnimation"),
-                enabled);
-            applyWobbleAnimationEnabled(enabled);
-        });
+    applyWobbleAnimationEnabled(SettingsDialog::wobbleAnimationEnabled());
 
     m_brushAction = new QAction(tr("&Brush"), this);
     m_brushAction->setCheckable(true);
@@ -661,7 +647,6 @@ void MainWindow::createMenus()
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
-    viewMenu->addAction(m_wobbleAnimationAction);
     viewMenu->addSeparator();
     viewMenu->addAction(m_layerDock->toggleViewAction());
 
