@@ -6,7 +6,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/nyattic/WagleWaglePaint?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/nyattic/WagleWaglePaint/total?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases)
-![License](https://img.shields.io/badge/license-MIT-ffc94a?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=1e1b2e)
+![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
 **한국어 사용자이신가요? [한국어 README](README.md)를 확인하세요.**
@@ -130,4 +130,4 @@ See [BUILDING.md](BUILDING.md) for source-build and test instructions.
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)
