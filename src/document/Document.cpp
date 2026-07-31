@@ -58,6 +58,7 @@ Document Document::createDefault(const QSize &canvasSize)
     document.size = canvasSize;
     Layer layer;
     layer.name = QStringLiteral("Layer 1");
+    layer.initialCanvasSize = canvasSize;
     document.activeLayerId = layer.id;
     document.layers.append(layer);
     return document;

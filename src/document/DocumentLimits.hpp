@@ -9,6 +9,7 @@ struct DocumentLimits final
 {
     static constexpr int minimumCanvasEdge = 1;
     static constexpr int maximumCanvasEdge = 4096;
+    static constexpr qreal maximumStoredCoordinateMagnitude = 32767.0;
     static constexpr int minimumAnimationFrames = 2;
     static constexpr int maximumAnimationFrames = 60;
     static constexpr qreal minimumFramesPerSecond = 1.0;

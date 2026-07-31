@@ -25,7 +25,15 @@ enum class IconGlyph {
     Lasso,
     Wand,
     Bucket,
-    Settings
+    Settings,
+    Move,
+    Scale,
+    Rotate,
+    MirrorVertical,
+    Delete,
+    Deselect,
+    Confirm,
+    Cancel
 };
 
 struct Icons final

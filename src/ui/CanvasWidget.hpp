@@ -3,12 +3,12 @@
 #include "document/DocumentController.hpp"
 #include "render/RenderEngine.hpp"
 
-#include <QByteArray>
 #include <QCache>
 #include <QColor>
 #include <QHash>
 #include <QImage>
 #include <QPainterPath>
+#include <QPointer>
 #include <QSet>
 #include <QTimer>
 #include <QWidget>
@@ -18,6 +18,8 @@ class QTabletEvent;
 class QWheelEvent;
 
 namespace wobble {
+
+class SelectionActionBar;
 
 class CanvasWidget final : public QWidget
 {
@@ -51,9 +53,20 @@ public:
     bool isCanvasMirrored() const;
     bool hasSelection() const;
     bool hasTransformableSelection() const;
+    bool selectionMoveMode() const;
+    bool hasSelectionTransformSession() const;
+    bool hasPendingSelectionTransform() const;
+    QTransform pendingSelectionTransform() const;
     bool scaleSelection(qreal factor);
     bool rotateSelection(qreal degrees);
+    bool flipSelectionHorizontally();
+    bool flipSelectionVertically();
+    bool applySelectionTransform();
+    void cancelSelectionTransform();
     bool duplicateSelection();
+    bool deleteSelection();
+    void deselectSelection();
+    void setSelectionActionBar(SelectionActionBar *actionBar);
 
 public slots:
     void setTool(Tool tool);
@@ -69,12 +82,16 @@ public slots:
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
     void fitToWindow();
+    void resetZoom();
+    void setZoomPercent(int percent);
     void zoomIn();
     void zoomOut();
     void setCanvasMirrored(bool mirrored);
     void toggleCanvasMirrored();
     void setCurrentFrame(int frame);
     void setPanModifierActive(bool active);
+    void setSelectionMoveMode(bool enabled);
+    void handleEscape();
     void cancelActiveInteraction();
 
 signals:
@@ -92,6 +109,9 @@ signals:
     void pointerPositionChanged(const QPointF &position, bool inside);
     void interactionMessage(const QString &message);
     void selectionTransformAvailabilityChanged(bool available);
+    void selectionAvailabilityChanged(bool hasArea, bool hasContent);
+    void selectionMoveModeChanged(bool enabled);
+    void selectionTransformSessionChanged(bool active, bool dirty);
 
 protected:
     bool event(QEvent *event) override;
@@ -115,14 +135,19 @@ private:
         QImage mask;
     };
 
-    struct SelectionSnapshot {
-        QSet<QUuid> strokes;
+    struct FloatingTransformSession {
+        bool active = false;
         QUuid layer;
-        QSize maskSize;
-        QByteArray compressedMask;
+        QVector<QUuid> strokeIds;
+        QImage sourceMask;
+        QPainterPath sourceOutline;
+        QRectF sourceBounds;
+        PixelSelectionOp previewOperation;
+        QTransform transform;
     };
 
     QTransform documentTransform() const;
+    qreal fitZoom() const;
     Document displayDocument() const;
     QPointF mapToDocument(const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
@@ -165,9 +190,6 @@ private:
         const SelectionState &previousSelection);
     SelectionState selectionStateForMask(QImage mask) const;
     SelectionState currentSelectionState() const;
-    SelectionSnapshot selectionSnapshot(const SelectionState &state) const;
-    SelectionState selectionStateFromSnapshot(
-        const SelectionSnapshot &snapshot) const;
     void restoreSelectionState(const SelectionState &state);
     void pushSelectionChange(
         const SelectionState &previousSelection,
@@ -179,6 +201,16 @@ private:
     void continueSelectionMove(const QPointF &documentPosition);
     void commitSelectionMove();
     void cancelSelectionMove();
+    bool beginSelectionTransformSession();
+    bool setPendingSelectionTransform(const QTransform &transform);
+    bool isValidSelectionTransform(const QTransform &transform) const;
+    void resetSelectionTransformSession();
+    void cancelSelectionTransformForBoundary(const QString &message = {});
+    QPainterPath displayedSelectionOutline() const;
+    QRectF displayedSelectionBounds() const;
+    QPointF safeSelectionDeltaForBounds(
+        const QPointF &delta,
+        const QRectF &bounds) const;
     void clearSelection();
     void pruneSelection();
     void transformSelectionOverlay(
@@ -191,6 +223,12 @@ private:
         const QVector<QUuid> &duplicateIds,
         const QPointF &delta,
         bool duplicated);
+    void handleSelectionOverlayTransition(
+        const QUuid &layerId,
+        const QVector<QUuid> &fromStrokeIds,
+        const QVector<QUuid> &toStrokeIds,
+        const QImage &fromMask,
+        const QImage &toMask);
     void handleCanvasResized(
         const QSize &previousSize,
         const QSize &currentSize,
@@ -198,7 +236,8 @@ private:
     void rebuildSelectionOutline();
     void updateSelectionAnimation();
     void notifySelectionTransformAvailability();
-    bool selectionBounds(QRectF *bounds) const;
+    bool flipSelection(bool horizontal);
+    void updateSelectionActionBar();
     QPointF clampedSelectionDelta(const QPointF &delta) const;
     QImage renderActiveLayerImage() const;
     void drawSelectionOverlay(QPainter &painter, const QTransform &transform);
@@ -255,9 +294,11 @@ private:
     qreal m_selectionDashOffset = 0.0;
     bool m_movingSelection = false;
     QPointF m_moveStartPosition;
-    QPointF m_moveDelta;
-    QHash<qint64, QImage> m_moveInsideMasks;
-    QHash<qint64, QImage> m_moveRemainderMasks;
+    QTransform m_moveBaseTransform;
+    bool m_moveStartedTransformSession = false;
+    FloatingTransformSession m_selectionTransformSession;
+    QPointer<SelectionActionBar> m_selectionActionBar;
+    bool m_selectionMoveMode = false;
 };
 
 }

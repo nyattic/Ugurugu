@@ -10,7 +10,7 @@ if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     )
 endif()
 
-project(WagleWaglePaint VERSION 0.6.2 LANGUAGES CXX)
+project(WagleWaglePaint VERSION 0.7.0 LANGUAGES CXX)
 
 include(FetchContent)
 if(WIN32)
@@ -156,6 +156,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentController.cpp
     src/document/DocumentController.hpp
     src/document/DocumentLimits.hpp
+    src/document/SelectionOperation.cpp
+    src/document/SelectionOperation.hpp
     src/document/StrokeMask.cpp
     src/document/StrokeMask.hpp
     src/io/DocumentSerializer.cpp
@@ -193,6 +195,8 @@ add_library(wobblepaint_ui STATIC
     src/ui/BrushPresetButton.hpp
     src/ui/BrushSizeRow.cpp
     src/ui/BrushSizeRow.hpp
+    src/ui/CanvasSizeDialog.cpp
+    src/ui/CanvasSizeDialog.hpp
     src/ui/CanvasWidget.cpp
     src/ui/CanvasWidget.hpp
     src/ui/ColorSwatchRow.cpp
@@ -201,6 +205,8 @@ add_library(wobblepaint_ui STATIC
     src/ui/FrameScrubber.hpp
     src/ui/Icons.cpp
     src/ui/Icons.hpp
+    src/ui/ImageSizeDialog.cpp
+    src/ui/ImageSizeDialog.hpp
     src/ui/LayerDock.cpp
     src/ui/LayerDock.hpp
     src/ui/LayerItemDelegate.cpp
@@ -211,6 +217,8 @@ add_library(wobblepaint_ui STATIC
     src/ui/MainWindow.hpp
     src/ui/PopoverToolButton.cpp
     src/ui/PopoverToolButton.hpp
+    src/ui/SelectionActionBar.cpp
+    src/ui/SelectionActionBar.hpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.hpp
     src/ui/Theme.cpp

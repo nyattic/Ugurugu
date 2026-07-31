@@ -1,14 +1,81 @@
 #pragma once
 
 #include "document/Document.hpp"
+#include "io/DocumentSerializer.hpp"
 
 #include <QObject>
 #include <QTransform>
-#include <QUndoStack>
 
-#include <functional>
+#include <memory>
+
+class QAction;
+class QUndoCommand;
 
 namespace wobble {
+
+class DocumentController;
+class DocumentControllerTestAccess;
+
+// Logical history prepares a complete target state before moving its cursor,
+// so a failed restore cannot partially apply a document transaction or its
+// UI side effects. Entries are bounded independently by count and resident
+// payload bytes.
+class DocumentUndoStack final : public QObject
+{
+    Q_OBJECT
+
+public:
+    struct StorageStats {
+        qsizetype retainedLayers = 0;
+        qsizetype retainedStrokes = 0;
+        qsizetype retainedPreparedDocuments = 0;
+        qsizetype entryCount = 0;
+        qsizetype stagedPreparedDocuments = 0;
+        qsizetype peakTransientPreparedDocuments = 0;
+        qint64 retainedBytes = 0;
+        bool residentBudgetSoftExceeded = false;
+    };
+
+    static constexpr qint64 maximumResidentBytes =
+        256LL * 1024LL * 1024LL;
+
+    explicit DocumentUndoStack(DocumentController *owner);
+    ~DocumentUndoStack() override;
+
+    bool canUndo() const;
+    bool canRedo() const;
+    bool isClean() const;
+    int count() const;
+    int index() const;
+    int undoLimit() const;
+    void setUndoLimit(int limit);
+    void setClean();
+    void clear();
+    void undo();
+    void redo();
+    void beginMacro(const QString &text);
+    void endMacro();
+    QAction *createUndoAction(QObject *parent);
+    QAction *createRedoAction(QObject *parent);
+    StorageStats storageStats() const;
+
+private:
+    struct Impl;
+
+    void push(QUndoCommand *command);
+    void updateActions();
+    void enforceLimits();
+    void failOpenMacro();
+    bool hasOpenMacro() const;
+
+    DocumentController *m_owner = nullptr;
+    std::unique_ptr<Impl> m_impl;
+    bool m_moving = false;
+    qint64 m_maximumResidentBytes = maximumResidentBytes;
+
+    friend class DocumentController;
+    friend class DocumentControllerTestAccess;
+};
 
 class DocumentController final : public QObject
 {
@@ -16,20 +83,33 @@ class DocumentController final : public QObject
 
 public:
     explicit DocumentController(QObject *parent = nullptr);
+    ~DocumentController() override;
 
     const Document &document() const;
-    QUndoStack *undoStack();
+    DocumentUndoStack *undoStack();
     bool isModified() const;
-    void pushTransientCommand(
+    bool selectionHasVisibleLayerPixels(
+        const QUuid &layerId,
+        const QImage &selectionMask,
+        int preferredFrame = 0) const;
+    void pushSelectionStateCommand(
         const QString &text,
-        std::function<void()> redoAction,
-        std::function<void()> undoAction);
+        const QUuid &beforeLayerId,
+        const QImage &beforeMask,
+        const QUuid &afterLayerId,
+        const QImage &afterMask);
 
     void newDocument(const QSize &size);
     void loadDocument(Document document);
     void loadRecoveredDocument(Document document);
+    bool saveDocument(
+        const QString &filePath,
+        QString *error = nullptr);
     void markSaved();
-    bool resizeCanvas(const QSize &size);
+    bool resizeImage(const QSize &size);
+    bool resizeCanvas(
+        const QSize &size,
+        const QPoint &contentOffset);
 
     void setActiveLayer(const QUuid &id);
     void addStroke(const QUuid &layerId, Stroke stroke);
@@ -50,10 +130,28 @@ public:
         const QPointF &center,
         qreal degrees,
         const QImage &selectionMask = {});
+    bool flipStrokes(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QPointF &center,
+        bool horizontal,
+        const QImage &selectionMask = {});
+    // Commits an already accumulated affine floating-selection transform as
+    // one undoable document operation.
+    bool transformSelection(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QTransform &transform,
+        const QImage &selectionMask = {});
     bool duplicateStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
-        const QPointF &delta);
+        const QPointF &delta,
+        const QImage &selectionMask = {});
+    bool removeSelectedContent(
+        const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QImage &selectionMask);
     void removeStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds);
@@ -90,13 +188,45 @@ signals:
         const QVector<QUuid> &duplicateIds,
         const QPointF &delta,
         bool duplicated);
+    // Exact UI selection transition emitted by selection-aware document
+    // commands. Undo emits the same transition with both sides swapped.
+    void selectionOverlayTransition(
+        const QUuid &layerId,
+        const QVector<QUuid> &fromStrokeIds,
+        const QVector<QUuid> &toStrokeIds,
+        const QImage &fromMask,
+        const QImage &toMask);
     void strokePresenceChanged(
         const QUuid &layerId,
         const QUuid &strokeId,
         const QImage &clipMask,
         bool present);
+    void selectionHistoryStateRequested(
+        const QUuid &layerId,
+        const QImage &mask);
 
 private:
+    struct DocumentDelta;
+    struct HistoryEffects;
+    struct MacroTransaction;
+    class DocumentCommand;
+    class TransientCommand;
+
+    enum class CommitDirection {
+        Forward,
+        Reverse
+    };
+
+    enum class ActiveLayerPolicy {
+        PreserveCurrentIfPresent,
+        UsePrepared
+    };
+
+    using PreparedDocument =
+        DocumentSerializer::PreparedDocument;
+    using PreparedState =
+        std::shared_ptr<const PreparedDocument>;
+
     bool transformStrokes(
         const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
@@ -104,22 +234,69 @@ private:
         qreal widthScale,
         const QString &text,
         const QImage &selectionMask);
-    void pushDocumentCommand(
+    bool tryCommitCandidate(
         QString text,
-        std::function<void()> redoAction,
-        std::function<void()> undoAction,
+        Document candidate,
+        std::shared_ptr<const HistoryEffects> effects = {},
+        ActiveLayerPolicy activeLayerPolicy =
+            ActiveLayerPolicy::PreserveCurrentIfPresent,
         int mergeId = -1,
         const QUuid &mergeScope = {});
-    void setContentRevision(quint64 revision);
+    PreparedState prepareState(
+        Document document,
+        const PreparedDocument *base = nullptr,
+        const DocumentSerializer::ImmutableBackingLease *trusted = nullptr,
+        bool historyPreflight = false);
+    void applyPreparedState(
+        const PreparedState &state,
+        ActiveLayerPolicy activeLayerPolicy,
+        const HistoryEffects &effects,
+        CommitDirection direction,
+        quint64 historyNode,
+        quint64 contentRevision);
+    bool preflightHistoryMovement(
+        const QUndoCommand *command,
+        bool forward);
+    void applyHistoryMovement(
+        QUndoCommand *command,
+        bool forward);
+    void clearHistoryPreflight(const QUndoCommand *command);
+    DocumentUndoStack::StorageStats historyStorageStats(
+        const QUndoCommand *command) const;
     void notifyDocumentChanged();
-    void ensureActiveLayer();
+    void dispatchHistoryEffects(
+        const HistoryEffects &effects,
+        CommitDirection direction,
+        bool documentChanged);
+    void beginHistoryMacro(const QString &text);
+    void endHistoryMacro();
+    void failHistoryMacro();
+    bool rejectHistoryMutation();
+    bool hasOpenHistoryMacro() const;
+    const PreparedState &editableState() const;
+    void normalizeMergedNoOp(
+        quint64 historyNode,
+        quint64 contentRevision);
+    static void ensureActiveLayer(Document &document);
     QString nextLayerName() const;
 
-    Document m_document;
-    QUndoStack m_undoStack;
+    DocumentSerializer::SerializationCache m_serializationCache;
+    PreparedState m_currentState;
+    DocumentUndoStack m_undoStack;
+    quint64 m_currentHistoryNode = 0;
+    quint64 m_nextHistoryNode = 0;
     quint64 m_currentContentRevision = 0;
     quint64 m_savedContentRevision = 0;
     quint64 m_nextContentRevision = 0;
+    mutable bool m_selectionVisibilityCacheValid = false;
+    mutable QUuid m_selectionVisibilityLayerId;
+    mutable qint64 m_selectionVisibilityMaskKey = 0;
+    mutable bool m_selectionVisibilityCacheResult = false;
+    int m_historyPrepareFailureCountdownForTesting = -1;
+    std::unique_ptr<MacroTransaction> m_macroTransaction;
+
+    friend class DocumentUndoStack;
+    friend class DocumentControllerTestAccess;
 };
 
 }

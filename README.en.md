@@ -65,11 +65,18 @@ necessary.
 - Optional per-stroke anti-aliasing for smooth lines
 - A wobble-off mode for using the app as a regular drawing tool
 - Boiling-line wobble with independently redrawn, fully loopable frames
-- Persistent lasso and auto selection with move, scale, rotate, duplicate,
-  delete, and undo support
+- Persistent lasso and auto selection with an action bar for previewing
+  move, scale, rotate, and flip combinations before applying or
+  cancelling them, plus duplicate, delete, deselect, and undo support
 - Selection-aware brush, eraser, and paint bucket edits
-- Resizable canvases that scale existing artwork and brush sizes
-- Layers with thumbnails, visibility, opacity, and drag reordering
+- Change the canvas area without scaling the artwork by using absolute
+  or relative dimensions, a 3×3 anchor, and offsets to crop or expand it
+- Resize artwork and brush sizes by exact pixel dimensions or
+  percentage, with an option to preserve the image aspect ratio
+- A logarithmic 1–1600% zoom slider, true 100% actual-pixel view, and
+  fit-to-window view
+- Layers with thumbnails, visibility, opacity, and drag reordering;
+  the last layer can be deleted to leave an empty, zero-layer canvas
 - A timeline with a frame scrubber, a live wobble preview, and
   adjustable wobble strength, frame count, and FPS
 - Per-stroke roughness control layered on top of the global wobble
@@ -100,13 +107,16 @@ Shortcuts**.
 | Scroll | Zoom |
 | `Ctrl/Cmd++` / `Ctrl/Cmd+-` | Zoom in / out |
 | `Ctrl/Cmd+Space` + drag | Zoom with the pen or mouse (drag right to zoom in) |
+| Status-bar zoom slider | Zoom from 1–1600% |
 | `Alt` + click | Pick a color from the canvas (brush, eraser, and bucket tools) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |
 | `Ctrl/Cmd+E` | Export an animated GIF |
 | `Ctrl/Cmd+D` | Duplicate the selection |
 | `Ctrl/Cmd+0` | Fit the canvas to the window |
-| `Esc` | Cancel the current stroke or selection |
+| `Ctrl/Cmd+1` | View at true 100% actual-pixel size |
+| `Enter` | Apply the pending selection transform |
+| `Esc` | Cancel the current stroke or selection transform; otherwise deselect |
 
 ## Settings
 

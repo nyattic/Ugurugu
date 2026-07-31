@@ -1,73 +1,129 @@
 #include "document/DocumentController.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "document/SelectionOperation.hpp"
 #include "document/StrokeMask.hpp"
+#include "io/DocumentSerializer.hpp"
+#include "render/RenderEngine.hpp"
 
+#include <QAction>
 #include <QHash>
 #include <QPainter>
+#include <QPointer>
+#include <QScopedValueRollback>
 #include <QSet>
 #include <QUndoCommand>
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
+#include <limits>
 #include <memory>
+#include <type_traits>
+#include <variant>
+#include <vector>
 #include <utility>
 
 namespace wobble {
 
 namespace {
 
-class LambdaCommand final : public QUndoCommand
-{
-public:
-    LambdaCommand(
-        QString text,
-        std::function<void()> redoAction,
-        std::function<void()> undoAction,
-        int mergeId = -1,
-        QUuid mergeScope = QUuid())
-        : QUndoCommand(std::move(text))
-        , m_redoAction(std::move(redoAction))
-        , m_undoAction(std::move(undoAction))
-        , m_mergeId(mergeId)
-        , m_mergeScope(mergeScope)
-    {
-    }
+struct HistoryMemoryFootprint {
+    qint64 ownedBytes = 0;
+    QHash<QString, qint64> sharedBackings;
 
-    int id() const override
+    void addOwned(qint64 bytes)
     {
-        return m_mergeId;
-    }
-
-    bool mergeWith(const QUndoCommand *other) override
-    {
-        const auto *command = dynamic_cast<const LambdaCommand *>(other);
-        if (!command
-            || command->m_mergeId != m_mergeId
-            || command->m_mergeScope != m_mergeScope) {
-            return false;
+        if (bytes <= 0) {
+            return;
         }
-        m_redoAction = command->m_redoAction;
-        return true;
+        if (ownedBytes
+            > std::numeric_limits<qint64>::max() - bytes) {
+            ownedBytes = std::numeric_limits<qint64>::max();
+            return;
+        }
+        ownedBytes += bytes;
     }
 
-    void redo() override
+    void addShared(
+        const QString &kind,
+        quint64 identity,
+        qint64 bytes)
     {
-        m_redoAction();
+        if (identity == 0 || bytes <= 0) {
+            return;
+        }
+        const QString key = QStringLiteral("%1:%2")
+                                .arg(kind)
+                                .arg(identity, 0, 16);
+        const auto existing = sharedBackings.constFind(key);
+        if (existing == sharedBackings.cend()
+            || *existing < bytes) {
+            sharedBackings.insert(key, bytes);
+        }
     }
 
-    void undo() override
+    qint64 totalBytes() const
     {
-        m_undoAction();
+        qint64 total = ownedBytes;
+        for (const qint64 bytes : sharedBackings) {
+            if (total > std::numeric_limits<qint64>::max() - bytes) {
+                return std::numeric_limits<qint64>::max();
+            }
+            total += bytes;
+        }
+        return total;
     }
-
-private:
-    std::function<void()> m_redoAction;
-    std::function<void()> m_undoAction;
-    int m_mergeId = -1;
-    QUuid m_mergeScope;
 };
+
+template<typename T>
+void accountVectorStorage(
+    HistoryMemoryFootprint &footprint,
+    const QVector<T> &items,
+    const QString &kind)
+{
+    if (items.capacity() <= 0 || !items.constData()) {
+        return;
+    }
+    footprint.addShared(
+        kind,
+        reinterpret_cast<quintptr>(items.constData()),
+        static_cast<qint64>(items.capacity())
+            * static_cast<qint64>(sizeof(T)));
+}
+
+void accountByteStorage(
+    HistoryMemoryFootprint &footprint,
+    const QByteArray &bytes)
+{
+    if (bytes.capacity() <= 0 || !bytes.constData()) {
+        return;
+    }
+    footprint.addShared(
+        QStringLiteral("bytes"),
+        reinterpret_cast<quintptr>(bytes.constData()),
+        bytes.capacity());
+}
+
+void accountImageStorage(
+    HistoryMemoryFootprint &footprint,
+    const QImage &image)
+{
+    if (!image.isNull()) {
+        footprint.addShared(
+            QStringLiteral("image"),
+            static_cast<quint64>(image.cacheKey()),
+            image.sizeInBytes());
+    }
+}
+
+void accountPackedMask(
+    HistoryMemoryFootprint &footprint,
+    const std::optional<PackedMaskRegion> &mask)
+{
+    if (mask) {
+        accountByteStorage(footprint, mask->packedMask);
+    }
+}
 
 constexpr int wobbleAmountMergeId = 1;
 constexpr int animationFramesMergeId = 2;
@@ -115,6 +171,17 @@ qsizetype layerPointCount(const Layer &layer)
     return count;
 }
 
+bool layerCanProducePixels(const Layer &layer)
+{
+    return std::any_of(
+        layer.strokes.cbegin(),
+        layer.strokes.cend(),
+        [](const Stroke &stroke) {
+            return stroke.mode == StrokeMode::Paint
+                || stroke.mode == StrokeMode::Fill;
+        });
+}
+
 bool containsStrokeId(const Document &document, const QUuid &id)
 {
     for (const Layer &layer : document.layers) {
@@ -127,7 +194,7 @@ bool containsStrokeId(const Document &document, const QUuid &id)
     return false;
 }
 
-bool isValidStrokePoint(const StrokePoint &point, const QSize &size)
+bool isValidInputStrokePoint(const StrokePoint &point, const QSize &size)
 {
     return std::isfinite(point.position.x())
         && std::isfinite(point.position.y())
@@ -140,44 +207,1877 @@ bool isValidStrokePoint(const StrokePoint &point, const QSize &size)
         && point.pressure <= 1.0;
 }
 
+bool isValidStoredStrokePoint(const StrokePoint &point)
+{
+    return std::isfinite(point.position.x())
+        && std::isfinite(point.position.y())
+        && std::abs(point.position.x())
+            <= DocumentLimits::maximumStoredCoordinateMagnitude
+        && std::abs(point.position.y())
+            <= DocumentLimits::maximumStoredCoordinateMagnitude
+        && std::isfinite(point.pressure)
+        && point.pressure >= 0.0
+        && point.pressure <= 1.0;
+}
+
+QString visibilityCacheKey(const Stroke &stroke)
+{
+    const qint64 maskKey =
+        stroke.clipMask.isNull() ? 0 : stroke.clipMask.cacheKey();
+    if (!stroke.visibilityClip) {
+        return QString::number(maskKey);
+    }
+    const QRect &rect = *stroke.visibilityClip;
+    return QStringLiteral("%1:%2,%3,%4,%5")
+        .arg(maskKey)
+        .arg(rect.x())
+        .arg(rect.y())
+        .arg(rect.width())
+        .arg(rect.height());
+}
+
 quint64 distinctClipMaskBytes(const Document &document)
 {
     QSet<qint64> seen;
+    QSet<quintptr> seenPackedBackings;
     quint64 bytes = 0;
     for (const Layer &layer : document.layers) {
         for (const Stroke &stroke : layer.strokes) {
-            if (stroke.clipMask.isNull()
-                || seen.contains(stroke.clipMask.cacheKey())) {
-                continue;
+            for (const QImage *mask :
+                 {&stroke.clipMask, &stroke.fillMask}) {
+                if (mask->isNull()
+                    || seen.contains(mask->cacheKey())) {
+                    continue;
+                }
+                seen.insert(mask->cacheKey());
+                const quint64 maskBytes = mask->sizeInBytes();
+                if (maskBytes
+                    > DocumentLimits::maximumDistinctClipMaskBytes
+                        - bytes) {
+                    return
+                        DocumentLimits::maximumDistinctClipMaskBytes + 1;
+                }
+                bytes += maskBytes;
             }
-            seen.insert(stroke.clipMask.cacheKey());
-            const quint64 maskBytes = stroke.clipMask.sizeInBytes();
-            if (maskBytes
-                > DocumentLimits::maximumDistinctClipMaskBytes - bytes) {
-                return DocumentLimits::maximumDistinctClipMaskBytes + 1;
+            const auto registerPacked =
+                [&bytes, &seenPackedBackings](
+                    const QByteArray &packed) {
+                const quintptr backing =
+                    reinterpret_cast<quintptr>(
+                        packed.constData());
+                if (seenPackedBackings.contains(backing)) {
+                    return true;
+                }
+                const quint64 packedBytes =
+                    static_cast<quint64>(packed.size());
+                if (packedBytes
+                    > DocumentLimits::maximumDistinctClipMaskBytes
+                        - bytes) {
+                    return false;
+                }
+                seenPackedBackings.insert(backing);
+                bytes += packedBytes;
+                return true;
+            };
+            if ((stroke.pixelSelectionOp
+                 && !registerPacked(
+                     stroke.pixelSelectionOp->packedMask))) {
+                return
+                    DocumentLimits::maximumDistinctClipMaskBytes + 1;
             }
-            bytes += maskBytes;
         }
     }
     return bytes;
 }
 
+std::optional<Stroke> selectionOperationStroke(
+    const QImage &selectionMask,
+    const QTransform &transform,
+    bool clearSource,
+    bool drawDestination)
+{
+    const std::optional<PixelSelectionOp> operation =
+        makePixelSelectionOp(
+            selectionMask,
+            transform,
+            clearSource,
+            drawDestination);
+    if (!operation) {
+        return std::nullopt;
+    }
+    Stroke stroke;
+    stroke.mode = StrokeMode::PixelSelection;
+    stroke.points.clear();
+    stroke.pixelSelectionOp = *operation;
+    return stroke;
+}
+
+}
+
+struct DocumentController::HistoryEffects
+{
+    struct CanvasResize {
+        QSize beforeSize;
+        QSize afterSize;
+        QTransform forwardTransform;
+        QTransform reverseTransform;
+    };
+
+    struct StrokeTransform {
+        QUuid layerId;
+        QVector<QUuid> strokeIds;
+        QTransform forwardTransform;
+        QTransform reverseTransform;
+    };
+
+    struct StrokeDuplicate {
+        QUuid layerId;
+        QVector<QUuid> sourceIds;
+        QVector<QUuid> duplicateIds;
+        QPointF delta;
+    };
+
+    struct SelectionOverlay {
+        QUuid layerId;
+        QVector<QUuid> beforeIds;
+        QVector<QUuid> afterIds;
+        std::optional<PackedMaskRegion> beforeMask;
+        std::optional<PackedMaskRegion> afterMask;
+    };
+
+    struct StrokePresence {
+        QUuid layerId;
+        QUuid strokeId;
+        std::optional<PackedMaskRegion> clipMask;
+    };
+
+    struct LayerThumbnail {
+        QUuid layerId;
+    };
+
+    struct LayerThumbnailsReset {
+    };
+
+    struct ActiveLayer {
+    };
+
+    struct SelectionState {
+        QUuid layerId;
+        std::optional<PackedMaskRegion> mask;
+    };
+
+    struct SelectionStateTransition {
+        SelectionState before;
+        SelectionState after;
+    };
+
+    using BeforeEvent = std::variant<
+        CanvasResize,
+        StrokeTransform,
+        StrokeDuplicate,
+        SelectionOverlay,
+        StrokePresence>;
+    using AfterEvent = std::variant<
+        LayerThumbnail,
+        LayerThumbnailsReset,
+        ActiveLayer>;
+
+    QVector<BeforeEvent> beforeDocumentChanged;
+    QVector<AfterEvent> afterDocumentChanged;
+    std::optional<SelectionStateTransition> selectionState;
+
+    static bool sameSelectionState(
+        const SelectionState &left,
+        const SelectionState &right)
+    {
+        return left.layerId == right.layerId
+            && left.mask == right.mask;
+    }
+
+    bool isEmpty() const
+    {
+        return beforeDocumentChanged.isEmpty()
+            && afterDocumentChanged.isEmpty()
+            && !selectionState;
+    }
+
+    bool hasDocumentEffects() const
+    {
+        return !beforeDocumentChanged.isEmpty()
+            || !afterDocumentChanged.isEmpty();
+    }
+
+    bool hasSelectionTransition() const
+    {
+        return selectionState
+            && !sameSelectionState(
+                selectionState->before,
+                selectionState->after);
+    }
+
+    static QVector<QUuid> owningIds(const QVector<QUuid> &source)
+    {
+        QVector<QUuid> copy;
+        copy.reserve(source.size());
+        for (const QUuid &id : source) {
+            copy.append(id);
+        }
+        return copy;
+    }
+
+    static std::optional<PackedMaskRegion> owningMask(
+        const std::optional<PackedMaskRegion> &source)
+    {
+        if (!source) {
+            return std::nullopt;
+        }
+        PackedMaskRegion copy = *source;
+        copy.packedMask = QByteArray(
+            source->packedMask.constData(),
+            source->packedMask.size());
+        return copy;
+    }
+
+    HistoryEffects frozenCopy() const
+    {
+        HistoryEffects frozen = *this;
+        for (BeforeEvent &event : frozen.beforeDocumentChanged) {
+            std::visit(
+                [](auto &value) {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, StrokeTransform>) {
+                        value.strokeIds = owningIds(value.strokeIds);
+                    } else if constexpr (
+                        std::is_same_v<T, StrokeDuplicate>) {
+                        value.sourceIds = owningIds(value.sourceIds);
+                        value.duplicateIds = owningIds(value.duplicateIds);
+                    } else if constexpr (
+                        std::is_same_v<T, SelectionOverlay>) {
+                        value.beforeIds = owningIds(value.beforeIds);
+                        value.afterIds = owningIds(value.afterIds);
+                        value.beforeMask = owningMask(value.beforeMask);
+                        value.afterMask = owningMask(value.afterMask);
+                    } else if constexpr (
+                        std::is_same_v<T, StrokePresence>) {
+                        value.clipMask = owningMask(value.clipMask);
+                    }
+                },
+                event);
+        }
+        if (frozen.selectionState) {
+            frozen.selectionState->before.mask =
+                owningMask(frozen.selectionState->before.mask);
+            frozen.selectionState->after.mask =
+                owningMask(frozen.selectionState->after.mask);
+        }
+        return frozen;
+    }
+
+    void append(const HistoryEffects &later)
+    {
+        beforeDocumentChanged += later.beforeDocumentChanged;
+        afterDocumentChanged += later.afterDocumentChanged;
+        if (later.selectionState) {
+            if (!selectionState) {
+                selectionState = later.selectionState;
+            } else {
+                selectionState->after = later.selectionState->after;
+            }
+            if (!hasSelectionTransition()) {
+                selectionState.reset();
+            }
+        }
+    }
+
+    void discardDocumentEffects()
+    {
+        beforeDocumentChanged.clear();
+        afterDocumentChanged.clear();
+    }
+
+    void accountStorage(HistoryMemoryFootprint &footprint) const
+    {
+        footprint.addOwned(
+            static_cast<qint64>(beforeDocumentChanged.capacity())
+                * static_cast<qint64>(sizeof(BeforeEvent))
+            + static_cast<qint64>(afterDocumentChanged.capacity())
+                * static_cast<qint64>(sizeof(AfterEvent))
+            + static_cast<qint64>(sizeof(HistoryEffects)));
+        for (const BeforeEvent &event : beforeDocumentChanged) {
+            std::visit(
+                [&footprint](const auto &value) {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, StrokeTransform>) {
+                        accountVectorStorage(
+                            footprint,
+                            value.strokeIds,
+                            QStringLiteral("effect-transform-ids"));
+                    } else if constexpr (
+                        std::is_same_v<T, StrokeDuplicate>) {
+                        accountVectorStorage(
+                            footprint,
+                            value.sourceIds,
+                            QStringLiteral("effect-source-ids"));
+                        accountVectorStorage(
+                            footprint,
+                            value.duplicateIds,
+                            QStringLiteral("effect-duplicate-ids"));
+                    } else if constexpr (
+                        std::is_same_v<T, SelectionOverlay>) {
+                        accountVectorStorage(
+                            footprint,
+                            value.beforeIds,
+                            QStringLiteral("effect-before-ids"));
+                        accountVectorStorage(
+                            footprint,
+                            value.afterIds,
+                            QStringLiteral("effect-after-ids"));
+                        accountPackedMask(footprint, value.beforeMask);
+                        accountPackedMask(footprint, value.afterMask);
+                    } else if constexpr (
+                        std::is_same_v<T, StrokePresence>) {
+                        accountPackedMask(footprint, value.clipMask);
+                    }
+                },
+                event);
+        }
+        if (selectionState) {
+            accountPackedMask(footprint, selectionState->before.mask);
+            accountPackedMask(footprint, selectionState->after.mask);
+        }
+    }
+};
+
+struct DocumentController::MacroTransaction
+{
+    QString text;
+    int depth = 1;
+    bool failed = false;
+    PreparedState startState;
+    PreparedState workingState;
+    HistoryEffects effects;
+};
+
+struct DocumentController::DocumentDelta
+{
+    template<typename T>
+    struct ValueChange {
+        T before;
+        T after;
+    };
+
+    struct IndexedStroke {
+        int index = -1;
+        Stroke stroke;
+    };
+
+    struct ReplacedStroke {
+        QUuid id;
+        Stroke before;
+        Stroke after;
+    };
+
+    struct StrokeSequenceDelta {
+        QVector<IndexedStroke> removed;
+        QVector<IndexedStroke> added;
+        QVector<ReplacedStroke> replaced;
+        QVector<QUuid> beforeOrder;
+        QVector<QUuid> afterOrder;
+
+        bool isEmpty() const
+        {
+            return removed.isEmpty()
+                && added.isEmpty()
+                && replaced.isEmpty()
+                && beforeOrder.isEmpty();
+        }
+
+        qsizetype retainedStrokeCount() const
+        {
+            return removed.size()
+                + added.size()
+                + replaced.size() * 2;
+        }
+    };
+
+    struct LayerChange {
+        QUuid id;
+        std::optional<ValueChange<QString>> name;
+        std::optional<ValueChange<bool>> visible;
+        std::optional<ValueChange<qreal>> opacity;
+        std::optional<ValueChange<QSize>> initialCanvasSize;
+        StrokeSequenceDelta strokes;
+
+        bool isEmpty() const
+        {
+            return !name
+                && !visible
+                && !opacity
+                && !initialCanvasSize
+                && strokes.isEmpty();
+        }
+    };
+
+    struct IndexedLayer {
+        int index = -1;
+        Layer layer;
+    };
+
+    std::optional<ValueChange<QSize>> size;
+    std::optional<ValueChange<QColor>> background;
+    std::optional<ValueChange<int>> animationFrames;
+    std::optional<ValueChange<qreal>> framesPerSecond;
+    std::optional<ValueChange<qreal>> wobbleAmount;
+    std::optional<ValueChange<QUuid>> activeLayerId;
+    QVector<IndexedLayer> removedLayers;
+    QVector<IndexedLayer> addedLayers;
+    QVector<LayerChange> changedLayers;
+    QVector<QUuid> beforeLayerOrder;
+    QVector<QUuid> afterLayerOrder;
+
+    static bool samePointBacking(
+        const QVector<StrokePoint> &left,
+        const QVector<StrokePoint> &right)
+    {
+        return left.size() == right.size()
+            && (left.isEmpty()
+                || left.constData() == right.constData());
+    }
+
+    static bool sameStrokeVectorBacking(
+        const QVector<Stroke> &left,
+        const QVector<Stroke> &right)
+    {
+        return left.size() == right.size()
+            && (left.isEmpty()
+                || left.constData() == right.constData());
+    }
+
+    static bool sameByteBacking(
+        const QByteArray &left,
+        const QByteArray &right)
+    {
+        return left.size() == right.size()
+            && (left.isEmpty()
+                || left.constData() == right.constData());
+    }
+
+    static bool sameImageBacking(
+        const QImage &left,
+        const QImage &right)
+    {
+        if (left.isNull() || right.isNull()) {
+            return left.isNull() && right.isNull();
+        }
+        return left.cacheKey() == right.cacheKey()
+            && left.size() == right.size()
+            && left.format() == right.format();
+    }
+
+    static bool samePixelSelectionOperation(
+        const std::optional<PixelSelectionOp> &left,
+        const std::optional<PixelSelectionOp> &right)
+    {
+        if (!left || !right) {
+            return !left && !right;
+        }
+        return left->canvasSize == right->canvasSize
+            && left->sourceBounds == right->sourceBounds
+            && sameByteBacking(
+                left->packedMask,
+                right->packedMask)
+            && left->transform == right->transform
+            && left->sampling == right->sampling
+            && left->clearSource == right->clearSource
+            && left->drawDestination == right->drawDestination;
+    }
+
+    static bool sameStroke(
+        const Stroke &left,
+        const Stroke &right)
+    {
+        return left.id == right.id
+            && left.seed == right.seed
+            && left.mode == right.mode
+            && left.color == right.color
+            && left.width == right.width
+            && left.brush == right.brush
+            && samePointBacking(left.points, right.points)
+            && left.visibilityClip == right.visibilityClip
+            && sameImageBacking(left.clipMask, right.clipMask)
+            && sameImageBacking(left.fillMask, right.fillMask)
+            && samePixelSelectionOperation(
+                left.pixelSelectionOp,
+                right.pixelSelectionOp)
+            && left.reframeOp == right.reframeOp;
+    }
+
+    template<typename T>
+    static void recordChange(
+        const T &before,
+        const T &after,
+        std::optional<ValueChange<T>> &destination)
+    {
+        if (before != after) {
+            destination = ValueChange<T>{before, after};
+        }
+    }
+
+    static QVector<QUuid> strokeIds(
+        const QVector<Stroke> &strokes)
+    {
+        QVector<QUuid> ids;
+        ids.reserve(strokes.size());
+        for (const Stroke &stroke : strokes) {
+            ids.append(stroke.id);
+        }
+        return ids;
+    }
+
+    static QVector<QUuid> layerIds(
+        const QVector<Layer> &layers)
+    {
+        QVector<QUuid> ids;
+        ids.reserve(layers.size());
+        for (const Layer &layer : layers) {
+            ids.append(layer.id);
+        }
+        return ids;
+    }
+
+    static StrokeSequenceDelta betweenStrokes(
+        const QVector<Stroke> &before,
+        const QVector<Stroke> &after)
+    {
+        if (sameStrokeVectorBacking(before, after)) {
+            return {};
+        }
+
+        // Appending is the dominant drawing path, while equal-position
+        // replacement covers transforms.  Avoid two large UUID hash tables
+        // when the common prefix already proves that no sequence matching is
+        // needed.
+        const int commonPrefixSize =
+            std::min(before.size(), after.size());
+        StrokeSequenceDelta aligned;
+        bool commonPrefixMatches = true;
+        for (int index = 0; index < commonPrefixSize; ++index) {
+            if (before[index].id != after[index].id) {
+                commonPrefixMatches = false;
+                break;
+            }
+            if (!sameStroke(before[index], after[index])) {
+                aligned.replaced.append(
+                    {before[index].id, before[index], after[index]});
+            }
+        }
+        if (commonPrefixMatches) {
+            for (int index = commonPrefixSize;
+                 index < before.size();
+                 ++index) {
+                aligned.removed.append({index, before[index]});
+            }
+            for (int index = commonPrefixSize;
+                 index < after.size();
+                 ++index) {
+                aligned.added.append({index, after[index]});
+            }
+            return aligned;
+        }
+
+        StrokeSequenceDelta delta;
+        QHash<QUuid, int> beforeIndexes;
+        QHash<QUuid, int> afterIndexes;
+        beforeIndexes.reserve(before.size());
+        afterIndexes.reserve(after.size());
+        for (int index = 0; index < before.size(); ++index) {
+            beforeIndexes.insert(before[index].id, index);
+        }
+        for (int index = 0; index < after.size(); ++index) {
+            afterIndexes.insert(after[index].id, index);
+        }
+
+        QVector<QUuid> commonBefore;
+        QVector<QUuid> commonAfter;
+        commonBefore.reserve(std::min(before.size(), after.size()));
+        commonAfter.reserve(std::min(before.size(), after.size()));
+        for (int index = 0; index < before.size(); ++index) {
+            const Stroke &stroke = before[index];
+            const auto afterIndex = afterIndexes.constFind(stroke.id);
+            if (afterIndex == afterIndexes.cend()) {
+                delta.removed.append({index, stroke});
+                continue;
+            }
+            commonBefore.append(stroke.id);
+            const Stroke &afterStroke = after[*afterIndex];
+            if (!sameStroke(stroke, afterStroke)) {
+                delta.replaced.append(
+                    {stroke.id, stroke, afterStroke});
+            }
+        }
+        for (int index = 0; index < after.size(); ++index) {
+            const Stroke &stroke = after[index];
+            if (!beforeIndexes.contains(stroke.id)) {
+                delta.added.append({index, stroke});
+            } else {
+                commonAfter.append(stroke.id);
+            }
+        }
+        if (commonBefore != commonAfter) {
+            delta.beforeOrder = strokeIds(before);
+            delta.afterOrder = strokeIds(after);
+        }
+        return delta;
+    }
+
+    static DocumentDelta between(
+        const Document &before,
+        const Document &after)
+    {
+        DocumentDelta delta;
+        recordChange(before.size, after.size, delta.size);
+        recordChange(
+            before.background,
+            after.background,
+            delta.background);
+        recordChange(
+            before.animationFrames,
+            after.animationFrames,
+            delta.animationFrames);
+        recordChange(
+            before.framesPerSecond,
+            after.framesPerSecond,
+            delta.framesPerSecond);
+        recordChange(
+            before.wobbleAmount,
+            after.wobbleAmount,
+            delta.wobbleAmount);
+        recordChange(
+            before.activeLayerId,
+            after.activeLayerId,
+            delta.activeLayerId);
+
+        QHash<QUuid, int> beforeIndexes;
+        QHash<QUuid, int> afterIndexes;
+        beforeIndexes.reserve(before.layers.size());
+        afterIndexes.reserve(after.layers.size());
+        for (int index = 0; index < before.layers.size(); ++index) {
+            beforeIndexes.insert(before.layers[index].id, index);
+        }
+        for (int index = 0; index < after.layers.size(); ++index) {
+            afterIndexes.insert(after.layers[index].id, index);
+        }
+
+        QVector<QUuid> commonBefore;
+        QVector<QUuid> commonAfter;
+        commonBefore.reserve(
+            std::min(before.layers.size(), after.layers.size()));
+        commonAfter.reserve(
+            std::min(before.layers.size(), after.layers.size()));
+        for (int index = 0; index < before.layers.size(); ++index) {
+            const Layer &layer = before.layers[index];
+            const auto afterIndex = afterIndexes.constFind(layer.id);
+            if (afterIndex == afterIndexes.cend()) {
+                delta.removedLayers.append({index, layer});
+                continue;
+            }
+            commonBefore.append(layer.id);
+            const Layer &afterLayer = after.layers[*afterIndex];
+            LayerChange change;
+            change.id = layer.id;
+            recordChange(layer.name, afterLayer.name, change.name);
+            recordChange(
+                layer.visible,
+                afterLayer.visible,
+                change.visible);
+            recordChange(
+                layer.opacity,
+                afterLayer.opacity,
+                change.opacity);
+            recordChange(
+                layer.initialCanvasSize,
+                afterLayer.initialCanvasSize,
+                change.initialCanvasSize);
+            if (!sameStrokeVectorBacking(
+                    layer.strokes,
+                    afterLayer.strokes)) {
+                change.strokes = betweenStrokes(
+                    layer.strokes,
+                    afterLayer.strokes);
+            }
+            if (!change.isEmpty()) {
+                delta.changedLayers.append(std::move(change));
+            }
+        }
+        for (int index = 0; index < after.layers.size(); ++index) {
+            const Layer &layer = after.layers[index];
+            if (!beforeIndexes.contains(layer.id)) {
+                delta.addedLayers.append({index, layer});
+            } else {
+                commonAfter.append(layer.id);
+            }
+        }
+        if (commonBefore != commonAfter) {
+            delta.beforeLayerOrder = layerIds(before.layers);
+            delta.afterLayerOrder = layerIds(after.layers);
+        }
+        return delta;
+    }
+
+    bool isEmpty() const
+    {
+        return !size
+            && !background
+            && !animationFrames
+            && !framesPerSecond
+            && !wobbleAmount
+            && !activeLayerId
+            && removedLayers.isEmpty()
+            && addedLayers.isEmpty()
+            && changedLayers.isEmpty()
+            && beforeLayerOrder.isEmpty();
+    }
+
+    template<typename T>
+    static void applyChange(
+        T &target,
+        const std::optional<ValueChange<T>> &change,
+        bool forward)
+    {
+        if (change) {
+            target = forward ? change->after : change->before;
+        }
+    }
+
+    static bool reorderStrokes(
+        QVector<Stroke> &strokes,
+        const QVector<QUuid> &order)
+    {
+        if (order.isEmpty()) {
+            return true;
+        }
+        if (strokes.size() != order.size()) {
+            return false;
+        }
+        QHash<QUuid, int> indexes;
+        indexes.reserve(strokes.size());
+        for (int index = 0; index < strokes.size(); ++index) {
+            if (indexes.contains(strokes[index].id)) {
+                return false;
+            }
+            indexes.insert(strokes[index].id, index);
+        }
+        QVector<Stroke> reordered;
+        reordered.reserve(strokes.size());
+        for (const QUuid &id : order) {
+            const auto found = indexes.constFind(id);
+            if (found == indexes.cend()) {
+                return false;
+            }
+            reordered.append(strokes[*found]);
+        }
+        strokes = std::move(reordered);
+        return true;
+    }
+
+    static bool reorderLayers(
+        QVector<Layer> &layers,
+        const QVector<QUuid> &order)
+    {
+        if (order.isEmpty()) {
+            return true;
+        }
+        if (layers.size() != order.size()) {
+            return false;
+        }
+        QHash<QUuid, int> indexes;
+        indexes.reserve(layers.size());
+        for (int index = 0; index < layers.size(); ++index) {
+            if (indexes.contains(layers[index].id)) {
+                return false;
+            }
+            indexes.insert(layers[index].id, index);
+        }
+        QVector<Layer> reordered;
+        reordered.reserve(layers.size());
+        for (const QUuid &id : order) {
+            const auto found = indexes.constFind(id);
+            if (found == indexes.cend()) {
+                return false;
+            }
+            reordered.append(layers[*found]);
+        }
+        layers = std::move(reordered);
+        return true;
+    }
+
+    static bool applyStrokeDelta(
+        QVector<Stroke> &strokes,
+        const StrokeSequenceDelta &delta,
+        bool forward)
+    {
+        if (delta.isEmpty()) {
+            return true;
+        }
+        QHash<QUuid, int> currentIndexes;
+        currentIndexes.reserve(strokes.size());
+        for (int index = 0; index < strokes.size(); ++index) {
+            if (currentIndexes.contains(strokes[index].id)) {
+                return false;
+            }
+            currentIndexes.insert(strokes[index].id, index);
+        }
+        for (const ReplacedStroke &replacement : delta.replaced) {
+            const auto found =
+                currentIndexes.constFind(replacement.id);
+            if (found == currentIndexes.cend()) {
+                return false;
+            }
+            strokes[*found] = forward
+                ? replacement.after
+                : replacement.before;
+        }
+
+        const QVector<IndexedStroke> &removals =
+            forward ? delta.removed : delta.added;
+        QSet<QUuid> removalIds;
+        removalIds.reserve(removals.size());
+        for (const IndexedStroke &entry : removals) {
+            if (entry.index < 0
+                || entry.index >= strokes.size()
+                || strokes[entry.index].id != entry.stroke.id
+                || removalIds.contains(entry.stroke.id)) {
+                return false;
+            }
+            removalIds.insert(entry.stroke.id);
+        }
+        QVector<Stroke> retained;
+        retained.reserve(strokes.size() - removals.size());
+        for (const Stroke &stroke : std::as_const(strokes)) {
+            if (!removalIds.contains(stroke.id)) {
+                retained.append(stroke);
+            }
+        }
+        if (retained.size() != strokes.size() - removals.size()) {
+            return false;
+        }
+
+        const QVector<IndexedStroke> &additions =
+            forward ? delta.added : delta.removed;
+        const int targetSize = retained.size() + additions.size();
+        QSet<QUuid> targetIds;
+        targetIds.reserve(targetSize);
+        for (const Stroke &stroke : std::as_const(retained)) {
+            targetIds.insert(stroke.id);
+        }
+        int previousAdditionIndex = -1;
+        for (const IndexedStroke &entry : additions) {
+            if (entry.index <= previousAdditionIndex
+                || entry.index < 0
+                || entry.index >= targetSize
+                || targetIds.contains(entry.stroke.id)) {
+                return false;
+            }
+            previousAdditionIndex = entry.index;
+            targetIds.insert(entry.stroke.id);
+        }
+
+        QVector<Stroke> rebuilt;
+        rebuilt.reserve(targetSize);
+        int retainedIndex = 0;
+        int additionIndex = 0;
+        for (int targetIndex = 0;
+             targetIndex < targetSize;
+             ++targetIndex) {
+            if (additionIndex < additions.size()
+                && additions[additionIndex].index == targetIndex) {
+                rebuilt.append(additions[additionIndex].stroke);
+                ++additionIndex;
+            } else {
+                if (retainedIndex >= retained.size()) {
+                    return false;
+                }
+                rebuilt.append(retained[retainedIndex]);
+                ++retainedIndex;
+            }
+        }
+        if (retainedIndex != retained.size()
+            || additionIndex != additions.size()) {
+            return false;
+        }
+        strokes = std::move(rebuilt);
+        return reorderStrokes(
+            strokes,
+            forward ? delta.afterOrder : delta.beforeOrder);
+    }
+
+    bool apply(Document &document, bool forward) const
+    {
+        applyChange(document.size, size, forward);
+        applyChange(document.background, background, forward);
+        applyChange(
+            document.animationFrames,
+            animationFrames,
+            forward);
+        applyChange(
+            document.framesPerSecond,
+            framesPerSecond,
+            forward);
+        applyChange(
+            document.wobbleAmount,
+            wobbleAmount,
+            forward);
+
+        for (const LayerChange &change : changedLayers) {
+            Layer *layer = document.layer(change.id);
+            if (!layer) {
+                return false;
+            }
+            applyChange(layer->name, change.name, forward);
+            applyChange(layer->visible, change.visible, forward);
+            applyChange(layer->opacity, change.opacity, forward);
+            applyChange(
+                layer->initialCanvasSize,
+                change.initialCanvasSize,
+                forward);
+            if (!applyStrokeDelta(
+                    layer->strokes,
+                    change.strokes,
+                    forward)) {
+                return false;
+            }
+        }
+
+        const QVector<IndexedLayer> &removals =
+            forward ? removedLayers : addedLayers;
+        for (auto entry = removals.crbegin();
+             entry != removals.crend();
+             ++entry) {
+            const int index = document.layerIndex(entry->layer.id);
+            if (index < 0) {
+                return false;
+            }
+            document.layers.removeAt(index);
+        }
+
+        const QVector<IndexedLayer> &additions =
+            forward ? addedLayers : removedLayers;
+        for (const IndexedLayer &entry : additions) {
+            if (entry.index < 0
+                || entry.index > document.layers.size()
+                || document.layer(entry.layer.id)) {
+                return false;
+            }
+            document.layers.insert(entry.index, entry.layer);
+        }
+        if (!reorderLayers(
+                document.layers,
+                forward ? afterLayerOrder : beforeLayerOrder)) {
+            return false;
+        }
+        applyChange(
+            document.activeLayerId,
+            activeLayerId,
+            forward);
+        return true;
+    }
+
+    bool mergeScalar(
+        const DocumentDelta &next,
+        int mergeId,
+        const QUuid &scope)
+    {
+        const auto hasNoStructure = [](const DocumentDelta &delta) {
+            return !delta.size
+                && !delta.background
+                && !delta.activeLayerId
+                && delta.removedLayers.isEmpty()
+                && delta.addedLayers.isEmpty()
+                && delta.beforeLayerOrder.isEmpty();
+        };
+        if (!hasNoStructure(*this) || !hasNoStructure(next)) {
+            return false;
+        }
+
+        const auto merge = []<typename T>(
+            std::optional<ValueChange<T>> &current,
+            const std::optional<ValueChange<T>> &later) {
+            if (!current || !later
+                || current->after != later->before) {
+                return false;
+            }
+            current->after = later->after;
+            return true;
+        };
+        const bool noLayerChanges = changedLayers.isEmpty()
+            && next.changedLayers.isEmpty();
+        if (mergeId == wobbleAmountMergeId
+            && noLayerChanges
+            && !animationFrames
+            && !next.animationFrames
+            && !framesPerSecond
+            && !next.framesPerSecond
+            && !size
+            && !next.size) {
+            return merge(wobbleAmount, next.wobbleAmount);
+        }
+        if (mergeId == animationFramesMergeId
+            && noLayerChanges
+            && !wobbleAmount
+            && !next.wobbleAmount
+            && !framesPerSecond
+            && !next.framesPerSecond) {
+            return merge(animationFrames, next.animationFrames);
+        }
+        if (mergeId == framesPerSecondMergeId
+            && noLayerChanges
+            && !wobbleAmount
+            && !next.wobbleAmount
+            && !animationFrames
+            && !next.animationFrames) {
+            return merge(framesPerSecond, next.framesPerSecond);
+        }
+        if (mergeId != layerOpacityMergeId
+            || scope.isNull()
+            || wobbleAmount
+            || next.wobbleAmount
+            || animationFrames
+            || next.animationFrames
+            || framesPerSecond
+            || next.framesPerSecond
+            || changedLayers.size() != 1
+            || next.changedLayers.size() != 1) {
+            return false;
+        }
+        LayerChange &current = changedLayers[0];
+        const LayerChange &later = next.changedLayers[0];
+        if (current.id != scope
+            || later.id != scope
+            || current.name
+            || later.name
+            || current.visible
+            || later.visible
+            || current.initialCanvasSize
+            || later.initialCanvasSize
+            || !current.strokes.isEmpty()
+            || !later.strokes.isEmpty()) {
+            return false;
+        }
+        return merge(current.opacity, later.opacity);
+    }
+
+    void normalizeMergedChanges()
+    {
+        const auto normalize = []<typename T>(
+                                   std::optional<ValueChange<T>> &change) {
+            if (change && change->before == change->after) {
+                change.reset();
+            }
+        };
+        normalize(size);
+        normalize(background);
+        normalize(animationFrames);
+        normalize(framesPerSecond);
+        normalize(wobbleAmount);
+        normalize(activeLayerId);
+        for (LayerChange &change : changedLayers) {
+            normalize(change.name);
+            normalize(change.visible);
+            normalize(change.opacity);
+            normalize(change.initialCanvasSize);
+        }
+        changedLayers.removeIf(
+            [](const LayerChange &change) { return change.isEmpty(); });
+    }
+
+    QVector<Stroke> payloadStrokes(bool targetAfter) const
+    {
+        QVector<Stroke> strokes;
+        const QVector<IndexedLayer> &layers =
+            targetAfter ? addedLayers : removedLayers;
+        qsizetype count = 0;
+        for (const IndexedLayer &entry : layers) {
+            count += entry.layer.strokes.size();
+        }
+        for (const LayerChange &change : changedLayers) {
+            count += targetAfter
+                ? change.strokes.added.size()
+                    + change.strokes.replaced.size()
+                : change.strokes.removed.size()
+                    + change.strokes.replaced.size();
+        }
+        strokes.reserve(count);
+        for (const IndexedLayer &entry : layers) {
+            strokes += entry.layer.strokes;
+        }
+        for (const LayerChange &change : changedLayers) {
+            const QVector<IndexedStroke> &indexed = targetAfter
+                ? change.strokes.added
+                : change.strokes.removed;
+            for (const IndexedStroke &entry : indexed) {
+                strokes.append(entry.stroke);
+            }
+            for (const ReplacedStroke &entry : change.strokes.replaced) {
+                strokes.append(
+                    targetAfter ? entry.after : entry.before);
+            }
+        }
+        return strokes;
+    }
+
+    static void accountStroke(
+        HistoryMemoryFootprint &footprint,
+        const Stroke &stroke)
+    {
+        accountVectorStorage(
+            footprint,
+            stroke.points,
+            QStringLiteral("stroke-points"));
+        accountImageStorage(footprint, stroke.clipMask);
+        accountImageStorage(footprint, stroke.fillMask);
+        if (stroke.pixelSelectionOp) {
+            accountByteStorage(
+                footprint,
+                stroke.pixelSelectionOp->packedMask);
+        }
+    }
+
+    static void accountLayer(
+        HistoryMemoryFootprint &footprint,
+        const Layer &layer)
+    {
+        accountVectorStorage(
+            footprint,
+            layer.strokes,
+            QStringLiteral("layer-strokes"));
+        for (const Stroke &stroke : layer.strokes) {
+            accountStroke(footprint, stroke);
+        }
+        footprint.addOwned(
+            static_cast<qint64>(layer.name.capacity())
+                * static_cast<qint64>(sizeof(QChar)));
+    }
+
+    void accountStorage(HistoryMemoryFootprint &footprint) const
+    {
+        footprint.addOwned(sizeof(DocumentDelta));
+        footprint.addOwned(
+            static_cast<qint64>(removedLayers.capacity())
+                * static_cast<qint64>(sizeof(IndexedLayer))
+            + static_cast<qint64>(addedLayers.capacity())
+                * static_cast<qint64>(sizeof(IndexedLayer))
+            + static_cast<qint64>(changedLayers.capacity())
+                * static_cast<qint64>(sizeof(LayerChange))
+            + static_cast<qint64>(beforeLayerOrder.capacity())
+                * static_cast<qint64>(sizeof(QUuid))
+            + static_cast<qint64>(afterLayerOrder.capacity())
+                * static_cast<qint64>(sizeof(QUuid)));
+        for (const IndexedLayer &entry : removedLayers) {
+            accountLayer(footprint, entry.layer);
+        }
+        for (const IndexedLayer &entry : addedLayers) {
+            accountLayer(footprint, entry.layer);
+        }
+        for (const LayerChange &change : changedLayers) {
+            if (change.name) {
+                footprint.addOwned(
+                    static_cast<qint64>(change.name->before.capacity()
+                                        + change.name->after.capacity())
+                        * static_cast<qint64>(sizeof(QChar)));
+            }
+            const StrokeSequenceDelta &strokes = change.strokes;
+            footprint.addOwned(
+                static_cast<qint64>(strokes.removed.capacity())
+                    * static_cast<qint64>(sizeof(IndexedStroke))
+                + static_cast<qint64>(strokes.added.capacity())
+                    * static_cast<qint64>(sizeof(IndexedStroke))
+                + static_cast<qint64>(strokes.replaced.capacity())
+                    * static_cast<qint64>(sizeof(ReplacedStroke))
+                + static_cast<qint64>(strokes.beforeOrder.capacity()
+                                      + strokes.afterOrder.capacity())
+                    * static_cast<qint64>(sizeof(QUuid)));
+            for (const IndexedStroke &entry : strokes.removed) {
+                accountStroke(footprint, entry.stroke);
+            }
+            for (const IndexedStroke &entry : strokes.added) {
+                accountStroke(footprint, entry.stroke);
+            }
+            for (const ReplacedStroke &entry : strokes.replaced) {
+                accountStroke(footprint, entry.before);
+                accountStroke(footprint, entry.after);
+            }
+        }
+    }
+
+    DocumentUndoStack::StorageStats storageStats() const
+    {
+        DocumentUndoStack::StorageStats stats;
+        stats.retainedLayers =
+            removedLayers.size() + addedLayers.size();
+        for (const IndexedLayer &entry : removedLayers) {
+            stats.retainedStrokes += entry.layer.strokes.size();
+        }
+        for (const IndexedLayer &entry : addedLayers) {
+            stats.retainedStrokes += entry.layer.strokes.size();
+        }
+        for (const LayerChange &change : changedLayers) {
+            stats.retainedStrokes +=
+                change.strokes.retainedStrokeCount();
+        }
+        return stats;
+    }
+};
+
+class LogicalHistoryCommand : public QUndoCommand
+{
+public:
+    using QUndoCommand::QUndoCommand;
+
+    virtual bool preflight(bool forward) = 0;
+    virtual void clearPreflight() = 0;
+    virtual DocumentUndoStack::StorageStats storageStats() const = 0;
+    virtual void accountStorage(HistoryMemoryFootprint &footprint) const = 0;
+};
+
+class DocumentController::DocumentCommand final
+    : public LogicalHistoryCommand
+{
+public:
+    DocumentCommand(
+        DocumentController *owner,
+        QString text,
+        DocumentDelta delta,
+        PreparedState initialRedo,
+        ActiveLayerPolicy activeLayerPolicy,
+        std::shared_ptr<const HistoryEffects> effects,
+        DocumentSerializer::ImmutableBackingLease beforeLease,
+        DocumentSerializer::ImmutableBackingLease afterLease,
+        int mergeId,
+        QUuid mergeScope,
+        quint64 beforeNode,
+        quint64 afterNode,
+        quint64 beforeRevision,
+        quint64 afterRevision,
+        qint64 beforeCompactSize,
+        qint64 afterCompactSize)
+        : LogicalHistoryCommand(std::move(text))
+        , m_owner(owner)
+        , m_delta(std::move(delta))
+        , m_initialRedo(std::move(initialRedo))
+        , m_activeLayerPolicy(activeLayerPolicy)
+        , m_effects(std::move(effects))
+        , m_beforeLease(std::move(beforeLease))
+        , m_afterLease(std::move(afterLease))
+        , m_mergeId(mergeId)
+        , m_mergeScope(std::move(mergeScope))
+        , m_beforeNode(beforeNode)
+        , m_afterNode(afterNode)
+        , m_beforeRevision(beforeRevision)
+        , m_afterRevision(afterRevision)
+        , m_beforeCompactSize(beforeCompactSize)
+        , m_afterCompactSize(afterCompactSize)
+    {
+    }
+
+    int id() const override
+    {
+        return m_mergeId;
+    }
+
+    bool mergeWith(const QUndoCommand *other) override
+    {
+        const auto *command =
+            dynamic_cast<const DocumentCommand *>(other);
+        if (!command
+            || command->m_owner != m_owner
+            || command->m_mergeId != m_mergeId
+            || command->m_mergeScope != m_mergeScope
+            || command->m_activeLayerPolicy != m_activeLayerPolicy
+            || m_afterNode != command->m_beforeNode
+            || command->m_firstRedo
+            || command->m_initialRedo
+            || command->m_staged
+            || !m_delta.mergeScalar(
+                command->m_delta,
+                m_mergeId,
+                m_mergeScope)) {
+            return false;
+        }
+        m_afterNode = command->m_afterNode;
+        m_afterRevision = command->m_afterRevision;
+        m_afterCompactSize = command->m_afterCompactSize;
+        m_afterLease = command->m_afterLease;
+        m_effects = command->m_effects;
+        m_delta.normalizeMergedChanges();
+        if (m_delta.isEmpty()) {
+            setObsolete(true);
+            m_owner->normalizeMergedNoOp(
+                m_beforeNode,
+                m_beforeRevision);
+        }
+        return true;
+    }
+
+    void redo() override
+    {
+        PreparedState target;
+        ActiveLayerPolicy policy = ActiveLayerPolicy::UsePrepared;
+        if (m_firstRedo) {
+            m_firstRedo = false;
+            target = std::exchange(m_initialRedo, {});
+            policy = m_activeLayerPolicy;
+        } else {
+            target = std::exchange(m_staged, {});
+        }
+        requireReady(target, m_beforeNode, "redo");
+        m_owner->applyPreparedState(
+            target,
+            policy,
+            *m_effects,
+            CommitDirection::Forward,
+            m_afterNode,
+            m_afterRevision);
+    }
+
+    void undo() override
+    {
+        PreparedState target = std::exchange(m_staged, {});
+        requireReady(target, m_afterNode, "undo");
+        m_owner->applyPreparedState(
+            target,
+            ActiveLayerPolicy::UsePrepared,
+            *m_effects,
+            CommitDirection::Reverse,
+            m_beforeNode,
+            m_beforeRevision);
+    }
+
+    bool preflight(bool forward) override
+    {
+        if (!m_owner || !m_owner->m_currentState || m_staged) {
+            return false;
+        }
+        PreparedState cursor = m_owner->m_currentState;
+        quint64 cursorNode = m_owner->m_currentHistoryNode;
+        const quint64 sourceNode =
+            forward ? m_beforeNode : m_afterNode;
+        if (cursorNode != sourceNode) {
+            return false;
+        }
+        Document candidate = cursor->document();
+        if (!m_delta.apply(candidate, forward)) {
+            return false;
+        }
+        if (m_activeLayerPolicy
+                == ActiveLayerPolicy::PreserveCurrentIfPresent) {
+            const QUuid active = cursor->document().activeLayerId;
+            const bool canPreserve = candidate.layers.isEmpty()
+                ? active.isNull()
+                : candidate.layer(active) != nullptr;
+            if (canPreserve) {
+                candidate.activeLayerId = active;
+            }
+        }
+
+        PreparedState prepared = m_owner->prepareState(
+            std::move(candidate),
+            cursor.get(),
+            forward ? &m_afterLease : &m_beforeLease,
+            true);
+        const qint64 expectedSize = forward
+            ? m_afterCompactSize
+            : m_beforeCompactSize;
+        if (!prepared
+            || prepared->compactSize() != expectedSize) {
+            return false;
+        }
+        m_staged = prepared;
+        return true;
+    }
+
+    void clearPreflight() override
+    {
+        m_staged.reset();
+    }
+
+    DocumentUndoStack::StorageStats storageStats() const override
+    {
+        DocumentUndoStack::StorageStats stats =
+            m_delta.storageStats();
+        stats.retainedPreparedDocuments =
+            (m_initialRedo ? 1 : 0) + (m_staged ? 1 : 0);
+        stats.stagedPreparedDocuments = m_staged ? 1 : 0;
+        return stats;
+    }
+
+    void accountStorage(HistoryMemoryFootprint &footprint) const override
+    {
+        m_delta.accountStorage(footprint);
+        if (m_effects) {
+            m_effects->accountStorage(footprint);
+        }
+        footprint.addOwned(sizeof(DocumentCommand));
+        footprint.addOwned(
+            static_cast<qint64>(text().capacity())
+                * static_cast<qint64>(sizeof(QChar)));
+    }
+
+private:
+    void requireReady(
+        const PreparedState &target,
+        quint64 expectedNode,
+        const char *operation) const
+    {
+        if (!m_owner
+            || !target
+            || !target->isValid()
+            || m_owner->m_currentHistoryNode != expectedNode) {
+            qFatal(
+                "Document history invariant failed during %s",
+                operation);
+        }
+    }
+
+    DocumentController *m_owner = nullptr;
+    DocumentDelta m_delta;
+    PreparedState m_initialRedo;
+    PreparedState m_staged;
+    ActiveLayerPolicy m_activeLayerPolicy =
+        ActiveLayerPolicy::PreserveCurrentIfPresent;
+    std::shared_ptr<const HistoryEffects> m_effects;
+    DocumentSerializer::ImmutableBackingLease m_beforeLease;
+    DocumentSerializer::ImmutableBackingLease m_afterLease;
+    int m_mergeId = -1;
+    QUuid m_mergeScope;
+    quint64 m_beforeNode = 0;
+    quint64 m_afterNode = 0;
+    quint64 m_beforeRevision = 0;
+    quint64 m_afterRevision = 0;
+    qint64 m_beforeCompactSize = 0;
+    qint64 m_afterCompactSize = 0;
+    bool m_firstRedo = true;
+};
+
+class DocumentController::TransientCommand final
+    : public LogicalHistoryCommand
+{
+public:
+    TransientCommand(
+        DocumentController *owner,
+        QString text,
+        std::shared_ptr<const HistoryEffects> effects)
+        : LogicalHistoryCommand(std::move(text))
+        , m_owner(owner)
+        , m_effects(std::move(effects))
+    {
+    }
+
+    bool preflight(bool) override
+    {
+        return m_owner && m_effects;
+    }
+
+    void clearPreflight() override
+    {
+    }
+
+    void redo() override
+    {
+        if (m_owner && m_effects) {
+            m_owner->dispatchHistoryEffects(
+                *m_effects,
+                CommitDirection::Forward,
+                false);
+        }
+    }
+
+    void undo() override
+    {
+        if (m_owner && m_effects) {
+            m_owner->dispatchHistoryEffects(
+                *m_effects,
+                CommitDirection::Reverse,
+                false);
+        }
+    }
+
+    DocumentUndoStack::StorageStats storageStats() const override
+    {
+        return {};
+    }
+
+    void accountStorage(HistoryMemoryFootprint &footprint) const override
+    {
+        if (m_effects) {
+            m_effects->accountStorage(footprint);
+        }
+        footprint.addOwned(sizeof(TransientCommand));
+        footprint.addOwned(
+            static_cast<qint64>(text().capacity())
+                * static_cast<qint64>(sizeof(QChar)));
+    }
+
+private:
+    DocumentController *m_owner = nullptr;
+    std::shared_ptr<const HistoryEffects> m_effects;
+};
+
+struct DocumentUndoStack::Impl {
+    std::vector<std::unique_ptr<QUndoCommand>> entries;
+    int index = 0;
+    int cleanIndex = 0;
+    int undoLimit = 64;
+    qsizetype peakTransientPreparedDocuments = 0;
+    std::vector<QPointer<QAction>> undoActions;
+    std::vector<QPointer<QAction>> redoActions;
+};
+
+DocumentUndoStack::DocumentUndoStack(DocumentController *owner)
+    : m_owner(owner)
+    , m_impl(std::make_unique<Impl>())
+{
+}
+
+DocumentUndoStack::~DocumentUndoStack() = default;
+
+bool DocumentUndoStack::canUndo() const
+{
+    return m_impl && m_impl->index > 0;
+}
+
+bool DocumentUndoStack::canRedo() const
+{
+    return m_impl
+        && m_impl->index < static_cast<int>(m_impl->entries.size());
+}
+
+bool DocumentUndoStack::isClean() const
+{
+    return m_impl
+        && m_impl->cleanIndex >= 0
+        && m_impl->index == m_impl->cleanIndex;
+}
+
+int DocumentUndoStack::count() const
+{
+    return m_impl ? static_cast<int>(m_impl->entries.size()) : 0;
+}
+
+int DocumentUndoStack::index() const
+{
+    return m_impl ? m_impl->index : 0;
+}
+
+int DocumentUndoStack::undoLimit() const
+{
+    return m_impl ? m_impl->undoLimit : 0;
+}
+
+void DocumentUndoStack::setUndoLimit(int limit)
+{
+    if (!m_impl || m_moving || hasOpenMacro() || limit < 0) {
+        return;
+    }
+    m_impl->undoLimit = limit;
+    enforceLimits();
+    updateActions();
+}
+
+void DocumentUndoStack::setClean()
+{
+    if (!m_impl || m_moving || hasOpenMacro()) {
+        return;
+    }
+    m_impl->cleanIndex = m_impl->index;
+}
+
+void DocumentUndoStack::clear()
+{
+    if (!m_impl || m_moving) {
+        return;
+    }
+    if (hasOpenMacro()) {
+        failOpenMacro();
+        return;
+    }
+    m_impl->entries.clear();
+    m_impl->index = 0;
+    m_impl->cleanIndex = 0;
+    updateActions();
+}
+
+void DocumentUndoStack::push(QUndoCommand *rawCommand)
+{
+    std::unique_ptr<QUndoCommand> command(rawCommand);
+    if (!m_impl || !command || m_moving || hasOpenMacro()) {
+        return;
+    }
+
+    while (static_cast<int>(m_impl->entries.size()) > m_impl->index) {
+        const int oldCount = static_cast<int>(m_impl->entries.size());
+        if (m_impl->cleanIndex == oldCount) {
+            m_impl->cleanIndex = -1;
+        }
+        m_impl->entries.pop_back();
+    }
+
+    const bool mayMergeAcrossCurrentBoundary =
+        m_impl->cleanIndex != m_impl->index;
+    QScopedValueRollback<bool> movement(m_moving, true);
+    command->redo();
+
+    bool merged = false;
+    if (mayMergeAcrossCurrentBoundary
+        && m_impl->index > 0
+        && command->id() >= 0) {
+        QUndoCommand *previous =
+            m_impl->entries[static_cast<size_t>(m_impl->index - 1)].get();
+        if (previous && previous->id() == command->id()) {
+            merged = previous->mergeWith(command.get());
+            if (merged && previous->isObsolete()) {
+                m_impl->entries.erase(
+                    m_impl->entries.begin() + (m_impl->index - 1));
+                --m_impl->index;
+            }
+        }
+    }
+    if (!merged) {
+        m_impl->entries.push_back(std::move(command));
+        ++m_impl->index;
+    }
+    m_moving = false;
+    enforceLimits();
+    updateActions();
+}
+
+void DocumentUndoStack::undo()
+{
+    if (!m_impl || !m_owner || m_moving || hasOpenMacro() || !canUndo()) {
+        return;
+    }
+    QScopedValueRollback<bool> movement(m_moving, true);
+    QUndoCommand *command =
+        m_impl->entries[static_cast<size_t>(m_impl->index - 1)].get();
+    if (!command
+        || !m_owner->preflightHistoryMovement(command, false)) {
+        m_owner->clearHistoryPreflight(command);
+        return;
+    }
+    m_impl->peakTransientPreparedDocuments = std::max(
+        m_impl->peakTransientPreparedDocuments,
+        m_owner->historyStorageStats(command).stagedPreparedDocuments);
+    m_owner->applyHistoryMovement(command, false);
+    --m_impl->index;
+    m_owner->clearHistoryPreflight(command);
+    m_moving = false;
+    updateActions();
+}
+
+void DocumentUndoStack::redo()
+{
+    if (!m_impl || !m_owner || m_moving || hasOpenMacro() || !canRedo()) {
+        return;
+    }
+    QScopedValueRollback<bool> movement(m_moving, true);
+    QUndoCommand *command =
+        m_impl->entries[static_cast<size_t>(m_impl->index)].get();
+    if (!command
+        || !m_owner->preflightHistoryMovement(command, true)) {
+        m_owner->clearHistoryPreflight(command);
+        return;
+    }
+    m_impl->peakTransientPreparedDocuments = std::max(
+        m_impl->peakTransientPreparedDocuments,
+        m_owner->historyStorageStats(command).stagedPreparedDocuments);
+    m_owner->applyHistoryMovement(command, true);
+    ++m_impl->index;
+    m_owner->clearHistoryPreflight(command);
+    m_moving = false;
+    updateActions();
+}
+
+void DocumentUndoStack::beginMacro(const QString &text)
+{
+    if (!m_owner || m_moving) {
+        return;
+    }
+    m_owner->beginHistoryMacro(text);
+}
+
+void DocumentUndoStack::endMacro()
+{
+    if (!m_owner || m_moving || !hasOpenMacro()) {
+        return;
+    }
+    m_owner->endHistoryMacro();
+}
+
+void DocumentUndoStack::failOpenMacro()
+{
+    if (m_owner) {
+        m_owner->failHistoryMacro();
+    }
+}
+
+bool DocumentUndoStack::hasOpenMacro() const
+{
+    return m_owner && m_owner->hasOpenHistoryMacro();
+}
+
+QAction *DocumentUndoStack::createUndoAction(QObject *parent)
+{
+    auto *action = new QAction(parent);
+    QObject::connect(
+        action,
+        &QAction::triggered,
+        this,
+        [this]() { undo(); });
+    m_impl->undoActions.emplace_back(action);
+    updateActions();
+    return action;
+}
+
+QAction *DocumentUndoStack::createRedoAction(QObject *parent)
+{
+    auto *action = new QAction(parent);
+    QObject::connect(
+        action,
+        &QAction::triggered,
+        this,
+        [this]() { redo(); });
+    m_impl->redoActions.emplace_back(action);
+    updateActions();
+    return action;
+}
+
+void DocumentUndoStack::updateActions()
+{
+    if (!m_impl) {
+        return;
+    }
+    const QString undoText = canUndo()
+        ? tr("Undo %1").arg(
+              m_impl->entries[static_cast<size_t>(m_impl->index - 1)]->text())
+        : tr("Undo");
+    const QString redoText = canRedo()
+        ? tr("Redo %1").arg(
+              m_impl->entries[static_cast<size_t>(m_impl->index)]->text())
+        : tr("Redo");
+    for (auto iterator = m_impl->undoActions.begin();
+         iterator != m_impl->undoActions.end();) {
+        if (!*iterator) {
+            iterator = m_impl->undoActions.erase(iterator);
+            continue;
+        }
+        (*iterator)->setEnabled(canUndo());
+        (*iterator)->setText(undoText);
+        ++iterator;
+    }
+    for (auto iterator = m_impl->redoActions.begin();
+         iterator != m_impl->redoActions.end();) {
+        if (!*iterator) {
+            iterator = m_impl->redoActions.erase(iterator);
+            continue;
+        }
+        (*iterator)->setEnabled(canRedo());
+        (*iterator)->setText(redoText);
+        ++iterator;
+    }
+}
+
+DocumentUndoStack::StorageStats DocumentUndoStack::storageStats() const
+{
+    StorageStats total;
+    if (!m_impl) {
+        return total;
+    }
+    HistoryMemoryFootprint footprint;
+    total.entryCount = static_cast<qsizetype>(m_impl->entries.size());
+    total.peakTransientPreparedDocuments =
+        m_impl->peakTransientPreparedDocuments;
+    for (const std::unique_ptr<QUndoCommand> &entry : m_impl->entries) {
+        const auto *logical =
+            dynamic_cast<const LogicalHistoryCommand *>(entry.get());
+        if (!logical) {
+            continue;
+        }
+        const StorageStats command = logical->storageStats();
+        total.retainedLayers += command.retainedLayers;
+        total.retainedStrokes += command.retainedStrokes;
+        total.retainedPreparedDocuments +=
+            command.retainedPreparedDocuments;
+        total.stagedPreparedDocuments +=
+            command.stagedPreparedDocuments;
+        logical->accountStorage(footprint);
+    }
+    total.retainedBytes = footprint.totalBytes();
+    total.residentBudgetSoftExceeded =
+        total.entryCount == 1
+        && total.retainedBytes > m_maximumResidentBytes;
+    return total;
+}
+
+void DocumentUndoStack::enforceLimits()
+{
+    if (!m_impl) {
+        return;
+    }
+    while (m_impl->entries.size() > 1) {
+        const StorageStats stats = storageStats();
+        const bool overCount = m_impl->undoLimit > 0
+            && static_cast<int>(m_impl->entries.size())
+                > m_impl->undoLimit;
+        const bool overBytes =
+            stats.retainedBytes > m_maximumResidentBytes;
+        if (!overCount && !overBytes) {
+            break;
+        }
+
+        const int count = static_cast<int>(m_impl->entries.size());
+        const int undoDistance = m_impl->index;
+        const int redoDistance = count - m_impl->index;
+        const bool removePrefix = undoDistance > 0
+            && (redoDistance == 0 || undoDistance >= redoDistance);
+        if (removePrefix) {
+            m_impl->entries.erase(m_impl->entries.begin());
+            --m_impl->index;
+            if (m_impl->cleanIndex == 0) {
+                m_impl->cleanIndex = -1;
+            } else if (m_impl->cleanIndex > 0) {
+                --m_impl->cleanIndex;
+            }
+        } else {
+            const int oldCount = count;
+            m_impl->entries.pop_back();
+            if (m_impl->cleanIndex == oldCount) {
+                m_impl->cleanIndex = -1;
+            }
+        }
+    }
 }
 
 DocumentController::DocumentController(QObject *parent)
     : QObject(parent)
-    , m_document(Document::createDefault())
+    , m_undoStack(this)
 {
+    m_currentState = prepareState(Document::createDefault());
+    Q_ASSERT(m_currentState);
     m_undoStack.setUndoLimit(64);
     m_undoStack.setClean();
 }
 
+DocumentController::~DocumentController() = default;
+
 const Document &DocumentController::document() const
 {
-    return m_document;
+    static const Document empty;
+    const PreparedState &state = editableState();
+    return state
+        ? state->document()
+        : empty;
 }
 
-QUndoStack *DocumentController::undoStack()
+DocumentUndoStack *DocumentController::undoStack()
 {
     return &m_undoStack;
 }
@@ -187,19 +2087,129 @@ bool DocumentController::isModified() const
     return m_currentContentRevision != m_savedContentRevision;
 }
 
-void DocumentController::pushTransientCommand(
-    const QString &text,
-    std::function<void()> redoAction,
-    std::function<void()> undoAction)
+bool DocumentController::selectionHasVisibleLayerPixels(
+    const QUuid &layerId,
+    const QImage &selectionMask,
+    int preferredFrame) const
 {
-    m_undoStack.push(new LambdaCommand(
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
+    if (!layer
+        || selectionMask.isNull()
+        || selectionMask.size() != current.size
+        || selectionMask.format() != QImage::Format_Grayscale8) {
+        return false;
+    }
+    const qint64 maskKey = selectionMask.cacheKey();
+    if (m_selectionVisibilityCacheValid
+        && m_selectionVisibilityLayerId == layerId
+        && m_selectionVisibilityMaskKey == maskKey) {
+        return m_selectionVisibilityCacheResult;
+    }
+
+    const int frameCount =
+        std::max(1, current.animationFrames);
+    const int normalizedPreferred =
+        ((preferredFrame % frameCount) + frameCount)
+        % frameCount;
+    QVector<int> frames;
+    frames.reserve(frameCount);
+    frames.append(normalizedPreferred);
+    for (int frame = 0; frame < frameCount; ++frame) {
+        if (frame != normalizedPreferred) {
+            frames.append(frame);
+        }
+    }
+
+    bool result = false;
+    bool renderSucceeded = true;
+    for (const int frame : frames) {
+        QImage layerImage;
+        if (!RenderEngine::renderStrokesOnLayer(
+                layerImage,
+                current,
+                layer->strokes,
+                frame,
+                current.size)
+            || layerImage.size() != selectionMask.size()) {
+            renderSucceeded = false;
+            break;
+        }
+        for (int y = 0; y < layerImage.height() && !result; ++y) {
+            const auto *pixels =
+                reinterpret_cast<const QRgb *>(
+                    layerImage.constScanLine(y));
+            const uchar *selection =
+                selectionMask.constScanLine(y);
+            for (int x = 0; x < layerImage.width(); ++x) {
+                if (selection[x] >= 128
+                    && qAlpha(pixels[x]) != 0) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+        if (result) {
+            break;
+        }
+    }
+    m_selectionVisibilityCacheValid = renderSucceeded;
+    m_selectionVisibilityLayerId = layerId;
+    m_selectionVisibilityMaskKey = maskKey;
+    m_selectionVisibilityCacheResult = result;
+    return result;
+}
+
+void DocumentController::pushSelectionStateCommand(
+    const QString &text,
+    const QUuid &beforeLayerId,
+    const QImage &beforeMask,
+    const QUuid &afterLayerId,
+    const QImage &afterMask)
+{
+    if (m_undoStack.m_moving) {
+        return;
+    }
+    const auto snapshot = [](const QImage &mask)
+        -> std::optional<PackedMaskRegion> {
+        return mask.isNull()
+            ? std::optional<PackedMaskRegion>()
+            : packBinaryMask(mask);
+    };
+    const std::optional<PackedMaskRegion> before = snapshot(beforeMask);
+    const std::optional<PackedMaskRegion> after = snapshot(afterMask);
+    if ((!beforeMask.isNull() && !before)
+        || (!afterMask.isNull() && !after)) {
+        failHistoryMacro();
+        return;
+    }
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->selectionState = HistoryEffects::SelectionStateTransition{
+        {beforeLayerId, before},
+        {afterLayerId, after}};
+    if (!effects->hasSelectionTransition()) {
+        return;
+    }
+    auto frozenEffects = std::make_shared<const HistoryEffects>(
+        effects->frozenCopy());
+    if (m_macroTransaction) {
+        if (!m_macroTransaction->failed) {
+            m_macroTransaction->effects.append(*frozenEffects);
+        }
+        return;
+    }
+    m_undoStack.push(new TransientCommand(
+        this,
         text,
-        std::move(redoAction),
-        std::move(undoAction)));
+        std::move(frozenEffects)));
 }
 
 void DocumentController::newDocument(const QSize &size)
 {
+    if (m_undoStack.m_moving || hasOpenHistoryMacro()) {
+        failHistoryMacro();
+        return;
+    }
     const bool wasModified = isModified();
     const QSize normalized(
         std::clamp(
@@ -210,16 +2220,24 @@ void DocumentController::newDocument(const QSize &size)
             size.height(),
             DocumentLimits::minimumCanvasEdge,
             DocumentLimits::maximumCanvasEdge));
-    m_document = Document::createDefault(normalized);
+    const PreparedState prepared =
+        prepareState(Document::createDefault(normalized));
+    if (!prepared) {
+        return;
+    }
+    m_currentState = prepared;
     m_undoStack.clear();
     m_undoStack.setClean();
     m_currentContentRevision = 0;
     m_savedContentRevision = 0;
     m_nextContentRevision = 0;
+    m_currentHistoryNode = 0;
+    m_nextHistoryNode = 0;
+    m_selectionVisibilityCacheValid = false;
     emit documentReplaced();
     emit documentChanged();
     emit layerThumbnailsReset();
-    emit activeLayerChanged(m_document.activeLayerId);
+    emit activeLayerChanged(document().activeLayerId);
     if (wasModified) {
         emit modifiedChanged(false);
     }
@@ -227,18 +2245,29 @@ void DocumentController::newDocument(const QSize &size)
 
 void DocumentController::loadDocument(Document document)
 {
+    if (m_undoStack.m_moving || hasOpenHistoryMacro()) {
+        failHistoryMacro();
+        return;
+    }
     const bool wasModified = isModified();
-    m_document = std::move(document);
-    ensureActiveLayer();
+    ensureActiveLayer(document);
+    const PreparedState prepared = prepareState(std::move(document));
+    if (!prepared) {
+        return;
+    }
+    m_currentState = prepared;
     m_undoStack.clear();
     m_undoStack.setClean();
     m_currentContentRevision = 0;
     m_savedContentRevision = 0;
     m_nextContentRevision = 0;
+    m_currentHistoryNode = 0;
+    m_nextHistoryNode = 0;
+    m_selectionVisibilityCacheValid = false;
     emit documentReplaced();
     emit documentChanged();
     emit layerThumbnailsReset();
-    emit activeLayerChanged(m_document.activeLayerId);
+    emit activeLayerChanged(this->document().activeLayerId);
     if (wasModified) {
         emit modifiedChanged(false);
     }
@@ -246,24 +2275,58 @@ void DocumentController::loadDocument(Document document)
 
 void DocumentController::loadRecoveredDocument(Document document)
 {
+    if (m_undoStack.m_moving || hasOpenHistoryMacro()) {
+        failHistoryMacro();
+        return;
+    }
     const bool wasModified = isModified();
-    m_document = std::move(document);
-    ensureActiveLayer();
+    ensureActiveLayer(document);
+    const PreparedState prepared = prepareState(std::move(document));
+    if (!prepared) {
+        return;
+    }
+    m_currentState = prepared;
     m_undoStack.clear();
     m_currentContentRevision = 1;
     m_savedContentRevision = 0;
     m_nextContentRevision = 1;
+    m_currentHistoryNode = 0;
+    m_nextHistoryNode = 0;
+    m_selectionVisibilityCacheValid = false;
     emit documentReplaced();
     emit documentChanged();
     emit layerThumbnailsReset();
-    emit activeLayerChanged(m_document.activeLayerId);
+    emit activeLayerChanged(this->document().activeLayerId);
     if (!wasModified) {
         emit modifiedChanged(true);
     }
 }
 
+bool DocumentController::saveDocument(
+    const QString &filePath,
+    QString *error)
+{
+    if (hasOpenHistoryMacro()) {
+        failHistoryMacro();
+        if (error) {
+            *error = tr("Cannot save an unfinished history transaction.");
+        }
+        return rejectHistoryMutation();
+    }
+    return m_currentState
+        && DocumentSerializer::save(
+            filePath,
+            *m_currentState,
+            m_serializationCache,
+            error);
+}
+
 void DocumentController::markSaved()
 {
+    if (m_undoStack.m_moving || hasOpenHistoryMacro()) {
+        failHistoryMacro();
+        return;
+    }
     const bool wasModified = isModified();
     m_savedContentRevision = m_currentContentRevision;
     m_undoStack.setClean();
@@ -272,96 +2335,185 @@ void DocumentController::markSaved()
     }
 }
 
-bool DocumentController::resizeCanvas(const QSize &size)
+bool DocumentController::resizeImage(const QSize &size)
 {
-    if (size == m_document.size
+    const Document &current = document();
+    if (size == current.size
         || size.width() < DocumentLimits::minimumCanvasEdge
         || size.height() < DocumentLimits::minimumCanvasEdge
         || size.width() > DocumentLimits::maximumCanvasEdge
         || size.height() > DocumentLimits::maximumCanvasEdge) {
-        return false;
+        return rejectHistoryMutation();
     }
 
-    const auto previous = std::make_shared<Document>(m_document);
-    auto resized = std::make_shared<Document>(m_document);
+    Document resized = current;
     const qreal horizontalScale =
-        static_cast<qreal>(size.width()) / m_document.size.width();
+        static_cast<qreal>(size.width()) / current.size.width();
     const qreal verticalScale =
-        static_cast<qreal>(size.height()) / m_document.size.height();
-    const qreal widthScale = std::sqrt(horizontalScale * verticalScale);
+        static_cast<qreal>(size.height()) / current.size.height();
     QTransform transform;
     transform.scale(horizontalScale, verticalScale);
-    resized->size = size;
-    QHash<qint64, QImage> transformedMasks;
-    for (Layer &layer : resized->layers) {
-        for (Stroke &stroke : layer.strokes) {
-            for (StrokePoint &point : stroke.points) {
-                const QPointF mapped = transform.map(point.position);
-                point.position = QPointF(
-                    std::clamp(
-                        mapped.x(),
-                        0.0,
-                        static_cast<qreal>(size.width())),
-                    std::clamp(
-                        mapped.y(),
-                        0.0,
-                        static_cast<qreal>(size.height())));
-            }
-            stroke.width = std::clamp(
-                stroke.width * widthScale,
-                DocumentLimits::minimumStrokeWidth,
-                DocumentLimits::maximumStrokeWidth);
-            if (!transformMask(
-                    stroke.clipMask,
-                    size,
-                    transform,
-                    transformedMasks)) {
-                return false;
-            }
+    resized.size = size;
+    for (Layer &layer : resized.layers) {
+        if (!layerCanProducePixels(layer)) {
+            layer.strokes.clear();
+            layer.initialCanvasSize = size;
+            continue;
         }
+        if (!layer.initialCanvasSize.isValid()) {
+            layer.initialCanvasSize = current.size;
+        }
+        if (layer.strokes.size()
+            >= DocumentLimits::maximumStrokesPerLayer) {
+            return rejectHistoryMutation();
+        }
+        Stroke reframe;
+        reframe.mode = StrokeMode::Reframe;
+        reframe.reframeOp = ReframeOp{
+            ReframeMode::Image,
+            SamplingMode::Smooth,
+            current.size,
+            size,
+            QPoint()};
+        reframe.points.clear();
+        layer.strokes.append(std::move(reframe));
     }
-    if (distinctClipMaskBytes(*resized)
-        > DocumentLimits::maximumDistinctClipMaskBytes) {
-        return false;
+    if (totalStrokeCount(resized)
+            > DocumentLimits::maximumTotalStrokes
+        || distinctClipMaskBytes(resized)
+            > DocumentLimits::maximumDistinctClipMaskBytes) {
+        return rejectHistoryMutation();
     }
 
-    const auto apply = [this](const std::shared_ptr<Document> &state) {
-        const QSize oldSize = m_document.size;
-        const QSize newSize = state->size;
-        QTransform resizeTransform;
-        resizeTransform.scale(
-            static_cast<qreal>(newSize.width()) / oldSize.width(),
-            static_cast<qreal>(newSize.height()) / oldSize.height());
-        m_document = *state;
-        emit canvasResized(oldSize, newSize, resizeTransform);
-        notifyDocumentChanged();
-        emit layerThumbnailsReset();
-    };
-    pushDocumentCommand(
+    bool invertible = false;
+    const QTransform inverse = transform.inverted(&invertible);
+    if (!invertible) {
+        return rejectHistoryMutation();
+    }
+    auto effects = std::make_shared<HistoryEffects>();
+    const QSize previousSize = current.size;
+    effects->beforeDocumentChanged.append(
+        HistoryEffects::CanvasResize{
+            previousSize,
+            size,
+            transform,
+            inverse});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    return tryCommitCandidate(
+        tr("Resize image"),
+        std::move(resized),
+        std::move(effects));
+}
+
+bool DocumentController::resizeCanvas(
+    const QSize &size,
+    const QPoint &contentOffset)
+{
+    const Document &current = document();
+    if ((size == current.size && contentOffset.isNull())
+        || size.width() < DocumentLimits::minimumCanvasEdge
+        || size.height() < DocumentLimits::minimumCanvasEdge
+        || size.width() > DocumentLimits::maximumCanvasEdge
+        || size.height() > DocumentLimits::maximumCanvasEdge
+        || std::abs(static_cast<qreal>(contentOffset.x()))
+            > DocumentLimits::maximumStoredCoordinateMagnitude
+        || std::abs(static_cast<qreal>(contentOffset.y()))
+            > DocumentLimits::maximumStoredCoordinateMagnitude) {
+        return rejectHistoryMutation();
+    }
+
+    QTransform transform;
+    transform.translate(contentOffset.x(), contentOffset.y());
+    bool invertible = false;
+    const QTransform inverse = transform.inverted(&invertible);
+    if (!invertible) {
+        return rejectHistoryMutation();
+    }
+
+    Document resized = current;
+    resized.size = size;
+
+    for (Layer &layer : resized.layers) {
+        if (!layerCanProducePixels(layer)) {
+            layer.strokes.clear();
+            layer.initialCanvasSize = size;
+            continue;
+        }
+        if (!layer.initialCanvasSize.isValid()) {
+            layer.initialCanvasSize = current.size;
+        }
+        if (layer.strokes.size()
+            >= DocumentLimits::maximumStrokesPerLayer) {
+            return rejectHistoryMutation();
+        }
+        Stroke reframe;
+        reframe.mode = StrokeMode::Reframe;
+        reframe.reframeOp = ReframeOp{
+            ReframeMode::Canvas,
+            SamplingMode::Nearest,
+            current.size,
+            size,
+            contentOffset};
+        reframe.points.clear();
+        layer.strokes.append(std::move(reframe));
+    }
+    if (totalStrokeCount(resized)
+            > DocumentLimits::maximumTotalStrokes
+        || distinctClipMaskBytes(resized)
+            > DocumentLimits::maximumDistinctClipMaskBytes) {
+        return rejectHistoryMutation();
+    }
+
+    auto effects = std::make_shared<HistoryEffects>();
+    const QSize previousSize = current.size;
+    effects->beforeDocumentChanged.append(
+        HistoryEffects::CanvasResize{
+            previousSize,
+            size,
+            transform,
+            inverse});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    return tryCommitCandidate(
         tr("Resize canvas"),
-        [apply, resized]() { apply(resized); },
-        [apply, previous]() { apply(previous); });
-    return true;
+        std::move(resized),
+        std::move(effects));
 }
 
 void DocumentController::setActiveLayer(const QUuid &id)
 {
-    if (m_document.activeLayerId == id || !m_document.layer(id)) {
+    if (hasOpenHistoryMacro()) {
+        failHistoryMacro();
         return;
     }
-    m_document.activeLayerId = id;
+    const Document &current = document();
+    if (current.activeLayerId == id || !current.layer(id)) {
+        return;
+    }
+    std::optional<PreparedDocument> rebound =
+        DocumentSerializer::rebindActiveLayer(
+            *m_currentState,
+            id);
+    if (!rebound) {
+        return;
+    }
+    m_currentState =
+        std::make_shared<const PreparedDocument>(
+            std::move(*rebound));
     emit activeLayerChanged(id);
 }
 
 void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
 {
-    Layer *layer = m_document.layer(layerId);
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
     if (!layer
         || layer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
-        || totalStrokeCount(m_document)
+        || totalStrokeCount(current)
             >= DocumentLimits::maximumTotalStrokes
         || stroke.id.isNull()
-        || containsStrokeId(m_document, stroke.id)
+        || containsStrokeId(current, stroke.id)
         || (stroke.mode != StrokeMode::Paint
             && stroke.mode != StrokeMode::Erase
             && stroke.mode != StrokeMode::Fill)
@@ -371,14 +2523,26 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
         || stroke.width > DocumentLimits::maximumStrokeWidth
         || !isValidBrushSettings(stroke.brush)
         || stroke.points.isEmpty()
+        || (stroke.visibilityClip
+            && (stroke.visibilityClip->isEmpty()
+                || !QRect(QPoint(), current.size)
+                        .contains(*stroke.visibilityClip)))
         || (!stroke.clipMask.isNull()
-            && (stroke.clipMask.size() != m_document.size
-                || stroke.clipMask.format() != QImage::Format_Grayscale8))) {
+            && (stroke.clipMask.size() != current.size
+                || stroke.clipMask.format() != QImage::Format_Grayscale8))
+        || (!stroke.fillMask.isNull()
+            && (stroke.mode != StrokeMode::Fill
+                || stroke.fillMask.size() != current.size
+                || stroke.fillMask.format()
+                    != QImage::Format_Grayscale8))
+        ) {
+        failHistoryMacro();
         return;
     }
 
-    const qsizetype currentPointCount = totalPointCount(m_document);
+    const qsizetype currentPointCount = totalPointCount(current);
     if (currentPointCount >= DocumentLimits::maximumTotalPoints) {
+        failHistoryMacro();
         return;
     }
     const qsizetype availablePoints =
@@ -392,82 +2556,67 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
     if (!std::all_of(
             stroke.points.cbegin(),
             stroke.points.cend(),
-            [this](const StrokePoint &point) {
-                return isValidStrokePoint(point, m_document.size);
+            [&current](const StrokePoint &point) {
+                return isValidInputStrokePoint(point, current.size);
             })) {
+        failHistoryMacro();
         return;
     }
-    if (!stroke.clipMask.isNull()) {
-        const quint64 existingMaskBytes =
-            distinctClipMaskBytes(m_document);
-        bool alreadyPresent = false;
-        for (const Layer &existingLayer : m_document.layers) {
-            for (const Stroke &existingStroke : existingLayer.strokes) {
-                if (!existingStroke.clipMask.isNull()
-                    && (existingStroke.clipMask.cacheKey()
-                            == stroke.clipMask.cacheKey()
-                        || existingStroke.clipMask
-                            == stroke.clipMask)) {
-                    stroke.clipMask = existingStroke.clipMask;
-                    alreadyPresent = true;
-                    break;
-                }
-            }
-            if (alreadyPresent) {
-                break;
-            }
-        }
-        if (!alreadyPresent
-            && (existingMaskBytes
-                    > DocumentLimits::maximumDistinctClipMaskBytes
-                || static_cast<quint64>(
-                    stroke.clipMask.sizeInBytes())
-                    > DocumentLimits::maximumDistinctClipMaskBytes
-                        - existingMaskBytes)) {
+    const auto shareExistingMask = [&current](QImage &mask) {
+        if (mask.isNull()) {
             return;
         }
+        for (const Layer &existingLayer : current.layers) {
+            for (const Stroke &existingStroke : existingLayer.strokes) {
+                for (const QImage *existingMask :
+                     {&existingStroke.clipMask,
+                      &existingStroke.fillMask}) {
+                    if (!existingMask->isNull()
+                        && (existingMask->cacheKey()
+                                == mask.cacheKey()
+                            || *existingMask == mask)) {
+                        mask = *existingMask;
+                        return;
+                    }
+                }
+            }
+        }
+    };
+    shareExistingMask(stroke.clipMask);
+    shareExistingMask(stroke.fillMask);
+    if (!canonicalizeStrokeVisibility(stroke, current.size)) {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.layer(layerId)->strokes.append(stroke);
+    if (distinctClipMaskBytes(candidate)
+        > DocumentLimits::maximumDistinctClipMaskBytes) {
+        failHistoryMacro();
+        return;
     }
 
     const QUuid strokeId = stroke.id;
-    auto redoAction = [
-        this,
-        layerId,
-        stroke = std::move(stroke)
-    ]() {
-        if (Layer *target = m_document.layer(layerId)) {
-            target->strokes.append(stroke);
-            emit strokePresenceChanged(
-                layerId,
-                stroke.id,
-                stroke.clipMask,
-                true);
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    auto undoAction = [this, layerId, strokeId]() {
-        if (Layer *layer = m_document.layer(layerId)) {
-            for (int index = layer->strokes.size() - 1; index >= 0; --index) {
-                if (layer->strokes[index].id == strokeId) {
-                    const QImage clipMask =
-                        layer->strokes[index].clipMask;
-                    layer->strokes.removeAt(index);
-                    emit strokePresenceChanged(
-                        layerId,
-                        strokeId,
-                        clipMask,
-                        false);
-                    notifyDocumentChanged();
-                    emit layerThumbnailChanged(layerId);
-                    return;
-                }
-            }
-        }
-    };
-    pushDocumentCommand(
+    const std::optional<PackedMaskRegion> clipMask =
+        stroke.clipMask.isNull()
+        ? std::optional<PackedMaskRegion>()
+        : packBinaryMask(stroke.clipMask);
+    if (!stroke.clipMask.isNull() && !clipMask) {
+        failHistoryMacro();
+        return;
+    }
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->beforeDocumentChanged.append(
+        HistoryEffects::StrokePresence{
+            layerId,
+            strokeId,
+            clipMask});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    tryCommitCandidate(
         tr("Draw stroke"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate),
+        std::move(effects));
 }
 
 bool DocumentController::moveStrokes(
@@ -479,7 +2628,7 @@ bool DocumentController::moveStrokes(
     if (!std::isfinite(delta.x())
         || !std::isfinite(delta.y())
         || (qFuzzyIsNull(delta.x()) && qFuzzyIsNull(delta.y()))) {
-        return false;
+        return rejectHistoryMutation();
     }
     QTransform transform;
     transform.translate(delta.x(), delta.y());
@@ -503,7 +2652,7 @@ bool DocumentController::scaleStrokes(
         || !std::isfinite(center.y())
         || !std::isfinite(factor)
         || factor <= 0.0) {
-        return false;
+        return rejectHistoryMutation();
     }
     QTransform transform;
     transform.translate(center.x(), center.y());
@@ -529,7 +2678,7 @@ bool DocumentController::rotateStrokes(
         || !std::isfinite(center.y())
         || !std::isfinite(degrees)
         || qFuzzyIsNull(degrees)) {
-        return false;
+        return rejectHistoryMutation();
     }
     QTransform transform;
     transform.translate(center.x(), center.y());
@@ -544,47 +2693,258 @@ bool DocumentController::rotateStrokes(
         selectionMask);
 }
 
+bool DocumentController::flipStrokes(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QPointF &center,
+    bool horizontal,
+    const QImage &selectionMask)
+{
+    if (!std::isfinite(center.x())
+        || !std::isfinite(center.y())) {
+        return rejectHistoryMutation();
+    }
+    QTransform transform;
+    transform.translate(center.x(), center.y());
+    transform.scale(horizontal ? -1.0 : 1.0, horizontal ? 1.0 : -1.0);
+    transform.translate(-center.x(), -center.y());
+    return transformStrokes(
+        layerId,
+        strokeIds,
+        transform,
+        1.0,
+        horizontal
+            ? tr("Flip selection horizontally")
+            : tr("Flip selection vertically"),
+        selectionMask);
+}
+
+bool DocumentController::transformSelection(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QTransform &transform,
+    const QImage &selectionMask)
+{
+    const bool finite = std::isfinite(transform.m11())
+        && std::isfinite(transform.m12())
+        && std::isfinite(transform.m13())
+        && std::isfinite(transform.m21())
+        && std::isfinite(transform.m22())
+        && std::isfinite(transform.m23())
+        && std::isfinite(transform.m31())
+        && std::isfinite(transform.m32())
+        && std::isfinite(transform.m33());
+    const qreal determinant = transform.determinant();
+    const qreal widthScale =
+        std::sqrt(std::abs(determinant));
+    if (!finite
+        || !transform.isAffine()
+        || transform.isIdentity()
+        || !std::isfinite(widthScale)
+        || widthScale <= 0.0) {
+        return rejectHistoryMutation();
+    }
+    return transformStrokes(
+        layerId,
+        strokeIds,
+        transform,
+        widthScale,
+        tr("Transform selection"),
+        selectionMask);
+}
+
 bool DocumentController::duplicateStrokes(
     const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
-    const QPointF &delta)
+    const QPointF &delta,
+    const QImage &selectionMask)
 {
-    const Layer *layer = m_document.layer(layerId);
-    if (!layer
-        || strokeIds.isEmpty()
+    const Document &current = document();
+    if (strokeIds.isEmpty()
         || !std::isfinite(delta.x())
-        || !std::isfinite(delta.y())) {
-        return false;
+        || !std::isfinite(delta.y())
+        || (!selectionMask.isNull()
+            && (selectionMask.size() != current.size
+                || selectionMask.format()
+                    != QImage::Format_Grayscale8))) {
+        return rejectHistoryMutation();
     }
 
+    const Layer *layer = current.layer(layerId);
+    if (!layer) {
+        return rejectHistoryMutation();
+    }
+    if (selectionMask.isNull()
+        && std::any_of(
+            layer->strokes.cbegin(),
+            layer->strokes.cend(),
+            [](const Stroke &stroke) {
+                return stroke.mode == StrokeMode::PixelSelection
+                    || stroke.mode == StrokeMode::Reframe;
+            })) {
+        return rejectHistoryMutation();
+    }
     const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    if (!selectionMask.isNull()) {
+        if (layer->strokes.size()
+                >= DocumentLimits::maximumStrokesPerLayer
+            || totalStrokeCount(current)
+                >= DocumentLimits::maximumTotalStrokes
+            || !std::any_of(
+                layer->strokes.cbegin(),
+                layer->strokes.cend(),
+                [&requested](const Stroke &stroke) {
+                    return requested.contains(stroke.id);
+                })
+            || !selectionHasVisibleLayerPixels(
+                layerId,
+                selectionMask)) {
+            return rejectHistoryMutation();
+        }
+        QTransform transform;
+        transform.translate(delta.x(), delta.y());
+        const std::optional<Stroke> operation =
+            selectionOperationStroke(
+                selectionMask,
+                transform,
+                false,
+                true);
+        if (!operation) {
+            return rejectHistoryMutation();
+        }
+        const QVector<Stroke> before = layer->strokes;
+        QVector<Stroke> after = before;
+        after.append(*operation);
+        Document withCopy = current;
+        withCopy.layer(layerId)->strokes = after;
+        if (distinctClipMaskBytes(withCopy)
+                > DocumentLimits::maximumDistinctClipMaskBytes) {
+            return rejectHistoryMutation();
+        }
+        const QImage nextSelectionMask =
+            transformedSelectionSupport(
+                selectionMask,
+                current.size,
+                transform,
+                operation->pixelSelectionOp->sampling);
+        if (!maskHasContent(nextSelectionMask)) {
+            return rejectHistoryMutation();
+        }
+        const PackedMaskRegion sourceMaskSnapshot{
+            operation->pixelSelectionOp->canvasSize,
+            operation->pixelSelectionOp->sourceBounds,
+            operation->pixelSelectionOp->packedMask};
+        const std::optional<PackedMaskRegion>
+            nextMaskSnapshot =
+                packBinaryMask(nextSelectionMask);
+        if (!nextMaskSnapshot) {
+            return rejectHistoryMutation();
+        }
+        const QVector<QUuid> sourceIds = strokeIds;
+        const QVector<QUuid> resultIds{operation->id};
+        auto effects = std::make_shared<HistoryEffects>();
+        effects->beforeDocumentChanged.append(
+            HistoryEffects::SelectionOverlay{
+                layerId,
+                sourceIds,
+                resultIds,
+                sourceMaskSnapshot,
+                *nextMaskSnapshot});
+        effects->afterDocumentChanged.append(
+            HistoryEffects::LayerThumbnail{layerId});
+        return tryCommitCandidate(
+            tr("Duplicate selection"),
+            std::move(withCopy),
+            std::move(effects));
+    }
     QVector<Stroke> copies;
     QVector<QUuid> sourceIds;
     QVector<QUuid> duplicateIds;
     qsizetype addedPoints = 0;
+    QTransform transform;
+    transform.translate(delta.x(), delta.y());
+    QHash<QString, QImage> selectedMasks;
     QHash<qint64, QImage> transformedMasks;
     for (const Stroke &stroke : layer->strokes) {
         if (!requested.contains(stroke.id)) {
             continue;
         }
+        const QString sourceMaskKey = visibilityCacheKey(stroke);
+        QImage duplicateMask;
+        if (!selectionMask.isNull()) {
+            auto selected = selectedMasks.constFind(sourceMaskKey);
+            if (selected == selectedMasks.cend()) {
+                const std::optional<QImage> visibility =
+                    materializedVisibilityMask(
+                        stroke,
+                        current.size);
+                if (!visibility) {
+                    return rejectHistoryMutation();
+                }
+                selected = selectedMasks.insert(
+                    sourceMaskKey,
+                    maskedPart(
+                        *visibility,
+                        selectionMask,
+                        true));
+            }
+            if (!maskHasContent(selected.value())
+                || (stroke.mode == StrokeMode::Fill
+                    && !masksIntersect(
+                        stroke.fillMask,
+                        selected.value()))) {
+                continue;
+            }
+            duplicateMask = transformedMask(
+                selected.value(),
+                current.size,
+                transform);
+            if (!maskHasContent(duplicateMask)) {
+                continue;
+            }
+        }
+
         Stroke copy = stroke;
         copy.id = QUuid::createUuid();
         for (StrokePoint &point : copy.points) {
             point.position += delta;
-            if (!isValidStrokePoint(point, m_document.size)) {
-                return false;
+            const bool valid = selectionMask.isNull()
+                ? isValidInputStrokePoint(point, current.size)
+                : isValidStoredStrokePoint(point);
+            if (!valid) {
+                return rejectHistoryMutation();
             }
         }
-        if (!copy.clipMask.isNull()) {
-            QTransform transform;
-            transform.translate(delta.x(), delta.y());
+        if (!selectionMask.isNull()) {
+            copy.visibilityClip.reset();
+            copy.clipMask = duplicateMask;
+        } else {
+            const std::optional<QImage> visibility =
+                materializedVisibilityMask(stroke, current.size);
+            if (!visibility) {
+                return rejectHistoryMutation();
+            }
+            copy.visibilityClip.reset();
+            copy.clipMask = *visibility;
             if (!transformMask(
                     copy.clipMask,
-                    m_document.size,
+                    current.size,
                     transform,
                     transformedMasks)) {
-                return false;
+                return rejectHistoryMutation();
             }
+        }
+        if (!transformMask(
+                copy.fillMask,
+                current.size,
+                transform,
+                transformedMasks)) {
+            return rejectHistoryMutation();
+        }
+        if (!canonicalizeStrokeVisibility(
+                copy,
+                current.size)) {
+            return rejectHistoryMutation();
         }
         addedPoints += copy.points.size();
         sourceIds.append(stroke.id);
@@ -594,71 +2954,91 @@ bool DocumentController::duplicateStrokes(
     if (copies.isEmpty()
         || layer->strokes.size()
             > DocumentLimits::maximumStrokesPerLayer - copies.size()
-        || totalStrokeCount(m_document)
+        || totalStrokeCount(current)
             > DocumentLimits::maximumTotalStrokes - copies.size()
-        || totalPointCount(m_document)
+        || totalPointCount(current)
             > DocumentLimits::maximumTotalPoints - addedPoints) {
-        return false;
+        return rejectHistoryMutation();
     }
-    Document withCopies = m_document;
+    Document withCopies = current;
     if (Layer *target = withCopies.layer(layerId)) {
         target->strokes += copies;
     }
     if (distinctClipMaskBytes(withCopies)
         > DocumentLimits::maximumDistinctClipMaskBytes) {
-        return false;
+        return rejectHistoryMutation();
     }
 
-    const QSet<QUuid> duplicateSet(
-        duplicateIds.cbegin(),
-        duplicateIds.cend());
-    auto redoAction = [
-        this,
-        layerId,
-        copies,
-        sourceIds,
-        duplicateIds,
-        delta
-    ]() {
-        if (Layer *target = m_document.layer(layerId)) {
-            target->strokes += copies;
-            emit strokesDuplicated(
-                layerId,
-                sourceIds,
-                duplicateIds,
-                delta,
-                true);
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    auto undoAction = [
-        this,
-        layerId,
-        sourceIds,
-        duplicateIds,
-        duplicateSet,
-        delta
-    ]() {
-        if (Layer *target = m_document.layer(layerId)) {
-            target->strokes.removeIf([&duplicateSet](const Stroke &stroke) {
-                return duplicateSet.contains(stroke.id);
-            });
-            emit strokesDuplicated(
-                layerId,
-                sourceIds,
-                duplicateIds,
-                delta,
-                false);
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    pushDocumentCommand(
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->beforeDocumentChanged.append(
+        HistoryEffects::StrokeDuplicate{
+            layerId,
+            sourceIds,
+            duplicateIds,
+            delta});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    return tryCommitCandidate(
         tr("Duplicate selection"),
-        std::move(redoAction),
-        std::move(undoAction));
-    return true;
+        std::move(withCopies),
+        std::move(effects));
+}
+
+bool DocumentController::removeSelectedContent(
+    const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QImage &selectionMask)
+{
+    const Document &current = document();
+    if (strokeIds.isEmpty()
+        || selectionMask.size() != current.size
+        || selectionMask.format() != QImage::Format_Grayscale8) {
+        return rejectHistoryMutation();
+    }
+
+    const Layer *layer = current.layer(layerId);
+    if (!layer) {
+        return rejectHistoryMutation();
+    }
+    const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    if (layer->strokes.size()
+            >= DocumentLimits::maximumStrokesPerLayer
+        || totalStrokeCount(current)
+            >= DocumentLimits::maximumTotalStrokes
+        || !std::any_of(
+            layer->strokes.cbegin(),
+            layer->strokes.cend(),
+            [&requested](const Stroke &stroke) {
+                return requested.contains(stroke.id);
+            })
+        || !selectionHasVisibleLayerPixels(
+            layerId,
+            selectionMask)) {
+        return rejectHistoryMutation();
+    }
+    const std::optional<Stroke> operation =
+        selectionOperationStroke(
+            selectionMask,
+            QTransform(),
+            true,
+            false);
+    if (!operation) {
+        return rejectHistoryMutation();
+    }
+    Document withoutSelection = current;
+    withoutSelection.layer(layerId)->strokes.append(*operation);
+    if (distinctClipMaskBytes(withoutSelection)
+            > DocumentLimits::maximumDistinctClipMaskBytes) {
+        return rejectHistoryMutation();
+    }
+
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    return tryCommitCandidate(
+        tr("Delete selected content"),
+        std::move(withoutSelection),
+        std::move(effects));
 }
 
 bool DocumentController::transformStrokes(
@@ -669,231 +3049,105 @@ bool DocumentController::transformStrokes(
     const QString &text,
     const QImage &selectionMask)
 {
-    const Layer *layer = m_document.layer(layerId);
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
     if (!layer
         || strokeIds.isEmpty()
         || !std::isfinite(widthScale)
         || widthScale <= 0.0) {
-        return false;
+        return rejectHistoryMutation();
+    }
+    if (selectionMask.isNull()
+        && std::any_of(
+            layer->strokes.cbegin(),
+            layer->strokes.cend(),
+            [](const Stroke &stroke) {
+                return stroke.mode == StrokeMode::PixelSelection
+                    || stroke.mode == StrokeMode::Reframe;
+            })) {
+        return rejectHistoryMutation();
     }
     bool invertible = false;
     const QTransform inverse = transform.inverted(&invertible);
     if (!invertible) {
-        return false;
+        return rejectHistoryMutation();
     }
 
     const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
     if (!selectionMask.isNull()) {
-        if (selectionMask.size() != m_document.size
+        if (selectionMask.size() != current.size
             || selectionMask.format() != QImage::Format_Grayscale8) {
-            return false;
+            return rejectHistoryMutation();
         }
-
-        const QVector<Stroke> before = layer->strokes;
-        QVector<Stroke> after;
-        after.reserve(before.size() + requested.size());
-        QVector<QUuid> transformedIds;
-        QSet<qint64> distinctAfterMaskKeys;
-        quint64 distinctAfterMaskBytes = 0;
-        for (const Layer &otherLayer : m_document.layers) {
-            if (otherLayer.id == layerId) {
-                continue;
-            }
-            for (const Stroke &otherStroke : otherLayer.strokes) {
-                if (otherStroke.clipMask.isNull()) {
-                    continue;
-                }
-                const qint64 key = otherStroke.clipMask.cacheKey();
-                if (distinctAfterMaskKeys.contains(key)) {
-                    continue;
-                }
-                const quint64 bytes =
-                    otherStroke.clipMask.sizeInBytes();
-                if (bytes
-                    > DocumentLimits::maximumDistinctClipMaskBytes
-                        - distinctAfterMaskBytes) {
-                    return false;
-                }
-                distinctAfterMaskKeys.insert(key);
-                distinctAfterMaskBytes += bytes;
-            }
+        const Layer *sourceLayer = current.layer(layerId);
+        if (!sourceLayer
+            || sourceLayer->strokes.size()
+                >= DocumentLimits::maximumStrokesPerLayer
+            || totalStrokeCount(current)
+                >= DocumentLimits::maximumTotalStrokes
+            || !std::any_of(
+                sourceLayer->strokes.cbegin(),
+                sourceLayer->strokes.cend(),
+                [&requested](const Stroke &stroke) {
+                    return requested.contains(stroke.id);
+                })
+            || !selectionHasVisibleLayerPixels(
+                layerId,
+                selectionMask)) {
+            return rejectHistoryMutation();
         }
-        const qsizetype currentStrokeCount =
-            totalStrokeCount(m_document);
-        const qsizetype currentPointCount =
-            totalPointCount(m_document);
-        const qsizetype currentLayerPointCount =
-            layerPointCount(*layer);
-        if (currentStrokeCount > DocumentLimits::maximumTotalStrokes
-            || currentPointCount > DocumentLimits::maximumTotalPoints
-            || currentLayerPointCount > currentPointCount) {
-            return false;
+        const std::optional<Stroke> operation =
+            selectionOperationStroke(
+                selectionMask,
+                transform,
+                true,
+                true);
+        if (!operation) {
+            return rejectHistoryMutation();
         }
-        const qsizetype strokesOutsideLayer =
-            currentStrokeCount - before.size();
-        const qsizetype pointsOutsideLayer =
-            currentPointCount - currentLayerPointCount;
-        qsizetype afterPointCount = 0;
-        auto appendStroke = [
-            &after,
-            &afterPointCount,
-            &distinctAfterMaskKeys,
-            &distinctAfterMaskBytes,
-            strokesOutsideLayer,
-            pointsOutsideLayer
-        ](Stroke stroke) {
-            if (after.size()
-                    >= DocumentLimits::maximumStrokesPerLayer
-                || strokesOutsideLayer + after.size()
-                    >= DocumentLimits::maximumTotalStrokes
-                || stroke.points.size()
-                    > DocumentLimits::maximumTotalPoints
-                        - pointsOutsideLayer
-                        - afterPointCount) {
-                return false;
-            }
-            if (!stroke.clipMask.isNull()) {
-                const qint64 key = stroke.clipMask.cacheKey();
-                if (!distinctAfterMaskKeys.contains(key)) {
-                    const quint64 bytes = stroke.clipMask.sizeInBytes();
-                    if (bytes
-                        > DocumentLimits::maximumDistinctClipMaskBytes
-                            - distinctAfterMaskBytes) {
-                        return false;
-                    }
-                    distinctAfterMaskKeys.insert(key);
-                    distinctAfterMaskBytes += bytes;
-                }
-            }
-            afterPointCount += stroke.points.size();
-            after.append(std::move(stroke));
-            return true;
-        };
-        struct PartialMaskTransform {
-            QImage selected;
-            QImage remainder;
-            QImage transformed;
-            bool hasSelectedContent = false;
-            bool transformedReady = false;
-        };
-        QHash<qint64, PartialMaskTransform> partialMasks;
-        for (const Stroke &stroke : before) {
-            if (!requested.contains(stroke.id)) {
-                if (!appendStroke(stroke)) {
-                    return false;
-                }
-                continue;
-            }
-
-            const qint64 sourceMaskKey =
-                stroke.clipMask.isNull()
-                ? 0
-                : stroke.clipMask.cacheKey();
-            auto masks = partialMasks.find(sourceMaskKey);
-            if (masks == partialMasks.end()) {
-                PartialMaskTransform parts;
-                parts.selected =
-                    maskedPart(stroke.clipMask, selectionMask, true);
-                parts.hasSelectedContent =
-                    maskHasContent(parts.selected);
-                if (!parts.hasSelectedContent) {
-                    parts.selected = {};
-                } else {
-                    parts.remainder =
-                        maskedPart(
-                            stroke.clipMask,
-                            selectionMask,
-                            false);
-                    if (!maskHasContent(parts.remainder)) {
-                        parts.remainder = {};
-                    }
-                }
-                masks = partialMasks.insert(
-                    sourceMaskKey,
-                    std::move(parts));
-            }
-            if (!masks->hasSelectedContent) {
-                if (!appendStroke(stroke)) {
-                    return false;
-                }
-                continue;
-            }
-
-            if (!masks->remainder.isNull()) {
-                Stroke remainder = stroke;
-                remainder.id = QUuid::createUuid();
-                remainder.clipMask = masks->remainder;
-                if (!appendStroke(std::move(remainder))) {
-                    return false;
-                }
-            }
-
-            Stroke transformed = stroke;
-            for (StrokePoint &point : transformed.points) {
-                const QPointF mapped = transform.map(point.position);
-                if (!std::isfinite(mapped.x())
-                    || !std::isfinite(mapped.y())) {
-                    return false;
-                }
-                point.position = QPointF(
-                    std::clamp(
-                        mapped.x(),
-                        0.0,
-                        static_cast<qreal>(m_document.size.width())),
-                    std::clamp(
-                        mapped.y(),
-                        0.0,
-                        static_cast<qreal>(m_document.size.height())));
-            }
-            transformed.width = std::clamp(
-                transformed.width * widthScale,
-                DocumentLimits::minimumStrokeWidth,
-                DocumentLimits::maximumStrokeWidth);
-            if (!masks->transformedReady) {
-                masks->transformed = transformedMask(
-                    masks->selected,
-                    m_document.size,
-                    transform);
-                masks->transformedReady = true;
-                masks->selected = {};
-                if (masks->transformed.isNull()) {
-                    return false;
-                }
-            }
-            transformed.clipMask = masks->transformed;
-            transformedIds.append(transformed.id);
-            if (!appendStroke(std::move(transformed))) {
-                return false;
-            }
+        Document transformedDocument = current;
+        transformedDocument.layer(layerId)->strokes.append(*operation);
+        if (distinctClipMaskBytes(transformedDocument)
+                > DocumentLimits::maximumDistinctClipMaskBytes) {
+            return rejectHistoryMutation();
         }
-
-        if (transformedIds.isEmpty()) {
-            return false;
+        const QImage nextSelectionMask =
+            transformedSelectionSupport(
+                selectionMask,
+                current.size,
+                transform,
+                operation->pixelSelectionOp->sampling);
+        if (!maskHasContent(nextSelectionMask)) {
+            return rejectHistoryMutation();
         }
-
-        const auto replace = [
-            this,
-            layerId,
-            transformedIds
-        ](const QVector<Stroke> &strokes, const QTransform &appliedTransform) {
-            if (Layer *target = m_document.layer(layerId)) {
-                target->strokes = strokes;
-                emit strokesTransformed(
-                    layerId,
-                    transformedIds,
-                    appliedTransform);
-                notifyDocumentChanged();
-                emit layerThumbnailChanged(layerId);
-            }
-        };
-        pushDocumentCommand(
+        const PackedMaskRegion sourceMaskSnapshot{
+            operation->pixelSelectionOp->canvasSize,
+            operation->pixelSelectionOp->sourceBounds,
+            operation->pixelSelectionOp->packedMask};
+        const std::optional<PackedMaskRegion>
+            nextMaskSnapshot =
+                packBinaryMask(nextSelectionMask);
+        if (!nextMaskSnapshot) {
+            return rejectHistoryMutation();
+        }
+        const QVector<QUuid> sourceIds = strokeIds;
+        const QVector<QUuid> resultIds{operation->id};
+        auto effects = std::make_shared<HistoryEffects>();
+        effects->beforeDocumentChanged.append(
+            HistoryEffects::SelectionOverlay{
+                layerId,
+                sourceIds,
+                resultIds,
+                sourceMaskSnapshot,
+                *nextMaskSnapshot});
+        effects->afterDocumentChanged.append(
+            HistoryEffects::LayerThumbnail{layerId});
+        return tryCommitCandidate(
             text,
-            [replace, after, transform]() { replace(after, transform); },
-            [replace, before, inverse]() { replace(before, inverse); });
-        return true;
+            std::move(transformedDocument),
+            std::move(effects));
     }
 
-    QVector<Stroke> before;
     QVector<Stroke> after;
     QVector<QUuid> transformedIds;
     QHash<qint64, QImage> transformedMasks;
@@ -901,11 +3155,15 @@ bool DocumentController::transformStrokes(
         if (!requested.contains(stroke.id)) {
             continue;
         }
+        if (stroke.mode == StrokeMode::PixelSelection
+            || stroke.mode == StrokeMode::Reframe) {
+            return rejectHistoryMutation();
+        }
         Stroke transformed = stroke;
         for (StrokePoint &point : transformed.points) {
             point.position = transform.map(point.position);
-            if (!isValidStrokePoint(point, m_document.size)) {
-                return false;
+            if (!isValidInputStrokePoint(point, current.size)) {
+                return rejectHistoryMutation();
             }
         }
         transformed.width = std::clamp(
@@ -914,19 +3172,30 @@ bool DocumentController::transformStrokes(
             DocumentLimits::maximumStrokeWidth);
         if (!transformMask(
                 transformed.clipMask,
-                m_document.size,
+                current.size,
                 transform,
                 transformedMasks)) {
-            return false;
+            return rejectHistoryMutation();
         }
-        before.append(stroke);
+        if (!transformMask(
+                transformed.fillMask,
+                current.size,
+                transform,
+                transformedMasks)) {
+            return rejectHistoryMutation();
+        }
+        if (!canonicalizeStrokeVisibility(
+                transformed,
+                current.size)) {
+            return rejectHistoryMutation();
+        }
         after.append(std::move(transformed));
         transformedIds.append(stroke.id);
     }
     if (after.isEmpty()) {
-        return false;
+        return rejectHistoryMutation();
     }
-    Document transformedDocument = m_document;
+    Document transformedDocument = current;
     if (Layer *target = transformedDocument.layer(layerId)) {
         QHash<QUuid, Stroke> replacements;
         for (const Stroke &stroke : after) {
@@ -941,140 +3210,104 @@ bool DocumentController::transformStrokes(
     }
     if (distinctClipMaskBytes(transformedDocument)
         > DocumentLimits::maximumDistinctClipMaskBytes) {
-        return false;
+        return rejectHistoryMutation();
     }
 
-    const auto replace = [
-        this,
-        layerId,
-        transformedIds
-    ](const QVector<Stroke> &strokes, const QTransform &appliedTransform) {
-        if (Layer *target = m_document.layer(layerId)) {
-            QHash<QUuid, Stroke> replacements;
-            for (const Stroke &stroke : strokes) {
-                replacements.insert(stroke.id, stroke);
-            }
-            for (Stroke &stroke : target->strokes) {
-                const auto replacement = replacements.constFind(stroke.id);
-                if (replacement != replacements.cend()) {
-                    stroke = replacement.value();
-                }
-            }
-            emit strokesTransformed(
-                layerId,
-                transformedIds,
-                appliedTransform);
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    pushDocumentCommand(
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->beforeDocumentChanged.append(
+        HistoryEffects::StrokeTransform{
+            layerId,
+            transformedIds,
+            transform,
+            inverse});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    return tryCommitCandidate(
         text,
-        [replace, after, transform]() { replace(after, transform); },
-        [replace, before, inverse]() { replace(before, inverse); });
-    return true;
+        std::move(transformedDocument),
+        std::move(effects));
 }
 
 void DocumentController::removeStrokes(
     const QUuid &layerId,
     const QVector<QUuid> &strokeIds)
 {
-    const Layer *layer = m_document.layer(layerId);
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
     if (!layer || strokeIds.isEmpty()) {
+        failHistoryMacro();
         return;
     }
 
     const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
-    QVector<QPair<int, Stroke>> removed;
-    for (int index = 0; index < layer->strokes.size(); ++index) {
-        if (requested.contains(layer->strokes[index].id)) {
-            removed.append({index, layer->strokes[index]});
+    QSet<QUuid> removableIds;
+    for (const Stroke &stroke : layer->strokes) {
+        if (requested.contains(stroke.id)
+            && stroke.mode != StrokeMode::PixelSelection
+            && stroke.mode != StrokeMode::Reframe) {
+            removableIds.insert(stroke.id);
         }
     }
-    if (removed.isEmpty()) {
+    if (removableIds.isEmpty()) {
+        failHistoryMacro();
         return;
     }
 
-    auto redoAction = [this, layerId, requested]() {
-        if (Layer *target = m_document.layer(layerId)) {
-            target->strokes.removeIf([&requested](const Stroke &stroke) {
-                return requested.contains(stroke.id);
-            });
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    auto undoAction = [this, layerId, removed]() {
-        if (Layer *target = m_document.layer(layerId)) {
-            for (const auto &entry : removed) {
-                target->strokes.insert(
-                    std::clamp(
-                        entry.first,
-                        0,
-                        static_cast<int>(target->strokes.size())),
-                    entry.second);
-            }
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(layerId);
-        }
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layer(layerId)->strokes.removeIf(
+        [&removableIds](const Stroke &stroke) {
+            return removableIds.contains(stroke.id);
+        });
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    tryCommitCandidate(
         tr("Delete selection"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate),
+        std::move(effects));
 }
 
 void DocumentController::addLayer()
 {
-    if (m_document.layers.size() >= DocumentLimits::maximumLayers) {
+    const Document &current = document();
+    if (current.layers.size() >= DocumentLimits::maximumLayers) {
+        failHistoryMacro();
         return;
     }
     Layer layer;
     layer.name = nextLayerName();
-    const int insertionIndex = m_document.layers.size();
-    const QUuid previousActive = m_document.activeLayerId;
+    layer.initialCanvasSize = current.size;
     const QUuid layerId = layer.id;
-    auto redoAction = [this, layer, insertionIndex, layerId]() {
-        const int index = std::clamp(
-            insertionIndex,
-            0,
-            static_cast<int>(m_document.layers.size()));
-        m_document.layers.insert(index, layer);
-        m_document.activeLayerId = layerId;
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(layerId);
-        emit activeLayerChanged(layerId);
-    };
-    auto undoAction = [this, layerId, previousActive]() {
-        const int index = m_document.layerIndex(layerId);
-        if (index >= 0) {
-            m_document.layers.removeAt(index);
-        }
-        m_document.activeLayerId = previousActive;
-        ensureActiveLayer();
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(layerId);
-        emit activeLayerChanged(m_document.activeLayerId);
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layers.append(std::move(layer));
+    candidate.activeLayerId = layerId;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::ActiveLayer{});
+    tryCommitCandidate(
         tr("Add layer"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate),
+        std::move(effects),
+        ActiveLayerPolicy::UsePrepared);
 }
 
 void DocumentController::duplicateLayer(const QUuid &id)
 {
-    const int sourceIndex = m_document.layerIndex(id);
+    const Document &current = document();
+    const int sourceIndex = current.layerIndex(id);
     if (sourceIndex < 0
-        || m_document.layers.size() >= DocumentLimits::maximumLayers) {
+        || current.layers.size() >= DocumentLimits::maximumLayers) {
+        failHistoryMacro();
         return;
     }
     const qsizetype sourcePointCount =
-        layerPointCount(m_document.layers[sourceIndex]);
-    const qsizetype existingPointCount = totalPointCount(m_document);
+        layerPointCount(current.layers[sourceIndex]);
+    const qsizetype existingPointCount = totalPointCount(current);
     const qsizetype sourceStrokeCount =
-        m_document.layers[sourceIndex].strokes.size();
-    const qsizetype existingStrokeCount = totalStrokeCount(m_document);
+        current.layers[sourceIndex].strokes.size();
+    const qsizetype existingStrokeCount = totalStrokeCount(current);
     if (sourcePointCount > DocumentLimits::maximumTotalPoints
         || existingPointCount > DocumentLimits::maximumTotalPoints
         || sourcePointCount
@@ -1083,9 +3316,10 @@ void DocumentController::duplicateLayer(const QUuid &id)
         || existingStrokeCount > DocumentLimits::maximumTotalStrokes
         || sourceStrokeCount
             > DocumentLimits::maximumTotalStrokes - existingStrokeCount) {
+        failHistoryMacro();
         return;
     }
-    Layer copy = m_document.layers[sourceIndex];
+    Layer copy = current.layers[sourceIndex];
     copy.id = QUuid::createUuid();
     copy.name = tr("%1 copy").arg(copy.name);
     if (copy.name.size() > DocumentLimits::maximumLayerNameLength) {
@@ -1094,233 +3328,177 @@ void DocumentController::duplicateLayer(const QUuid &id)
     for (Stroke &stroke : copy.strokes) {
         stroke.id = QUuid::createUuid();
     }
-    const int insertionIndex = sourceIndex + 1;
+    Document withCopy = current;
+    withCopy.layers.insert(sourceIndex + 1, copy);
+    withCopy.activeLayerId = copy.id;
+    if (distinctClipMaskBytes(withCopy)
+            > DocumentLimits::maximumDistinctClipMaskBytes) {
+        failHistoryMacro();
+        return;
+    }
     const QUuid copyId = copy.id;
-    const QUuid previousActive = m_document.activeLayerId;
-    auto redoAction = [this, copy, insertionIndex, copyId]() {
-        m_document.layers.insert(
-            std::clamp(
-                insertionIndex,
-                0,
-                static_cast<int>(m_document.layers.size())),
-            copy);
-        m_document.activeLayerId = copyId;
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(copyId);
-        emit activeLayerChanged(copyId);
-    };
-    auto undoAction = [this, copyId, previousActive]() {
-        const int index = m_document.layerIndex(copyId);
-        if (index >= 0) {
-            m_document.layers.removeAt(index);
-        }
-        m_document.activeLayerId = previousActive;
-        ensureActiveLayer();
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(copyId);
-        emit activeLayerChanged(m_document.activeLayerId);
-    };
-    pushDocumentCommand(
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{copyId});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::ActiveLayer{});
+    tryCommitCandidate(
         tr("Duplicate layer"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(withCopy),
+        std::move(effects),
+        ActiveLayerPolicy::UsePrepared);
 }
 
 void DocumentController::removeLayer(const QUuid &id)
 {
-    const int index = m_document.layerIndex(id);
+    const Document &current = document();
+    const int index = current.layerIndex(id);
     if (index < 0) {
+        failHistoryMacro();
         return;
     }
-    const Layer removedLayer = m_document.layers[index];
-    const QUuid previousActive = m_document.activeLayerId;
+    Document candidate = current;
+    candidate.layers.removeAt(index);
     QUuid nextActive;
-    if (m_document.layers.size() > 1) {
+    if (!candidate.layers.isEmpty()) {
         const int nextIndex = index > 0 ? index - 1 : 1;
-        nextActive = m_document.layers[nextIndex].id;
+        nextActive = current.layers[nextIndex].id;
     }
-    auto redoAction = [this, id, nextActive]() {
-        const int currentIndex = m_document.layerIndex(id);
-        if (currentIndex >= 0) {
-            m_document.layers.removeAt(currentIndex);
-        }
-        if (m_document.activeLayerId == id) {
-            m_document.activeLayerId = nextActive;
-        }
-        ensureActiveLayer();
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(id);
-        emit activeLayerChanged(m_document.activeLayerId);
-    };
-    auto undoAction = [this, removedLayer, index, previousActive]() {
-        m_document.layers.insert(
-            std::clamp(
-                index,
-                0,
-                static_cast<int>(m_document.layers.size())),
-            removedLayer);
-        m_document.activeLayerId = previousActive;
-        ensureActiveLayer();
-        notifyDocumentChanged();
-        emit layerThumbnailChanged(removedLayer.id);
-        emit activeLayerChanged(m_document.activeLayerId);
-    };
-    pushDocumentCommand(
+    if (candidate.activeLayerId == id) {
+        candidate.activeLayerId = nextActive;
+    }
+    ensureActiveLayer(candidate);
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{id});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::ActiveLayer{});
+    tryCommitCandidate(
         tr("Delete layer"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate),
+        std::move(effects),
+        ActiveLayerPolicy::UsePrepared);
 }
 
 void DocumentController::clearLayer(const QUuid &id)
 {
-    Layer *layer = m_document.layer(id);
-    if (!layer || layer->strokes.isEmpty()) {
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    if (!layer
+        || (layer->strokes.isEmpty()
+            && layer->initialCanvasSize == current.size)) {
+        failHistoryMacro();
         return;
     }
-    const QVector<Stroke> previousStrokes = layer->strokes;
-    auto redoAction = [this, id]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->strokes.clear();
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(id);
-        }
-    };
-    auto undoAction = [this, id, previousStrokes]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->strokes = previousStrokes;
-            notifyDocumentChanged();
-            emit layerThumbnailChanged(id);
-        }
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    Layer *target = candidate.layer(id);
+    target->strokes.clear();
+    target->initialCanvasSize = current.size;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{id});
+    tryCommitCandidate(
         tr("Clear layer"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate),
+        std::move(effects));
 }
 
 void DocumentController::renameLayer(const QUuid &id, const QString &name)
 {
-    Layer *layer = m_document.layer(id);
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
     const QString normalized = name.trimmed();
     if (!layer
         || normalized.isEmpty()
         || normalized.size() > DocumentLimits::maximumLayerNameLength
         || layer->name == normalized) {
+        failHistoryMacro();
         return;
     }
-    const QString previousName = layer->name;
-    auto redoAction = [this, id, normalized]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->name = normalized;
-            notifyDocumentChanged();
-        }
-    };
-    auto undoAction = [this, id, previousName]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->name = previousName;
-            notifyDocumentChanged();
-        }
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layer(id)->name = normalized;
+    tryCommitCandidate(
         tr("Rename layer"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate));
 }
 
 void DocumentController::setLayerVisible(const QUuid &id, bool visible)
 {
-    Layer *layer = m_document.layer(id);
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
     if (!layer || layer->visible == visible) {
+        failHistoryMacro();
         return;
     }
-    const bool previous = layer->visible;
-    auto redoAction = [this, id, visible]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->visible = visible;
-            notifyDocumentChanged();
-        }
-    };
-    auto undoAction = [this, id, previous]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->visible = previous;
-            notifyDocumentChanged();
-        }
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layer(id)->visible = visible;
+    tryCommitCandidate(
         tr("Toggle layer visibility"),
-        std::move(redoAction),
-        std::move(undoAction));
+        std::move(candidate));
 }
 
 void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
 {
-    Layer *layer = m_document.layer(id);
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
     if (!std::isfinite(opacity)) {
+        failHistoryMacro();
         return;
     }
     const qreal normalized = std::clamp(opacity, 0.0, 1.0);
     if (!layer || qFuzzyCompare(layer->opacity, normalized)) {
+        failHistoryMacro();
         return;
     }
-    const qreal previous = layer->opacity;
-    auto redoAction = [this, id, normalized]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->opacity = normalized;
-            notifyDocumentChanged();
-        }
-    };
-    auto undoAction = [this, id, previous]() {
-        if (Layer *target = m_document.layer(id)) {
-            target->opacity = previous;
-            notifyDocumentChanged();
-        }
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layer(id)->opacity = normalized;
+    tryCommitCandidate(
         tr("Change layer opacity"),
-        std::move(redoAction),
-        std::move(undoAction),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
         layerOpacityMergeId,
         id);
 }
 
 void DocumentController::moveLayer(const QUuid &id, int offset)
 {
-    const int from = m_document.layerIndex(id);
+    const Document &current = document();
+    const int from = current.layerIndex(id);
     const int to = from + offset;
-    if (from < 0 || to < 0 || to >= m_document.layers.size() || from == to) {
+    if (from < 0 || to < 0 || to >= current.layers.size() || from == to) {
+        failHistoryMacro();
         return;
     }
-    auto move = [this](int source, int destination) {
-        m_document.layers.move(source, destination);
-        notifyDocumentChanged();
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.layers.move(from, to);
+    tryCommitCandidate(
         tr("Move layer"),
-        [move, from, to]() { move(from, to); },
-        [move, from, to]() { move(to, from); });
+        std::move(candidate));
 }
 
 void DocumentController::setWobbleAmount(qreal amount)
 {
     if (!std::isfinite(amount)) {
+        failHistoryMacro();
         return;
     }
     const qreal normalized = std::clamp(
         amount,
         DocumentLimits::minimumWobbleAmount,
         DocumentLimits::maximumWobbleAmount);
-    if (qFuzzyCompare(m_document.wobbleAmount, normalized)) {
+    const Document &current = document();
+    if (qFuzzyCompare(current.wobbleAmount, normalized)) {
+        failHistoryMacro();
         return;
     }
-    const qreal previous = m_document.wobbleAmount;
-    auto apply = [this](qreal value) {
-        m_document.wobbleAmount = value;
-        notifyDocumentChanged();
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.wobbleAmount = normalized;
+    tryCommitCandidate(
         tr("Change wobble"),
-        [apply, normalized]() { apply(normalized); },
-        [apply, previous]() { apply(previous); },
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
         wobbleAmountMergeId);
 }
 
@@ -1330,82 +3508,474 @@ void DocumentController::setAnimationFrames(int frames)
         frames,
         DocumentLimits::minimumAnimationFrames,
         DocumentLimits::maximumAnimationFrames);
-    if (m_document.animationFrames == normalized) {
+    const Document &current = document();
+    if (current.animationFrames == normalized) {
+        failHistoryMacro();
         return;
     }
-    const int previous = m_document.animationFrames;
-    auto apply = [this](int value) {
-        m_document.animationFrames = value;
-        notifyDocumentChanged();
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.animationFrames = normalized;
+    tryCommitCandidate(
         tr("Change animation frames"),
-        [apply, normalized]() { apply(normalized); },
-        [apply, previous]() { apply(previous); },
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
         animationFramesMergeId);
 }
 
 void DocumentController::setFramesPerSecond(qreal fps)
 {
     if (!std::isfinite(fps)) {
+        failHistoryMacro();
         return;
     }
     const qreal normalized = std::clamp(
         fps,
         DocumentLimits::minimumFramesPerSecond,
         DocumentLimits::maximumFramesPerSecond);
-    if (qFuzzyCompare(m_document.framesPerSecond, normalized)) {
+    const Document &current = document();
+    if (qFuzzyCompare(current.framesPerSecond, normalized)) {
+        failHistoryMacro();
         return;
     }
-    const qreal previous = m_document.framesPerSecond;
-    auto apply = [this](qreal value) {
-        m_document.framesPerSecond = value;
-        notifyDocumentChanged();
-    };
-    pushDocumentCommand(
+    Document candidate = current;
+    candidate.framesPerSecond = normalized;
+    tryCommitCandidate(
         tr("Change animation speed"),
-        [apply, normalized]() { apply(normalized); },
-        [apply, previous]() { apply(previous); },
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
         framesPerSecondMergeId);
 }
 
-void DocumentController::pushDocumentCommand(
+bool DocumentController::tryCommitCandidate(
     QString text,
-    std::function<void()> redoAction,
-    std::function<void()> undoAction,
+    Document candidate,
+    std::shared_ptr<const HistoryEffects> effects,
+    ActiveLayerPolicy activeLayerPolicy,
     int mergeId,
     const QUuid &mergeScope)
 {
-    const quint64 previousRevision = m_currentContentRevision;
-    const quint64 nextRevision = ++m_nextContentRevision;
-    auto trackedRedo = [
+    const PreparedState before = editableState();
+    if (!before
+        || m_undoStack.m_moving
+        || (m_macroTransaction && m_macroTransaction->failed)) {
+        return false;
+    }
+    if (!effects) {
+        effects = std::make_shared<const HistoryEffects>();
+    } else {
+        effects = std::make_shared<const HistoryEffects>(
+            effects->frozenCopy());
+    }
+    const PreparedState after = prepareState(
+        std::move(candidate),
+        before.get());
+    if (!after) {
+        failHistoryMacro();
+        return false;
+    }
+
+    DocumentDelta delta = DocumentDelta::between(
+        before->document(),
+        after->document());
+    if (delta.isEmpty()) {
+        failHistoryMacro();
+        return false;
+    }
+
+    if (m_macroTransaction) {
+        m_macroTransaction->workingState = after;
+        m_macroTransaction->effects.append(*effects);
+        return true;
+    }
+
+    const quint64 beforeNode = m_currentHistoryNode;
+    const quint64 beforeRevision = m_currentContentRevision;
+    const QVector<Stroke> beforePayload = delta.payloadStrokes(false);
+    const QVector<Stroke> afterPayload = delta.payloadStrokes(true);
+    DocumentSerializer::ImmutableBackingLease beforeLease =
+        DocumentSerializer::retainImmutableBackings(
+            *before,
+            beforePayload);
+    DocumentSerializer::ImmutableBackingLease afterLease =
+        DocumentSerializer::retainImmutableBackings(
+            *after,
+            afterPayload);
+    if (!beforeLease.isValid() || !afterLease.isValid()) {
+        failHistoryMacro();
+        return false;
+    }
+    const quint64 afterNode = m_nextHistoryNode + 1;
+    const quint64 afterRevision = m_nextContentRevision + 1;
+    m_nextHistoryNode = afterNode;
+    m_nextContentRevision = afterRevision;
+    m_undoStack.push(new DocumentCommand(
         this,
-        redoAction = std::move(redoAction),
-        nextRevision
-    ]() {
-        redoAction();
-        setContentRevision(nextRevision);
-    };
-    auto trackedUndo = [
-        this,
-        undoAction = std::move(undoAction),
-        previousRevision
-    ]() {
-        undoAction();
-        setContentRevision(previousRevision);
-    };
-    m_undoStack.push(new LambdaCommand(
         std::move(text),
-        std::move(trackedRedo),
-        std::move(trackedUndo),
+        std::move(delta),
+        after,
+        activeLayerPolicy,
+        std::move(effects),
+        std::move(beforeLease),
+        std::move(afterLease),
         mergeId,
-        mergeScope));
+        mergeScope,
+        beforeNode,
+        afterNode,
+        beforeRevision,
+        afterRevision,
+        m_currentState->compactSize(),
+        after->compactSize()));
+    return true;
 }
 
-void DocumentController::setContentRevision(quint64 revision)
+DocumentController::PreparedState DocumentController::prepareState(
+    Document document,
+    const PreparedDocument *base,
+    const DocumentSerializer::ImmutableBackingLease *trusted,
+    bool historyPreflight)
+{
+    if (historyPreflight
+        && m_historyPrepareFailureCountdownForTesting == 0) {
+        m_historyPrepareFailureCountdownForTesting = -1;
+        return {};
+    }
+    if (historyPreflight
+        && m_historyPrepareFailureCountdownForTesting > 0) {
+        --m_historyPrepareFailureCountdownForTesting;
+    }
+    const PreparedDocument *effectiveBase = base;
+    if (!effectiveBase && m_currentState) {
+        effectiveBase = m_currentState.get();
+    }
+    std::optional<PreparedDocument> prepared =
+        DocumentSerializer::prepare(
+            std::move(document),
+            m_serializationCache,
+            effectiveBase,
+            trusted,
+            DocumentLimits::maximumProjectBytes);
+    if (!prepared) {
+        return {};
+    }
+    return std::make_shared<const PreparedDocument>(
+        std::move(*prepared));
+}
+
+void DocumentController::applyPreparedState(
+    const PreparedState &state,
+    ActiveLayerPolicy activeLayerPolicy,
+    const HistoryEffects &effects,
+    CommitDirection direction,
+    quint64 historyNode,
+    quint64 contentRevision)
+{
+    Q_ASSERT(state && state->isValid());
+    if (!state || !state->isValid()) {
+        return;
+    }
+
+    PreparedState appliedState = state;
+    if (activeLayerPolicy
+            == ActiveLayerPolicy::PreserveCurrentIfPresent
+        && m_currentState) {
+        const QUuid currentActive = document().activeLayerId;
+        const Document &target = state->document();
+        const bool canPreserve = target.layers.isEmpty()
+            ? currentActive.isNull()
+            : target.layer(currentActive) != nullptr;
+        if (canPreserve
+            && target.activeLayerId != currentActive) {
+            std::optional<PreparedDocument> rebound =
+                DocumentSerializer::rebindActiveLayer(
+                    *state,
+                    currentActive);
+            Q_ASSERT(rebound.has_value());
+            if (rebound) {
+                appliedState =
+                    std::make_shared<const PreparedDocument>(
+                        std::move(*rebound));
+            }
+        }
+    }
+
+    const bool wasModified = isModified();
+    // Install the complete observable controller state before any callback.
+    // Slots may query or modify the controller synchronously from the
+    // command's effect and documentChanged signals.
+    m_currentState = std::move(appliedState);
+    m_currentHistoryNode = historyNode;
+    m_currentContentRevision = contentRevision;
+    m_selectionVisibilityCacheValid = false;
+    dispatchHistoryEffects(effects, direction, true);
+    const bool modified = isModified();
+    if (modified != wasModified) {
+        emit modifiedChanged(modified);
+    }
+}
+
+bool DocumentController::preflightHistoryMovement(
+    const QUndoCommand *command,
+    bool forward)
+{
+    if (!command || !m_currentState) {
+        return false;
+    }
+    auto *logical = const_cast<LogicalHistoryCommand *>(
+        dynamic_cast<const LogicalHistoryCommand *>(command));
+    return logical && logical->preflight(forward);
+}
+
+void DocumentController::applyHistoryMovement(
+    QUndoCommand *command,
+    bool forward)
+{
+    if (!command) {
+        return;
+    }
+    if (forward) {
+        command->redo();
+    } else {
+        command->undo();
+    }
+}
+
+void DocumentController::clearHistoryPreflight(
+    const QUndoCommand *command)
+{
+    auto *logical = const_cast<LogicalHistoryCommand *>(
+        dynamic_cast<const LogicalHistoryCommand *>(command));
+    if (logical) {
+        logical->clearPreflight();
+    }
+}
+
+DocumentUndoStack::StorageStats
+DocumentController::historyStorageStats(
+    const QUndoCommand *command) const
+{
+    DocumentUndoStack::StorageStats total;
+    if (!command) {
+        return total;
+    }
+    if (const auto *logical =
+            dynamic_cast<const LogicalHistoryCommand *>(command)) {
+        return logical->storageStats();
+    }
+    return total;
+}
+
+void DocumentController::dispatchHistoryEffects(
+    const HistoryEffects &effects,
+    CommitDirection direction,
+    bool changedDocument)
+{
+    const bool forward = direction == CommitDirection::Forward;
+    for (const HistoryEffects::BeforeEvent &event :
+         effects.beforeDocumentChanged) {
+        std::visit(
+            [this, forward](const auto &value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, HistoryEffects::CanvasResize>) {
+                    emit canvasResized(
+                        forward ? value.beforeSize : value.afterSize,
+                        forward ? value.afterSize : value.beforeSize,
+                        forward
+                            ? value.forwardTransform
+                            : value.reverseTransform);
+                } else if constexpr (
+                    std::is_same_v<T, HistoryEffects::StrokeTransform>) {
+                    emit strokesTransformed(
+                        value.layerId,
+                        value.strokeIds,
+                        forward
+                            ? value.forwardTransform
+                            : value.reverseTransform);
+                } else if constexpr (
+                    std::is_same_v<T, HistoryEffects::StrokeDuplicate>) {
+                    emit strokesDuplicated(
+                        value.layerId,
+                        value.sourceIds,
+                        value.duplicateIds,
+                        value.delta,
+                        forward);
+                } else if constexpr (
+                    std::is_same_v<T, HistoryEffects::SelectionOverlay>) {
+                    const auto unpack = [](const auto &mask) {
+                        return mask ? unpackBinaryMask(*mask) : QImage();
+                    };
+                    emit selectionOverlayTransition(
+                        value.layerId,
+                        forward ? value.beforeIds : value.afterIds,
+                        forward ? value.afterIds : value.beforeIds,
+                        unpack(forward ? value.beforeMask : value.afterMask),
+                        unpack(forward ? value.afterMask : value.beforeMask));
+                } else if constexpr (
+                    std::is_same_v<T, HistoryEffects::StrokePresence>) {
+                    emit strokePresenceChanged(
+                        value.layerId,
+                        value.strokeId,
+                        value.clipMask
+                            ? unpackBinaryMask(*value.clipMask)
+                            : QImage(),
+                        forward);
+                }
+            },
+            event);
+    }
+    if (changedDocument) {
+        notifyDocumentChanged();
+    }
+    for (const HistoryEffects::AfterEvent &event :
+         effects.afterDocumentChanged) {
+        std::visit(
+            [this](const auto &value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (
+                    std::is_same_v<T, HistoryEffects::LayerThumbnail>) {
+                    emit layerThumbnailChanged(value.layerId);
+                } else if constexpr (
+                    std::is_same_v<T,
+                                   HistoryEffects::LayerThumbnailsReset>) {
+                    emit layerThumbnailsReset();
+                } else if constexpr (
+                    std::is_same_v<T, HistoryEffects::ActiveLayer>) {
+                    emit activeLayerChanged(document().activeLayerId);
+                }
+            },
+            event);
+    }
+    if (effects.selectionState) {
+        const HistoryEffects::SelectionState &state = forward
+            ? effects.selectionState->after
+            : effects.selectionState->before;
+        emit selectionHistoryStateRequested(
+            state.layerId,
+            state.mask ? unpackBinaryMask(*state.mask) : QImage());
+    }
+}
+
+void DocumentController::beginHistoryMacro(const QString &text)
+{
+    if (m_undoStack.m_moving || !m_currentState) {
+        return;
+    }
+    if (m_macroTransaction) {
+        ++m_macroTransaction->depth;
+        return;
+    }
+    m_macroTransaction = std::make_unique<MacroTransaction>();
+    m_macroTransaction->text = text;
+    m_macroTransaction->startState = m_currentState;
+    m_macroTransaction->workingState = m_currentState;
+}
+
+void DocumentController::endHistoryMacro()
+{
+    if (!m_macroTransaction || m_undoStack.m_moving) {
+        return;
+    }
+    if (--m_macroTransaction->depth > 0) {
+        return;
+    }
+    std::unique_ptr<MacroTransaction> transaction =
+        std::move(m_macroTransaction);
+    if (transaction->failed
+        || !transaction->startState
+        || !transaction->workingState) {
+        return;
+    }
+
+    DocumentDelta delta = DocumentDelta::between(
+        transaction->startState->document(),
+        transaction->workingState->document());
+    if (delta.isEmpty()) {
+        transaction->effects.discardDocumentEffects();
+        if (!transaction->effects.hasSelectionTransition()) {
+            return;
+        }
+        auto effects = std::make_shared<const HistoryEffects>(
+            transaction->effects.frozenCopy());
+        m_undoStack.push(new TransientCommand(
+            this,
+            transaction->text,
+            std::move(effects)));
+        return;
+    }
+
+    const quint64 beforeNode = m_currentHistoryNode;
+    const quint64 beforeRevision = m_currentContentRevision;
+    const QVector<Stroke> beforePayload = delta.payloadStrokes(false);
+    const QVector<Stroke> afterPayload = delta.payloadStrokes(true);
+    auto beforeLease = DocumentSerializer::retainImmutableBackings(
+        *transaction->startState,
+        beforePayload);
+    auto afterLease = DocumentSerializer::retainImmutableBackings(
+        *transaction->workingState,
+        afterPayload);
+    if (!beforeLease.isValid() || !afterLease.isValid()) {
+        return;
+    }
+    const quint64 afterNode = m_nextHistoryNode + 1;
+    const quint64 afterRevision = m_nextContentRevision + 1;
+    m_nextHistoryNode = afterNode;
+    m_nextContentRevision = afterRevision;
+    auto effects = std::make_shared<const HistoryEffects>(
+        transaction->effects.frozenCopy());
+    m_undoStack.push(new DocumentCommand(
+        this,
+        transaction->text,
+        std::move(delta),
+        transaction->workingState,
+        ActiveLayerPolicy::UsePrepared,
+        std::move(effects),
+        std::move(beforeLease),
+        std::move(afterLease),
+        -1,
+        {},
+        beforeNode,
+        afterNode,
+        beforeRevision,
+        afterRevision,
+        transaction->startState->compactSize(),
+        transaction->workingState->compactSize()));
+}
+
+void DocumentController::failHistoryMacro()
+{
+    if (m_macroTransaction) {
+        m_macroTransaction->failed = true;
+    }
+}
+
+bool DocumentController::rejectHistoryMutation()
+{
+    failHistoryMacro();
+    return false;
+}
+
+bool DocumentController::hasOpenHistoryMacro() const
+{
+    return static_cast<bool>(m_macroTransaction);
+}
+
+const DocumentController::PreparedState &
+DocumentController::editableState() const
+{
+    if (m_macroTransaction && m_macroTransaction->workingState) {
+        return m_macroTransaction->workingState;
+    }
+    return m_currentState;
+}
+
+void DocumentController::normalizeMergedNoOp(
+    quint64 historyNode,
+    quint64 contentRevision)
 {
     const bool wasModified = isModified();
-    m_currentContentRevision = revision;
+    m_currentHistoryNode = historyNode;
+    m_currentContentRevision = contentRevision;
     const bool modified = isModified();
     if (modified != wasModified) {
         emit modifiedChanged(modified);
@@ -1414,28 +3984,30 @@ void DocumentController::setContentRevision(quint64 revision)
 
 void DocumentController::notifyDocumentChanged()
 {
+    m_selectionVisibilityCacheValid = false;
     emit documentChanged();
 }
 
-void DocumentController::ensureActiveLayer()
+void DocumentController::ensureActiveLayer(Document &document)
 {
-    if (m_document.layer(m_document.activeLayerId)) {
+    if (document.layer(document.activeLayerId)) {
         return;
     }
-    if (m_document.layers.isEmpty()) {
-        m_document.activeLayerId = {};
+    if (document.layers.isEmpty()) {
+        document.activeLayerId = {};
         return;
     }
-    m_document.activeLayerId = m_document.layers.constLast().id;
+    document.activeLayerId = document.layers.constLast().id;
 }
 
 QString DocumentController::nextLayerName() const
 {
-    int number = m_document.layers.size() + 1;
+    const Document &current = document();
+    int number = current.layers.size() + 1;
     while (true) {
         const QString candidate = tr("Layer %1").arg(number);
         bool exists = false;
-        for (const Layer &layer : m_document.layers) {
+        for (const Layer &layer : current.layers) {
             if (layer.name == candidate) {
                 exists = true;
                 break;

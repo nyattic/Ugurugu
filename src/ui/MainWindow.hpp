@@ -11,6 +11,8 @@ class QCloseEvent;
 class QEvent;
 class QLabel;
 class QPushButton;
+class QSlider;
+class QSpinBox;
 
 namespace wobble {
 
@@ -53,6 +55,7 @@ private:
     QString autosavePath() const;
     void newDocument();
     void resizeCanvas();
+    void resizeImage();
     void scaleSelection();
     void rotateSelection();
     void chooseOpenFile();
@@ -79,12 +82,20 @@ private:
     QAction *m_scaleSelectionAction = nullptr;
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
+    QAction *m_moveSelectionAction = nullptr;
+    QAction *m_flipSelectionHorizontalAction = nullptr;
+    QAction *m_flipSelectionVerticalAction = nullptr;
+    QAction *m_applySelectionTransformAction = nullptr;
+    QAction *m_cancelSelectionTransformAction = nullptr;
+    QAction *m_deleteSelectionAction = nullptr;
+    QAction *m_deselectSelectionAction = nullptr;
     QAction *m_mirrorCanvasAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
     ColorSwatchRow *m_swatchRow = nullptr;
     QLabel *m_pointerLabel = nullptr;
-    QLabel *m_zoomLabel = nullptr;
+    QSlider *m_zoomSlider = nullptr;
+    QSpinBox *m_zoomSpin = nullptr;
     QTimer m_autosaveTimer;
     QTimer m_drawingToolSettingsSaveTimer;
     bool m_autosavePending = false;

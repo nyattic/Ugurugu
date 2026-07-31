@@ -310,6 +310,123 @@ Glyph settingsGlyph()
     return glyph;
 }
 
+Glyph moveGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{4.4, 12.0}, {19.6, 12.0}}));
+    glyph.lines.append(polyline({{12.0, 4.4}, {12.0, 19.6}}));
+    addArrowHead(glyph, {19.6, 12.0}, 0.0, 3.7);
+    addArrowHead(glyph, {4.4, 12.0}, 180.0, 3.7);
+    addArrowHead(glyph, {12.0, 4.4}, 90.0, 3.7);
+    addArrowHead(glyph, {12.0, 19.6}, -90.0, 3.7);
+    return glyph;
+}
+
+Glyph scaleGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{6.0, 18.0}, {18.0, 6.0}}));
+    addArrowHead(glyph, {18.0, 6.0}, 45.0, 4.0);
+    addArrowHead(glyph, {6.0, 18.0}, 225.0, 4.0);
+    glyph.lines.append(polyline({{4.2, 9.0}, {4.2, 4.2}, {9.0, 4.2}}));
+    glyph.lines.append(
+        polyline({{15.0, 19.8}, {19.8, 19.8}, {19.8, 15.0}}));
+    return glyph;
+}
+
+Glyph rotateGlyph()
+{
+    Glyph glyph;
+    QPolygonF arc;
+    constexpr int steps = 24;
+    constexpr qreal startDegrees = 35.0;
+    constexpr qreal endDegrees = 330.0;
+    arc.reserve(steps + 1);
+    for (int step = 0; step <= steps; ++step) {
+        const qreal degrees =
+            startDegrees
+            + (endDegrees - startDegrees) * step / steps;
+        const qreal radians =
+            degrees * std::numbers::pi_v<qreal> / 180.0;
+        arc.append(
+            QPointF(
+                12.0 + 7.2 * std::cos(radians),
+                12.0 + 7.2 * std::sin(radians)));
+    }
+    glyph.lines.append(arc);
+    addArrowHead(glyph, arc.constLast(), -60.0, 4.0);
+    return glyph;
+}
+
+Glyph mirrorVerticalGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{3.8, 12.0}, {20.2, 12.0}}));
+    glyph.lines.append(polyline({
+        {6.0, 10.0},
+        {12.0, 4.2},
+        {18.0, 10.0},
+        {6.0, 10.0}
+    }));
+    glyph.lines.append(polyline({
+        {6.0, 14.0},
+        {12.0, 19.8},
+        {18.0, 14.0},
+        {6.0, 14.0}
+    }));
+    return glyph;
+}
+
+Glyph deleteGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{5.0, 7.2}, {19.0, 7.2}}));
+    glyph.lines.append(polyline({{9.0, 4.6}, {15.0, 4.6}}));
+    glyph.lines.append(polyline({
+        {7.2, 8.8},
+        {8.2, 19.6},
+        {15.8, 19.6},
+        {16.8, 8.8}
+    }));
+    glyph.lines.append(polyline({{10.4, 10.2}, {10.8, 17.4}}));
+    glyph.lines.append(polyline({{13.6, 10.2}, {13.2, 17.4}}));
+    return glyph;
+}
+
+Glyph deselectGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{4.2, 9.0}, {4.2, 4.2}, {9.0, 4.2}}));
+    glyph.lines.append(
+        polyline({{15.0, 4.2}, {19.8, 4.2}, {19.8, 9.0}}));
+    glyph.lines.append(
+        polyline({{4.2, 15.0}, {4.2, 19.8}, {9.0, 19.8}}));
+    glyph.lines.append(
+        polyline({{15.0, 19.8}, {19.8, 19.8}, {19.8, 15.0}}));
+    glyph.lines.append(polyline({{8.4, 8.4}, {15.6, 15.6}}));
+    glyph.lines.append(polyline({{15.6, 8.4}, {8.4, 15.6}}));
+    return glyph;
+}
+
+Glyph confirmGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({
+        {4.8, 12.4},
+        {9.6, 17.2},
+        {19.4, 6.8}
+    }));
+    return glyph;
+}
+
+Glyph cancelGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{6.0, 6.0}, {18.0, 18.0}}));
+    glyph.lines.append(polyline({{18.0, 6.0}, {6.0, 18.0}}));
+    return glyph;
+}
+
 Glyph glyphFor(IconGlyph glyph)
 {
     switch (glyph) {
@@ -351,6 +468,22 @@ Glyph glyphFor(IconGlyph glyph)
         return bucketGlyph();
     case IconGlyph::Settings:
         return settingsGlyph();
+    case IconGlyph::Move:
+        return moveGlyph();
+    case IconGlyph::Scale:
+        return scaleGlyph();
+    case IconGlyph::Rotate:
+        return rotateGlyph();
+    case IconGlyph::MirrorVertical:
+        return mirrorVerticalGlyph();
+    case IconGlyph::Delete:
+        return deleteGlyph();
+    case IconGlyph::Deselect:
+        return deselectGlyph();
+    case IconGlyph::Confirm:
+        return confirmGlyph();
+    case IconGlyph::Cancel:
+        return cancelGlyph();
     }
     return {};
 }

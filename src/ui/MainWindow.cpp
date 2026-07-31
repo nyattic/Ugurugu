@@ -7,11 +7,14 @@
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BrushSizeRow.hpp"
+#include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorSwatchRow.hpp"
 #include "ui/Icons.hpp"
+#include "ui/ImageSizeDialog.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/PopoverToolButton.hpp"
+#include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
@@ -46,7 +49,9 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QShortcut>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
@@ -74,6 +79,33 @@ constexpr auto roughnessKey = "drawingTools/brush/roughness";
 constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
 constexpr qreal minimumRememberedStrokeWidth = 1.0;
+constexpr int minimumZoomPercent = 1;
+constexpr int maximumZoomPercent = 1600;
+constexpr int zoomSliderSteps = 1000;
+
+int zoomPercentFromSlider(int value)
+{
+    const qreal progress =
+        std::clamp(value, 0, zoomSliderSteps)
+        / static_cast<qreal>(zoomSliderSteps);
+    const qreal minimum = std::log(minimumZoomPercent);
+    const qreal maximum = std::log(maximumZoomPercent);
+    return qRound(std::exp(minimum + (maximum - minimum) * progress));
+}
+
+int sliderFromZoomPercent(int percent)
+{
+    const qreal clamped = std::clamp(
+        percent,
+        minimumZoomPercent,
+        maximumZoomPercent);
+    const qreal minimum = std::log(minimumZoomPercent);
+    const qreal maximum = std::log(maximumZoomPercent);
+    return qRound(
+        (std::log(clamped) - minimum)
+        / (maximum - minimum)
+        * zoomSliderSteps);
+}
 
 QString presetWidthKey(const QString &presetId)
 {
@@ -283,6 +315,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
+    QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
     qApp->installEventFilter(this);
 
 #ifdef Q_OS_MACOS
@@ -515,7 +548,8 @@ void MainWindow::createActions()
     redoAction->setIcon(Icons::icon(IconGlyph::Redo));
     registerShortcut(redoAction, QKeySequence(QKeySequence::Redo));
 
-    auto *resizeCanvasAction = new QAction(tr("Resize canvas…"), this);
+    auto *resizeCanvasAction =
+        new QAction(tr("Change canvas size…"), this);
     resizeCanvasAction->setObjectName(QStringLiteral("resizeCanvasAction"));
     registerShortcut(resizeCanvasAction, {});
     connect(
@@ -524,9 +558,41 @@ void MainWindow::createActions()
         this,
         &MainWindow::resizeCanvas);
 
+    auto *resizeImageAction =
+        new QAction(tr("Change image size…"), this);
+    resizeImageAction->setObjectName(QStringLiteral("resizeImageAction"));
+    registerShortcut(resizeImageAction, {});
+    connect(
+        resizeImageAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::resizeImage);
+
+    m_moveSelectionAction = new QAction(tr("Move selection"), this);
+    m_moveSelectionAction->setObjectName(
+        QStringLiteral("moveSelectionAction"));
+    m_moveSelectionAction->setCheckable(true);
+    m_moveSelectionAction->setIcon(
+        Icons::toggleIcon(IconGlyph::Move));
+    m_moveSelectionAction->setToolTip(
+        tr("Move selected content by dragging"));
+    registerShortcut(m_moveSelectionAction, {});
+    connect(
+        m_moveSelectionAction,
+        &QAction::toggled,
+        m_canvas,
+        &CanvasWidget::setSelectionMoveMode);
+    connect(
+        m_canvas,
+        &CanvasWidget::selectionMoveModeChanged,
+        m_moveSelectionAction,
+        &QAction::setChecked);
+
     m_scaleSelectionAction = new QAction(tr("Scale selection…"), this);
     m_scaleSelectionAction->setObjectName(
         QStringLiteral("scaleSelectionAction"));
+    m_scaleSelectionAction->setIcon(Icons::icon(IconGlyph::Scale));
+    m_scaleSelectionAction->setToolTip(tr("Scale selected content"));
     m_scaleSelectionAction->setEnabled(false);
     registerShortcut(m_scaleSelectionAction, {});
     connect(
@@ -538,6 +604,8 @@ void MainWindow::createActions()
     m_rotateSelectionAction = new QAction(tr("Rotate selection…"), this);
     m_rotateSelectionAction->setObjectName(
         QStringLiteral("rotateSelectionAction"));
+    m_rotateSelectionAction->setIcon(Icons::icon(IconGlyph::Rotate));
+    m_rotateSelectionAction->setToolTip(tr("Rotate selected content"));
     m_rotateSelectionAction->setEnabled(false);
     registerShortcut(m_rotateSelectionAction, {});
     connect(
@@ -550,6 +618,9 @@ void MainWindow::createActions()
         new QAction(tr("Duplicate selection"), this);
     m_duplicateSelectionAction->setObjectName(
         QStringLiteral("duplicateSelectionAction"));
+    m_duplicateSelectionAction->setIcon(
+        Icons::icon(IconGlyph::Duplicate));
+    m_duplicateSelectionAction->setToolTip(tr("Duplicate selected content"));
     m_duplicateSelectionAction->setEnabled(false);
     registerShortcut(
         m_duplicateSelectionAction,
@@ -559,15 +630,165 @@ void MainWindow::createActions()
         &QAction::triggered,
         m_canvas,
         &CanvasWidget::duplicateSelection);
+
+    m_flipSelectionHorizontalAction =
+        new QAction(tr("Flip selection horizontally"), this);
+    m_flipSelectionHorizontalAction->setObjectName(
+        QStringLiteral("flipSelectionHorizontalAction"));
+    m_flipSelectionHorizontalAction->setIcon(
+        Icons::icon(IconGlyph::MirrorHorizontal));
+    m_flipSelectionHorizontalAction->setToolTip(
+        tr("Flip selected content horizontally"));
+    registerShortcut(m_flipSelectionHorizontalAction, {});
+    connect(
+        m_flipSelectionHorizontalAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::flipSelectionHorizontally);
+
+    m_flipSelectionVerticalAction =
+        new QAction(tr("Flip selection vertically"), this);
+    m_flipSelectionVerticalAction->setObjectName(
+        QStringLiteral("flipSelectionVerticalAction"));
+    m_flipSelectionVerticalAction->setIcon(
+        Icons::icon(IconGlyph::MirrorVertical));
+    m_flipSelectionVerticalAction->setToolTip(
+        tr("Flip selected content vertically"));
+    registerShortcut(m_flipSelectionVerticalAction, {});
+    connect(
+        m_flipSelectionVerticalAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::flipSelectionVertically);
+
+    m_applySelectionTransformAction =
+        new QAction(tr("Apply transform"), this);
+    m_applySelectionTransformAction->setObjectName(
+        QStringLiteral("applySelectionTransformAction"));
+    m_applySelectionTransformAction->setIcon(
+        Icons::icon(IconGlyph::Confirm));
+    m_applySelectionTransformAction->setToolTip(
+        tr("Apply selection transform (Enter)"));
+    m_applySelectionTransformAction->setEnabled(false);
+    registerShortcut(
+        m_applySelectionTransformAction,
+        QKeySequence(QStringLiteral("Return")));
+    connect(
+        m_applySelectionTransformAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::applySelectionTransform);
+
+    m_cancelSelectionTransformAction =
+        new QAction(tr("Cancel transform"), this);
+    m_cancelSelectionTransformAction->setObjectName(
+        QStringLiteral("cancelSelectionTransformAction"));
+    m_cancelSelectionTransformAction->setIcon(
+        Icons::icon(IconGlyph::Cancel));
+    m_cancelSelectionTransformAction->setToolTip(
+        tr("Cancel selection transform (Esc)"));
+    m_cancelSelectionTransformAction->setEnabled(false);
+    registerShortcut(m_cancelSelectionTransformAction, {});
+    connect(
+        m_cancelSelectionTransformAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::cancelSelectionTransform);
+
+    m_deleteSelectionAction =
+        new QAction(tr("Delete selected content"), this);
+    m_deleteSelectionAction->setObjectName(
+        QStringLiteral("deleteSelectionAction"));
+    m_deleteSelectionAction->setIcon(Icons::icon(IconGlyph::Delete));
+    m_deleteSelectionAction->setToolTip(tr("Delete selected content"));
+    registerShortcut(
+        m_deleteSelectionAction,
+        QKeySequence(Qt::Key_Delete));
+    connect(
+        m_deleteSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::deleteSelection);
+
+    m_deselectSelectionAction = new QAction(tr("Deselect"), this);
+    m_deselectSelectionAction->setObjectName(
+        QStringLiteral("deselectSelectionAction"));
+    m_deselectSelectionAction->setIcon(
+        Icons::icon(IconGlyph::Deselect));
+    m_deselectSelectionAction->setToolTip(tr("Deselect (Esc)"));
+    registerShortcut(m_deselectSelectionAction, {});
+    connect(
+        m_deselectSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::deselectSelection);
+
+    auto *escapeCanvasAction =
+        new QAction(tr("Cancel current canvas action"), this);
+    escapeCanvasAction->setObjectName(
+        QStringLiteral("escapeCanvasAction"));
+    escapeCanvasAction->setShortcutContext(Qt::WindowShortcut);
+    registerShortcut(
+        escapeCanvasAction,
+        QKeySequence(Qt::Key_Escape));
+    connect(
+        escapeCanvasAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::handleEscape);
+
+    const auto syncSelectionActions =
+        [this](bool hasArea, bool hasContent) {
+            m_moveSelectionAction->setEnabled(hasContent);
+            m_scaleSelectionAction->setEnabled(hasContent);
+            m_rotateSelectionAction->setEnabled(hasContent);
+            m_duplicateSelectionAction->setEnabled(hasContent);
+            m_flipSelectionHorizontalAction->setEnabled(hasContent);
+            m_flipSelectionVerticalAction->setEnabled(hasContent);
+            m_deleteSelectionAction->setEnabled(hasContent);
+            m_deselectSelectionAction->setEnabled(hasArea);
+            if (!hasContent) {
+                m_moveSelectionAction->setChecked(false);
+            }
+        };
     connect(
         m_canvas,
-        &CanvasWidget::selectionTransformAvailabilityChanged,
+        &CanvasWidget::selectionAvailabilityChanged,
         this,
-        [this](bool available) {
-            m_scaleSelectionAction->setEnabled(available);
-            m_rotateSelectionAction->setEnabled(available);
-            m_duplicateSelectionAction->setEnabled(available);
-        });
+        syncSelectionActions);
+    syncSelectionActions(
+        m_canvas->hasSelection(),
+        m_canvas->hasTransformableSelection());
+    const auto syncSelectionTransformSession =
+        [this](bool active, bool dirty) {
+            m_applySelectionTransformAction->setEnabled(active && dirty);
+            m_cancelSelectionTransformAction->setEnabled(active);
+        };
+    connect(
+        m_canvas,
+        &CanvasWidget::selectionTransformSessionChanged,
+        this,
+        syncSelectionTransformSession);
+    syncSelectionTransformSession(
+        m_canvas->hasSelectionTransformSession(),
+        m_canvas->hasPendingSelectionTransform());
+
+    auto *selectionBar = new SelectionActionBar(m_canvas);
+    selectionBar->addAction(m_moveSelectionAction);
+    selectionBar->addAction(m_scaleSelectionAction);
+    selectionBar->addAction(m_rotateSelectionAction);
+    selectionBar->addSeparator();
+    selectionBar->addAction(m_flipSelectionHorizontalAction);
+    selectionBar->addAction(m_flipSelectionVerticalAction);
+    selectionBar->addSeparator();
+    selectionBar->addAction(m_applySelectionTransformAction);
+    selectionBar->addAction(m_cancelSelectionTransformAction);
+    selectionBar->addSeparator();
+    selectionBar->addAction(m_duplicateSelectionAction);
+    selectionBar->addAction(m_deleteSelectionAction);
+    selectionBar->addSeparator();
+    selectionBar->addAction(m_deselectSelectionAction);
+    m_canvas->setSelectionActionBar(selectionBar);
 
     auto *clearLayerAction = new QAction(tr("Clear active layer"), this);
     clearLayerAction->setObjectName(QStringLiteral("clearLayerAction"));
@@ -603,6 +824,18 @@ void MainWindow::createActions()
         &QAction::triggered,
         m_canvas,
         &CanvasWidget::zoomOut);
+
+    auto *actualSizeAction = new QAction(tr("Actual &pixels"), this);
+    actualSizeAction->setObjectName(QStringLiteral("actualSizeAction"));
+    actualSizeAction->setToolTip(tr("Show the canvas at 100%"));
+    registerShortcut(
+        actualSizeAction,
+        QKeySequence(QStringLiteral("Ctrl+1")));
+    connect(
+        actualSizeAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::resetZoom);
 
     auto *fitAction = new QAction(tr("&Fit canvas"), this);
     fitAction->setObjectName(QStringLiteral("fitAction"));
@@ -737,13 +970,23 @@ void MainWindow::createActions()
     addAction(quitAction);
     addAction(undoAction);
     addAction(redoAction);
+    addAction(resizeImageAction);
     addAction(resizeCanvasAction);
+    addAction(m_moveSelectionAction);
     addAction(m_scaleSelectionAction);
     addAction(m_rotateSelectionAction);
+    addAction(m_flipSelectionHorizontalAction);
+    addAction(m_flipSelectionVerticalAction);
+    addAction(m_applySelectionTransformAction);
+    addAction(m_cancelSelectionTransformAction);
     addAction(m_duplicateSelectionAction);
+    addAction(m_deleteSelectionAction);
+    addAction(m_deselectSelectionAction);
+    addAction(escapeCanvasAction);
     addAction(clearLayerAction);
     addAction(zoomInAction);
     addAction(zoomOutAction);
+    addAction(actualSizeAction);
     addAction(fitAction);
     addAction(m_mirrorCanvasAction);
     addAction(m_playAction);
@@ -769,11 +1012,25 @@ void MainWindow::createMenus()
     editMenu->addAction(findChild<QAction *>(QStringLiteral("redoAction")));
     editMenu->addSeparator();
     editMenu->addAction(
+        findChild<QAction *>(QStringLiteral("resizeImageAction")));
+    editMenu->addAction(
         findChild<QAction *>(QStringLiteral("resizeCanvasAction")));
     editMenu->addSeparator();
-    editMenu->addAction(m_scaleSelectionAction);
-    editMenu->addAction(m_rotateSelectionAction);
-    editMenu->addAction(m_duplicateSelectionAction);
+    QMenu *selectionMenu = editMenu->addMenu(tr("&Selection"));
+    selectionMenu->addAction(m_moveSelectionAction);
+    selectionMenu->addAction(m_scaleSelectionAction);
+    selectionMenu->addAction(m_rotateSelectionAction);
+    selectionMenu->addSeparator();
+    selectionMenu->addAction(m_flipSelectionHorizontalAction);
+    selectionMenu->addAction(m_flipSelectionVerticalAction);
+    selectionMenu->addSeparator();
+    selectionMenu->addAction(m_applySelectionTransformAction);
+    selectionMenu->addAction(m_cancelSelectionTransformAction);
+    selectionMenu->addSeparator();
+    selectionMenu->addAction(m_duplicateSelectionAction);
+    selectionMenu->addAction(m_deleteSelectionAction);
+    selectionMenu->addSeparator();
+    selectionMenu->addAction(m_deselectSelectionAction);
     editMenu->addSeparator();
     editMenu->addAction(findChild<QAction *>(QStringLiteral("clearLayerAction")));
     editMenu->addSeparator();
@@ -782,6 +1039,8 @@ void MainWindow::createMenus()
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("zoomInAction")));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("zoomOutAction")));
+    viewMenu->addAction(
+        findChild<QAction *>(QStringLiteral("actualSizeAction")));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
@@ -1069,10 +1328,23 @@ void MainWindow::createStatusBar()
     m_pointerLabel->setMinimumWidth(150);
     statusBar()->addPermanentWidget(m_pointerLabel);
 
-    m_zoomLabel = new QLabel(tr("100%"), this);
-    m_zoomLabel->setMinimumWidth(56);
-    m_zoomLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    statusBar()->addPermanentWidget(m_zoomLabel);
+    m_zoomSlider = new QSlider(Qt::Horizontal, this);
+    m_zoomSlider->setObjectName(QStringLiteral("zoomSlider"));
+    m_zoomSlider->setRange(0, zoomSliderSteps);
+    m_zoomSlider->setFixedWidth(96);
+    m_zoomSlider->setToolTip(tr("Canvas zoom"));
+    m_zoomSlider->setAccessibleName(tr("Canvas zoom"));
+    statusBar()->addPermanentWidget(m_zoomSlider);
+
+    m_zoomSpin = new QSpinBox(this);
+    m_zoomSpin->setObjectName(QStringLiteral("zoomPercentSpin"));
+    m_zoomSpin->setRange(minimumZoomPercent, maximumZoomPercent);
+    m_zoomSpin->setSuffix(tr("%"));
+    m_zoomSpin->setWrapping(false);
+    m_zoomSpin->setFixedWidth(72);
+    m_zoomSpin->setToolTip(tr("Canvas zoom percentage"));
+    m_zoomSpin->setAccessibleName(tr("Canvas zoom percentage"));
+    statusBar()->addPermanentWidget(m_zoomSpin);
 
     auto *mirrorButton = new QToolButton(this);
     mirrorButton->setObjectName(QStringLiteral("mirrorCanvasButton"));
@@ -1099,11 +1371,26 @@ void MainWindow::createStatusBar()
                     : QString());
         });
     connect(
+        m_zoomSlider,
+        &QSlider::valueChanged,
+        this,
+        [this](int value) {
+            m_canvas->setZoomPercent(zoomPercentFromSlider(value));
+        });
+    connect(
+        m_zoomSpin,
+        &QSpinBox::valueChanged,
+        m_canvas,
+        &CanvasWidget::setZoomPercent);
+    connect(
         m_canvas,
         &CanvasWidget::zoomChanged,
         this,
         [this](int percent) {
-            m_zoomLabel->setText(tr("%1%").arg(percent));
+            const QSignalBlocker sliderBlocker(m_zoomSlider);
+            const QSignalBlocker spinBlocker(m_zoomSpin);
+            m_zoomSlider->setValue(sliderFromZoomPercent(percent));
+            m_zoomSpin->setValue(percent);
         });
     connect(
         m_canvas,
@@ -1112,6 +1399,9 @@ void MainWindow::createStatusBar()
         [this](const QString &message) {
             statusBar()->showMessage(message, 4000);
         });
+    const int initialZoom = qRound(m_canvas->zoom() * 100.0);
+    m_zoomSlider->setValue(sliderFromZoomPercent(initialZoom));
+    m_zoomSpin->setValue(initialZoom);
     statusBar()->showMessage(tr("Ready"), 2000);
 }
 
@@ -1256,7 +1546,7 @@ bool MainWindow::saveAs()
 bool MainWindow::saveToFile(const QString &filePath)
 {
     QString error;
-    if (!DocumentSerializer::save(filePath, m_controller.document(), &error)) {
+    if (!m_controller.saveDocument(filePath, &error)) {
         spdlog::error(
             "Failed to save project {}: {}",
             filePath.toUtf8().constData(),
@@ -1298,16 +1588,65 @@ void MainWindow::newDocument()
 
 void MainWindow::resizeCanvas()
 {
-    const QSize previous = m_controller.document().size;
-    const QSize size = requestCanvasSize(
-        this,
-        previous,
-        tr("Resize canvas"),
-        tr("Artwork and brush sizes will be scaled to the new canvas."));
-    if (!size.isValid() || size == previous) {
+    CanvasSizeDialog dialog(m_controller.document().size, this);
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
-    m_controller.resizeCanvas(size);
+    const CanvasSizeDialog::Result requested = dialog.result();
+    if (requested.size == m_controller.document().size
+        && requested.contentOffset.isNull()) {
+        return;
+    }
+    m_canvas->setSelectionMoveMode(false);
+    m_canvas->cancelActiveInteraction();
+    const bool hadSelection = m_canvas->hasSelection();
+    if (hadSelection) {
+        m_controller.undoStack()->beginMacro(tr("Resize canvas"));
+        m_canvas->deselectSelection();
+    }
+    const bool resized = m_controller.resizeCanvas(
+        requested.size,
+        requested.contentOffset);
+    if (hadSelection) {
+        m_controller.undoStack()->endMacro();
+    }
+    if (!resized) {
+        QMessageBox::warning(
+            this,
+            tr("Canvas size"),
+            tr("The canvas size could not be changed. "
+               "Try a smaller size or offset."));
+    }
+}
+
+void MainWindow::resizeImage()
+{
+    ImageSizeDialog dialog(m_controller.document().size, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    const QSize requested = dialog.imageSize();
+    if (requested == m_controller.document().size) {
+        return;
+    }
+    m_canvas->setSelectionMoveMode(false);
+    m_canvas->cancelActiveInteraction();
+    const bool hadSelection = m_canvas->hasSelection();
+    if (hadSelection) {
+        m_controller.undoStack()->beginMacro(tr("Resize image"));
+        m_canvas->deselectSelection();
+    }
+    const bool resized = m_controller.resizeImage(requested);
+    if (hadSelection) {
+        m_controller.undoStack()->endMacro();
+    }
+    if (!resized) {
+        QMessageBox::warning(
+            this,
+            tr("Image size"),
+            tr("The image size could not be changed. "
+               "Try smaller dimensions."));
+    }
 }
 
 void MainWindow::scaleSelection()
@@ -1358,10 +1697,7 @@ void MainWindow::writeAutosave()
     }
 
     QString error;
-    if (!DocumentSerializer::save(
-            filePath,
-            m_controller.document(),
-            &error)) {
+    if (!m_controller.saveDocument(filePath, &error)) {
         spdlog::warn(
             "Failed to write recovery file {}: {}",
             filePath.toUtf8().constData(),
