@@ -1060,4 +1060,210 @@
 %1</translation>
     </message>
 </context>
+<context>
+    <name>wobble::DocumentSerializer</name>
+    <message>
+        <source>A layer contains invalid data.</source>
+        <translation>레이어에 잘못된 데이터가 있습니다.</translation>
+    </message>
+    <message>
+        <source>A layer contains invalid fields.</source>
+        <translation>레이어에 잘못된 필드가 있습니다.</translation>
+    </message>
+    <message>
+        <source>A layer contains too many strokes.</source>
+        <translation>레이어에 스트로크가 너무 많습니다.</translation>
+    </message>
+    <message>
+        <source>A layer entry is not an object.</source>
+        <translation>레이어 항목이 객체가 아닙니다.</translation>
+    </message>
+    <message>
+        <source>A layer has an invalid ID.</source>
+        <translation>레이어의 ID가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A layer has an invalid name.</source>
+        <translation>레이어의 이름이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A layer has an invalid opacity.</source>
+        <translation>레이어의 불투명도가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke clip mask is too large.</source>
+        <translation>스트로크 클립 마스크가 너무 큽니다.</translation>
+    </message>
+    <message>
+        <source>A stroke contains an invalid point.</source>
+        <translation>스트로크에 잘못된 점이 있습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke contains invalid data.</source>
+        <translation>스트로크에 잘못된 데이터가 있습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke contains invalid fields.</source>
+        <translation>스트로크에 잘못된 필드가 있습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke entry is not an object.</source>
+        <translation>스트로크 항목이 객체가 아닙니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid ID.</source>
+        <translation>스트로크의 ID가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid brush engine.</source>
+        <translation>스트로크의 브러시 엔진이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid brush tip.</source>
+        <translation>스트로크의 브러시 팁이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid clip mask.</source>
+        <translation>스트로크의 클립 마스크가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid color.</source>
+        <translation>스트로크의 색상이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid mode.</source>
+        <translation>스트로크의 모드가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid point count.</source>
+        <translation>스트로크의 점 개수가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid seed.</source>
+        <translation>스트로크의 시드 값이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has an invalid width.</source>
+        <translation>스트로크의 굵기가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>A stroke has invalid brush settings.</source>
+        <translation>스트로크의 브러시 설정이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The active layer ID is invalid.</source>
+        <translation>활성 레이어 ID가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The animation settings are invalid.</source>
+        <translation>애니메이션 설정이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The canvas background is invalid.</source>
+        <translation>캔버스 배경이 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The canvas size is invalid.</source>
+        <translation>캔버스 크기가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The layer count is invalid.</source>
+        <translation>레이어 개수가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains duplicate layer IDs.</source>
+        <translation>프로젝트에 중복된 레이어 ID가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains duplicate stroke IDs.</source>
+        <translation>프로젝트에 중복된 스트로크 ID가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains invalid fields.</source>
+        <translation>프로젝트에 잘못된 필드가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains invalid layer IDs.</source>
+        <translation>프로젝트에 잘못된 레이어 ID가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains invalid stroke IDs.</source>
+        <translation>프로젝트에 잘못된 스트로크 ID가 있습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains too many points.</source>
+        <translation>프로젝트에 점이 너무 많습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains too many strokes.</source>
+        <translation>프로젝트에 스트로크가 너무 많습니다.</translation>
+    </message>
+    <message>
+        <source>The project contains too much selection data.</source>
+        <translation>프로젝트에 선택 영역 데이터가 너무 많습니다.</translation>
+    </message>
+    <message>
+        <source>The project data is too large.</source>
+        <translation>프로젝트 데이터가 너무 큽니다.</translation>
+    </message>
+    <message>
+        <source>The project file is too large.</source>
+        <translation>프로젝트 파일이 너무 큽니다.</translation>
+    </message>
+    <message>
+        <source>The project is too large to save.</source>
+        <translation>프로젝트가 너무 커서 저장할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>This project version is not supported.</source>
+        <translation>지원하지 않는 프로젝트 버전입니다.</translation>
+    </message>
+    <message>
+        <source>This rendering algorithm version is not supported.</source>
+        <translation>지원하지 않는 렌더링 알고리즘 버전입니다.</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::GifWriter</name>
+    <message>
+        <source>A frame could not be converted to the GIF pixel format.</source>
+        <translation>프레임을 GIF 픽셀 형식으로 변환할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>All frames must have the same dimensions.</source>
+        <translation>모든 프레임의 크기가 같아야 합니다.</translation>
+    </message>
+    <message>
+        <source>At least one frame is required.</source>
+        <translation>프레임이 최소 한 개 필요합니다.</translation>
+    </message>
+    <message>
+        <source>Each frame must have one delay value.</source>
+        <translation>각 프레임에는 지연 값이 하나씩 있어야 합니다.</translation>
+    </message>
+    <message>
+        <source>Frame delays must be between 0 and 65535 centiseconds.</source>
+        <translation>프레임 지연은 0에서 65535센티초 사이여야 합니다.</translation>
+    </message>
+    <message>
+        <source>Frames must contain valid image data.</source>
+        <translation>프레임에 유효한 이미지 데이터가 있어야 합니다.</translation>
+    </message>
+    <message>
+        <source>GIF dimensions cannot exceed 65535 pixels.</source>
+        <translation>GIF 크기는 65535픽셀을 넘을 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>The animation is too large to encode safely.</source>
+        <translation>애니메이션이 너무 커서 안전하게 인코딩할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>The frame dimensions are too large.</source>
+        <translation>프레임 크기가 너무 큽니다.</translation>
+    </message>
+    <message>
+        <source>The output path is empty.</source>
+        <translation>출력 경로가 비어 있습니다.</translation>
+    </message>
+</context>
 </TS>

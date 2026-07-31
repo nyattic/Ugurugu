@@ -2,12 +2,16 @@
 
 #include "document/Document.hpp"
 
+#include <QCoreApplication>
+
 #include <optional>
 
 namespace wobble {
 
 class DocumentSerializer
 {
+    Q_DECLARE_TR_FUNCTIONS(wobble::DocumentSerializer)
+
 public:
     static bool save(
         const QString &filePath,

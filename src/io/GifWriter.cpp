@@ -447,33 +447,33 @@ bool GifWriter::write(
     }
 
     if (path.isEmpty()) {
-        return fail(error, QStringLiteral("The output path is empty."));
+        return fail(error, GifWriter::tr("The output path is empty."));
     }
     if (frames.isEmpty()) {
-        return fail(error, QStringLiteral("At least one frame is required."));
+        return fail(error, GifWriter::tr("At least one frame is required."));
     }
     if (delaysCentiseconds.size() != frames.size()) {
-        return fail(error, QStringLiteral("Each frame must have one delay value."));
+        return fail(error, GifWriter::tr("Each frame must have one delay value."));
     }
     for (int delayCentiseconds : delaysCentiseconds) {
         if (delayCentiseconds < 0 || delayCentiseconds > 65535) {
-            return fail(error, QStringLiteral("Frame delays must be between 0 and 65535 centiseconds."));
+            return fail(error, GifWriter::tr("Frame delays must be between 0 and 65535 centiseconds."));
         }
     }
 
     const int width = frames.first().width();
     const int height = frames.first().height();
     if (frames.first().isNull() || width <= 0 || height <= 0) {
-        return fail(error, QStringLiteral("Frames must contain valid image data."));
+        return fail(error, GifWriter::tr("Frames must contain valid image data."));
     }
     if (width > 65535 || height > 65535) {
-        return fail(error, QStringLiteral("GIF dimensions cannot exceed 65535 pixels."));
+        return fail(error, GifWriter::tr("GIF dimensions cannot exceed 65535 pixels."));
     }
 
     const qsizetype pixelCount = static_cast<qsizetype>(width)
         * static_cast<qsizetype>(height);
     if (pixelCount <= 0 || pixelCount > std::numeric_limits<int>::max()) {
-        return fail(error, QStringLiteral("The frame dimensions are too large."));
+        return fail(error, GifWriter::tr("The frame dimensions are too large."));
     }
     const long double estimatedWorkingBytes =
         static_cast<long double>(pixelCount)
@@ -484,7 +484,7 @@ bool GifWriter::write(
             DocumentLimits::maximumGifWorkingBytes)) {
         return fail(
             error,
-            QStringLiteral("The animation is too large to encode safely."));
+            GifWriter::tr("The animation is too large to encode safely."));
     }
 
     QVector<QImage> normalizedFrames;
@@ -492,14 +492,14 @@ bool GifWriter::write(
 
     for (const QImage &frame : frames) {
         if (frame.isNull()) {
-            return fail(error, QStringLiteral("Frames must contain valid image data."));
+            return fail(error, GifWriter::tr("Frames must contain valid image data."));
         }
         if (frame.width() != width || frame.height() != height) {
-            return fail(error, QStringLiteral("All frames must have the same dimensions."));
+            return fail(error, GifWriter::tr("All frames must have the same dimensions."));
         }
         QImage normalized = frame.convertToFormat(QImage::Format_ARGB32);
         if (normalized.isNull()) {
-            return fail(error, QStringLiteral("A frame could not be converted to the GIF pixel format."));
+            return fail(error, GifWriter::tr("A frame could not be converted to the GIF pixel format."));
         }
         normalizedFrames.append(std::move(normalized));
     }

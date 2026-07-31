@@ -102,7 +102,7 @@ std::optional<BrushSettings> brushFromJson(
     QString *error)
 {
     if (!value.isObject()) {
-        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;
     }
     const QJsonObject object = value.toObject();
@@ -119,13 +119,13 @@ std::optional<BrushSettings> brushFromJson(
         || !object.value(QStringLiteral("opacityDynamics")).isDouble()
         || !object.value(QStringLiteral("sizeJitter")).isDouble()
         || !object.value(QStringLiteral("animatedJitter")).isBool()) {
-        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;
     }
     const QJsonValue wobbleScaleValue =
         object.value(QStringLiteral("wobbleScale"));
     if (!wobbleScaleValue.isUndefined() && !wobbleScaleValue.isDouble()) {
-        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;
     }
 
@@ -136,14 +136,14 @@ std::optional<BrushSettings> brushFromJson(
     } else if (engine == QStringLiteral("spray")) {
         brush.engine = BrushEngine::Spray;
     } else if (engine != QStringLiteral("line")) {
-        setError(error, QStringLiteral("A stroke has an invalid brush engine."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid brush engine."));
         return std::nullopt;
     }
     const QString tip = object.value(QStringLiteral("tip")).toString();
     if (tip == QStringLiteral("square")) {
         brush.tipShape = BrushTipShape::Square;
     } else if (tip != QStringLiteral("round")) {
-        setError(error, QStringLiteral("A stroke has an invalid brush tip."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid brush tip."));
         return std::nullopt;
     }
     brush.opacity = object.value(QStringLiteral("opacity")).toDouble();
@@ -165,7 +165,7 @@ std::optional<BrushSettings> brushFromJson(
     brush.wobbleScale =
         wobbleScaleValue.isDouble() ? wobbleScaleValue.toDouble() : 1.0;
     if (!isValidBrushSettings(brush)) {
-        setError(error, QStringLiteral("A stroke has invalid brush settings."));
+        setError(error, DocumentSerializer::tr("A stroke has invalid brush settings."));
         return std::nullopt;
     }
     return brush;
@@ -216,7 +216,7 @@ std::optional<QImage> clipMaskFromJson(
     QString *error)
 {
     if (!value.isObject()) {
-        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
     const QJsonObject object = value.toObject();
@@ -231,19 +231,19 @@ std::optional<QImage> clipMaskFromJson(
         || *height < DocumentLimits::minimumCanvasEdge
         || *width > DocumentLimits::maximumCanvasEdge
         || *height > DocumentLimits::maximumCanvasEdge) {
-        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
 
     QImage mask(QSize(*width, *height), QImage::Format_Grayscale8);
     if (mask.isNull()) {
-        setError(error, QStringLiteral("A stroke clip mask is too large."));
+        setError(error, DocumentSerializer::tr("A stroke clip mask is too large."));
         return std::nullopt;
     }
     const QByteArray compressed = QByteArray::fromBase64(
         object.value(QStringLiteral("data")).toString().toLatin1());
     if (compressed.size() < 4) {
-        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
     const auto *header =
@@ -254,7 +254,7 @@ std::optional<QImage> clipMaskFromJson(
         | (static_cast<quint32>(header[2]) << 8U)
         | static_cast<quint32>(header[3]);
     if (declaredSize != static_cast<quint32>(mask.sizeInBytes())) {
-        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
     QByteArray cacheKey =
@@ -270,12 +270,12 @@ std::optional<QImage> clipMaskFromJson(
     if (declaredSize
         > DocumentLimits::maximumDistinctClipMaskBytes
             - distinctMaskBytes) {
-        setError(error, QStringLiteral("The project contains too much selection data."));
+        setError(error, DocumentSerializer::tr("The project contains too much selection data."));
         return std::nullopt;
     }
     const QByteArray bytes = qUncompress(compressed);
     if (bytes.size() != mask.sizeInBytes()) {
-        setError(error, QStringLiteral("A stroke has an invalid clip mask."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid clip mask."));
         return std::nullopt;
     }
     std::memcpy(
@@ -295,7 +295,7 @@ std::optional<Stroke> strokeFromJson(
     QString *error)
 {
     if (!value.isObject()) {
-        setError(error, QStringLiteral("A stroke entry is not an object."));
+        setError(error, DocumentSerializer::tr("A stroke entry is not an object."));
         return std::nullopt;
     }
 
@@ -306,20 +306,20 @@ std::optional<Stroke> strokeFromJson(
         || !object.value(QStringLiteral("color")).isString()
         || !object.value(QStringLiteral("width")).isDouble()
         || !object.value(QStringLiteral("points")).isArray()) {
-        setError(error, QStringLiteral("A stroke contains invalid fields."));
+        setError(error, DocumentSerializer::tr("A stroke contains invalid fields."));
         return std::nullopt;
     }
     const QJsonArray points = object.value(QStringLiteral("points")).toArray();
     if (points.isEmpty()
         || points.size() > DocumentLimits::maximumPointsPerStroke) {
-        setError(error, QStringLiteral("A stroke has an invalid point count."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid point count."));
         return std::nullopt;
     }
 
     Stroke stroke;
     const QUuid id(object.value(QStringLiteral("id")).toString());
     if (id.isNull()) {
-        setError(error, QStringLiteral("A stroke has an invalid ID."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid ID."));
         return std::nullopt;
     }
     stroke.id = id;
@@ -333,20 +333,20 @@ std::optional<Stroke> strokeFromJson(
                 return character >= QLatin1Char('0')
                     && character <= QLatin1Char('9');
             })) {
-        setError(error, QStringLiteral("A stroke has an invalid seed."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid seed."));
         return std::nullopt;
     }
     bool seedValid = false;
     stroke.seed = seedText.toULongLong(&seedValid);
     if (!seedValid) {
-        setError(error, QStringLiteral("A stroke has an invalid seed."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid seed."));
         return std::nullopt;
     }
     const QString mode = object.value(QStringLiteral("mode")).toString();
     if (mode != QStringLiteral("paint")
         && mode != QStringLiteral("erase")
         && mode != QStringLiteral("fill")) {
-        setError(error, QStringLiteral("A stroke has an invalid mode."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid mode."));
         return std::nullopt;
     }
     if (mode == QStringLiteral("erase")) {
@@ -358,7 +358,7 @@ std::optional<Stroke> strokeFromJson(
     }
     const QColor color(object.value(QStringLiteral("color")).toString());
     if (!color.isValid()) {
-        setError(error, QStringLiteral("A stroke has an invalid color."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid color."));
         return std::nullopt;
     }
     stroke.color = color;
@@ -366,7 +366,7 @@ std::optional<Stroke> strokeFromJson(
     if (!std::isfinite(stroke.width)
         || stroke.width < DocumentLimits::minimumStrokeWidth
         || stroke.width > DocumentLimits::maximumStrokeWidth) {
-        setError(error, QStringLiteral("A stroke has an invalid width."));
+        setError(error, DocumentSerializer::tr("A stroke has an invalid width."));
         return std::nullopt;
     }
     if (fileSchemaVersion >= 2) {
@@ -382,7 +382,7 @@ std::optional<Stroke> strokeFromJson(
     for (const QJsonValue &pointValue : points) {
         const std::optional<StrokePoint> point = pointFromJson(pointValue);
         if (!point) {
-            setError(error, QStringLiteral("A stroke contains an invalid point."));
+            setError(error, DocumentSerializer::tr("A stroke contains an invalid point."));
             return std::nullopt;
         }
         stroke.points.append(*point);
@@ -426,7 +426,7 @@ std::optional<Layer> layerFromJson(
     QString *error)
 {
     if (!value.isObject()) {
-        setError(error, QStringLiteral("A layer entry is not an object."));
+        setError(error, DocumentSerializer::tr("A layer entry is not an object."));
         return std::nullopt;
     }
 
@@ -436,33 +436,33 @@ std::optional<Layer> layerFromJson(
         || !object.value(QStringLiteral("visible")).isBool()
         || !object.value(QStringLiteral("opacity")).isDouble()
         || !object.value(QStringLiteral("strokes")).isArray()) {
-        setError(error, QStringLiteral("A layer contains invalid fields."));
+        setError(error, DocumentSerializer::tr("A layer contains invalid fields."));
         return std::nullopt;
     }
     const QJsonArray strokes = object.value(QStringLiteral("strokes")).toArray();
     if (strokes.size() > DocumentLimits::maximumStrokesPerLayer) {
-        setError(error, QStringLiteral("A layer contains too many strokes."));
+        setError(error, DocumentSerializer::tr("A layer contains too many strokes."));
         return std::nullopt;
     }
 
     Layer layer;
     const QUuid id(object.value(QStringLiteral("id")).toString());
     if (id.isNull()) {
-        setError(error, QStringLiteral("A layer has an invalid ID."));
+        setError(error, DocumentSerializer::tr("A layer has an invalid ID."));
         return std::nullopt;
     }
     layer.id = id;
     layer.name = object.value(QStringLiteral("name")).toString();
     if (layer.name.trimmed().isEmpty()
         || layer.name.size() > DocumentLimits::maximumLayerNameLength) {
-        setError(error, QStringLiteral("A layer has an invalid name."));
+        setError(error, DocumentSerializer::tr("A layer has an invalid name."));
         return std::nullopt;
     }
     layer.visible = object.value(QStringLiteral("visible")).toBool();
     layer.opacity = object.value(QStringLiteral("opacity")).toDouble();
     if (!std::isfinite(layer.opacity)
         || layer.opacity < 0.0 || layer.opacity > 1.0) {
-        setError(error, QStringLiteral("A layer has an invalid opacity."));
+        setError(error, DocumentSerializer::tr("A layer has an invalid opacity."));
         return std::nullopt;
     }
     layer.strokes.reserve(strokes.size());
@@ -517,7 +517,7 @@ bool validateCollectionBudgets(
         const QJsonArray strokes = strokesValue.toArray();
         if (strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || strokes.size() > remainingStrokes) {
-            setError(error, QStringLiteral("The project contains too many strokes."));
+            setError(error, DocumentSerializer::tr("The project contains too many strokes."));
             return false;
         }
         remainingStrokes -= strokes.size();
@@ -534,7 +534,7 @@ bool validateCollectionBudgets(
             const qsizetype pointCount = pointsValue.toArray().size();
             if (pointCount > DocumentLimits::maximumPointsPerStroke
                 || pointCount > remainingPoints) {
-                setError(error, QStringLiteral("The project contains too many points."));
+                setError(error, DocumentSerializer::tr("The project contains too many points."));
                 return false;
             }
             remainingPoints -= pointCount;
@@ -549,11 +549,11 @@ bool validateDocument(const Document &document, QString *error)
         || document.size.height() < DocumentLimits::minimumCanvasEdge
         || document.size.width() > DocumentLimits::maximumCanvasEdge
         || document.size.height() > DocumentLimits::maximumCanvasEdge) {
-        setError(error, QStringLiteral("The canvas size is invalid."));
+        setError(error, DocumentSerializer::tr("The canvas size is invalid."));
         return false;
     }
     if (!document.background.isValid()) {
-        setError(error, QStringLiteral("The canvas background is invalid."));
+        setError(error, DocumentSerializer::tr("The canvas background is invalid."));
         return false;
     }
     if (document.animationFrames < DocumentLimits::minimumAnimationFrames
@@ -564,12 +564,12 @@ bool validateDocument(const Document &document, QString *error)
         || !std::isfinite(document.wobbleAmount)
         || document.wobbleAmount < DocumentLimits::minimumWobbleAmount
         || document.wobbleAmount > DocumentLimits::maximumWobbleAmount) {
-        setError(error, QStringLiteral("The animation settings are invalid."));
+        setError(error, DocumentSerializer::tr("The animation settings are invalid."));
         return false;
     }
     if (document.layers.isEmpty()
         || document.layers.size() > DocumentLimits::maximumLayers) {
-        setError(error, QStringLiteral("The layer count is invalid."));
+        setError(error, DocumentSerializer::tr("The layer count is invalid."));
         return false;
     }
 
@@ -582,7 +582,7 @@ bool validateDocument(const Document &document, QString *error)
     bool activeLayerFound = false;
     for (const Layer &layer : document.layers) {
         if (layer.id.isNull() || layerIds.contains(layer.id)) {
-            setError(error, QStringLiteral("The project contains invalid layer IDs."));
+            setError(error, DocumentSerializer::tr("The project contains invalid layer IDs."));
             return false;
         }
         layerIds.insert(layer.id);
@@ -595,14 +595,14 @@ bool validateDocument(const Document &document, QString *error)
             || layer.strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || layer.strokes.size()
                 > DocumentLimits::maximumTotalStrokes - totalStrokes) {
-            setError(error, QStringLiteral("A layer contains invalid data."));
+            setError(error, DocumentSerializer::tr("A layer contains invalid data."));
             return false;
         }
         totalStrokes += layer.strokes.size();
 
         for (const Stroke &stroke : layer.strokes) {
             if (stroke.id.isNull() || strokeIds.contains(stroke.id)) {
-                setError(error, QStringLiteral("The project contains invalid stroke IDs."));
+                setError(error, DocumentSerializer::tr("The project contains invalid stroke IDs."));
                 return false;
             }
             strokeIds.insert(stroke.id);
@@ -637,7 +637,7 @@ bool validateDocument(const Document &document, QString *error)
                             != QImage::Format_Grayscale8))
                 || stroke.points.size()
                     > DocumentLimits::maximumTotalPoints - totalPoints) {
-                setError(error, QStringLiteral("A stroke contains invalid data."));
+                setError(error, DocumentSerializer::tr("A stroke contains invalid data."));
                 return false;
             }
             totalPoints += stroke.points.size();
@@ -651,14 +651,14 @@ bool validateDocument(const Document &document, QString *error)
                     || point.position.y() > document.size.height()
                     || point.pressure < 0.0
                     || point.pressure > 1.0) {
-                    setError(error, QStringLiteral("A stroke contains an invalid point."));
+                    setError(error, DocumentSerializer::tr("A stroke contains an invalid point."));
                     return false;
                 }
             }
         }
     }
     if (document.activeLayerId.isNull() || !activeLayerFound) {
-        setError(error, QStringLiteral("The active layer ID is invalid."));
+        setError(error, DocumentSerializer::tr("The active layer ID is invalid."));
         return false;
     }
     return true;
@@ -676,7 +676,7 @@ bool DocumentSerializer::save(
     }
     const QByteArray data = toJson(document);
     if (data.size() > DocumentLimits::maximumProjectBytes) {
-        setError(error, QStringLiteral("The project is too large to save."));
+        setError(error, DocumentSerializer::tr("The project is too large to save."));
         return false;
     }
     QSaveFile file(filePath);
@@ -707,7 +707,7 @@ std::optional<Document> DocumentSerializer::load(
     }
     if (file.size() < 0
         || file.size() > DocumentLimits::maximumProjectBytes) {
-        setError(error, QStringLiteral("The project file is too large."));
+        setError(error, DocumentSerializer::tr("The project file is too large."));
         return std::nullopt;
     }
     return fromJson(file.readAll(), error);
@@ -749,7 +749,7 @@ std::optional<Document> DocumentSerializer::fromJson(
     QString *error)
 {
     if (data.size() > DocumentLimits::maximumProjectBytes) {
-        setError(error, QStringLiteral("The project data is too large."));
+        setError(error, DocumentSerializer::tr("The project data is too large."));
         return std::nullopt;
     }
     QJsonParseError parseError;
@@ -765,7 +765,7 @@ std::optional<Document> DocumentSerializer::fromJson(
     if (!fileSchemaVersion
         || *fileSchemaVersion < 1
         || *fileSchemaVersion > schemaVersion) {
-        setError(error, QStringLiteral("This project version is not supported."));
+        setError(error, DocumentSerializer::tr("This project version is not supported."));
         return std::nullopt;
     }
     const std::optional<int> fileAlgorithmVersion =
@@ -775,7 +775,7 @@ std::optional<Document> DocumentSerializer::fromJson(
         || *fileAlgorithmVersion > algorithmVersion) {
         setError(
             error,
-            QStringLiteral("This rendering algorithm version is not supported."));
+            DocumentSerializer::tr("This rendering algorithm version is not supported."));
         return std::nullopt;
     }
 
@@ -783,7 +783,7 @@ std::optional<Document> DocumentSerializer::fromJson(
         || !root.value(QStringLiteral("animation")).isObject()
         || !root.value(QStringLiteral("activeLayerId")).isString()
         || !root.value(QStringLiteral("layers")).isArray()) {
-        setError(error, QStringLiteral("The project contains invalid fields."));
+        setError(error, DocumentSerializer::tr("The project contains invalid fields."));
         return std::nullopt;
     }
     const QJsonObject canvas = root.value(QStringLiteral("canvas")).toObject();
@@ -797,20 +797,20 @@ std::optional<Document> DocumentSerializer::fromJson(
         || *height < DocumentLimits::minimumCanvasEdge
         || *width > DocumentLimits::maximumCanvasEdge
         || *height > DocumentLimits::maximumCanvasEdge) {
-        setError(error, QStringLiteral("The canvas size is invalid."));
+        setError(error, DocumentSerializer::tr("The canvas size is invalid."));
         return std::nullopt;
     }
     const QColor background(
         canvas.value(QStringLiteral("background")).toString());
     if (!background.isValid()) {
-        setError(error, QStringLiteral("The canvas background is invalid."));
+        setError(error, DocumentSerializer::tr("The canvas background is invalid."));
         return std::nullopt;
     }
 
     const QJsonArray layers = root.value(QStringLiteral("layers")).toArray();
     if (layers.isEmpty()
         || layers.size() > DocumentLimits::maximumLayers) {
-        setError(error, QStringLiteral("The layer count is invalid."));
+        setError(error, DocumentSerializer::tr("The layer count is invalid."));
         return std::nullopt;
     }
     if (!validateCollectionBudgets(layers, error)) {
@@ -824,7 +824,7 @@ std::optional<Document> DocumentSerializer::fromJson(
     if (!frames
         || !animation.value(QStringLiteral("fps")).isDouble()
         || !animation.value(QStringLiteral("wobble")).isDouble()) {
-        setError(error, QStringLiteral("The animation settings are invalid."));
+        setError(error, DocumentSerializer::tr("The animation settings are invalid."));
         return std::nullopt;
     }
     const qreal framesPerSecond =
@@ -839,7 +839,7 @@ std::optional<Document> DocumentSerializer::fromJson(
         || !std::isfinite(wobbleAmount)
         || wobbleAmount < DocumentLimits::minimumWobbleAmount
         || wobbleAmount > DocumentLimits::maximumWobbleAmount) {
-        setError(error, QStringLiteral("The animation settings are invalid."));
+        setError(error, DocumentSerializer::tr("The animation settings are invalid."));
         return std::nullopt;
     }
 
@@ -868,21 +868,21 @@ std::optional<Document> DocumentSerializer::fromJson(
             return std::nullopt;
         }
         if (layerIds.contains(layer->id)) {
-            setError(error, QStringLiteral("The project contains duplicate layer IDs."));
+            setError(error, DocumentSerializer::tr("The project contains duplicate layer IDs."));
             return std::nullopt;
         }
         layerIds.insert(layer->id);
         for (const Stroke &stroke : layer->strokes) {
             if (stroke.points.size()
                 > DocumentLimits::maximumTotalPoints - totalPoints) {
-                setError(error, QStringLiteral("The project contains too many points."));
+                setError(error, DocumentSerializer::tr("The project contains too many points."));
                 return std::nullopt;
             }
             totalPoints += stroke.points.size();
             if (strokeIds.contains(stroke.id)) {
                 setError(
                     error,
-                    QStringLiteral("The project contains duplicate stroke IDs."));
+                    DocumentSerializer::tr("The project contains duplicate stroke IDs."));
                 return std::nullopt;
             }
             strokeIds.insert(stroke.id);
