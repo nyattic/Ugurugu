@@ -55,6 +55,11 @@ jobs:
           if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
             release_tag="v${version}"
           fi
+          release_notes="release-notes/${version}.md"
+          if [[ ! -f "$release_notes" ]]; then
+            echo "Missing release notes: $release_notes"
+            exit 1
+          fi
           mkdir -p artifacts "$RUNNER_TEMP/dmg" "$RUNNER_TEMP/sparkle-updates"
           cp -R "$RUNNER_TEMP/install/WagleWaglePaint.app" "$RUNNER_TEMP/dmg/"
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
@@ -63,8 +68,8 @@ jobs:
             -srcfolder "$RUNNER_TEMP/dmg" \
             -format UDZO \
             -ov \
-            "artifacts/WagleWaglePaint-${version}-macOS-${architecture}.dmg"
-          archive="WagleWaglePaint-${version}-macOS-${architecture}.zip"
+            "artifacts/WagleWaglePaint-macOS-${architecture}.dmg"
+          archive="WagleWaglePaint-macOS-${architecture}.zip"
           ditto \
             -c \
             -k \
@@ -72,11 +77,18 @@ jobs:
             --keepParent \
             "$RUNNER_TEMP/install/WagleWaglePaint.app" \
             "$RUNNER_TEMP/sparkle-updates/$archive"
+          python3 -m pip install --quiet --user markdown
+          {
+            printf '%s' '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+            python3 -m markdown -x extra "$release_notes"
+            printf '%s' '</body></html>'
+          } > "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
             out/build/macos-release/_deps/sparkle-src/bin/generate_appcast \
               --ed-key-file - \
               --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${release_tag}/" \
               --link "https://github.com/nyattic/WagleWaglePaint" \
+              --embed-release-notes \
               --maximum-versions 1 \
               --maximum-deltas 0 \
               "$RUNNER_TEMP/sparkle-updates"
@@ -170,6 +182,10 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
             throw "Release tag $env:GITHUB_REF_NAME does not match project version $version"
           }
+          $releaseNotes = "release-notes/$version.md"
+          if (-not (Test-Path $releaseNotes)) {
+            throw "Missing release notes: $releaseNotes"
+          }
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           vpk pack `
             --packId WagleWaglePaint `
@@ -179,6 +195,7 @@ jobs:
             --packTitle WagleWaglePaint `
             --packAuthors nyattic `
             --icon resources/icons/WobblePaint.ico `
+            --releaseNotes $releaseNotes `
             --runtime win10-x64 `
             --channel win `
             --delta None `
@@ -186,7 +203,7 @@ jobs:
             --outputDir artifacts
           Rename-Item `
             -Path "artifacts\WagleWaglePaint-win-Setup.exe" `
-            -NewName "WagleWaglePaint-${version}-Windows-x64-Setup.exe"
+            -NewName "WagleWaglePaint-Windows-x64-Setup.exe"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -209,5 +226,6 @@ jobs:
 
       - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
+          name: WagleWaglePaint ${{ github.ref_name }}
           generate_release_notes: true
           files: artifacts/*
