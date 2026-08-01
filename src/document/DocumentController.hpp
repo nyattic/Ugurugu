@@ -152,6 +152,7 @@ public:
     void renameLayer(const QUuid &id, const QString &name);
     void setLayerVisible(const QUuid &id, bool visible);
     void setLayerOpacity(const QUuid &id, qreal opacity);
+    void setLayerBlendMode(const QUuid &id, LayerBlendMode mode);
     void moveLayer(const QUuid &id, int offset);
     void setWobbleAmount(qreal amount);
     void setAnimationFrames(int frames);

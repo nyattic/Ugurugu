@@ -43,6 +43,7 @@ public:
         QImage layerBase;
         QImage above;
         qreal layerOpacity = 1.0;
+        LayerBlendMode layerBlendMode = LayerBlendMode::Normal;
         bool layerVisible = false;
         bool valid = false;
     };

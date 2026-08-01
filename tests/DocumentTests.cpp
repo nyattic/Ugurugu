@@ -142,6 +142,7 @@ private slots:
         QCOMPARE(document.layers.first().name, QStringLiteral("Layer 1"));
         QVERIFY(document.layers.first().visible);
         QCOMPARE(document.layers.first().opacity, 1.0);
+        QCOMPARE(document.layers.first().blendMode, LayerBlendMode::Normal);
         QVERIFY(document.layers.first().strokes.isEmpty());
         QCOMPARE(document.activeLayerId, document.layers.first().id);
         QCOMPARE(document.layerIndex(document.activeLayerId), 0);
@@ -1312,6 +1313,28 @@ private slots:
         QCOMPARE(controller.document().layer(layerId)->opacity, 0.7);
     }
 
+    void changesLayerBlendModeUndoably()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        controller.setLayerBlendMode(layerId, LayerBlendMode::Multiply);
+        QCOMPARE(controller.document().layer(layerId)->blendMode,
+            LayerBlendMode::Multiply);
+        QCOMPARE(controller.undoStack()->count(), 1);
+
+        controller.setLayerBlendMode(layerId, static_cast<LayerBlendMode>(100));
+        QCOMPARE(controller.undoStack()->count(), 1);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layer(layerId)->blendMode,
+            LayerBlendMode::Normal);
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().layer(layerId)->blendMode,
+            LayerBlendMode::Multiply);
+    }
+
     void undoActionsCannotBypassHistoryPreflight()
     {
         DocumentController controller;
@@ -1506,6 +1529,7 @@ private slots:
             QUuid(QStringLiteral("{22222222-2222-2222-2222-222222222222}"));
         firstLayer.name = QStringLiteral("Ink");
         firstLayer.opacity = 0.625;
+        firstLayer.blendMode = LayerBlendMode::Multiply;
 
         Stroke paint;
         paint.id =
@@ -1533,6 +1557,7 @@ private slots:
         secondLayer.name = QStringLiteral("Erase");
         secondLayer.visible = false;
         secondLayer.opacity = 0.4;
+        secondLayer.blendMode = LayerBlendMode::Screen;
 
         Stroke erase;
         erase.id =
@@ -1567,6 +1592,7 @@ private slots:
             QCOMPARE(actualLayer.name, expectedLayer.name);
             QCOMPARE(actualLayer.visible, expectedLayer.visible);
             QCOMPARE(actualLayer.opacity, expectedLayer.opacity);
+            QCOMPARE(actualLayer.blendMode, expectedLayer.blendMode);
             QCOMPARE(actualLayer.strokes.size(), expectedLayer.strokes.size());
 
             for (int strokeIndex = 0;
@@ -1661,7 +1687,7 @@ private slots:
         QVERIFY(!currentJson.isEmpty());
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
-        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 6);
+        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 7);
         QCOMPARE(
             currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 2);
         const std::optional<Document> reloaded =
@@ -1764,6 +1790,34 @@ private slots:
             QCOMPARE(RenderEngine::render(*migrated, frame),
                 RenderEngine::render(*reloaded, frame));
         }
+    }
+
+    void validatesLayerBlendModeSchema()
+    {
+        const Document source = Document::createDefault(QSize(32, 24));
+        QJsonObject root =
+            QJsonDocument::fromJson(DocumentSerializer::toJson(source))
+                .object();
+        QJsonArray layers = root.value(QStringLiteral("layers")).toArray();
+        QJsonObject layer = layers.first().toObject();
+        layer.insert(QStringLiteral("blendMode"), QStringLiteral("invalid"));
+        layers[0] = layer;
+        root.insert(QStringLiteral("layers"), layers);
+
+        QString error;
+        QVERIFY(!DocumentSerializer::fromJson(
+            QJsonDocument(root).toJson(QJsonDocument::Compact), &error)
+                .has_value());
+        QVERIFY(!error.isEmpty());
+
+        root.insert(QStringLiteral("schemaVersion"), 6);
+        layer.remove(QStringLiteral("blendMode"));
+        layers[0] = layer;
+        root.insert(QStringLiteral("layers"), layers);
+        const std::optional<Document> legacy = DocumentSerializer::fromJson(
+            QJsonDocument(root).toJson(QJsonDocument::Compact), &error);
+        QVERIFY2(legacy.has_value(), qPrintable(error));
+        QCOMPARE(legacy->layers.first().blendMode, LayerBlendMode::Normal);
     }
 
     void roundTripsOrderedFramebufferOperations()
@@ -2207,7 +2261,7 @@ private slots:
                      .object()
                      .value(QStringLiteral("schemaVersion"))
                      .toInt(),
-            6);
+            7);
         const std::optional<Document> loaded =
             DocumentSerializer::fromJson(json, &error);
         QVERIFY2(loaded.has_value(), qPrintable(error));
@@ -3048,6 +3102,7 @@ private slots:
         changed.layers.first().name = QStringLiteral("이름 \"변경\"\n日本語");
         changed.layers.first().visible = false;
         changed.layers.first().opacity = 0.625;
+        changed.layers.first().blendMode = LayerBlendMode::Overlay;
         changed.background = QColor(QStringLiteral("#123456"));
         changed.animationFrames = 22;
         changed.framesPerSecond = 18.5;
@@ -3089,6 +3144,7 @@ private slots:
             DocumentSerializer::fromJson(json, &error);
         QVERIFY2(decoded.has_value(), qPrintable(error));
         QCOMPARE(decoded->layers.first().name, expectedName);
+        QCOMPARE(decoded->layers.first().blendMode, LayerBlendMode::Overlay);
         QCOMPARE(decoded->background, changed.background);
         QCOMPARE(decoded->animationFrames, 22);
         QCOMPARE(decoded->framesPerSecond, 18.5);
@@ -3113,6 +3169,14 @@ private slots:
         Document invalid = base->document();
         invalid.layers.first().opacity =
             std::numeric_limits<qreal>::quiet_NaN();
+        QVERIFY(!DocumentSerializer::prepare(std::move(invalid),
+            cache,
+            &*base,
+            DocumentLimits::maximumProjectBytes)
+                .has_value());
+
+        invalid = base->document();
+        invalid.layers.first().blendMode = static_cast<LayerBlendMode>(100);
         QVERIFY(!DocumentSerializer::prepare(std::move(invalid),
             cache,
             &*base,
@@ -3600,7 +3664,7 @@ private slots:
 
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version") << QByteArrayLiteral(
-            R"({"schemaVersion":6,"canvas":{"width":10,"height":10},"layers":[{}]})");
+            R"({"schemaVersion":8,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[]})");
         QTest::newRow("unsupported-algorithm") << QByteArrayLiteral(
             R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("invalid-canvas") << QByteArrayLiteral(

@@ -1187,6 +1187,101 @@ private slots:
         QVERIFY(normal != rough);
     }
 
+    void rendersLayerBlendModes_data()
+    {
+        QTest::addColumn<int>("blendMode");
+        QTest::addColumn<int>("compositionMode");
+
+        QTest::newRow("normal")
+            << static_cast<int>(LayerBlendMode::Normal)
+            << static_cast<int>(QPainter::CompositionMode_SourceOver);
+        QTest::newRow("multiply")
+            << static_cast<int>(LayerBlendMode::Multiply)
+            << static_cast<int>(QPainter::CompositionMode_Multiply);
+        QTest::newRow("screen")
+            << static_cast<int>(LayerBlendMode::Screen)
+            << static_cast<int>(QPainter::CompositionMode_Screen);
+        QTest::newRow("overlay")
+            << static_cast<int>(LayerBlendMode::Overlay)
+            << static_cast<int>(QPainter::CompositionMode_Overlay);
+    }
+
+    void rendersLayerBlendModes()
+    {
+        QFETCH(int, blendMode);
+        QFETCH(int, compositionMode);
+
+        const QColor background(60, 130, 210);
+        const QColor source(210, 70, 125);
+        Document document = Document::createDefault(QSize(16, 16));
+        document.background = background;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        layer.opacity = 0.75;
+        layer.blendMode = static_cast<LayerBlendMode>(blendMode);
+        Stroke stroke =
+            makeStroke(StrokeMode::Paint, source, 16.0, 1, {QPointF(8.0, 8.0)});
+        stroke.brush.tipShape = BrushTipShape::Square;
+        stroke.brush.sizeDynamics = 0.0;
+        stroke.brush.wobbleScale = 0.0;
+        stroke.brush.antialiasing = false;
+        layer.strokes.append(stroke);
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QVERIFY(!rendered.isNull());
+
+        QImage expected(1, 1, QImage::Format_ARGB32_Premultiplied);
+        expected.fill(background);
+        QPainter painter(&expected);
+        painter.setCompositionMode(
+            static_cast<QPainter::CompositionMode>(compositionMode));
+        painter.setOpacity(layer.opacity);
+        painter.fillRect(expected.rect(), source);
+        painter.end();
+
+        const QColor actual = rendered.pixelColor(8, 8);
+        const QColor reference = expected.pixelColor(0, 0);
+        QVERIFY(std::abs(actual.red() - reference.red()) <= 1);
+        QVERIFY(std::abs(actual.green() - reference.green()) <= 1);
+        QVERIFY(std::abs(actual.blue() - reference.blue()) <= 1);
+        QCOMPARE(actual.alpha(), reference.alpha());
+    }
+
+    void handlesBlendModesInLayerSplitPreviews()
+    {
+        Document document = Document::createDefault(QSize(48, 36));
+        document.wobbleAmount = 0.0;
+        Layer &target = document.layers.first();
+        target.blendMode = LayerBlendMode::Overlay;
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(220, 70, 90),
+            14.0,
+            1,
+            {QPointF(24.0, 18.0)}));
+        const QUuid targetId = target.id;
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 180, 100),
+            8.0,
+            2,
+            {QPointF(10.0, 10.0)}));
+        document.layers.append(top);
+
+        RenderEngine::LayerSplitFrame split = RenderEngine::renderLayerSplit(
+            document, 0, document.size, targetId);
+        QVERIFY(split.valid);
+        QCOMPARE(RenderEngine::composeLayerSplit(split, split.layerBase),
+            RenderEngine::render(document, 0));
+
+        document.layers.last().blendMode = LayerBlendMode::Screen;
+        split = RenderEngine::renderLayerSplit(
+            document, 0, document.size, targetId);
+        QVERIFY(!split.valid);
+    }
+
     void composesLayerSplitLikeFullRender()
     {
         Document document = Document::createDefault(QSize(96, 72));

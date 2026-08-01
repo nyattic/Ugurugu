@@ -655,6 +655,11 @@
         <translation>레이어 불투명도 변경</translation>
     </message>
     <message>
+        <location filename="../src/document/DocumentController.cpp" line="3480"/>
+        <source>Change layer blend mode</source>
+        <translation>레이어 합성 모드 변경</translation>
+    </message>
+    <message>
         <location filename="../src/document/DocumentController.cpp" line="3481"/>
         <source>Move layer</source>
         <translation>레이어 순서 이동</translation>
@@ -786,6 +791,11 @@
         <location filename="../src/io/DocumentSerializer.cpp" line="2916"/>
         <source>A layer has an invalid opacity.</source>
         <translation>레이어의 불투명도가 잘못되었습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/io/DocumentSerializer.cpp" line="2940"/>
+        <source>A layer has an invalid blend mode.</source>
+        <translation>레이어의 합성 모드가 잘못되었습니다.</translation>
     </message>
     <message>
         <location filename="../src/io/DocumentSerializer.cpp" line="1095"/>
@@ -1264,6 +1274,36 @@
         <location filename="../src/ui/LayerDock.cpp" line="157"/>
         <source>OPACITY</source>
         <translation>불투명도</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="157"/>
+        <source>BLEND MODE</source>
+        <translation>합성 모드</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="162"/>
+        <source>Layer blend mode</source>
+        <translation>레이어 합성 모드</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="164"/>
+        <source>Normal</source>
+        <translation>일반</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="166"/>
+        <source>Multiply</source>
+        <translation>곱하기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="168"/>
+        <source>Screen</source>
+        <translation>스크린</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="170"/>
+        <source>Overlay</source>
+        <translation>오버레이</translation>
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="293"/>
@@ -1909,6 +1949,11 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/SettingsDialog.cpp" line="177"/>
         <source>General</source>
         <translation>일반</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/SettingsDialog.cpp" line="196"/>
+        <source>Stroke stabilization</source>
+        <translation>손떨림 보정</translation>
     </message>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="193"/>

@@ -622,13 +622,14 @@ struct DocumentController::DocumentDelta
         std::optional<ValueChange<QString>> name;
         std::optional<ValueChange<bool>> visible;
         std::optional<ValueChange<qreal>> opacity;
+        std::optional<ValueChange<LayerBlendMode>> blendMode;
         std::optional<ValueChange<QSize>> initialCanvasSize;
         StrokeSequenceDelta strokes;
 
         bool isEmpty() const
         {
-            return !name && !visible && !opacity && !initialCanvasSize
-                   && strokes.isEmpty();
+            return !name && !visible && !opacity && !blendMode
+                   && !initialCanvasSize && strokes.isEmpty();
         }
     };
 
@@ -891,6 +892,8 @@ struct DocumentController::DocumentDelta
             recordChange(layer.name, afterLayer.name, change.name);
             recordChange(layer.visible, afterLayer.visible, change.visible);
             recordChange(layer.opacity, afterLayer.opacity, change.opacity);
+            recordChange(
+                layer.blendMode, afterLayer.blendMode, change.blendMode);
             recordChange(layer.initialCanvasSize,
                 afterLayer.initialCanvasSize,
                 change.initialCanvasSize);
@@ -1142,6 +1145,7 @@ struct DocumentController::DocumentDelta
             applyChange(layer->name, change.name, forward);
             applyChange(layer->visible, change.visible, forward);
             applyChange(layer->opacity, change.opacity, forward);
+            applyChange(layer->blendMode, change.blendMode, forward);
             applyChange(
                 layer->initialCanvasSize, change.initialCanvasSize, forward);
             if (!applyStrokeDelta(layer->strokes, change.strokes, forward))
@@ -3386,6 +3390,20 @@ void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
         ActiveLayerPolicy::PreserveCurrentIfPresent,
         layerOpacityMergeId,
         id);
+}
+
+void DocumentController::setLayerBlendMode(const QUuid &id, LayerBlendMode mode)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    if (!layer || !isValidLayerBlendMode(mode) || layer->blendMode == mode)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.layer(id)->blendMode = mode;
+    tryCommitCandidate(tr("Change layer blend mode"), std::move(candidate));
 }
 
 void DocumentController::moveLayer(const QUuid &id, int offset)

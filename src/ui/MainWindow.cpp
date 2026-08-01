@@ -302,6 +302,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
+    m_canvas->setStrokeStabilization(SettingsDialog::strokeStabilization());
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
@@ -539,6 +540,10 @@ void MainWindow::createActions()
                 &SettingsDialog::wobbleAnimationEnabledChanged,
                 this,
                 &MainWindow::applyWobbleAnimationEnabled);
+            connect(&dialog,
+                &SettingsDialog::strokeStabilizationChanged,
+                m_canvas,
+                &CanvasWidget::setStrokeStabilization);
             dialog.exec();
         });
 

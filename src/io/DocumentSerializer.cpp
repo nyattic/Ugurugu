@@ -166,7 +166,7 @@ using serializer_detail::ImmutableBackings;
 using serializer_detail::PreparedPlan;
 using serializer_detail::StrokeMeta;
 
-constexpr int schemaVersion = 6;
+constexpr int schemaVersion = 7;
 constexpr int algorithmVersion = 2;
 constexpr int serializationFormatGeneration = 1;
 
@@ -883,6 +883,22 @@ QString samplingModeName(SamplingMode sampling)
                                             : QStringLiteral("nearest");
 }
 
+QString layerBlendModeName(LayerBlendMode mode)
+{
+    switch (mode)
+    {
+    case LayerBlendMode::Multiply:
+        return QStringLiteral("multiply");
+    case LayerBlendMode::Screen:
+        return QStringLiteral("screen");
+    case LayerBlendMode::Overlay:
+        return QStringLiteral("overlay");
+    case LayerBlendMode::Normal:
+        return QStringLiteral("normal");
+    }
+    return {};
+}
+
 QJsonArray transformToJson(const QTransform &transform)
 {
     return {transform.m11(),
@@ -1371,6 +1387,32 @@ std::optional<SamplingMode> samplingModeFromJson(const QJsonValue &value)
     return std::nullopt;
 }
 
+std::optional<LayerBlendMode> layerBlendModeFromJson(const QJsonValue &value)
+{
+    if (!value.isString())
+    {
+        return std::nullopt;
+    }
+    const QString name = value.toString();
+    if (name == QStringLiteral("normal"))
+    {
+        return LayerBlendMode::Normal;
+    }
+    if (name == QStringLiteral("multiply"))
+    {
+        return LayerBlendMode::Multiply;
+    }
+    if (name == QStringLiteral("screen"))
+    {
+        return LayerBlendMode::Screen;
+    }
+    if (name == QStringLiteral("overlay"))
+    {
+        return LayerBlendMode::Overlay;
+    }
+    return std::nullopt;
+}
+
 std::optional<QSize> sizeFromJsonArray(const QJsonValue &value)
 {
     if (!value.isArray())
@@ -1834,6 +1876,8 @@ QJsonObject layerToJson(const Layer &layer,
     object.insert(QStringLiteral("name"), layer.name);
     object.insert(QStringLiteral("visible"), layer.visible);
     object.insert(QStringLiteral("opacity"), layer.opacity);
+    object.insert(
+        QStringLiteral("blendMode"), layerBlendModeName(layer.blendMode));
     object.insert(QStringLiteral("initialCanvasSize"),
         QJsonArray{
             layer.initialCanvasSize.width(), layer.initialCanvasSize.height()});
@@ -1849,6 +1893,8 @@ QJsonObject layerSkeletonToJson(const Layer &layer)
     object.insert(QStringLiteral("name"), layer.name);
     object.insert(QStringLiteral("visible"), layer.visible);
     object.insert(QStringLiteral("opacity"), layer.opacity);
+    object.insert(
+        QStringLiteral("blendMode"), layerBlendModeName(layer.blendMode));
     object.insert(QStringLiteral("initialCanvasSize"),
         QJsonArray{
             layer.initialCanvasSize.width(), layer.initialCanvasSize.height()});
@@ -2188,6 +2234,7 @@ private:
         frozen.name = owningCopy(source.name);
         frozen.visible = source.visible;
         frozen.opacity = source.opacity;
+        frozen.blendMode = source.blendMode;
         frozen.initialCanvasSize = source.initialCanvasSize;
         frozen.strokes.reserve(source.strokes.size());
         for (const Stroke &stroke : source.strokes)
@@ -2299,7 +2346,7 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
         if (layer.name.trimmed().isEmpty()
             || layer.name.size() > DocumentLimits::maximumLayerNameLength
             || !std::isfinite(layer.opacity) || layer.opacity < 0.0
-            || layer.opacity > 1.0)
+            || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode))
         {
             setError(error,
                 DocumentSerializer::tr("A layer contains invalid data."));
@@ -2419,6 +2466,7 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             frozenLayer.name = owningStringCopy(layer.name);
             frozenLayer.visible = layer.visible;
             frozenLayer.opacity = layer.opacity;
+            frozenLayer.blendMode = layer.blendMode;
             frozenLayer.initialCanvasSize = layer.initialCanvasSize;
             frozenLayer.strokes = baseLayer.strokes;
             frozen.layers.append(std::move(frozenLayer));
@@ -2678,6 +2726,8 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
         || !object.value(QStringLiteral("visible")).isBool()
         || !object.value(QStringLiteral("opacity")).isDouble()
         || !object.value(QStringLiteral("strokes")).isArray()
+        || (fileSchemaVersion >= 7
+            && !object.value(QStringLiteral("blendMode")).isString())
         || (fileSchemaVersion >= 6
             && !object.value(QStringLiteral("initialCanvasSize")).isArray()))
     {
@@ -2717,6 +2767,18 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
         setError(
             error, DocumentSerializer::tr("A layer has an invalid opacity."));
         return std::nullopt;
+    }
+    if (fileSchemaVersion >= 7)
+    {
+        const std::optional<LayerBlendMode> blendMode =
+            layerBlendModeFromJson(object.value(QStringLiteral("blendMode")));
+        if (!blendMode)
+        {
+            setError(error,
+                DocumentSerializer::tr("A layer has an invalid blend mode."));
+            return std::nullopt;
+        }
+        layer.blendMode = *blendMode;
     }
     layer.initialCanvasSize = canvasSize;
     if (fileSchemaVersion >= 6)
@@ -2887,7 +2949,7 @@ bool validateDocument(
         if (layer.name.trimmed().isEmpty()
             || layer.name.size() > DocumentLimits::maximumLayerNameLength
             || !std::isfinite(layer.opacity) || layer.opacity < 0.0
-            || layer.opacity > 1.0
+            || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
             || layer.strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || layer.strokes.size()
                    > DocumentLimits::maximumTotalStrokes - totalStrokes)

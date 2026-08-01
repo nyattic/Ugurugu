@@ -40,6 +40,12 @@ bool isValidBrushSettings(const BrushSettings &settings)
            && settings.wobbleScale <= DocumentLimits::maximumBrushWobbleScale;
 }
 
+bool isValidLayerBlendMode(LayerBlendMode mode)
+{
+    return mode == LayerBlendMode::Normal || mode == LayerBlendMode::Multiply
+           || mode == LayerBlendMode::Screen || mode == LayerBlendMode::Overlay;
+}
+
 Document Document::createDefault(const QSize &canvasSize)
 {
     Document document;

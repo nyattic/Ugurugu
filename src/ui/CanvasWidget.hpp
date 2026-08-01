@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/DocumentController.hpp"
+#include "input/StrokeStabilizer.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QCache>
@@ -45,6 +46,7 @@ public:
     qreal brushPresetWidth(const QString &presetId) const;
     qreal eraserWidth() const;
     qreal brushRoughness() const;
+    qreal strokeStabilization() const;
     bool brushAntialiasing() const;
     QString brushPresetId() const;
     bool isAnimating() const;
@@ -81,6 +83,7 @@ public slots:
     void setBrushPresetWidth(const QString &presetId, qreal width);
     void setEraserWidth(qreal width);
     void setBrushRoughness(qreal roughness);
+    void setStrokeStabilization(qreal strength);
     void setBrushAntialiasing(bool antialiasing);
     void setWobbleAnimationEnabled(bool enabled);
     void setBrushPreset(const QString &presetId);
@@ -106,6 +109,7 @@ signals:
     void brushWidthChanged(qreal width);
     void eraserWidthChanged(qreal width);
     void brushRoughnessChanged(qreal roughness);
+    void strokeStabilizationChanged(qreal strength);
     void brushAntialiasingChanged(bool antialiasing);
     void brushPresetChanged(const QString &presetId);
     void animatingChanged(bool animating);
@@ -162,15 +166,20 @@ private:
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
     QImage frameImage(int frame);
+    QImage interactionPreview(Document document, const QSize &renderSize) const;
     const RenderEngine::LayerSplitFrame &previewSplit(
         const QUuid &layerId, const QSize &renderSize);
     void invalidateFrames();
     void updateTimerInterval();
     void advanceFrame();
-    void beginStroke(
-        const QPointF &widgetPosition, qreal pressure, bool tabletEraser);
-    void continueStroke(const QPointF &widgetPosition, qreal pressure);
-    void endStroke(const QPointF &widgetPosition, qreal pressure);
+    void beginStroke(const QPointF &widgetPosition,
+        qreal pressure,
+        bool tabletEraser,
+        quint64 timestamp);
+    void continueStroke(
+        const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
+    void endStroke(
+        const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
     void cancelStroke();
     void beginPan(const QPointF &widgetPosition);
     void continuePan(const QPointF &widgetPosition);
@@ -247,6 +256,7 @@ private:
     qreal m_brushWidth = 6.0;
     qreal m_eraserWidth = 6.0;
     qreal m_brushRoughness = 1.0;
+    StrokeStabilizer m_strokeStabilizer;
     bool m_brushAntialiasing = false;
     bool m_wobbleAnimationEnabled = true;
     QString m_brushPresetId;

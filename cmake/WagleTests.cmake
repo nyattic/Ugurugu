@@ -21,6 +21,7 @@ set(WOBBLEPAINT_TEST_SUITES
     gif
     mask
     release_notes
+    stabilizer
     ui
 )
 foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)

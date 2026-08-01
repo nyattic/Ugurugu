@@ -23,6 +23,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/SelectionVisibility.hpp
     src/document/StrokeMask.cpp
     src/document/StrokeMask.hpp
+    src/input/StrokeStabilizer.cpp
+    src/input/StrokeStabilizer.hpp
     src/io/AnimationExportPolicy.cpp
     src/io/AnimationExportPolicy.hpp
     src/io/DocumentSerializer.cpp
@@ -89,6 +91,7 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/MaskRegressionTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp
+    tests/StrokeStabilizerTests.cpp
     tests/TestMain.cpp
     tests/TestSuites.hpp
     tests/UiTests.cpp

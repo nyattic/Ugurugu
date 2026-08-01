@@ -140,12 +140,23 @@ struct Stroke
     std::optional<ReframeOp> reframeOp;
 };
 
+enum class LayerBlendMode
+{
+    Normal,
+    Multiply,
+    Screen,
+    Overlay
+};
+
+bool isValidLayerBlendMode(LayerBlendMode mode);
+
 struct Layer
 {
     QUuid id = QUuid::createUuid();
     QString name;
     bool visible = true;
     qreal opacity = 1.0;
+    LayerBlendMode blendMode = LayerBlendMode::Normal;
     // The framebuffer epoch before the first ordered operation.
     QSize initialCanvasSize;
     QVector<Stroke> strokes;

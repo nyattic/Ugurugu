@@ -1,0 +1,114 @@
+#include "input/StrokeStabilizer.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace wobble
+{
+
+namespace
+{
+
+constexpr qreal defaultSampleInterval = 1.0 / 120.0;
+constexpr qreal minimumSampleInterval = 1.0 / 1000.0;
+constexpr qreal maximumSampleInterval = 0.1;
+constexpr qreal derivativeCutoff = 1.0;
+constexpr qreal weakestMinimumCutoff = 18.0;
+constexpr qreal strongestMinimumCutoff = 0.75;
+constexpr qreal weakestSpeedCoefficient = 0.08;
+constexpr qreal strongestSpeedCoefficient = 0.008;
+
+qreal lowPassAlpha(qreal cutoff, qreal interval)
+{
+    const qreal timeConstant = 1.0 / (2.0 * std::numbers::pi_v<qreal> * cutoff);
+    return 1.0 / (1.0 + timeConstant / interval);
+}
+
+}
+
+qreal StrokeStabilizer::strength() const
+{
+    return m_strength;
+}
+
+void StrokeStabilizer::setStrength(qreal strength)
+{
+    if (!std::isfinite(strength))
+    {
+        return;
+    }
+    m_strength = std::clamp(strength, 0.0, 1.0);
+}
+
+void StrokeStabilizer::reset()
+{
+    m_initialized = false;
+    m_previousRawPosition = {};
+    m_filteredPosition = {};
+    m_filteredVelocity = {};
+    m_previousTimestamp = 0;
+}
+
+QPointF StrokeStabilizer::begin(const QPointF &position, quint64 timestamp)
+{
+    m_initialized = true;
+    m_previousRawPosition = position;
+    m_filteredPosition = position;
+    m_filteredVelocity = {};
+    m_previousTimestamp = timestamp;
+    return position;
+}
+
+QPointF StrokeStabilizer::update(const QPointF &position, quint64 timestamp)
+{
+    if (!m_initialized)
+    {
+        return begin(position, timestamp);
+    }
+
+    const qreal interval = sampleInterval(timestamp);
+    const QPointF rawVelocity = (position - m_previousRawPosition) / interval;
+    const qreal velocityAlpha = lowPassAlpha(derivativeCutoff, interval);
+    m_filteredVelocity += (rawVelocity - m_filteredVelocity) * velocityAlpha;
+
+    if (qFuzzyIsNull(m_strength))
+    {
+        m_filteredPosition = position;
+        rememberRawSample(position, timestamp);
+        return position;
+    }
+
+    const qreal minimumCutoff =
+        std::lerp(weakestMinimumCutoff, strongestMinimumCutoff, m_strength);
+    const qreal speedCoefficient = std::lerp(
+        weakestSpeedCoefficient, strongestSpeedCoefficient, m_strength);
+    const qreal speed =
+        std::hypot(m_filteredVelocity.x(), m_filteredVelocity.y());
+    const qreal adaptiveAlpha =
+        lowPassAlpha(minimumCutoff + speedCoefficient * speed, interval);
+    const qreal positionAlpha = std::lerp(1.0, adaptiveAlpha, m_strength);
+    m_filteredPosition += (position - m_filteredPosition) * positionAlpha;
+    rememberRawSample(position, timestamp);
+    return m_filteredPosition;
+}
+
+qreal StrokeStabilizer::sampleInterval(quint64 timestamp) const
+{
+    if (timestamp <= m_previousTimestamp)
+    {
+        return defaultSampleInterval;
+    }
+    return std::clamp((timestamp - m_previousTimestamp) / 1000.0,
+        minimumSampleInterval,
+        maximumSampleInterval);
+}
+
+void StrokeStabilizer::rememberRawSample(
+    const QPointF &position, quint64 timestamp)
+{
+    m_previousRawPosition = position;
+    m_previousTimestamp = timestamp;
+}
+
+}

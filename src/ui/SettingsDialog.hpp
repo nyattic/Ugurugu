@@ -12,6 +12,8 @@ class QKeySequenceEdit;
 class QLabel;
 class QLineEdit;
 class QRadioButton;
+class QSlider;
+class QSpinBox;
 
 namespace wobble
 {
@@ -23,6 +25,7 @@ class SettingsDialog final : public QDialog
 public:
     static bool animateWhileDrawing();
     static bool wobbleAnimationEnabled();
+    static qreal strokeStabilization();
     static QString defaultSaveFolder();
     static QString uiLanguage();
     static QKeySequence shortcutForAction(
@@ -34,6 +37,7 @@ public:
 signals:
     void animateWhileDrawingChanged(bool animate);
     void wobbleAnimationEnabledChanged(bool enabled);
+    void strokeStabilizationChanged(qreal strength);
 
 private:
     void updateDrawingOptionsEnabled();
@@ -43,6 +47,8 @@ private:
     void restoreDefaults();
 
     QCheckBox *m_wobbleAnimation = nullptr;
+    QSlider *m_strokeStabilizationSlider = nullptr;
+    QSpinBox *m_strokeStabilizationSpin = nullptr;
     QLabel *m_drawingOptionsLabel = nullptr;
     QRadioButton *m_pauseWhileDrawing = nullptr;
     QRadioButton *m_keepWobbling = nullptr;

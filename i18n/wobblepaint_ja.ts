@@ -655,6 +655,11 @@
         <translation>レイヤー不透明度の変更</translation>
     </message>
     <message>
+        <location filename="../src/document/DocumentController.cpp" line="3480"/>
+        <source>Change layer blend mode</source>
+        <translation>レイヤーのブレンドモードを変更</translation>
+    </message>
+    <message>
         <location filename="../src/document/DocumentController.cpp" line="3481"/>
         <source>Move layer</source>
         <translation>レイヤーの移動</translation>
@@ -786,6 +791,11 @@
         <location filename="../src/io/DocumentSerializer.cpp" line="2916"/>
         <source>A layer has an invalid opacity.</source>
         <translation>レイヤーの不透明度が無効です。</translation>
+    </message>
+    <message>
+        <location filename="../src/io/DocumentSerializer.cpp" line="2940"/>
+        <source>A layer has an invalid blend mode.</source>
+        <translation>レイヤーのブレンドモードが無効です。</translation>
     </message>
     <message>
         <location filename="../src/io/DocumentSerializer.cpp" line="1095"/>
@@ -1264,6 +1274,36 @@
         <location filename="../src/ui/LayerDock.cpp" line="157"/>
         <source>OPACITY</source>
         <translation>不透明度</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="157"/>
+        <source>BLEND MODE</source>
+        <translation>ブレンドモード</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="162"/>
+        <source>Layer blend mode</source>
+        <translation>レイヤーのブレンドモード</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="164"/>
+        <source>Normal</source>
+        <translation>通常</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="166"/>
+        <source>Multiply</source>
+        <translation>乗算</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="168"/>
+        <source>Screen</source>
+        <translation>スクリーン</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="170"/>
+        <source>Overlay</source>
+        <translation>オーバーレイ</translation>
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="293"/>
@@ -1909,6 +1949,11 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/SettingsDialog.cpp" line="177"/>
         <source>General</source>
         <translation>一般</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/SettingsDialog.cpp" line="196"/>
+        <source>Stroke stabilization</source>
+        <translation>手ぶれ補正</translation>
     </message>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="193"/>

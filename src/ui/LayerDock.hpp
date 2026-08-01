@@ -10,6 +10,7 @@
 
 class QLabel;
 class QListWidgetItem;
+class QComboBox;
 class QSlider;
 class QToolButton;
 
@@ -47,6 +48,7 @@ private:
     QToolButton *m_deleteButton = nullptr;
     QToolButton *m_moveUpButton = nullptr;
     QToolButton *m_moveDownButton = nullptr;
+    QComboBox *m_blendModeCombo = nullptr;
     QSlider *m_opacitySlider = nullptr;
     QLabel *m_opacityValue = nullptr;
     QTimer m_thumbnailTimer;

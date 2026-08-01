@@ -8,6 +8,7 @@
 #include "ui/LayerThumbnailRenderer.hpp"
 
 #include <QAbstractItemView>
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -117,6 +118,30 @@ void LayerDock::buildContent()
     buttonLayout->addWidget(m_moveDownButton);
 
     layout->addLayout(buttonLayout);
+
+    auto *blendModeLayout = new QHBoxLayout;
+    blendModeLayout->setContentsMargins(10, 0, 10, 0);
+    blendModeLayout->setSpacing(6);
+
+    auto *blendModeLabel = new QLabel(tr("BLEND MODE"), content);
+    blendModeLabel->setProperty("fieldLabel", true);
+    blendModeLayout->addWidget(blendModeLabel);
+
+    m_blendModeCombo = new QComboBox(content);
+    m_blendModeCombo->setObjectName(QStringLiteral("layerBlendModeCombo"));
+    m_blendModeCombo->setAccessibleName(tr("Layer blend mode"));
+    m_blendModeCombo->addItem(
+        tr("Normal"), static_cast<int>(LayerBlendMode::Normal));
+    m_blendModeCombo->addItem(
+        tr("Multiply"), static_cast<int>(LayerBlendMode::Multiply));
+    m_blendModeCombo->addItem(
+        tr("Screen"), static_cast<int>(LayerBlendMode::Screen));
+    m_blendModeCombo->addItem(
+        tr("Overlay"), static_cast<int>(LayerBlendMode::Overlay));
+    blendModeLabel->setBuddy(m_blendModeCombo);
+    blendModeLayout->addWidget(m_blendModeCombo, 1);
+
+    layout->addLayout(blendModeLayout);
 
     auto *opacityLayout = new QHBoxLayout;
     opacityLayout->setContentsMargins(10, 0, 10, 0);
@@ -309,6 +334,24 @@ void LayerDock::connectControls()
             }
         });
 
+    connect(m_blendModeCombo,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this](int index)
+        {
+            if (!m_controller || m_syncing || index < 0)
+            {
+                return;
+            }
+            const QUuid id = selectedLayerId();
+            if (!id.isNull())
+            {
+                m_controller->setLayerBlendMode(id,
+                    static_cast<LayerBlendMode>(
+                        m_blendModeCombo->itemData(index).toInt()));
+            }
+        });
+
     if (m_controller)
     {
         connect(m_controller,
@@ -408,7 +451,17 @@ void LayerDock::updateControls()
     m_deleteButton->setEnabled(hasLayer);
     m_moveUpButton->setEnabled(hasLayer && index < document->layers.size() - 1);
     m_moveDownButton->setEnabled(hasLayer && index > 0);
+    m_blendModeCombo->setEnabled(hasLayer);
     m_opacitySlider->setEnabled(hasLayer);
+
+    {
+        const QSignalBlocker blocker(m_blendModeCombo);
+        const int blendModeIndex =
+            layer
+                ? m_blendModeCombo->findData(static_cast<int>(layer->blendMode))
+                : -1;
+        m_blendModeCombo->setCurrentIndex(blendModeIndex);
+    }
 
     if (!m_opacityDragging || m_opacityLayerId != id)
     {

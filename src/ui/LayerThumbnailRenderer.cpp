@@ -25,6 +25,7 @@ QPixmap LayerThumbnailRenderer::render(
     Layer visibleLayer = layer;
     visibleLayer.visible = true;
     visibleLayer.opacity = 1.0;
+    visibleLayer.blendMode = LayerBlendMode::Normal;
     single.layers = {visibleLayer};
 
     const QImage image =

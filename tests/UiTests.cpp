@@ -257,6 +257,34 @@ private slots:
             window.windowTitle().contains(QStringLiteral("WagleWaglePaint")));
     }
 
+    void changesLayerBlendModeFromDock()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        LayerDock dock(&controller);
+        QComboBox *blendModeCombo =
+            dock.findChild<QComboBox *>(QStringLiteral("layerBlendModeCombo"));
+        QVERIFY(blendModeCombo);
+        QCOMPARE(blendModeCombo->count(), 4);
+        QCOMPARE(blendModeCombo->currentData().toInt(),
+            static_cast<int>(LayerBlendMode::Normal));
+
+        blendModeCombo->setCurrentIndex(blendModeCombo->findData(
+            static_cast<int>(LayerBlendMode::Overlay)));
+        QCOMPARE(controller.document().layers.first().blendMode,
+            LayerBlendMode::Overlay);
+        QCOMPARE(controller.undoStack()->count(), 1);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.first().blendMode,
+            LayerBlendMode::Normal);
+        QCOMPARE(blendModeCombo->currentData().toInt(),
+            static_cast<int>(LayerBlendMode::Normal));
+        controller.undoStack()->redo();
+        QCOMPARE(blendModeCombo->currentData().toInt(),
+            static_cast<int>(LayerBlendMode::Overlay));
+    }
+
     void editsAndRestoresShortcuts()
     {
         const QString brushKey = QStringLiteral("shortcuts/brushAction");
@@ -344,6 +372,40 @@ private slots:
         QCOMPARE(versionLabel->text(), QStringLiteral("Version 9.8.7-test"));
         QCOMPARE(
             tabs->tabText(tabs->indexOf(aboutTab)), QStringLiteral("About"));
+    }
+
+    void persistsStrokeStabilizationSetting()
+    {
+        const QString key = QStringLiteral("canvas/strokeStabilization");
+        SettingValueGuard guard(key);
+        QSettings settings;
+        settings.remove(key);
+
+        SettingsDialog dialog;
+        QSlider *slider = dialog.findChild<QSlider *>(
+            QStringLiteral("strokeStabilizationSlider"));
+        QSpinBox *spin = dialog.findChild<QSpinBox *>(
+            QStringLiteral("strokeStabilizationSpin"));
+        QVERIFY(slider);
+        QVERIFY(spin);
+        QCOMPARE(slider->value(), 0);
+        QCOMPARE(spin->value(), 0);
+        QCOMPARE(SettingsDialog::strokeStabilization(), 0.0);
+
+        spin->setValue(65);
+        QCOMPARE(slider->value(), 65);
+        QCOMPARE(SettingsDialog::strokeStabilization(), 0.65);
+
+        QDialogButtonBox *buttons = dialog.findChild<QDialogButtonBox *>();
+        QVERIFY(buttons);
+        QPushButton *restoreButton =
+            buttons->button(QDialogButtonBox::RestoreDefaults);
+        QVERIFY(restoreButton);
+        QTest::mouseClick(restoreButton, Qt::LeftButton);
+        QCOMPARE(slider->value(), 0);
+        QCOMPARE(spin->value(), 0);
+        QVERIFY(!settings.contains(key));
+        QCOMPARE(SettingsDialog::strokeStabilization(), 0.0);
     }
 
     void configuresCanvasSizeDialog()

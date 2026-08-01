@@ -23,6 +23,7 @@ constexpr std::array suites{
     Suite{"gif", wobble::runGifWriterTests},
     Suite{"mask", wobble::runMaskRegressionTests},
     Suite{"release_notes", wobble::runReleaseNotesTests},
+    Suite{"stabilizer", wobble::runStrokeStabilizerTests},
     Suite{"ui", wobble::runUiTests},
 };
 

@@ -1512,6 +1512,29 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
            && layerImage.size() == mapping.outputSize;
 }
 
+QPainter::CompositionMode compositionMode(LayerBlendMode mode)
+{
+    switch (mode)
+    {
+    case LayerBlendMode::Multiply:
+        return QPainter::CompositionMode_Multiply;
+    case LayerBlendMode::Screen:
+        return QPainter::CompositionMode_Screen;
+    case LayerBlendMode::Overlay:
+        return QPainter::CompositionMode_Overlay;
+    case LayerBlendMode::Normal:
+        return QPainter::CompositionMode_SourceOver;
+    }
+    return QPainter::CompositionMode_SourceOver;
+}
+
+void prepareLayerComposition(
+    QPainter &painter, LayerBlendMode mode, qreal opacity)
+{
+    painter.setCompositionMode(compositionMode(mode));
+    painter.setOpacity(std::clamp(opacity, 0.0, 1.0));
+}
+
 QImage renderAtDisplayScale(const Document &document,
     int frameIndex,
     const QSize &outputSize,
@@ -1564,7 +1587,7 @@ QImage renderAtDisplayScale(const Document &document,
             return {};
         }
         notePreviewWorkingSet(stats, result, layerImage);
-        compositor.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
         compositor.drawImage(QPoint(0, 0), layerImage);
     }
     return result;
@@ -1622,7 +1645,7 @@ QImage renderAtSize(
         {
             return {};
         }
-        compositor.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
         compositor.drawImage(QPoint(0, 0), layerImage);
     }
 
@@ -1679,6 +1702,22 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
         || document.layerIndex(layerId) < 0)
     {
         return split;
+    }
+
+    bool afterTarget = false;
+    for (const Layer &layer : document.layers)
+    {
+        if (layer.id == layerId)
+        {
+            afterTarget = true;
+            continue;
+        }
+        if (afterTarget && layer.visible && layer.opacity > 0.0
+            && !layer.strokes.isEmpty()
+            && layer.blendMode != LayerBlendMode::Normal)
+        {
+            return split;
+        }
     }
 
     QImage below(outputSize, QImage::Format_ARGB32_Premultiplied);
@@ -1757,13 +1796,14 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                                                  Qt::FastTransformation);
     };
 
-    bool afterTarget = false;
+    afterTarget = false;
     for (const Layer &layer : document.layers)
     {
         if (layer.id == layerId)
         {
             split.layerVisible = layer.visible && layer.opacity > 0.0;
             split.layerOpacity = std::clamp(layer.opacity, 0.0, 1.0);
+            split.layerBlendMode = layer.blendMode;
             if (split.layerVisible && !layer.strokes.isEmpty())
             {
                 layerBase = renderedLayer(layer);
@@ -1799,7 +1839,7 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
             previewStats, below, layerBase, above, layerImage);
         QPainter compositor(afterTarget ? &above : &below);
         compositor.setRenderHint(QPainter::Antialiasing, false);
-        compositor.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
         compositor.drawImage(QPoint(0, 0), layerImage);
     }
 
@@ -1896,12 +1936,13 @@ QImage RenderEngine::composeLayerSplit(
     compositor.setRenderHint(QPainter::Antialiasing, false);
     if (split.layerVisible && !layerImage.isNull())
     {
-        compositor.setOpacity(split.layerOpacity);
+        prepareLayerComposition(
+            compositor, split.layerBlendMode, split.layerOpacity);
         compositor.drawImage(QPoint(0, 0), layerImage);
-        compositor.setOpacity(1.0);
     }
     if (!split.above.isNull())
     {
+        prepareLayerComposition(compositor, LayerBlendMode::Normal, 1.0);
         compositor.drawImage(QPoint(0, 0), split.above);
     }
     return result;

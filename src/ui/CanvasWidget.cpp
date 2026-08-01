@@ -293,6 +293,11 @@ qreal CanvasWidget::brushRoughness() const
     return m_brushRoughness;
 }
 
+qreal CanvasWidget::strokeStabilization() const
+{
+    return m_strokeStabilizer.strength();
+}
+
 bool CanvasWidget::brushAntialiasing() const
 {
     return m_brushAntialiasing;
@@ -756,6 +761,21 @@ void CanvasWidget::setBrushRoughness(qreal roughness)
     update();
 }
 
+void CanvasWidget::setStrokeStabilization(qreal strength)
+{
+    if (!std::isfinite(strength))
+    {
+        return;
+    }
+    const qreal normalized = std::clamp(strength, 0.0, 1.0);
+    if (qFuzzyCompare(1.0 + m_strokeStabilizer.strength(), 1.0 + normalized))
+    {
+        return;
+    }
+    m_strokeStabilizer.setStrength(normalized);
+    emit strokeStabilizationChanged(normalized);
+}
+
 void CanvasWidget::setBrushAntialiasing(bool antialiasing)
 {
     if (m_brushAntialiasing == antialiasing)
@@ -1058,6 +1078,12 @@ void CanvasWidget::paintEvent(QPaintEvent *)
             }
         }
     }
+    if (displayedFrame.isNull()
+        && ((m_drawing && !m_activeStroke.points.isEmpty())
+            || hasPendingSelectionTransform()))
+    {
+        displayedFrame = interactionPreview(document, renderSize);
+    }
     if (displayedFrame.isNull())
     {
         displayedFrame = frameImage(m_currentFrame);
@@ -1186,7 +1212,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
         {
         case Tool::Brush:
         case Tool::Eraser:
-            beginStroke(event->position(), 1.0, false);
+            beginStroke(event->position(), 1.0, false, event->timestamp());
             break;
         case Tool::Lasso:
             beginLasso(documentPosition);
@@ -1232,7 +1258,7 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
     }
     if (m_drawing && !m_tabletSequence)
     {
-        continueStroke(event->position(), 1.0);
+        continueStroke(event->position(), 1.0, event->timestamp());
         event->accept();
         return;
     }
@@ -1289,7 +1315,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
     }
     if (event->button() == Qt::LeftButton && m_drawing && !m_tabletSequence)
     {
-        endStroke(event->position(), 1.0);
+        endStroke(event->position(), 1.0, event->timestamp());
         event->accept();
         return;
     }
@@ -1393,7 +1419,8 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             return;
         }
         m_tabletSequence = true;
-        beginStroke(event->position(), event->pressure(), eraser);
+        beginStroke(
+            event->position(), event->pressure(), eraser, event->timestamp());
         event->accept();
         return;
     }
@@ -1422,7 +1449,8 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         }
         else
         {
-            continueStroke(event->position(), event->pressure());
+            continueStroke(
+                event->position(), event->pressure(), event->timestamp());
         }
         event->accept();
         return;
@@ -1448,7 +1476,7 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         }
         else
         {
-            endStroke(event->position(), event->pressure());
+            endStroke(event->position(), event->pressure(), event->timestamp());
         }
         m_tabletSequence = false;
         event->accept();
@@ -1581,6 +1609,37 @@ QImage CanvasWidget::frameImage(int frame)
     return image;
 }
 
+QImage CanvasWidget::interactionPreview(
+    Document document, const QSize &renderSize) const
+{
+    Layer *layer = nullptr;
+    if (m_drawing && !m_activeStroke.points.isEmpty())
+    {
+        layer = document.layer(m_activeStrokeLayer);
+        if (layer)
+        {
+            layer->strokes.append(m_activeStroke);
+        }
+    }
+    else if (hasPendingSelectionTransform())
+    {
+        layer = document.layer(m_selectionTransformSession.layer);
+        if (layer)
+        {
+            Stroke operation;
+            operation.mode = StrokeMode::PixelSelection;
+            operation.pixelSelectionOp =
+                m_selectionTransformSession.previewOperation;
+            layer->strokes.append(std::move(operation));
+        }
+    }
+    if (!layer)
+    {
+        return {};
+    }
+    return RenderEngine::renderScaled(document, m_currentFrame, renderSize);
+}
+
 const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
     const QUuid &layerId, const QSize &renderSize)
 {
@@ -1637,8 +1696,10 @@ void CanvasWidget::advanceFrame()
     setCurrentFrame(m_currentFrame + 1);
 }
 
-void CanvasWidget::beginStroke(
-    const QPointF &widgetPosition, qreal pressure, bool tabletEraser)
+void CanvasWidget::beginStroke(const QPointF &widgetPosition,
+    qreal pressure,
+    bool tabletEraser,
+    quint64 timestamp)
 {
     bool inside = false;
     const QPointF documentPosition = mapToDocument(widgetPosition, &inside);
@@ -1681,14 +1742,16 @@ void CanvasWidget::beginStroke(
     {
         m_activeStroke.clipMask = m_selectionMask;
     }
-    m_activeStroke.points.append({clampedDocumentPosition(documentPosition),
-        std::clamp(pressure, 0.05, 1.0)});
+    const QPointF position = m_strokeStabilizer.begin(
+        clampedDocumentPosition(documentPosition), timestamp);
+    m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
     m_activeStrokeLayer = document.activeLayerId;
     m_drawing = true;
     update();
 }
 
-void CanvasWidget::continueStroke(const QPointF &widgetPosition, qreal pressure)
+void CanvasWidget::continueStroke(
+    const QPointF &widgetPosition, qreal pressure, quint64 timestamp)
 {
     if (!m_drawing)
     {
@@ -1698,8 +1761,8 @@ void CanvasWidget::continueStroke(const QPointF &widgetPosition, qreal pressure)
     {
         return;
     }
-    const QPointF position =
-        clampedDocumentPosition(mapToDocument(widgetPosition));
+    const QPointF position = m_strokeStabilizer.update(
+        clampedDocumentPosition(mapToDocument(widgetPosition)), timestamp);
     if (pointDistance(position, m_activeStroke.points.constLast().position)
         < 0.75)
     {
@@ -1709,18 +1772,20 @@ void CanvasWidget::continueStroke(const QPointF &widgetPosition, qreal pressure)
     update();
 }
 
-void CanvasWidget::endStroke(const QPointF &widgetPosition, qreal pressure)
+void CanvasWidget::endStroke(
+    const QPointF &widgetPosition, qreal pressure, quint64 timestamp)
 {
     if (!m_drawing)
     {
         return;
     }
-    continueStroke(widgetPosition, pressure);
+    continueStroke(widgetPosition, pressure, timestamp);
     Stroke completed = m_activeStroke;
     const QUuid layerId = m_activeStrokeLayer;
     m_drawing = false;
     m_activeStroke = Stroke();
     m_activeStrokeLayer = {};
+    m_strokeStabilizer.reset();
     m_controller->addStroke(layerId, std::move(completed));
     update();
 }
@@ -1734,6 +1799,7 @@ void CanvasWidget::cancelStroke()
     m_drawing = false;
     m_activeStroke = Stroke();
     m_activeStrokeLayer = {};
+    m_strokeStabilizer.reset();
     update();
 }
 
