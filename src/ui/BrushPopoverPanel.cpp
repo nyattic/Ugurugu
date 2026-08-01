@@ -5,6 +5,7 @@
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/StrokeStabilizationRow.hpp"
 
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -103,6 +104,10 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     layout->addWidget(new BrushSizeRow(canvas,
         BrushSizeRow::Target::Brush,
         QStringLiteral("brushSize"),
+        this));
+    layout->addWidget(new StrokeStabilizationRow(canvas,
+        StrokeStabilizationRow::Target::Brush,
+        QStringLiteral("brushStabilization"),
         this));
 
     auto *roughnessRow = new QWidget(this);

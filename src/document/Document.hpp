@@ -166,6 +166,7 @@ struct Layer
     QUuid parentGroupId;
     bool clipToLayerBelow = false;
     bool visible = true;
+    bool reference = false;
     qreal opacity = 1.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
     // The framebuffer epoch before the first ordered operation.

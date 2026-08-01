@@ -144,6 +144,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
 
@@ -152,6 +153,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
 
@@ -452,10 +454,13 @@ private slots:
             QStringLiteral("layerParentGroupCombo"));
         QCheckBox *clipCheck =
             dock.findChild<QCheckBox *>(QStringLiteral("layerClipCheck"));
+        QCheckBox *referenceCheck =
+            dock.findChild<QCheckBox *>(QStringLiteral("layerReferenceCheck"));
         QListWidget *list = dock.findChild<QListWidget *>();
         QVERIFY(groupButton);
         QVERIFY(parentCombo);
         QVERIFY(clipCheck);
+        QVERIFY(referenceCheck);
         QVERIFY(list);
 
         groupButton->click();
@@ -469,6 +474,11 @@ private slots:
         QVERIFY(controller.document().layer(layerId)->clipToLayerBelow);
         controller.undoStack()->undo();
         QVERIFY(!controller.document().layer(layerId)->clipToLayerBelow);
+
+        referenceCheck->click();
+        QVERIFY(controller.document().layer(layerId)->reference);
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(layerId)->reference);
     }
 
     void editsStrokePropertyDialogValues()
@@ -681,38 +691,27 @@ private slots:
             tabs->tabText(tabs->indexOf(aboutTab)), QStringLiteral("About"));
     }
 
-    void persistsStrokeStabilizationSetting()
+    void migratesGlobalStrokeStabilizationToDrawingTools()
     {
-        const QString key = QStringLiteral("canvas/strokeStabilization");
-        SettingValueGuard guard(key);
+        const QString legacyKey = QStringLiteral("canvas/strokeStabilization");
         QSettings settings;
-        settings.remove(key);
+        settings.setValue(legacyKey, 0.65);
+        settings.sync();
 
-        SettingsDialog dialog;
-        QSlider *slider = dialog.findChild<QSlider *>(
-            QStringLiteral("strokeStabilizationSlider"));
-        QSpinBox *spin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("strokeStabilizationSpin"));
-        QVERIFY(slider);
-        QVERIFY(spin);
-        QCOMPARE(slider->value(), 0);
-        QCOMPARE(spin->value(), 0);
-        QCOMPARE(SettingsDialog::strokeStabilization(), 0.0);
-
-        spin->setValue(65);
-        QCOMPARE(slider->value(), 65);
-        QCOMPARE(SettingsDialog::strokeStabilization(), 0.65);
-
-        QDialogButtonBox *buttons = dialog.findChild<QDialogButtonBox *>();
-        QVERIFY(buttons);
-        QPushButton *restoreButton =
-            buttons->button(QDialogButtonBox::RestoreDefaults);
-        QVERIFY(restoreButton);
-        QTest::mouseClick(restoreButton, Qt::LeftButton);
-        QCOMPARE(slider->value(), 0);
-        QCOMPARE(spin->value(), 0);
-        QVERIFY(!settings.contains(key));
-        QCOMPARE(SettingsDialog::strokeStabilization(), 0.0);
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
+        {
+            QCOMPARE(canvas->brushPresetStabilization(preset.id), 0.65);
+            QVERIFY(settings.contains(
+                QStringLiteral("drawingTools/brush/presetStabilizations/%1")
+                    .arg(preset.id)));
+        }
+        QCOMPARE(canvas->eraserStabilization(), 0.65);
+        QVERIFY(settings.contains(
+            QStringLiteral("drawingTools/eraser/stabilization")));
+        QVERIFY(!settings.contains(legacyKey));
     }
 
     void configuresCanvasSizeDialog()
@@ -1718,7 +1717,12 @@ private slots:
         const QByteArray cleanDocument = DocumentSerializer::toJson(
             canvas->documentWithPendingSelectionTransform());
 
-        QVERIFY(canvas->rotateSelection(10.0));
+        canvas->setSelectionMoveMode(true);
+        QVERIFY(canvas->selectionMoveMode());
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, center);
+        QTest::mouseMove(canvas, center + QPoint(40, 0), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(40, 0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         QVERIFY(undoAction->isEnabled());
         QVERIFY(!redoAction->isEnabled());
@@ -1728,6 +1732,7 @@ private slots:
         undoAction->trigger();
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(canvas->hasTransformableSelection());
+        QVERIFY(!canvas->selectionMoveMode());
         QCOMPARE(stackUndoAction->text(), stackUndoTextClean);
         QCOMPARE(stackUndoAction->isEnabled(), stackUndoEnabledClean);
         QCOMPARE(stackRedoAction->isEnabled(), stackRedoEnabledClean);
@@ -2691,6 +2696,93 @@ private slots:
         QTRY_VERIFY(canvas.hasTransformableSelection());
     }
 
+    void wandReferencesActiveMarkedAndVisibleLayers()
+    {
+        const auto selectionMask = [](CanvasWidget::WandReference reference,
+                                       bool marked) -> std::pair<QImage, bool>
+        {
+            Document document = Document::createDefault(QSize(100, 100));
+            document.background = Qt::transparent;
+            document.wobbleAmount = 0.0;
+            Layer boundary;
+            boundary.name = QStringLiteral("Boundary");
+            boundary.initialCanvasSize = document.size;
+            boundary.reference = marked;
+            Stroke outline;
+            outline.width = 4.0;
+            outline.brush.antialiasing = false;
+            outline.points = {{QPointF(20.0, 20.0), 1.0},
+                {QPointF(80.0, 20.0), 1.0},
+                {QPointF(80.0, 80.0), 1.0},
+                {QPointF(20.0, 80.0), 1.0},
+                {QPointF(20.0, 20.0), 1.0}};
+            boundary.strokes.append(outline);
+            document.layers.append(boundary);
+
+            DocumentController controller;
+            controller.loadDocument(document);
+            CanvasWidget canvas(&controller);
+            canvas.resize(400, 400);
+            canvas.setAnimating(false);
+            canvas.show();
+            if (!QTest::qWaitForWindowExposed(&canvas))
+            {
+                return {{}, false};
+            }
+            canvas.fitToWindow();
+            canvas.setWandReference(reference);
+            canvas.setTool(CanvasWidget::Tool::Wand);
+            QTest::mouseClick(&canvas,
+                Qt::LeftButton,
+                Qt::NoModifier,
+                canvas.rect().center());
+            if (!canvas.hasSelection())
+            {
+                return {{}, false};
+            }
+            canvas.setTool(CanvasWidget::Tool::Bucket);
+            QTest::mouseClick(&canvas,
+                Qt::LeftButton,
+                Qt::NoModifier,
+                canvas.rect().center());
+            const Layer *active =
+                controller.document().layer(document.activeLayerId);
+            if (!active || active->strokes.isEmpty())
+            {
+                return {{}, false};
+            }
+            return {active->strokes.constLast().clipMask, true};
+        };
+
+        const auto activeLayer =
+            selectionMask(CanvasWidget::WandReference::ActiveLayer, false);
+        QVERIFY(activeLayer.second);
+        QVERIFY(activeLayer.first.isNull());
+
+        const auto visibleLayers =
+            selectionMask(CanvasWidget::WandReference::AllVisibleLayers, false);
+        QVERIFY(visibleLayers.second);
+        const QImage &visibleLayersMask = visibleLayers.first;
+        QVERIFY(!visibleLayersMask.isNull());
+        QCOMPARE(visibleLayersMask.constScanLine(5)[5], static_cast<uchar>(0));
+        QCOMPARE(
+            visibleLayersMask.constScanLine(50)[50], static_cast<uchar>(255));
+
+        const auto referenceLayers =
+            selectionMask(CanvasWidget::WandReference::ReferenceLayers, true);
+        QVERIFY(referenceLayers.second);
+        const QImage &referenceLayersMask = referenceLayers.first;
+        QVERIFY(!referenceLayersMask.isNull());
+        QCOMPARE(
+            referenceLayersMask.constScanLine(5)[5], static_cast<uchar>(0));
+        QCOMPARE(
+            referenceLayersMask.constScanLine(50)[50], static_cast<uchar>(255));
+
+        const auto missingReference =
+            selectionMask(CanvasWidget::WandReference::ReferenceLayers, false);
+        QVERIFY(!missingReference.second);
+    }
+
     void selectionVisibilitySkipsRedundantStaticFrames()
     {
         Document document = Document::createDefault(QSize(64, 64));
@@ -3544,6 +3636,32 @@ private slots:
         QCOMPARE(strokes.at(2).width, 57.0);
     }
 
+    void isolatesEraserBrushEngineFromActiveBrush()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        canvas.setBrushPreset(QStringLiteral("soft-airbrush"));
+        canvas.setBrushRoughness(0.35);
+        canvas.setBrushAntialiasing(true);
+        canvas.setTool(CanvasWidget::Tool::Eraser);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(30, 0));
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(30, 0));
+
+        const Stroke &eraser =
+            controller.document().layers.first().strokes.constLast();
+        QCOMPARE(eraser.mode, StrokeMode::Erase);
+        QCOMPARE(eraser.brush, BrushSettings());
+    }
+
     void persistsDrawingToolSettings()
     {
         const QColor rememberedColor(18, 52, 86, 120);
@@ -3554,12 +3672,17 @@ private slots:
 
             canvas->setBrushPreset(QStringLiteral("monoline"));
             canvas->setBrushWidth(23.0);
+            canvas->setBrushStabilization(0.23);
             canvas->setBrushPreset(QStringLiteral("soft-airbrush"));
             canvas->setBrushWidth(47.0);
+            canvas->setBrushStabilization(0.64);
             canvas->setEraserWidth(57.0);
+            canvas->setEraserStabilization(0.51);
             canvas->setBrushRoughness(0.37);
             canvas->setBrushAntialiasing(true);
             canvas->setBrushColor(rememberedColor);
+            canvas->setWandReference(
+                CanvasWidget::WandReference::AllVisibleLayers);
             canvas->setTool(CanvasWidget::Tool::Eraser);
 
             QVERIFY(window.close());
@@ -3577,11 +3700,15 @@ private slots:
         QVERIFY(restored);
         QCOMPARE(restored->brushPresetId(), QStringLiteral("soft-airbrush"));
         QCOMPARE(restored->brushWidth(), 47.0);
+        QCOMPARE(restored->brushStabilization(), 0.64);
         QCOMPARE(restored->eraserWidth(), 57.0);
+        QCOMPARE(restored->eraserStabilization(), 0.51);
         QCOMPARE(restored->brushRoughness(), 0.37);
         QVERIFY(restored->brushAntialiasing());
         QCOMPARE(restored->brushColor(), rememberedColor);
         QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
+        QCOMPARE(restored->wandReference(),
+            CanvasWidget::WandReference::AllVisibleLayers);
 
         QAction *eraserAction =
             restoredWindow.findChild<QAction *>(QStringLiteral("eraserAction"));
@@ -3589,6 +3716,13 @@ private slots:
             QStringLiteral("brushSizeSpin"));
         QSpinBox *eraserSizeSpin = restoredWindow.findChild<QSpinBox *>(
             QStringLiteral("eraserSizeSpin"));
+        QSpinBox *brushStabilizationSpin = restoredWindow.findChild<QSpinBox *>(
+            QStringLiteral("brushStabilizationSpin"));
+        QSpinBox *eraserStabilizationSpin =
+            restoredWindow.findChild<QSpinBox *>(
+                QStringLiteral("eraserStabilizationSpin"));
+        QComboBox *wandReferenceCombo = restoredWindow.findChild<QComboBox *>(
+            QStringLiteral("wandReferenceCombo"));
         QSpinBox *roughnessSpin = restoredWindow.findChild<QSpinBox *>(
             QStringLiteral("brushRoughnessSpin"));
         QCheckBox *antialiasingToggle = restoredWindow.findChild<QCheckBox *>(
@@ -3596,20 +3730,31 @@ private slots:
         QVERIFY(eraserAction);
         QVERIFY(brushSizeSpin);
         QVERIFY(eraserSizeSpin);
+        QVERIFY(brushStabilizationSpin);
+        QVERIFY(eraserStabilizationSpin);
+        QVERIFY(wandReferenceCombo);
         QVERIFY(roughnessSpin);
         QVERIFY(antialiasingToggle);
         QVERIFY(eraserAction->isChecked());
         QCOMPARE(brushSizeSpin->value(), 47);
         QCOMPARE(eraserSizeSpin->value(), 57);
+        QCOMPARE(brushStabilizationSpin->value(), 64);
+        QCOMPARE(eraserStabilizationSpin->value(), 51);
+        QCOMPARE(wandReferenceCombo->currentData().toInt(),
+            static_cast<int>(CanvasWidget::WandReference::AllVisibleLayers));
         QCOMPARE(roughnessSpin->value(), 37);
         QVERIFY(antialiasingToggle->isChecked());
 
         restored->setBrushPreset(QStringLiteral("monoline"));
         QCOMPARE(restored->brushWidth(), 23.0);
+        QCOMPARE(restored->brushStabilization(), 0.23);
         QCOMPARE(brushSizeSpin->value(), 23);
+        QCOMPARE(brushStabilizationSpin->value(), 23);
         restored->setBrushPreset(QStringLiteral("soft-airbrush"));
         QCOMPARE(restored->brushWidth(), 47.0);
+        QCOMPARE(restored->brushStabilization(), 0.64);
         QCOMPARE(brushSizeSpin->value(), 47);
+        QCOMPARE(brushStabilizationSpin->value(), 64);
 
         BrushPresetButton *selectedPresetButton = nullptr;
         for (BrushPresetButton *button :
@@ -3665,6 +3810,13 @@ private slots:
             QStringLiteral("drawingTools/brush/presetWidths/g-pen"),
             std::numeric_limits<double>::quiet_NaN());
         settings.setValue(QStringLiteral("drawingTools/eraser/width"), -100.0);
+        settings.setValue(
+            QStringLiteral("drawingTools/brush/presetStabilizations/ink-pen"),
+            9999.0);
+        settings.setValue(QStringLiteral("drawingTools/eraser/stabilization"),
+            std::numeric_limits<double>::quiet_NaN());
+        settings.setValue(QStringLiteral("drawingTools/wand/reference"),
+            QStringLiteral("selection-set"));
         settings.sync();
 
         MainWindow window;
@@ -3675,9 +3827,13 @@ private slots:
             canvas->brushPresetId(), BrushPresetCatalog::defaultPreset().id);
         QCOMPARE(canvas->brushWidth(), DocumentLimits::maximumStrokeWidth);
         QCOMPARE(canvas->eraserWidth(), 1.0);
+        QCOMPARE(canvas->brushStabilization(), 1.0);
+        QCOMPARE(canvas->eraserStabilization(), 0.0);
         QCOMPARE(canvas->brushRoughness(), 1.0);
         QVERIFY(!canvas->brushAntialiasing());
         QCOMPARE(canvas->brushColor(), QColor(Qt::black));
+        QCOMPARE(
+            canvas->wandReference(), CanvasWidget::WandReference::ActiveLayer);
 
         canvas->setBrushPreset(QStringLiteral("g-pen"));
         QCOMPARE(canvas->brushWidth(),
@@ -3686,12 +3842,18 @@ private slots:
         const qreal brushWidth = canvas->brushWidth();
         const qreal eraserWidth = canvas->eraserWidth();
         const qreal roughness = canvas->brushRoughness();
+        const qreal brushStabilization = canvas->brushStabilization();
+        const qreal eraserStabilization = canvas->eraserStabilization();
         canvas->setBrushWidth(std::numeric_limits<qreal>::quiet_NaN());
         canvas->setEraserWidth(std::numeric_limits<qreal>::infinity());
         canvas->setBrushRoughness(std::numeric_limits<qreal>::quiet_NaN());
+        canvas->setBrushStabilization(std::numeric_limits<qreal>::infinity());
+        canvas->setEraserStabilization(std::numeric_limits<qreal>::quiet_NaN());
         QCOMPARE(canvas->brushWidth(), brushWidth);
         QCOMPARE(canvas->eraserWidth(), eraserWidth);
         QCOMPARE(canvas->brushRoughness(), roughness);
+        QCOMPARE(canvas->brushStabilization(), brushStabilization);
+        QCOMPARE(canvas->eraserStabilization(), eraserStabilization);
     }
 
     void deletesTheLastLayerAndAddsOneBack()

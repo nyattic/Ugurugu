@@ -158,6 +158,7 @@ private slots:
         QCOMPARE(document.layers.first().kind, LayerKind::Paint);
         QVERIFY(document.layers.first().parentGroupId.isNull());
         QVERIFY(!document.layers.first().clipToLayerBelow);
+        QVERIFY(!document.layers.first().reference);
         QVERIFY(document.layers.first().strokes.isEmpty());
         QCOMPARE(document.activeLayerId, document.layers.first().id);
         QCOMPARE(document.layerIndex(document.activeLayerId), 0);
@@ -1488,6 +1489,30 @@ private slots:
             LayerBlendMode::Multiply);
     }
 
+    void changesReferenceLayerUndoably()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        controller.setLayerReference(layerId, true);
+        QVERIFY(controller.document().layer(layerId)->reference);
+        QCOMPARE(controller.undoStack()->count(), 1);
+
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(layerId)->reference);
+        controller.undoStack()->redo();
+        QVERIFY(controller.document().layer(layerId)->reference);
+
+        controller.addLayerGroup(layerId);
+        const QUuid groupId =
+            controller.document().layer(layerId)->parentGroupId;
+        const int count = controller.undoStack()->count();
+        controller.setLayerReference(groupId, true);
+        QCOMPARE(controller.undoStack()->count(), count);
+        QVERIFY(!controller.document().layer(groupId)->reference);
+    }
+
     void managesLayerGroupsAndClippingUndoably()
     {
         DocumentController controller;
@@ -1568,12 +1593,13 @@ private slots:
         group.initialCanvasSize = document.size;
         document.layers.first().parentGroupId = group.id;
         document.layers.first().clipToLayerBelow = true;
+        document.layers.first().reference = true;
         document.layers.append(group);
 
         const QByteArray json = DocumentSerializer::toJson(document);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 8);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 9);
         QString error;
         const std::optional<Document> decoded =
             DocumentSerializer::fromJson(json, &error);
@@ -1581,10 +1607,31 @@ private slots:
         QCOMPARE(decoded->layers.last().kind, LayerKind::Group);
         QCOMPARE(decoded->layers.first().parentGroupId, group.id);
         QVERIFY(decoded->layers.first().clipToLayerBelow);
+        QVERIFY(decoded->layers.first().reference);
+
+        QJsonObject legacyRoot = root;
+        legacyRoot.insert(QStringLiteral("schemaVersion"), 8);
+        QJsonArray legacyLayers =
+            legacyRoot.value(QStringLiteral("layers")).toArray();
+        for (int index = 0; index < legacyLayers.size(); ++index)
+        {
+            QJsonObject legacyLayer = legacyLayers[index].toObject();
+            legacyLayer.remove(QStringLiteral("reference"));
+            legacyLayers[index] = legacyLayer;
+        }
+        legacyRoot.insert(QStringLiteral("layers"), legacyLayers);
+        const std::optional<Document> legacy = DocumentSerializer::fromJson(
+            QJsonDocument(legacyRoot).toJson(QJsonDocument::Compact), &error);
+        QVERIFY2(legacy.has_value(), qPrintable(error));
+        QVERIFY(!legacy->layers.first().reference);
 
         Document cyclic = *decoded;
         cyclic.layers.last().parentGroupId = cyclic.layers.last().id;
         QVERIFY(DocumentSerializer::toJson(cyclic).isEmpty());
+
+        Document invalidReference = *decoded;
+        invalidReference.layers.last().reference = true;
+        QVERIFY(DocumentSerializer::toJson(invalidReference).isEmpty());
     }
 
     void undoActionsCannotBypassHistoryPreflight()
@@ -1782,6 +1829,7 @@ private slots:
         firstLayer.name = QStringLiteral("Ink");
         firstLayer.opacity = 0.625;
         firstLayer.blendMode = LayerBlendMode::Multiply;
+        firstLayer.reference = true;
 
         Stroke paint;
         paint.id =
@@ -1843,6 +1891,7 @@ private slots:
             QCOMPARE(actualLayer.id, expectedLayer.id);
             QCOMPARE(actualLayer.name, expectedLayer.name);
             QCOMPARE(actualLayer.visible, expectedLayer.visible);
+            QCOMPARE(actualLayer.reference, expectedLayer.reference);
             QCOMPARE(actualLayer.opacity, expectedLayer.opacity);
             QCOMPARE(actualLayer.blendMode, expectedLayer.blendMode);
             QCOMPARE(actualLayer.strokes.size(), expectedLayer.strokes.size());
@@ -1939,7 +1988,7 @@ private slots:
         QVERIFY(!currentJson.isEmpty());
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
-        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 8);
+        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 9);
         QCOMPARE(
             currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 2);
         const std::optional<Document> reloaded =
@@ -2513,7 +2562,7 @@ private slots:
                      .object()
                      .value(QStringLiteral("schemaVersion"))
                      .toInt(),
-            8);
+            9);
         const std::optional<Document> loaded =
             DocumentSerializer::fromJson(json, &error);
         QVERIFY2(loaded.has_value(), qPrintable(error));
@@ -4329,7 +4378,7 @@ private slots:
 
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version") << QByteArrayLiteral(
-            R"({"schemaVersion":9,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[]})");
+            R"({"schemaVersion":10,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[]})");
         QTest::newRow("unsupported-algorithm") << QByteArrayLiteral(
             R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("invalid-canvas") << QByteArrayLiteral(

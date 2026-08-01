@@ -8,10 +8,10 @@
 #include "io/GifWriter.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
-#include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorSwatchRow.hpp"
+#include "ui/EraserPopoverPanel.hpp"
 #include "ui/Icons.hpp"
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LayerDock.hpp"
@@ -23,6 +23,7 @@
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolPopover.hpp"
+#include "ui/WandPopoverPanel.hpp"
 
 #ifdef Q_OS_MACOS
 #include "ui/MacWindowChrome.hpp"
@@ -83,6 +84,9 @@ constexpr auto recentColorsKey = "brush/recentColors";
 constexpr auto roughnessKey = "drawingTools/brush/roughness";
 constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
+constexpr auto eraserStabilizationKey = "drawingTools/eraser/stabilization";
+constexpr auto wandReferenceKey = "drawingTools/wand/reference";
+constexpr auto legacyStabilizationKey = "canvas/strokeStabilization";
 constexpr qreal minimumRememberedStrokeWidth = 1.0;
 constexpr int minimumZoomPercent = 1;
 constexpr int maximumZoomPercent = 1600;
@@ -110,6 +114,12 @@ int sliderFromZoomPercent(int percent)
 QString presetWidthKey(const QString &presetId)
 {
     return QStringLiteral("drawingTools/brush/presetWidths/%1").arg(presetId);
+}
+
+QString presetStabilizationKey(const QString &presetId)
+{
+    return QStringLiteral("drawingTools/brush/presetStabilizations/%1")
+        .arg(presetId);
 }
 
 qreal realSetting(const QSettings &settings,
@@ -189,6 +199,38 @@ std::optional<CanvasWidget::Tool> toolFromSettingsId(const QString &id)
     if (id == QStringLiteral("bucket"))
     {
         return CanvasWidget::Tool::Bucket;
+    }
+    return std::nullopt;
+}
+
+QString wandReferenceSettingsId(CanvasWidget::WandReference reference)
+{
+    switch (reference)
+    {
+    case CanvasWidget::WandReference::ActiveLayer:
+        return QStringLiteral("active");
+    case CanvasWidget::WandReference::ReferenceLayers:
+        return QStringLiteral("reference");
+    case CanvasWidget::WandReference::AllVisibleLayers:
+        return QStringLiteral("visible");
+    }
+    return QStringLiteral("active");
+}
+
+std::optional<CanvasWidget::WandReference> wandReferenceFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("active"))
+    {
+        return CanvasWidget::WandReference::ActiveLayer;
+    }
+    if (id == QStringLiteral("reference"))
+    {
+        return CanvasWidget::WandReference::ReferenceLayers;
+    }
+    if (id == QStringLiteral("visible"))
+    {
+        return CanvasWidget::WandReference::AllVisibleLayers;
     }
     return std::nullopt;
 }
@@ -305,7 +347,6 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
-    m_canvas->setStrokeStabilization(SettingsDialog::strokeStabilization());
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
@@ -542,10 +583,6 @@ void MainWindow::createActions()
                 &SettingsDialog::wobbleAnimationEnabledChanged,
                 this,
                 &MainWindow::applyWobbleAnimationEnabled);
-            connect(&dialog,
-                &SettingsDialog::strokeStabilizationChanged,
-                m_canvas,
-                &CanvasWidget::setStrokeStabilization);
             dialog.exec();
         });
 
@@ -1136,7 +1173,8 @@ void MainWindow::createToolBars()
     PopoverToolButton *eraserButton =
         addRailButton(m_eraserAction, IconGlyph::Eraser);
     addRailButton(m_lassoAction, IconGlyph::Lasso);
-    addRailButton(m_wandAction, IconGlyph::Wand);
+    PopoverToolButton *wandButton =
+        addRailButton(m_wandAction, IconGlyph::Wand);
     addRailButton(m_bucketAction, IconGlyph::Bucket);
 
     auto *brushPopover = new ToolPopover(this);
@@ -1159,9 +1197,12 @@ void MainWindow::createToolBars()
     brushButton->setPopover(brushPopover);
 
     auto *eraserPopover = new ToolPopover(this);
-    eraserPopover->setContentWidget(new BrushSizeRow(
-        m_canvas, BrushSizeRow::Target::Eraser, QStringLiteral("eraserSize")));
+    eraserPopover->setContentWidget(new EraserPopoverPanel(m_canvas));
     eraserButton->setPopover(eraserPopover);
+
+    auto *wandPopover = new ToolPopover(this);
+    wandPopover->setContentWidget(new WandPopoverPanel(m_canvas));
+    wandButton->setPopover(wandPopover);
 
     connect(m_canvas,
         &CanvasWidget::brushPresetChanged,
@@ -1241,7 +1282,11 @@ void MainWindow::createToolBars()
 
 void MainWindow::restoreDrawingToolSettings()
 {
-    const QSettings settings;
+    QSettings settings;
+    const bool hasLegacyStabilization =
+        settings.contains(legacyStabilizationKey);
+    const qreal legacyStabilization = realSetting(
+        settings, QString::fromLatin1(legacyStabilizationKey), 0.0, 0.0, 1.0);
     for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
     {
         m_canvas->setBrushPresetWidth(preset.id,
@@ -1250,6 +1295,14 @@ void MainWindow::restoreDrawingToolSettings()
                 preset.defaultSize,
                 minimumRememberedStrokeWidth,
                 DocumentLimits::maximumStrokeWidth));
+        const QString stabilizationKey = presetStabilizationKey(preset.id);
+        m_canvas->setBrushPresetStabilization(preset.id,
+            realSetting(
+                settings, stabilizationKey, legacyStabilization, 0.0, 1.0));
+        if (hasLegacyStabilization && !settings.contains(stabilizationKey))
+        {
+            settings.setValue(stabilizationKey, legacyStabilization);
+        }
     }
 
     const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
@@ -1264,6 +1317,15 @@ void MainWindow::restoreDrawingToolSettings()
         6.0,
         minimumRememberedStrokeWidth,
         DocumentLimits::maximumStrokeWidth));
+    m_canvas->setEraserStabilization(realSetting(settings,
+        QString::fromLatin1(eraserStabilizationKey),
+        legacyStabilization,
+        0.0,
+        1.0));
+    if (hasLegacyStabilization && !settings.contains(eraserStabilizationKey))
+    {
+        settings.setValue(eraserStabilizationKey, legacyStabilization);
+    }
     m_canvas->setBrushRoughness(realSetting(settings,
         QString::fromLatin1(roughnessKey),
         1.0,
@@ -1290,9 +1352,21 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setBrushColor(
         storedColor.isValid() ? storedColor : QColor(Qt::black));
 
+    const std::optional<CanvasWidget::WandReference> storedReference =
+        wandReferenceFromSettingsId(
+            settings.value(wandReferenceKey).toString());
+    m_canvas->setWandReference(
+        storedReference.value_or(CanvasWidget::WandReference::ActiveLayer));
+
     const std::optional<CanvasWidget::Tool> storedTool =
         toolFromSettingsId(settings.value(activeToolKey).toString());
     m_canvas->setTool(storedTool.value_or(CanvasWidget::Tool::Brush));
+
+    if (hasLegacyStabilization)
+    {
+        settings.remove(legacyStabilizationKey);
+        settings.sync();
+    }
 }
 
 void MainWindow::connectDrawingToolSettings()
@@ -1330,6 +1404,20 @@ void MainWindow::connectDrawingToolSettings()
             schedule();
         });
     connect(m_canvas,
+        &CanvasWidget::brushStabilizationChanged,
+        this,
+        [schedule](qreal)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::eraserStabilizationChanged,
+        this,
+        [schedule](qreal)
+        {
+            schedule();
+        });
+    connect(m_canvas,
         &CanvasWidget::brushRoughnessChanged,
         this,
         [schedule](qreal)
@@ -1347,6 +1435,13 @@ void MainWindow::connectDrawingToolSettings()
         &CanvasWidget::brushPresetChanged,
         this,
         [schedule](const QString &)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::wandReferenceChanged,
+        this,
+        [schedule](CanvasWidget::WandReference)
         {
             schedule();
         });
@@ -1368,10 +1463,15 @@ void MainWindow::saveDrawingToolSettings()
     settings.setValue(roughnessKey, m_canvas->brushRoughness());
     settings.setValue(antialiasingKey, m_canvas->brushAntialiasing());
     settings.setValue(eraserWidthKey, m_canvas->eraserWidth());
+    settings.setValue(eraserStabilizationKey, m_canvas->eraserStabilization());
+    settings.setValue(
+        wandReferenceKey, wandReferenceSettingsId(m_canvas->wandReference()));
     for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
     {
         settings.setValue(
             presetWidthKey(preset.id), m_canvas->brushPresetWidth(preset.id));
+        settings.setValue(presetStabilizationKey(preset.id),
+            m_canvas->brushPresetStabilization(preset.id));
     }
     settings.sync();
 }

@@ -87,6 +87,7 @@ void LayerItemDelegate::paint(QPainter *painter,
     const bool group = index.data(LayerItemRoles::Kind).toInt()
                        == static_cast<int>(LayerKind::Group);
     const bool clipped = index.data(LayerItemRoles::Clipped).toBool();
+    const bool reference = index.data(LayerItemRoles::Reference).toBool();
 
     if (selected)
     {
@@ -130,9 +131,22 @@ void LayerItemDelegate::paint(QPainter *painter,
     painter->setPen(visible ? Theme::textPrimary() : Theme::textMuted());
     const QString name = index.data(Qt::DisplayRole).toString();
     QRect textRect = nameRect(option.rect, depth);
-    if (group || clipped)
+    if (group || clipped || reference)
     {
-        const QString badge = group ? QStringLiteral("G") : QStringLiteral("↳");
+        QStringList badges;
+        if (group)
+        {
+            badges.append(QStringLiteral("G"));
+        }
+        if (clipped)
+        {
+            badges.append(QStringLiteral("↳"));
+        }
+        if (reference)
+        {
+            badges.append(QStringLiteral("R"));
+        }
+        const QString badge = badges.join(QLatin1Char(' '));
         const QRect badgeRect(textRect.left(),
             textRect.top(),
             option.fontMetrics.horizontalAdvance(badge) + 8,

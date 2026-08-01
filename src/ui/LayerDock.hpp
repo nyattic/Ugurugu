@@ -53,6 +53,7 @@ private:
     QComboBox *m_blendModeCombo = nullptr;
     QComboBox *m_parentGroupCombo = nullptr;
     QCheckBox *m_clipCheck = nullptr;
+    QCheckBox *m_referenceCheck = nullptr;
     QSlider *m_opacitySlider = nullptr;
     QLabel *m_opacityValue = nullptr;
     QTimer m_thumbnailTimer;

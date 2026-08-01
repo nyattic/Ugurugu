@@ -13,6 +13,7 @@ constexpr int Thumbnail = Qt::UserRole + 2;
 constexpr int Kind = Qt::UserRole + 3;
 constexpr int Depth = Qt::UserRole + 4;
 constexpr int Clipped = Qt::UserRole + 5;
+constexpr int Reference = Qt::UserRole + 6;
 }
 
 class LayerItemDelegate final : public QStyledItemDelegate

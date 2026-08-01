@@ -179,6 +179,7 @@ public:
     void clearLayer(const QUuid &id);
     RenameLayerResult renameLayer(const QUuid &id, const QString &name);
     void setLayerVisible(const QUuid &id, bool visible);
+    void setLayerReference(const QUuid &id, bool reference);
     void setLayerOpacity(const QUuid &id, qreal opacity);
     void setLayerBlendMode(const QUuid &id, LayerBlendMode mode);
     void setLayerClipToBelow(const QUuid &id, bool clipped);

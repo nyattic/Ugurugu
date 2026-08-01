@@ -56,6 +56,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/CanvasWidget.hpp
     src/ui/ColorSwatchRow.cpp
     src/ui/ColorSwatchRow.hpp
+    src/ui/EraserPopoverPanel.cpp
+    src/ui/EraserPopoverPanel.hpp
     src/ui/FrameScrubber.cpp
     src/ui/FrameScrubber.hpp
     src/ui/Icons.cpp
@@ -80,6 +82,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/ShortcutBinding.hpp
     src/ui/StrokePropertiesDialog.cpp
     src/ui/StrokePropertiesDialog.hpp
+    src/ui/StrokeStabilizationRow.cpp
+    src/ui/StrokeStabilizationRow.hpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.hpp
     src/ui/Theme.cpp
@@ -92,6 +96,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/WobblePlayButton.hpp
     src/ui/WobblePreview.cpp
     src/ui/WobblePreview.hpp
+    src/ui/WandPopoverPanel.cpp
+    src/ui/WandPopoverPanel.hpp
 )
 
 set(WOBBLEPAINT_TEST_SOURCES

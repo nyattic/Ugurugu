@@ -632,6 +632,7 @@ struct DocumentController::DocumentDelta
         QUuid id;
         std::optional<ValueChange<QString>> name;
         std::optional<ValueChange<bool>> visible;
+        std::optional<ValueChange<bool>> reference;
         std::optional<ValueChange<qreal>> opacity;
         std::optional<ValueChange<LayerBlendMode>> blendMode;
         std::optional<ValueChange<QUuid>> parentGroupId;
@@ -641,8 +642,8 @@ struct DocumentController::DocumentDelta
 
         bool isEmpty() const
         {
-            return !name && !visible && !opacity && !blendMode && !parentGroupId
-                   && !clipToLayerBelow && !initialCanvasSize
+            return !name && !visible && !reference && !opacity && !blendMode
+                   && !parentGroupId && !clipToLayerBelow && !initialCanvasSize
                    && strokes.isEmpty();
         }
     };
@@ -905,6 +906,8 @@ struct DocumentController::DocumentDelta
             change.id = layer.id;
             recordChange(layer.name, afterLayer.name, change.name);
             recordChange(layer.visible, afterLayer.visible, change.visible);
+            recordChange(
+                layer.reference, afterLayer.reference, change.reference);
             recordChange(layer.opacity, afterLayer.opacity, change.opacity);
             recordChange(
                 layer.blendMode, afterLayer.blendMode, change.blendMode);
@@ -970,6 +973,7 @@ struct DocumentController::DocumentDelta
                 || beforeLayer.parentGroupId != afterLayer.parentGroupId
                 || beforeLayer.clipToLayerBelow != afterLayer.clipToLayerBelow
                 || beforeLayer.visible != afterLayer.visible
+                || beforeLayer.reference != afterLayer.reference
                 || beforeLayer.opacity != afterLayer.opacity
                 || beforeLayer.blendMode != afterLayer.blendMode
                 || beforeLayer.initialCanvasSize
@@ -1216,6 +1220,7 @@ struct DocumentController::DocumentDelta
             }
             applyChange(layer->name, change.name, forward);
             applyChange(layer->visible, change.visible, forward);
+            applyChange(layer->reference, change.reference, forward);
             applyChange(layer->opacity, change.opacity, forward);
             applyChange(layer->blendMode, change.blendMode, forward);
             applyChange(layer->parentGroupId, change.parentGroupId, forward);
@@ -1316,11 +1321,11 @@ struct DocumentController::DocumentDelta
         const LayerChange &later = next.changedLayers[0];
         if (current.id != scope || later.id != scope || current.name
             || later.name || current.visible || later.visible
-            || current.blendMode || later.blendMode || current.parentGroupId
-            || later.parentGroupId || current.clipToLayerBelow
-            || later.clipToLayerBelow || current.initialCanvasSize
-            || later.initialCanvasSize || !current.strokes.isEmpty()
-            || !later.strokes.isEmpty())
+            || current.reference || later.reference || current.blendMode
+            || later.blendMode || current.parentGroupId || later.parentGroupId
+            || current.clipToLayerBelow || later.clipToLayerBelow
+            || current.initialCanvasSize || later.initialCanvasSize
+            || !current.strokes.isEmpty() || !later.strokes.isEmpty())
         {
             return false;
         }
@@ -1347,6 +1352,7 @@ struct DocumentController::DocumentDelta
         {
             normalize(change.name);
             normalize(change.visible);
+            normalize(change.reference);
             normalize(change.opacity);
             normalize(change.blendMode);
             normalize(change.parentGroupId);
@@ -3673,6 +3679,21 @@ void DocumentController::setLayerVisible(const QUuid &id, bool visible)
     tryCommitCandidate(tr("Toggle layer visibility"),
         std::move(candidate),
         std::move(effects));
+}
+
+void DocumentController::setLayerReference(const QUuid &id, bool reference)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    if (!layer || layer->kind != LayerKind::Paint
+        || layer->reference == reference)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.layer(id)->reference = reference;
+    tryCommitCandidate(tr("Set reference layer"), std::move(candidate));
 }
 
 void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)

@@ -20,14 +20,11 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QSignalBlocker>
-#include <QSlider>
-#include <QSpinBox>
 #include <QStandardPaths>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 namespace wobble
@@ -39,8 +36,6 @@ namespace
 const QString animateWhileDrawingKey =
     QStringLiteral("canvas/animateWhileDrawing");
 const QString wobbleAnimationKey = QStringLiteral("canvas/wobbleAnimation");
-const QString strokeStabilizationKey =
-    QStringLiteral("canvas/strokeStabilization");
 const QString defaultSaveFolderKey = QStringLiteral("files/defaultSaveFolder");
 const QString uiLanguageKey = QStringLiteral("appearance/language");
 
@@ -83,13 +78,6 @@ bool SettingsDialog::wobbleAnimationEnabled()
 bool SettingsDialog::animateWhileDrawing()
 {
     return QSettings().value(animateWhileDrawingKey, false).toBool();
-}
-
-qreal SettingsDialog::strokeStabilization()
-{
-    const qreal strength =
-        QSettings().value(strokeStabilizationKey, 0.0).toDouble();
-    return std::isfinite(strength) ? std::clamp(strength, 0.0, 1.0) : 0.0;
 }
 
 QString SettingsDialog::defaultSaveFolder()
@@ -155,47 +143,6 @@ SettingsDialog::SettingsDialog(
     auto *drawingLayout = new QVBoxLayout(drawingTab);
     drawingLayout->setContentsMargins(14, 14, 14, 14);
     drawingLayout->setSpacing(8);
-
-    auto *strokeStabilizationLabel =
-        new QLabel(tr("Stroke stabilization"), drawingTab);
-    drawingLayout->addWidget(strokeStabilizationLabel);
-
-    auto *strokeStabilizationRow = new QHBoxLayout;
-    strokeStabilizationRow->setSpacing(8);
-    m_strokeStabilizationSlider = new QSlider(Qt::Horizontal, drawingTab);
-    m_strokeStabilizationSlider->setObjectName(
-        QStringLiteral("strokeStabilizationSlider"));
-    m_strokeStabilizationSlider->setRange(0, 100);
-    m_strokeStabilizationSlider->setValue(
-        qRound(strokeStabilization() * 100.0));
-    strokeStabilizationRow->addWidget(m_strokeStabilizationSlider, 1);
-
-    m_strokeStabilizationSpin = new QSpinBox(drawingTab);
-    m_strokeStabilizationSpin->setObjectName(
-        QStringLiteral("strokeStabilizationSpin"));
-    m_strokeStabilizationSpin->setRange(0, 100);
-    m_strokeStabilizationSpin->setSuffix(QStringLiteral("%"));
-    m_strokeStabilizationSpin->setValue(m_strokeStabilizationSlider->value());
-    strokeStabilizationRow->addWidget(m_strokeStabilizationSpin);
-    drawingLayout->addLayout(strokeStabilizationRow);
-
-    connect(m_strokeStabilizationSlider,
-        &QSlider::valueChanged,
-        m_strokeStabilizationSpin,
-        &QSpinBox::setValue);
-    connect(m_strokeStabilizationSpin,
-        &QSpinBox::valueChanged,
-        m_strokeStabilizationSlider,
-        &QSlider::setValue);
-    connect(m_strokeStabilizationSpin,
-        &QSpinBox::valueChanged,
-        this,
-        [this](int percent)
-        {
-            const qreal strength = percent / 100.0;
-            QSettings().setValue(strokeStabilizationKey, strength);
-            emit strokeStabilizationChanged(strength);
-        });
 
     m_wobbleAnimation = new QCheckBox(tr("Wobble animation"), drawingTab);
     m_wobbleAnimation->setObjectName(QStringLiteral("wobbleAnimationCheck"));
@@ -482,14 +429,6 @@ void SettingsDialog::restoreDefaults()
     settings.remove(wobbleAnimationKey);
     emit wobbleAnimationEnabledChanged(true);
     updateDrawingOptionsEnabled();
-    {
-        const QSignalBlocker sliderBlocker(m_strokeStabilizationSlider);
-        const QSignalBlocker spinBlocker(m_strokeStabilizationSpin);
-        m_strokeStabilizationSlider->setValue(0);
-        m_strokeStabilizationSpin->setValue(0);
-    }
-    settings.remove(strokeStabilizationKey);
-    emit strokeStabilizationChanged(0.0);
     {
         const QSignalBlocker languageBlocker(m_languageCombo);
         m_languageCombo->setCurrentIndex(

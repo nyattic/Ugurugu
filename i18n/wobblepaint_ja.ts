@@ -490,6 +490,10 @@
         <translation>線で囲まれた空白部分をクリックすると選択できます。</translation>
     </message>
     <message>
+        <source>Set a visible paint layer as a reference layer first.</source>
+        <translation>先に表示中のペイントレイヤーを参照レイヤーに設定してください。</translation>
+    </message>
+    <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="2101"/>
         <source>Click inside the selected area to fill it.</source>
         <translation>選択範囲の内側をクリックすると塗りつぶします。</translation>
@@ -668,6 +672,10 @@
         <location filename="../src/document/DocumentController.cpp" line="3441"/>
         <source>Toggle layer visibility</source>
         <translation>レイヤー表示の切り替え</translation>
+    </message>
+    <message>
+        <source>Set reference layer</source>
+        <translation>参照レイヤーを設定</translation>
     </message>
     <message>
         <location filename="../src/document/DocumentController.cpp" line="3461"/>
@@ -1388,6 +1396,14 @@
         <translation>下のレイヤーでクリッピング</translation>
     </message>
     <message>
+        <source>Reference layer</source>
+        <translation>参照レイヤー</translation>
+    </message>
+    <message>
+        <source>Use this layer when a selection tool references marked layers</source>
+        <translation>マークしたレイヤーを参照する選択ツールでこのレイヤーを使用</translation>
+    </message>
+    <message>
         <source>Limit this layer to the opacity of the base layer below it</source>
         <translation>このレイヤーを下の基準レイヤーの不透明領域内に表示します</translation>
     </message>
@@ -2082,11 +2098,6 @@ The recovery file was not deleted. You can find it at:
         <translation>一般</translation>
     </message>
     <message>
-        <location filename="../src/ui/SettingsDialog.cpp" line="196"/>
-        <source>Stroke stabilization</source>
-        <translation>手ぶれ補正</translation>
-    </message>
-    <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="193"/>
         <source>Wobble preview while drawing a stroke</source>
         <translation>ストローク描画中のウォブルプレビュー</translation>
@@ -2302,6 +2313,44 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/WobblePreview.cpp" line="23"/>
         <source>Live preview of the wobble strength</source>
         <translation>現在のウォブルの強さをリアルタイムで表示します</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::StrokeStabilizationRow</name>
+    <message>
+        <source>Stroke stabilization</source>
+        <translation>手ぶれ補正</translation>
+    </message>
+    <message>
+        <source>STABILIZATION</source>
+        <translation>手ぶれ補正</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::WandPopoverPanel</name>
+    <message>
+        <source>REFERENCE</source>
+        <translation>参照</translation>
+    </message>
+    <message>
+        <source>Selection reference</source>
+        <translation>選択の参照先</translation>
+    </message>
+    <message>
+        <source>Active layer</source>
+        <translation>編集中のレイヤー</translation>
+    </message>
+    <message>
+        <source>Reference layers</source>
+        <translation>参照レイヤー</translation>
+    </message>
+    <message>
+        <source>All visible layers</source>
+        <translation>表示中のすべてのレイヤー</translation>
     </message>
 </context>
 </TS>

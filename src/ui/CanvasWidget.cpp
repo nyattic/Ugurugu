@@ -294,9 +294,24 @@ qreal CanvasWidget::brushRoughness() const
     return m_brushRoughness;
 }
 
-qreal CanvasWidget::strokeStabilization() const
+qreal CanvasWidget::brushStabilization() const
 {
-    return m_strokeStabilizer.strength();
+    return brushPresetStabilization(m_brushPresetId);
+}
+
+qreal CanvasWidget::brushPresetStabilization(const QString &presetId) const
+{
+    const BrushPreset *preset = BrushPresetCatalog::find(presetId);
+    if (!preset)
+    {
+        return 0.0;
+    }
+    return std::clamp(m_presetStabilizations.value(preset->id, 0.0), 0.0, 1.0);
+}
+
+qreal CanvasWidget::eraserStabilization() const
+{
+    return m_eraserStabilization;
 }
 
 bool CanvasWidget::brushAntialiasing() const
@@ -322,6 +337,11 @@ Document CanvasWidget::displayDocument() const
 QString CanvasWidget::brushPresetId() const
 {
     return m_brushPresetId;
+}
+
+CanvasWidget::WandReference CanvasWidget::wandReference() const
+{
+    return m_wandReference;
 }
 
 bool CanvasWidget::isAnimating() const
@@ -794,19 +814,45 @@ void CanvasWidget::setBrushRoughness(qreal roughness)
     update();
 }
 
-void CanvasWidget::setStrokeStabilization(qreal strength)
+void CanvasWidget::setBrushStabilization(qreal strength)
+{
+    setBrushPresetStabilization(m_brushPresetId, strength);
+}
+
+void CanvasWidget::setBrushPresetStabilization(
+    const QString &presetId, qreal strength)
+{
+    const BrushPreset *preset = BrushPresetCatalog::find(presetId);
+    if (!preset || !std::isfinite(strength))
+    {
+        return;
+    }
+    const qreal normalized = std::clamp(strength, 0.0, 1.0);
+    if (qFuzzyCompare(
+            1.0 + brushPresetStabilization(preset->id), 1.0 + normalized))
+    {
+        return;
+    }
+    m_presetStabilizations.insert(preset->id, normalized);
+    if (m_brushPresetId == preset->id)
+    {
+        emit brushStabilizationChanged(normalized);
+    }
+}
+
+void CanvasWidget::setEraserStabilization(qreal strength)
 {
     if (!std::isfinite(strength))
     {
         return;
     }
     const qreal normalized = std::clamp(strength, 0.0, 1.0);
-    if (qFuzzyCompare(1.0 + m_strokeStabilizer.strength(), 1.0 + normalized))
+    if (qFuzzyCompare(1.0 + m_eraserStabilization, 1.0 + normalized))
     {
         return;
     }
-    m_strokeStabilizer.setStrength(normalized);
-    emit strokeStabilizationChanged(normalized);
+    m_eraserStabilization = normalized;
+    emit eraserStabilizationChanged(normalized);
 }
 
 void CanvasWidget::setBrushAntialiasing(bool antialiasing)
@@ -855,7 +901,27 @@ void CanvasWidget::setBrushPreset(const QString &presetId)
         emit brushWidthChanged(nextWidth);
     }
     emit brushPresetChanged(preset->id);
+    emit brushStabilizationChanged(brushStabilization());
     update();
+}
+
+void CanvasWidget::setWandReference(WandReference reference)
+{
+    switch (reference)
+    {
+    case WandReference::ActiveLayer:
+    case WandReference::ReferenceLayers:
+    case WandReference::AllVisibleLayers:
+        break;
+    default:
+        return;
+    }
+    if (m_wandReference == reference)
+    {
+        return;
+    }
+    m_wandReference = reference;
+    emit wandReferenceChanged(reference);
 }
 
 void CanvasWidget::setAnimating(bool animating)
@@ -1831,13 +1897,18 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     m_activeStroke.mode = erasing ? StrokeMode::Erase : StrokeMode::Paint;
     m_activeStroke.color = m_brushColor;
     m_activeStroke.width = erasing ? m_eraserWidth : m_brushWidth;
-    m_activeStroke.brush = m_brushSettings;
-    m_activeStroke.brush.wobbleScale = m_brushRoughness;
-    m_activeStroke.brush.antialiasing = m_brushAntialiasing;
+    m_activeStroke.brush = erasing ? m_eraserSettings : m_brushSettings;
+    if (!erasing)
+    {
+        m_activeStroke.brush.wobbleScale = m_brushRoughness;
+        m_activeStroke.brush.antialiasing = m_brushAntialiasing;
+    }
     if (!m_selectionMask.isNull() && m_selectionLayer == document.activeLayerId)
     {
         m_activeStroke.clipMask = m_selectionMask;
     }
+    m_strokeStabilizer.setStrength(
+        erasing ? m_eraserStabilization : brushStabilization());
     const QPointF position = m_strokeStabilizer.begin(
         clampedDocumentPosition(documentPosition), timestamp);
     m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
@@ -2369,12 +2440,30 @@ void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
         std::clamp(
             static_cast<int>(documentPosition.y()), 0, size.height() - 1));
 
-    const QImage layerImage = renderActiveLayerImage();
-    if (layerImage.isNull())
+    QImage referenceImage;
+    switch (m_wandReference)
     {
+    case WandReference::ActiveLayer:
+        referenceImage = renderActiveLayerImage();
+        break;
+    case WandReference::ReferenceLayers:
+        referenceImage = renderReferenceLayersImage();
+        break;
+    case WandReference::AllVisibleLayers:
+        referenceImage = renderAllVisibleLayersImage();
+        break;
+    }
+    if (referenceImage.isNull())
+    {
+        pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        if (m_wandReference == WandReference::ReferenceLayers)
+        {
+            emit interactionMessage(
+                tr("Set a visible paint layer as a reference layer first."));
+        }
         return;
     }
-    const QImage mask = RenderEngine::fillRegionMask(layerImage, seed);
+    const QImage mask = RenderEngine::fillRegionMask(referenceImage, seed);
     if (mask.isNull())
     {
         pushSelectionChange(previousSelection, {}, tr("Deselect"));
@@ -3036,6 +3125,56 @@ QImage CanvasWidget::renderActiveLayerImage() const
     visibleLayer.opacity = 1.0;
     single.layers = {visibleLayer};
     return RenderEngine::render(single, m_currentFrame);
+}
+
+QImage CanvasWidget::renderReferenceLayersImage() const
+{
+    Document document = displayDocument();
+    if (!document.size.isValid())
+    {
+        return {};
+    }
+    bool hasVisibleReference = false;
+    for (Layer &layer : document.layers)
+    {
+        if (layer.kind != LayerKind::Paint)
+        {
+            continue;
+        }
+        if (!layer.reference)
+        {
+            layer.visible = false;
+            continue;
+        }
+        bool visible = layer.visible && layer.opacity > 0.0;
+        QUuid parentId = layer.parentGroupId;
+        for (int depth = 0;
+            !parentId.isNull() && depth < document.layers.size();
+            ++depth)
+        {
+            const Layer *parent = document.layer(parentId);
+            if (!parent || !parent->visible || parent->opacity <= 0.0)
+            {
+                visible = false;
+                break;
+            }
+            parentId = parent->parentGroupId;
+        }
+        hasVisibleReference = hasVisibleReference || visible;
+    }
+    if (!hasVisibleReference)
+    {
+        return {};
+    }
+    document.background = Qt::transparent;
+    return RenderEngine::render(document, m_currentFrame);
+}
+
+QImage CanvasWidget::renderAllVisibleLayersImage() const
+{
+    Document document = displayDocument();
+    document.background = Qt::transparent;
+    return RenderEngine::render(document, m_currentFrame);
 }
 
 void CanvasWidget::drawSelectionOverlay(

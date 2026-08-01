@@ -175,6 +175,12 @@ void LayerDock::buildContent()
         tr("Limit this layer to the opacity of the base layer below it"));
     layout->addWidget(m_clipCheck, 0, Qt::AlignLeft);
 
+    m_referenceCheck = new QCheckBox(tr("Reference layer"), content);
+    m_referenceCheck->setObjectName(QStringLiteral("layerReferenceCheck"));
+    m_referenceCheck->setToolTip(
+        tr("Use this layer when a selection tool references marked layers"));
+    layout->addWidget(m_referenceCheck, 0, Qt::AlignLeft);
+
     auto *opacityLayout = new QHBoxLayout;
     opacityLayout->setContentsMargins(10, 0, 10, 0);
     opacityLayout->setSpacing(6);
@@ -454,6 +460,22 @@ void LayerDock::connectControls()
             }
         });
 
+    connect(m_referenceCheck,
+        &QCheckBox::toggled,
+        this,
+        [this](bool reference)
+        {
+            if (!m_controller || m_syncing)
+            {
+                return;
+            }
+            const QUuid id = selectedLayerId();
+            if (!id.isNull())
+            {
+                m_controller->setLayerReference(id, reference);
+            }
+        });
+
     if (m_controller)
     {
         connect(m_controller,
@@ -522,6 +544,7 @@ void LayerDock::rebuild()
                     LayerItemRoles::Kind, static_cast<int>(layer.kind));
                 item->setData(LayerItemRoles::Depth, depth);
                 item->setData(LayerItemRoles::Clipped, layer.clipToLayerBelow);
+                item->setData(LayerItemRoles::Reference, layer.reference);
                 item->setFlags(
                     item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
                 if (layer.id == m_selectedLayerId)
@@ -604,6 +627,7 @@ void LayerDock::updateControls()
     m_blendModeCombo->setEnabled(hasLayer);
     m_opacitySlider->setEnabled(hasLayer);
     m_clipCheck->setEnabled(paintLayer);
+    m_referenceCheck->setEnabled(paintLayer);
 
     {
         const QSignalBlocker blocker(m_parentGroupCombo);
@@ -633,6 +657,10 @@ void LayerDock::updateControls()
     {
         const QSignalBlocker blocker(m_clipCheck);
         m_clipCheck->setChecked(layer && layer->clipToLayerBelow);
+    }
+    {
+        const QSignalBlocker blocker(m_referenceCheck);
+        m_referenceCheck->setChecked(layer && layer->reference);
     }
 
     {

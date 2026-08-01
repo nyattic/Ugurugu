@@ -37,6 +37,13 @@ public:
         Bucket
     };
 
+    enum class WandReference
+    {
+        ActiveLayer,
+        ReferenceLayers,
+        AllVisibleLayers
+    };
+
     explicit CanvasWidget(
         DocumentController *controller, QWidget *parent = nullptr);
 
@@ -46,9 +53,12 @@ public:
     qreal brushPresetWidth(const QString &presetId) const;
     qreal eraserWidth() const;
     qreal brushRoughness() const;
-    qreal strokeStabilization() const;
+    qreal brushStabilization() const;
+    qreal brushPresetStabilization(const QString &presetId) const;
+    qreal eraserStabilization() const;
     bool brushAntialiasing() const;
     QString brushPresetId() const;
+    WandReference wandReference() const;
     bool isAnimating() const;
     bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
@@ -86,10 +96,13 @@ public slots:
     void setBrushPresetWidth(const QString &presetId, qreal width);
     void setEraserWidth(qreal width);
     void setBrushRoughness(qreal roughness);
-    void setStrokeStabilization(qreal strength);
+    void setBrushStabilization(qreal strength);
+    void setBrushPresetStabilization(const QString &presetId, qreal strength);
+    void setEraserStabilization(qreal strength);
     void setBrushAntialiasing(bool antialiasing);
     void setWobbleAnimationEnabled(bool enabled);
     void setBrushPreset(const QString &presetId);
+    void setWandReference(WandReference reference);
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
@@ -112,9 +125,11 @@ signals:
     void brushWidthChanged(qreal width);
     void eraserWidthChanged(qreal width);
     void brushRoughnessChanged(qreal roughness);
-    void strokeStabilizationChanged(qreal strength);
+    void brushStabilizationChanged(qreal strength);
+    void eraserStabilizationChanged(qreal strength);
     void brushAntialiasingChanged(bool antialiasing);
     void brushPresetChanged(const QString &presetId);
+    void wandReferenceChanged(WandReference reference);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
@@ -254,6 +269,8 @@ private:
     void updateSelectionActionBar();
     QPointF clampedSelectionDelta(const QPointF &delta) const;
     QImage renderActiveLayerImage() const;
+    QImage renderReferenceLayersImage() const;
+    QImage renderAllVisibleLayersImage() const;
     void drawSelectionOverlay(QPainter &painter, const QTransform &transform);
 
     DocumentController *m_controller;
@@ -263,11 +280,15 @@ private:
     qreal m_eraserWidth = 6.0;
     qreal m_brushRoughness = 1.0;
     StrokeStabilizer m_strokeStabilizer;
+    qreal m_eraserStabilization = 0.0;
     bool m_brushAntialiasing = false;
     bool m_wobbleAnimationEnabled = true;
     QString m_brushPresetId;
     BrushSettings m_brushSettings;
+    BrushSettings m_eraserSettings;
     QHash<QString, qreal> m_presetWidths;
+    QHash<QString, qreal> m_presetStabilizations;
+    WandReference m_wandReference = WandReference::ActiveLayer;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
     int m_currentFrame = 0;

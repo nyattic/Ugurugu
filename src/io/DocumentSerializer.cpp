@@ -176,7 +176,7 @@ struct DocumentValidationStats
     quint64 distinctMaskBytes = 0;
 };
 
-constexpr int schemaVersion = 8;
+constexpr int schemaVersion = 9;
 constexpr int algorithmVersion = 2;
 constexpr int serializationFormatGeneration = 1;
 
@@ -1915,6 +1915,7 @@ QJsonObject layerToJson(const Layer &layer,
             : QJsonValue(layer.parentGroupId.toString(QUuid::WithoutBraces)));
     object.insert(QStringLiteral("clipToLayerBelow"), layer.clipToLayerBelow);
     object.insert(QStringLiteral("visible"), layer.visible);
+    object.insert(QStringLiteral("reference"), layer.reference);
     object.insert(QStringLiteral("opacity"), layer.opacity);
     object.insert(
         QStringLiteral("blendMode"), layerBlendModeName(layer.blendMode));
@@ -1938,6 +1939,7 @@ QJsonObject layerSkeletonToJson(const Layer &layer)
             : QJsonValue(layer.parentGroupId.toString(QUuid::WithoutBraces)));
     object.insert(QStringLiteral("clipToLayerBelow"), layer.clipToLayerBelow);
     object.insert(QStringLiteral("visible"), layer.visible);
+    object.insert(QStringLiteral("reference"), layer.reference);
     object.insert(QStringLiteral("opacity"), layer.opacity);
     object.insert(
         QStringLiteral("blendMode"), layerBlendModeName(layer.blendMode));
@@ -2282,6 +2284,7 @@ private:
         frozen.parentGroupId = source.parentGroupId;
         frozen.clipToLayerBelow = source.clipToLayerBelow;
         frozen.visible = source.visible;
+        frozen.reference = source.reference;
         frozen.opacity = source.opacity;
         frozen.blendMode = source.blendMode;
         frozen.initialCanvasSize = source.initialCanvasSize;
@@ -2400,7 +2403,8 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
             || !isValidLayerKind(layer.kind)
             || (layer.kind == LayerKind::Group
-                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow)))
+                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow
+                    || layer.reference)))
         {
             setError(error,
                 DocumentSerializer::tr("A layer contains invalid data."));
@@ -2544,6 +2548,7 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             frozenLayer.parentGroupId = layer.parentGroupId;
             frozenLayer.clipToLayerBelow = layer.clipToLayerBelow;
             frozenLayer.visible = layer.visible;
+            frozenLayer.reference = layer.reference;
             frozenLayer.opacity = layer.opacity;
             frozenLayer.blendMode = layer.blendMode;
             frozenLayer.initialCanvasSize = layer.initialCanvasSize;
@@ -2955,11 +2960,13 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
     }
 
     const QJsonObject object = value.toObject();
+    const QJsonValue referenceValue = object.value(QStringLiteral("reference"));
     if (!object.value(QStringLiteral("id")).isString()
         || !object.value(QStringLiteral("name")).isString()
         || !object.value(QStringLiteral("visible")).isBool()
         || !object.value(QStringLiteral("opacity")).isDouble()
         || !object.value(QStringLiteral("strokes")).isArray()
+        || (fileSchemaVersion >= 9 && !referenceValue.isBool())
         || (fileSchemaVersion >= 8
             && (!object.value(QStringLiteral("kind")).isString()
                 || (!object.value(QStringLiteral("parentGroupId")).isString()
@@ -3019,6 +3026,10 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
             object.value(QStringLiteral("clipToLayerBelow")).toBool();
     }
     layer.visible = object.value(QStringLiteral("visible")).toBool();
+    if (fileSchemaVersion >= 9)
+    {
+        layer.reference = referenceValue.toBool();
+    }
     layer.opacity = object.value(QStringLiteral("opacity")).toDouble();
     if (!std::isfinite(layer.opacity) || layer.opacity < 0.0
         || layer.opacity > 1.0)
@@ -3214,7 +3225,8 @@ bool validateDocument(const Document &document,
             || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
             || !isValidLayerKind(layer.kind)
             || (layer.kind == LayerKind::Group
-                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow))
+                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow
+                    || layer.reference))
             || layer.strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || layer.strokes.size()
                    > DocumentLimits::maximumTotalStrokes - totalStrokes)
