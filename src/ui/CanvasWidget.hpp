@@ -44,6 +44,13 @@ public:
         AllVisibleLayers
     };
 
+    enum class SelectionShape
+    {
+        Freehand,
+        Rectangle,
+        Ellipse
+    };
+
     explicit CanvasWidget(
         DocumentController *controller, QWidget *parent = nullptr);
 
@@ -52,13 +59,17 @@ public:
     qreal brushWidth() const;
     qreal brushPresetWidth(const QString &presetId) const;
     qreal eraserWidth() const;
+    qreal eraserPresetWidth(const QString &presetId) const;
     qreal brushRoughness() const;
     qreal brushStabilization() const;
     qreal brushPresetStabilization(const QString &presetId) const;
     qreal eraserStabilization() const;
+    qreal eraserPresetStabilization(const QString &presetId) const;
     bool brushAntialiasing() const;
     QString brushPresetId() const;
+    QString eraserPresetId() const;
     WandReference wandReference() const;
+    SelectionShape selectionShape() const;
     bool isAnimating() const;
     bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
@@ -95,14 +106,18 @@ public slots:
     void setBrushWidth(qreal width);
     void setBrushPresetWidth(const QString &presetId, qreal width);
     void setEraserWidth(qreal width);
+    void setEraserPresetWidth(const QString &presetId, qreal width);
     void setBrushRoughness(qreal roughness);
     void setBrushStabilization(qreal strength);
     void setBrushPresetStabilization(const QString &presetId, qreal strength);
     void setEraserStabilization(qreal strength);
+    void setEraserPresetStabilization(const QString &presetId, qreal strength);
     void setBrushAntialiasing(bool antialiasing);
     void setWobbleAnimationEnabled(bool enabled);
     void setBrushPreset(const QString &presetId);
+    void setEraserPreset(const QString &presetId);
     void setWandReference(WandReference reference);
+    void setSelectionShape(SelectionShape shape);
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
@@ -129,7 +144,9 @@ signals:
     void eraserStabilizationChanged(qreal strength);
     void brushAntialiasingChanged(bool antialiasing);
     void brushPresetChanged(const QString &presetId);
+    void eraserPresetChanged(const QString &presetId);
     void wandReferenceChanged(WandReference reference);
+    void selectionShapeChanged(SelectionShape shape);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
@@ -218,9 +235,12 @@ private:
     void updateCursor();
     void notifyZoomChanged();
     bool selectionContains(const QPointF &documentPosition) const;
-    void beginLasso(const QPointF &documentPosition);
-    void finishLasso();
-    void cancelLasso();
+    void beginAreaSelection(const QPointF &documentPosition);
+    void continueAreaSelection(const QPointF &documentPosition);
+    void finishAreaSelection();
+    void cancelAreaSelection();
+    bool canFinishAreaSelection() const;
+    QPainterPath areaSelectionPath() const;
     void applySelectionMask(
         QImage mask, const SelectionState &previousSelection);
     SelectionState selectionStateForMask(QImage mask) const;
@@ -280,15 +300,18 @@ private:
     qreal m_eraserWidth = 6.0;
     qreal m_brushRoughness = 1.0;
     StrokeStabilizer m_strokeStabilizer;
-    qreal m_eraserStabilization = 0.0;
     bool m_brushAntialiasing = false;
     bool m_wobbleAnimationEnabled = true;
     QString m_brushPresetId;
+    QString m_eraserPresetId;
     BrushSettings m_brushSettings;
     BrushSettings m_eraserSettings;
-    QHash<QString, qreal> m_presetWidths;
-    QHash<QString, qreal> m_presetStabilizations;
+    QHash<QString, qreal> m_brushPresetWidths;
+    QHash<QString, qreal> m_brushPresetStabilizations;
+    QHash<QString, qreal> m_eraserPresetWidths;
+    QHash<QString, qreal> m_eraserPresetStabilizations;
     WandReference m_wandReference = WandReference::ActiveLayer;
+    SelectionShape m_selectionShape = SelectionShape::Freehand;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
     int m_currentFrame = 0;
@@ -323,10 +346,12 @@ private:
     QPointF m_pointerWidgetPosition;
     bool m_pointerInside = false;
     bool m_pointerOverWidget = false;
-    QVector<QPointF> m_lassoPoints;
-    bool m_lassoActive = false;
-    SelectionState m_selectionBeforeLasso;
-    bool m_hasSelectionBeforeLasso = false;
+    QVector<QPointF> m_areaSelectionPoints;
+    QPointF m_areaSelectionAnchor;
+    QPointF m_areaSelectionCurrent;
+    bool m_areaSelectionActive = false;
+    SelectionState m_selectionBeforeArea;
+    bool m_hasSelectionBeforeArea = false;
     QSet<QUuid> m_selectedStrokes;
     QUuid m_selectionLayer;
     QImage m_selectionMask;

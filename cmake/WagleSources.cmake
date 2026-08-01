@@ -10,6 +10,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/app/UpdateCheckPolicy.hpp
     src/brush/BrushPreset.cpp
     src/brush/BrushPreset.hpp
+    src/brush/EraserPreset.cpp
+    src/brush/EraserPreset.hpp
     src/document/Document.cpp
     src/document/Document.hpp
     src/document/DocumentController.cpp
@@ -58,6 +60,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/ColorSwatchRow.hpp
     src/ui/EraserPopoverPanel.cpp
     src/ui/EraserPopoverPanel.hpp
+    src/ui/EraserPresetButton.cpp
+    src/ui/EraserPresetButton.hpp
     src/ui/FrameScrubber.cpp
     src/ui/FrameScrubber.hpp
     src/ui/Icons.cpp
@@ -72,12 +76,18 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/LayerListWidget.hpp
     src/ui/LayerThumbnailRenderer.cpp
     src/ui/LayerThumbnailRenderer.hpp
+    src/ui/LassoPopoverPanel.cpp
+    src/ui/LassoPopoverPanel.hpp
     src/ui/MainWindow.cpp
     src/ui/MainWindow.hpp
     src/ui/PopoverToolButton.cpp
     src/ui/PopoverToolButton.hpp
+    src/ui/PopoverOptionButton.cpp
+    src/ui/PopoverOptionButton.hpp
     src/ui/SelectionActionBar.cpp
     src/ui/SelectionActionBar.hpp
+    src/ui/SelectionShapeButton.cpp
+    src/ui/SelectionShapeButton.hpp
     src/ui/ShortcutBinding.cpp
     src/ui/ShortcutBinding.hpp
     src/ui/StrokePropertiesDialog.cpp
@@ -98,6 +108,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/WobblePreview.hpp
     src/ui/WandPopoverPanel.cpp
     src/ui/WandPopoverPanel.hpp
+    src/ui/WandReferenceButton.cpp
+    src/ui/WandReferenceButton.hpp
 )
 
 set(WOBBLEPAINT_TEST_SOURCES

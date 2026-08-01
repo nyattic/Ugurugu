@@ -110,6 +110,21 @@
     </message>
 </context>
 <context>
+    <name>EraserPresets</name>
+    <message>
+        <source>Hard</source>
+        <translation>ハード</translation>
+    </message>
+    <message>
+        <source>Soft</source>
+        <translation>ソフト</translation>
+    </message>
+    <message>
+        <source>Kneaded</source>
+        <translation>練り消し</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <location filename="../src/main.cpp" line="151"/>
@@ -1679,8 +1694,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="947"/>
-        <source>&amp;Lasso select</source>
-        <translation>なげなわ選択(&amp;L)</translation>
+        <source>&amp;Area select</source>
+        <translation>範囲選択(&amp;A)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="953"/>
@@ -2331,6 +2346,37 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
+    <name>wobble::LassoPopoverPanel</name>
+    <message>
+        <source>SHAPE</source>
+        <translation>形状</translation>
+    </message>
+    <message>
+        <source>Freehand</source>
+        <translation>自由選択</translation>
+    </message>
+    <message>
+        <source>Draw freely around an area</source>
+        <translation>領域の周囲を自由に描画</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>長方形</translation>
+    </message>
+    <message>
+        <source>Drag between opposite corners</source>
+        <translation>対角の2点間をドラッグ</translation>
+    </message>
+    <message>
+        <source>Ellipse</source>
+        <translation>楕円</translation>
+    </message>
+    <message>
+        <source>Drag to fit an oval area</source>
+        <translation>楕円の領域に合わせてドラッグ</translation>
+    </message>
+</context>
+<context>
     <name>wobble::WandPopoverPanel</name>
     <message>
         <source>REFERENCE</source>
@@ -2351,6 +2397,18 @@ The recovery file was not deleted. You can find it at:
     <message>
         <source>All visible layers</source>
         <translation>表示中のすべてのレイヤー</translation>
+    </message>
+    <message>
+        <source>Use only the layer you are editing</source>
+        <translation>編集中のレイヤーのみを使用</translation>
+    </message>
+    <message>
+        <source>Use layers marked as references</source>
+        <translation>参照に設定したレイヤーを使用</translation>
+    </message>
+    <message>
+        <source>Combine every visible layer</source>
+        <translation>表示中のすべてのレイヤーを結合して使用</translation>
     </message>
 </context>
 </TS>

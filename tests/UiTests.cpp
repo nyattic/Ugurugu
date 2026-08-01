@@ -1,4 +1,5 @@
 #include "brush/BrushPreset.hpp"
+#include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
@@ -11,16 +12,22 @@
 #include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorSwatchRow.hpp"
+#include "ui/EraserPopoverPanel.hpp"
+#include "ui/EraserPresetButton.hpp"
 #include "ui/FrameScrubber.hpp"
 #include "ui/ImageSizeDialog.hpp"
+#include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/LayerThumbnailRenderer.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
+#include "ui/SelectionShapeButton.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
 #include "ui/TimelineBar.hpp"
+#include "ui/WandPopoverPanel.hpp"
+#include "ui/WandReferenceButton.hpp"
 #include "ui/WobblePreview.hpp"
 
 #include <QAction>
@@ -34,6 +41,7 @@
 #include <QFileInfo>
 #include <QFocusEvent>
 #include <QHideEvent>
+#include <QInputDialog>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QLineEdit>
@@ -273,6 +281,104 @@ private slots:
         BrushPresetButton button(preset);
         QCOMPARE(
             button.accessibleName(), BrushPresetCatalog::displayName(preset));
+    }
+
+    void exposesEraserPresetNameToAccessibility()
+    {
+        const EraserPreset &preset = EraserPresetCatalog::defaultPreset();
+        EraserPresetButton button(preset);
+        QCOMPARE(
+            button.accessibleName(), EraserPresetCatalog::displayName(preset));
+    }
+
+    void switchesEraserPresetFromCards()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        EraserPopoverPanel panel(&canvas);
+
+        const QList<EraserPresetButton *> buttons =
+            panel.findChildren<EraserPresetButton *>();
+        QCOMPARE(buttons.size(), EraserPresetCatalog::builtIns().size());
+        EraserPresetButton *softButton = nullptr;
+        for (EraserPresetButton *button : buttons)
+        {
+            if (button->presetId() == QStringLiteral("soft-eraser"))
+            {
+                softButton = button;
+                break;
+            }
+        }
+        QVERIFY(softButton);
+        softButton->click();
+        QCOMPARE(canvas.eraserPresetId(), QStringLiteral("soft-eraser"));
+        QVERIFY(softButton->isChecked());
+        QCOMPARE(canvas.eraserWidth(),
+            EraserPresetCatalog::find(QStringLiteral("soft-eraser"))
+                ->defaultSize);
+    }
+
+    void switchesWandReferenceFromCards()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        WandPopoverPanel panel(&canvas);
+
+        WandReferenceButton *activeButton =
+            panel.findChild<WandReferenceButton *>(
+                QStringLiteral("wandReferenceActiveButton"));
+        WandReferenceButton *markedButton =
+            panel.findChild<WandReferenceButton *>(
+                QStringLiteral("wandReferenceMarkedButton"));
+        WandReferenceButton *visibleButton =
+            panel.findChild<WandReferenceButton *>(
+                QStringLiteral("wandReferenceVisibleButton"));
+        QVERIFY(activeButton);
+        QVERIFY(markedButton);
+        QVERIFY(visibleButton);
+        QCOMPARE(panel.findChildren<WandReferenceButton *>().size(), 3);
+        QVERIFY(activeButton->isChecked());
+
+        markedButton->click();
+        QCOMPARE(canvas.wandReference(),
+            CanvasWidget::WandReference::ReferenceLayers);
+        QVERIFY(markedButton->isChecked());
+
+        canvas.setWandReference(CanvasWidget::WandReference::AllVisibleLayers);
+        QVERIFY(visibleButton->isChecked());
+    }
+
+    void switchesSelectionShapeFromCards()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        LassoPopoverPanel panel(&canvas);
+
+        SelectionShapeButton *freehandButton =
+            panel.findChild<SelectionShapeButton *>(
+                QStringLiteral("selectionShapeFreehandButton"));
+        SelectionShapeButton *rectangleButton =
+            panel.findChild<SelectionShapeButton *>(
+                QStringLiteral("selectionShapeRectangleButton"));
+        SelectionShapeButton *ellipseButton =
+            panel.findChild<SelectionShapeButton *>(
+                QStringLiteral("selectionShapeEllipseButton"));
+        QVERIFY(freehandButton);
+        QVERIFY(rectangleButton);
+        QVERIFY(ellipseButton);
+        QCOMPARE(panel.findChildren<SelectionShapeButton *>().size(), 3);
+        QVERIFY(freehandButton->isChecked());
+
+        rectangleButton->click();
+        QCOMPARE(
+            canvas.selectionShape(), CanvasWidget::SelectionShape::Rectangle);
+        QVERIFY(rectangleButton->isChecked());
+
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Ellipse);
+        QVERIFY(ellipseButton->isChecked());
     }
 
     void tabsToFrameScrubberAndExposesCurrentFrame()
@@ -708,8 +814,14 @@ private slots:
                 QStringLiteral("drawingTools/brush/presetStabilizations/%1")
                     .arg(preset.id)));
         }
-        QCOMPARE(canvas->eraserStabilization(), 0.65);
-        QVERIFY(settings.contains(
+        for (const EraserPreset &preset : EraserPresetCatalog::builtIns())
+        {
+            QCOMPARE(canvas->eraserPresetStabilization(preset.id), 0.65);
+            QVERIFY(settings.contains(
+                QStringLiteral("drawingTools/eraser/presetStabilizations/%1")
+                    .arg(preset.id)));
+        }
+        QVERIFY(!settings.contains(
             QStringLiteral("drawingTools/eraser/stabilization")));
         QVERIFY(!settings.contains(legacyKey));
     }
@@ -1079,6 +1191,124 @@ private slots:
         QVERIFY(!window.isWindowModified());
     }
 
+    void selectsWithRectangleAndEllipseShapes()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+
+        Stroke centerStroke;
+        centerStroke.width = 2.0;
+        centerStroke.points = {
+            {QPointF(45.0, 50.0), 1.0}, {QPointF(55.0, 50.0), 1.0}};
+        centerStroke.brush.antialiasing = false;
+        const QUuid centerId = centerStroke.id;
+
+        Stroke cornerStroke;
+        cornerStroke.width = 2.0;
+        cornerStroke.points = {
+            {QPointF(22.0, 22.0), 1.0}, {QPointF(24.0, 22.0), 1.0}};
+        cornerStroke.brush.antialiasing = false;
+        const QUuid cornerId = cornerStroke.id;
+
+        document.layers.first().strokes = {centerStroke, cornerStroke};
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.setZoomPercent(100);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
+            return (QPointF(canvas.rect().center()) + documentPoint
+                    - QPointF(50.0, 50.0))
+                .toPoint();
+        };
+        const QPoint topLeft = widgetPoint(QPointF(20.0, 20.0));
+        const QPoint bottomRight = widgetPoint(QPointF(80.0, 80.0));
+
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, bottomRight);
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        const QVector<QUuid> rectangleIds = canvas.selectedStrokeIds();
+        QVERIFY(rectangleIds.contains(centerId));
+        QVERIFY(rectangleIds.contains(cornerId));
+
+        canvas.deselectSelection();
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Ellipse);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, bottomRight);
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        const QVector<QUuid> ellipseIds = canvas.selectedStrokeIds();
+        QVERIFY(ellipseIds.contains(centerId));
+        QVERIFY(!ellipseIds.contains(cornerId));
+    }
+
+    void selectsRectangleWithTabletPen()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.setZoomPercent(100);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+
+        QPointingDevice stylus(QStringLiteral("Selection stylus"),
+            2,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const QPointF start = canvas.rect().center() - QPoint(30, 25);
+        const QPointF end = canvas.rect().center() + QPoint(30, 25);
+        const QPointF globalStart = canvas.mapToGlobal(start.toPoint());
+        const QPointF globalEnd = canvas.mapToGlobal(end.toPoint());
+        QTabletEvent tabletPress(QEvent::TabletPress,
+            &stylus,
+            start,
+            globalStart,
+            0.7,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        QApplication::sendEvent(&canvas, &tabletPress);
+        QTabletEvent tabletRelease(QEvent::TabletRelease,
+            &stylus,
+            end,
+            globalEnd,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::NoButton);
+        QApplication::sendEvent(&canvas, &tabletRelease);
+
+        QTRY_VERIFY(canvas.hasSelection());
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+    }
+
     void keepsSelectionAcrossToolsAndTransformsIt()
     {
         MainWindow window;
@@ -1280,6 +1510,89 @@ private slots:
         QTRY_VERIFY(!window.isWindowModified());
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QCOMPARE(undoAction->text(), undoTextBeforeTransform);
+    }
+
+    void escapeDeselectsAfterConfirmedRotation()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString filePath =
+            directory.filePath(QStringLiteral("rotate-then-deselect.wagle"));
+        Document document = Document::createDefault(QSize(100, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 10.0;
+        source.points = {
+            {QPointF(25.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+        QString error;
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
+            qPrintable(error));
+
+        MainWindow window;
+        window.resize(1000, 680);
+        QVERIFY(window.openFile(filePath));
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *rotateAction = window.findChild<QAction *>(
+            QStringLiteral("rotateSelectionAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(rotateAction);
+
+        canvas->setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 80));
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 80));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+
+        bool rotationAccepted = false;
+        QTimer::singleShot(0,
+            &window,
+            [&rotationAccepted]()
+            {
+                QInputDialog *dialog = qobject_cast<QInputDialog *>(
+                    QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                dialog->setDoubleValue(90.0);
+                rotationAccepted = true;
+                dialog->accept();
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                if (QWidget *dialog = QApplication::activeModalWidget())
+                {
+                    dialog->close();
+                }
+            });
+        rotateAction->trigger();
+        QVERIFY(rotationAccepted);
+        QVERIFY(!canvas->hasSelectionTransformSession());
+        QVERIFY(canvas->hasTransformableSelection());
+        const QByteArray rotatedDocument = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+        QVERIFY(rotatedDocument != DocumentSerializer::toJson(document));
+
+        canvas->setFocus();
+        QTest::keyClick(canvas, Qt::Key_Escape);
+        QTRY_VERIFY(!canvas->hasSelection());
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            rotatedDocument);
     }
 
     void marksPendingTransformUnsavedAndPromptsBeforeClose()
@@ -3659,7 +3972,48 @@ private slots:
         const Stroke &eraser =
             controller.document().layers.first().strokes.constLast();
         QCOMPARE(eraser.mode, StrokeMode::Erase);
-        QCOMPARE(eraser.brush, BrushSettings());
+        QCOMPARE(eraser.brush, EraserPresetCatalog::defaultPreset().settings);
+
+        for (const QString &presetId :
+            {QStringLiteral("soft-eraser"),
+                QStringLiteral("kneaded-eraser")})
+        {
+            canvas.setEraserPreset(presetId);
+            QTest::mouseClick(&canvas,
+                Qt::LeftButton,
+                Qt::NoModifier,
+                center + QPoint(10, 20));
+            const Stroke &presetStroke =
+                controller.document().layers.first().strokes.constLast();
+            QCOMPARE(presetStroke.mode, StrokeMode::Erase);
+            QCOMPARE(presetStroke.brush,
+                EraserPresetCatalog::find(presetId)->settings);
+        }
+    }
+
+    void keepsEraserPresetSettingsIndependent()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+
+        canvas.setEraserWidth(11.0);
+        canvas.setEraserStabilization(0.15);
+        canvas.setEraserPreset(QStringLiteral("soft-eraser"));
+        canvas.setEraserWidth(62.0);
+        canvas.setEraserStabilization(0.45);
+        canvas.setEraserPreset(QStringLiteral("kneaded-eraser"));
+        canvas.setEraserWidth(39.0);
+        canvas.setEraserStabilization(0.75);
+
+        QCOMPARE(canvas.eraserWidth(), 39.0);
+        QCOMPARE(canvas.eraserStabilization(), 0.75);
+        canvas.setEraserPreset(QStringLiteral("hard-eraser"));
+        QCOMPARE(canvas.eraserWidth(), 11.0);
+        QCOMPARE(canvas.eraserStabilization(), 0.15);
+        canvas.setEraserPreset(QStringLiteral("soft-eraser"));
+        QCOMPARE(canvas.eraserWidth(), 62.0);
+        QCOMPARE(canvas.eraserStabilization(), 0.45);
     }
 
     void persistsDrawingToolSettings()
@@ -3676,13 +4030,21 @@ private slots:
             canvas->setBrushPreset(QStringLiteral("soft-airbrush"));
             canvas->setBrushWidth(47.0);
             canvas->setBrushStabilization(0.64);
+            canvas->setEraserPreset(QStringLiteral("hard-eraser"));
             canvas->setEraserWidth(57.0);
             canvas->setEraserStabilization(0.51);
+            canvas->setEraserPreset(QStringLiteral("soft-eraser"));
+            canvas->setEraserWidth(73.0);
+            canvas->setEraserStabilization(0.26);
+            canvas->setEraserPreset(QStringLiteral("kneaded-eraser"));
+            canvas->setEraserWidth(49.0);
+            canvas->setEraserStabilization(0.12);
             canvas->setBrushRoughness(0.37);
             canvas->setBrushAntialiasing(true);
             canvas->setBrushColor(rememberedColor);
             canvas->setWandReference(
                 CanvasWidget::WandReference::AllVisibleLayers);
+            canvas->setSelectionShape(CanvasWidget::SelectionShape::Ellipse);
             canvas->setTool(CanvasWidget::Tool::Eraser);
 
             QVERIFY(window.close());
@@ -3699,16 +4061,20 @@ private slots:
         CanvasWidget *restored = restoredWindow.findChild<CanvasWidget *>();
         QVERIFY(restored);
         QCOMPARE(restored->brushPresetId(), QStringLiteral("soft-airbrush"));
+        QCOMPARE(
+            restored->eraserPresetId(), QStringLiteral("kneaded-eraser"));
         QCOMPARE(restored->brushWidth(), 47.0);
         QCOMPARE(restored->brushStabilization(), 0.64);
-        QCOMPARE(restored->eraserWidth(), 57.0);
-        QCOMPARE(restored->eraserStabilization(), 0.51);
+        QCOMPARE(restored->eraserWidth(), 49.0);
+        QCOMPARE(restored->eraserStabilization(), 0.12);
         QCOMPARE(restored->brushRoughness(), 0.37);
         QVERIFY(restored->brushAntialiasing());
         QCOMPARE(restored->brushColor(), rememberedColor);
         QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
         QCOMPARE(restored->wandReference(),
             CanvasWidget::WandReference::AllVisibleLayers);
+        QCOMPARE(
+            restored->selectionShape(), CanvasWidget::SelectionShape::Ellipse);
 
         QAction *eraserAction =
             restoredWindow.findChild<QAction *>(QStringLiteral("eraserAction"));
@@ -3721,8 +4087,12 @@ private slots:
         QSpinBox *eraserStabilizationSpin =
             restoredWindow.findChild<QSpinBox *>(
                 QStringLiteral("eraserStabilizationSpin"));
-        QComboBox *wandReferenceCombo = restoredWindow.findChild<QComboBox *>(
-            QStringLiteral("wandReferenceCombo"));
+        WandReferenceButton *wandReferenceButton =
+            restoredWindow.findChild<WandReferenceButton *>(
+                QStringLiteral("wandReferenceVisibleButton"));
+        SelectionShapeButton *selectionShapeButton =
+            restoredWindow.findChild<SelectionShapeButton *>(
+                QStringLiteral("selectionShapeEllipseButton"));
         QSpinBox *roughnessSpin = restoredWindow.findChild<QSpinBox *>(
             QStringLiteral("brushRoughnessSpin"));
         QCheckBox *antialiasingToggle = restoredWindow.findChild<QCheckBox *>(
@@ -3732,16 +4102,21 @@ private slots:
         QVERIFY(eraserSizeSpin);
         QVERIFY(brushStabilizationSpin);
         QVERIFY(eraserStabilizationSpin);
-        QVERIFY(wandReferenceCombo);
+        QVERIFY(wandReferenceButton);
+        QVERIFY(selectionShapeButton);
         QVERIFY(roughnessSpin);
         QVERIFY(antialiasingToggle);
         QVERIFY(eraserAction->isChecked());
         QCOMPARE(brushSizeSpin->value(), 47);
-        QCOMPARE(eraserSizeSpin->value(), 57);
+        QCOMPARE(eraserSizeSpin->value(), 49);
         QCOMPARE(brushStabilizationSpin->value(), 64);
-        QCOMPARE(eraserStabilizationSpin->value(), 51);
-        QCOMPARE(wandReferenceCombo->currentData().toInt(),
-            static_cast<int>(CanvasWidget::WandReference::AllVisibleLayers));
+        QCOMPARE(eraserStabilizationSpin->value(), 12);
+        QCOMPARE(wandReferenceButton->reference(),
+            CanvasWidget::WandReference::AllVisibleLayers);
+        QVERIFY(wandReferenceButton->isChecked());
+        QCOMPARE(selectionShapeButton->shape(),
+            CanvasWidget::SelectionShape::Ellipse);
+        QVERIFY(selectionShapeButton->isChecked());
         QCOMPARE(roughnessSpin->value(), 37);
         QVERIFY(antialiasingToggle->isChecked());
 
@@ -3756,6 +4131,18 @@ private slots:
         QCOMPARE(brushSizeSpin->value(), 47);
         QCOMPARE(brushStabilizationSpin->value(), 64);
 
+        restored->setEraserPreset(QStringLiteral("hard-eraser"));
+        QCOMPARE(restored->eraserWidth(), 57.0);
+        QCOMPARE(restored->eraserStabilization(), 0.51);
+        QCOMPARE(eraserSizeSpin->value(), 57);
+        QCOMPARE(eraserStabilizationSpin->value(), 51);
+        restored->setEraserPreset(QStringLiteral("soft-eraser"));
+        QCOMPARE(restored->eraserWidth(), 73.0);
+        QCOMPARE(restored->eraserStabilization(), 0.26);
+        QCOMPARE(eraserSizeSpin->value(), 73);
+        QCOMPARE(eraserStabilizationSpin->value(), 26);
+        restored->setEraserPreset(QStringLiteral("kneaded-eraser"));
+
         BrushPresetButton *selectedPresetButton = nullptr;
         for (BrushPresetButton *button :
             restoredWindow.findChildren<BrushPresetButton *>())
@@ -3768,6 +4155,19 @@ private slots:
         }
         QVERIFY(selectedPresetButton);
         QVERIFY(selectedPresetButton->isChecked());
+
+        EraserPresetButton *selectedEraserPresetButton = nullptr;
+        for (EraserPresetButton *button :
+            restoredWindow.findChildren<EraserPresetButton *>())
+        {
+            if (button->presetId() == QStringLiteral("kneaded-eraser"))
+            {
+                selectedEraserPresetButton = button;
+                break;
+            }
+        }
+        QVERIFY(selectedEraserPresetButton);
+        QVERIFY(selectedEraserPresetButton->isChecked());
     }
 
     void migratesActiveColorFromRecentColors()
@@ -3798,6 +4198,8 @@ private slots:
             QStringLiteral("transform"));
         settings.setValue(QStringLiteral("drawingTools/brush/presetId"),
             QStringLiteral("missing-brush"));
+        settings.setValue(QStringLiteral("drawingTools/eraser/presetId"),
+            QStringLiteral("missing-eraser"));
         settings.setValue(QStringLiteral("drawingTools/brush/color"),
             QStringLiteral("not-a-color"));
         settings.setValue(QStringLiteral("drawingTools/brush/roughness"),
@@ -3817,6 +4219,8 @@ private slots:
             std::numeric_limits<double>::quiet_NaN());
         settings.setValue(QStringLiteral("drawingTools/wand/reference"),
             QStringLiteral("selection-set"));
+        settings.setValue(QStringLiteral("drawingTools/selection/shape"),
+            QStringLiteral("polygon"));
         settings.sync();
 
         MainWindow window;
@@ -3825,6 +4229,8 @@ private slots:
         QCOMPARE(canvas->tool(), CanvasWidget::Tool::Brush);
         QCOMPARE(
             canvas->brushPresetId(), BrushPresetCatalog::defaultPreset().id);
+        QCOMPARE(
+            canvas->eraserPresetId(), EraserPresetCatalog::defaultPreset().id);
         QCOMPARE(canvas->brushWidth(), DocumentLimits::maximumStrokeWidth);
         QCOMPARE(canvas->eraserWidth(), 1.0);
         QCOMPARE(canvas->brushStabilization(), 1.0);
@@ -3834,6 +4240,8 @@ private slots:
         QCOMPARE(canvas->brushColor(), QColor(Qt::black));
         QCOMPARE(
             canvas->wandReference(), CanvasWidget::WandReference::ActiveLayer);
+        QCOMPARE(
+            canvas->selectionShape(), CanvasWidget::SelectionShape::Freehand);
 
         canvas->setBrushPreset(QStringLiteral("g-pen"));
         QCOMPARE(canvas->brushWidth(),

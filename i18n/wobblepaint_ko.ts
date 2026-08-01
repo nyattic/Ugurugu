@@ -110,6 +110,21 @@
     </message>
 </context>
 <context>
+    <name>EraserPresets</name>
+    <message>
+        <source>Hard</source>
+        <translation>딱딱함</translation>
+    </message>
+    <message>
+        <source>Soft</source>
+        <translation>부드러움</translation>
+    </message>
+    <message>
+        <source>Kneaded</source>
+        <translation>반죽</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <location filename="../src/main.cpp" line="151"/>
@@ -1679,8 +1694,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="947"/>
-        <source>&amp;Lasso select</source>
-        <translation>올가미 선택(&amp;L)</translation>
+        <source>&amp;Area select</source>
+        <translation>영역 선택(&amp;A)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="953"/>
@@ -2331,6 +2346,37 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
+    <name>wobble::LassoPopoverPanel</name>
+    <message>
+        <source>SHAPE</source>
+        <translation>형태</translation>
+    </message>
+    <message>
+        <source>Freehand</source>
+        <translation>자유형</translation>
+    </message>
+    <message>
+        <source>Draw freely around an area</source>
+        <translation>영역 둘레를 자유롭게 그리기</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>사각형</translation>
+    </message>
+    <message>
+        <source>Drag between opposite corners</source>
+        <translation>마주 보는 두 모서리 사이로 드래그</translation>
+    </message>
+    <message>
+        <source>Ellipse</source>
+        <translation>타원</translation>
+    </message>
+    <message>
+        <source>Drag to fit an oval area</source>
+        <translation>타원 영역에 맞게 드래그</translation>
+    </message>
+</context>
+<context>
     <name>wobble::WandPopoverPanel</name>
     <message>
         <source>REFERENCE</source>
@@ -2351,6 +2397,18 @@ The recovery file was not deleted. You can find it at:
     <message>
         <source>All visible layers</source>
         <translation>표시된 모든 레이어</translation>
+    </message>
+    <message>
+        <source>Use only the layer you are editing</source>
+        <translation>편집 중인 레이어만 사용</translation>
+    </message>
+    <message>
+        <source>Use layers marked as references</source>
+        <translation>참조로 표시한 레이어 사용</translation>
+    </message>
+    <message>
+        <source>Combine every visible layer</source>
+        <translation>보이는 모든 레이어를 합쳐서 사용</translation>
     </message>
 </context>
 </TS>

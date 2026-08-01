@@ -1,6 +1,7 @@
 #include "ui/CanvasWidget.hpp"
 
 #include "brush/BrushPreset.hpp"
+#include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
@@ -17,7 +18,6 @@
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPointer>
-#include <QPolygonF>
 #include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QTabletEvent>
@@ -186,7 +186,12 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     m_brushPresetId = defaultPreset.id;
     m_brushSettings = defaultPreset.settings;
     m_brushWidth = defaultPreset.defaultSize;
-    m_presetWidths.insert(m_brushPresetId, m_brushWidth);
+    m_brushPresetWidths.insert(m_brushPresetId, m_brushWidth);
+    const EraserPreset &defaultEraser = EraserPresetCatalog::defaultPreset();
+    m_eraserPresetId = defaultEraser.id;
+    m_eraserSettings = defaultEraser.settings;
+    m_eraserWidth = defaultEraser.defaultSize;
+    m_eraserPresetWidths.insert(m_eraserPresetId, m_eraserWidth);
 
     connect(m_controller,
         &DocumentController::documentChanged,
@@ -279,7 +284,8 @@ qreal CanvasWidget::brushPresetWidth(const QString &presetId) const
     {
         return 0.0;
     }
-    return std::clamp(m_presetWidths.value(preset->id, preset->defaultSize),
+    return std::clamp(
+        m_brushPresetWidths.value(preset->id, preset->defaultSize),
         DocumentLimits::minimumStrokeWidth,
         DocumentLimits::maximumStrokeWidth);
 }
@@ -287,6 +293,19 @@ qreal CanvasWidget::brushPresetWidth(const QString &presetId) const
 qreal CanvasWidget::eraserWidth() const
 {
     return m_eraserWidth;
+}
+
+qreal CanvasWidget::eraserPresetWidth(const QString &presetId) const
+{
+    const EraserPreset *preset = EraserPresetCatalog::find(presetId);
+    if (!preset)
+    {
+        return 0.0;
+    }
+    return std::clamp(
+        m_eraserPresetWidths.value(preset->id, preset->defaultSize),
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
 }
 
 qreal CanvasWidget::brushRoughness() const
@@ -306,12 +325,24 @@ qreal CanvasWidget::brushPresetStabilization(const QString &presetId) const
     {
         return 0.0;
     }
-    return std::clamp(m_presetStabilizations.value(preset->id, 0.0), 0.0, 1.0);
+    return std::clamp(
+        m_brushPresetStabilizations.value(preset->id, 0.0), 0.0, 1.0);
 }
 
 qreal CanvasWidget::eraserStabilization() const
 {
-    return m_eraserStabilization;
+    return eraserPresetStabilization(m_eraserPresetId);
+}
+
+qreal CanvasWidget::eraserPresetStabilization(const QString &presetId) const
+{
+    const EraserPreset *preset = EraserPresetCatalog::find(presetId);
+    if (!preset)
+    {
+        return 0.0;
+    }
+    return std::clamp(
+        m_eraserPresetStabilizations.value(preset->id, 0.0), 0.0, 1.0);
 }
 
 bool CanvasWidget::brushAntialiasing() const
@@ -339,9 +370,19 @@ QString CanvasWidget::brushPresetId() const
     return m_brushPresetId;
 }
 
+QString CanvasWidget::eraserPresetId() const
+{
+    return m_eraserPresetId;
+}
+
 CanvasWidget::WandReference CanvasWidget::wandReference() const
 {
     return m_wandReference;
+}
+
+CanvasWidget::SelectionShape CanvasWidget::selectionShape() const
+{
+    return m_selectionShape;
 }
 
 bool CanvasWidget::isAnimating() const
@@ -658,12 +699,11 @@ void CanvasWidget::setTool(Tool tool)
     cancelStroke();
     endColorPick();
     setSelectionMoveMode(false);
-    if (m_lassoActive)
+    if (m_areaSelectionActive)
     {
-        const SelectionState previousSelection = m_hasSelectionBeforeLasso
-                                                     ? m_selectionBeforeLasso
-                                                     : SelectionState();
-        cancelLasso();
+        const SelectionState previousSelection =
+            m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+        cancelAreaSelection();
         restoreSelectionState(previousSelection);
     }
     m_tool = tool;
@@ -701,12 +741,11 @@ void CanvasWidget::handleEscape()
     {
         cancelSelectionTransform();
     }
-    else if (m_lassoActive)
+    else if (m_areaSelectionActive)
     {
-        const SelectionState previousSelection = m_hasSelectionBeforeLasso
-                                                     ? m_selectionBeforeLasso
-                                                     : SelectionState();
-        cancelLasso();
+        const SelectionState previousSelection =
+            m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+        cancelAreaSelection();
         restoreSelectionState(previousSelection);
     }
     else if (m_selectionMoveMode)
@@ -754,7 +793,7 @@ void CanvasWidget::setBrushWidth(qreal width)
     m_brushWidth = normalized;
     if (!m_brushPresetId.isEmpty())
     {
-        m_presetWidths.insert(m_brushPresetId, normalized);
+        m_brushPresetWidths.insert(m_brushPresetId, normalized);
     }
     emit brushWidthChanged(normalized);
     update();
@@ -775,7 +814,7 @@ void CanvasWidget::setBrushPresetWidth(const QString &presetId, qreal width)
         setBrushWidth(normalized);
         return;
     }
-    m_presetWidths.insert(preset->id, normalized);
+    m_brushPresetWidths.insert(preset->id, normalized);
 }
 
 void CanvasWidget::setEraserWidth(qreal width)
@@ -792,8 +831,30 @@ void CanvasWidget::setEraserWidth(qreal width)
         return;
     }
     m_eraserWidth = normalized;
+    if (!m_eraserPresetId.isEmpty())
+    {
+        m_eraserPresetWidths.insert(m_eraserPresetId, normalized);
+    }
     emit eraserWidthChanged(normalized);
     update();
+}
+
+void CanvasWidget::setEraserPresetWidth(const QString &presetId, qreal width)
+{
+    const EraserPreset *preset = EraserPresetCatalog::find(presetId);
+    if (!preset || !std::isfinite(width))
+    {
+        return;
+    }
+    const qreal normalized = std::clamp(width,
+        DocumentLimits::minimumStrokeWidth,
+        DocumentLimits::maximumStrokeWidth);
+    if (m_eraserPresetId == preset->id)
+    {
+        setEraserWidth(normalized);
+        return;
+    }
+    m_eraserPresetWidths.insert(preset->id, normalized);
 }
 
 void CanvasWidget::setBrushRoughness(qreal roughness)
@@ -833,7 +894,7 @@ void CanvasWidget::setBrushPresetStabilization(
     {
         return;
     }
-    m_presetStabilizations.insert(preset->id, normalized);
+    m_brushPresetStabilizations.insert(preset->id, normalized);
     if (m_brushPresetId == preset->id)
     {
         emit brushStabilizationChanged(normalized);
@@ -842,17 +903,28 @@ void CanvasWidget::setBrushPresetStabilization(
 
 void CanvasWidget::setEraserStabilization(qreal strength)
 {
-    if (!std::isfinite(strength))
+    setEraserPresetStabilization(m_eraserPresetId, strength);
+}
+
+void CanvasWidget::setEraserPresetStabilization(
+    const QString &presetId, qreal strength)
+{
+    const EraserPreset *preset = EraserPresetCatalog::find(presetId);
+    if (!preset || !std::isfinite(strength))
     {
         return;
     }
     const qreal normalized = std::clamp(strength, 0.0, 1.0);
-    if (qFuzzyCompare(1.0 + m_eraserStabilization, 1.0 + normalized))
+    if (qFuzzyCompare(
+            1.0 + eraserPresetStabilization(preset->id), 1.0 + normalized))
     {
         return;
     }
-    m_eraserStabilization = normalized;
-    emit eraserStabilizationChanged(normalized);
+    m_eraserPresetStabilizations.insert(preset->id, normalized);
+    if (m_eraserPresetId == preset->id)
+    {
+        emit eraserStabilizationChanged(normalized);
+    }
 }
 
 void CanvasWidget::setBrushAntialiasing(bool antialiasing)
@@ -891,10 +963,10 @@ void CanvasWidget::setBrushPreset(const QString &presetId)
     m_brushPresetId = preset->id;
     m_brushSettings = preset->settings;
     const qreal nextWidth =
-        std::clamp(m_presetWidths.value(preset->id, preset->defaultSize),
+        std::clamp(m_brushPresetWidths.value(preset->id, preset->defaultSize),
             DocumentLimits::minimumStrokeWidth,
             DocumentLimits::maximumStrokeWidth);
-    m_presetWidths.insert(preset->id, nextWidth);
+    m_brushPresetWidths.insert(preset->id, nextWidth);
     if (!qFuzzyCompare(m_brushWidth, nextWidth))
     {
         m_brushWidth = nextWidth;
@@ -902,6 +974,31 @@ void CanvasWidget::setBrushPreset(const QString &presetId)
     }
     emit brushPresetChanged(preset->id);
     emit brushStabilizationChanged(brushStabilization());
+    update();
+}
+
+void CanvasWidget::setEraserPreset(const QString &presetId)
+{
+    const EraserPreset *preset = EraserPresetCatalog::find(presetId);
+    if (!preset || m_eraserPresetId == preset->id)
+    {
+        return;
+    }
+    cancelStroke();
+    m_eraserPresetId = preset->id;
+    m_eraserSettings = preset->settings;
+    const qreal nextWidth =
+        std::clamp(m_eraserPresetWidths.value(preset->id, preset->defaultSize),
+            DocumentLimits::minimumStrokeWidth,
+            DocumentLimits::maximumStrokeWidth);
+    m_eraserPresetWidths.insert(preset->id, nextWidth);
+    if (!qFuzzyCompare(m_eraserWidth, nextWidth))
+    {
+        m_eraserWidth = nextWidth;
+        emit eraserWidthChanged(nextWidth);
+    }
+    emit eraserPresetChanged(preset->id);
+    emit eraserStabilizationChanged(eraserStabilization());
     update();
 }
 
@@ -922,6 +1019,33 @@ void CanvasWidget::setWandReference(WandReference reference)
     }
     m_wandReference = reference;
     emit wandReferenceChanged(reference);
+}
+
+void CanvasWidget::setSelectionShape(SelectionShape shape)
+{
+    switch (shape)
+    {
+    case SelectionShape::Freehand:
+    case SelectionShape::Rectangle:
+    case SelectionShape::Ellipse:
+        break;
+    default:
+        return;
+    }
+    if (m_selectionShape == shape)
+    {
+        return;
+    }
+    if (m_areaSelectionActive)
+    {
+        const SelectionState previousSelection =
+            m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+        cancelAreaSelection();
+        restoreSelectionState(previousSelection);
+    }
+    m_selectionShape = shape;
+    emit selectionShapeChanged(shape);
+    update();
 }
 
 void CanvasWidget::setAnimating(bool animating)
@@ -1035,20 +1159,17 @@ void CanvasWidget::setPanModifierActive(bool active)
 
 void CanvasWidget::cancelActiveInteraction()
 {
-    const bool restoreLassoSelection =
-        m_lassoActive && m_hasSelectionBeforeLasso;
-    const SelectionState selectionBeforeLasso =
-        restoreLassoSelection ? m_selectionBeforeLasso : SelectionState();
+    const bool restoreAreaSelection =
+        m_areaSelectionActive && m_hasSelectionBeforeArea;
+    const SelectionState selectionBeforeArea =
+        restoreAreaSelection ? m_selectionBeforeArea : SelectionState();
 
-    // Focus/proximity loss must never turn a gesture preview into a document
-    // edit. Strokes and selection moves are therefore discarded, while an
-    // unfinished lasso restores the selection that existed before it began.
     cancelStroke();
     cancelSelectionMove();
-    cancelLasso();
-    if (restoreLassoSelection)
+    cancelAreaSelection();
+    if (restoreAreaSelection)
     {
-        restoreSelectionState(selectionBeforeLasso);
+        restoreSelectionState(selectionBeforeArea);
     }
     endPan();
     endZoomDrag();
@@ -1354,7 +1475,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
             beginStroke(event->position(), 1.0, false, event->timestamp());
             break;
         case Tool::Lasso:
-            beginLasso(documentPosition);
+            beginAreaSelection(documentPosition);
             break;
         case Tool::Wand:
             computeWandSelection(documentPosition);
@@ -1407,16 +1528,9 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
         event->accept();
         return;
     }
-    if (m_lassoActive)
+    if (m_areaSelectionActive)
     {
-        const QPointF position =
-            clampedDocumentPosition(mapToDocument(event->position()));
-        if (m_lassoPoints.isEmpty()
-            || pointDistance(position, m_lassoPoints.constLast()) >= 1.0)
-        {
-            m_lassoPoints.append(position);
-            update();
-        }
+        continueAreaSelection(mapToDocument(event->position()));
         event->accept();
         return;
     }
@@ -1465,9 +1579,10 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && m_lassoActive)
+    if (event->button() == Qt::LeftButton && m_areaSelectionActive)
     {
-        finishLasso();
+        continueAreaSelection(mapToDocument(event->position()));
+        finishAreaSelection();
         event->accept();
         return;
     }
@@ -1552,12 +1667,25 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             event->accept();
             return;
         }
-        if (!eraser && m_tool != Tool::Brush && m_tool != Tool::Eraser)
+        m_tabletSequence = true;
+        if (!eraser && m_tool == Tool::Lasso)
         {
-            QWidget::tabletEvent(event);
+            beginAreaSelection(mapToDocument(event->position()));
+            event->accept();
             return;
         }
-        m_tabletSequence = true;
+        if (!eraser && m_tool == Tool::Wand)
+        {
+            computeWandSelection(mapToDocument(event->position()));
+            event->accept();
+            return;
+        }
+        if (!eraser && m_tool == Tool::Bucket)
+        {
+            applyBucketFill(mapToDocument(event->position()));
+            event->accept();
+            return;
+        }
         beginStroke(
             event->position(), event->pressure(), eraser, event->timestamp());
         event->accept();
@@ -1586,7 +1714,11 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         {
             continueSelectionMove(mapToDocument(event->position()));
         }
-        else
+        else if (m_areaSelectionActive)
+        {
+            continueAreaSelection(mapToDocument(event->position()));
+        }
+        else if (m_drawing)
         {
             continueStroke(
                 event->position(), event->pressure(), event->timestamp());
@@ -1613,7 +1745,12 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             continueSelectionMove(mapToDocument(event->position()));
             commitSelectionMove();
         }
-        else
+        else if (m_areaSelectionActive)
+        {
+            continueAreaSelection(mapToDocument(event->position()));
+            finishAreaSelection();
+        }
+        else if (m_drawing)
         {
             endStroke(event->position(), event->pressure(), event->timestamp());
         }
@@ -1908,7 +2045,7 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
         m_activeStroke.clipMask = m_selectionMask;
     }
     m_strokeStabilizer.setStrength(
-        erasing ? m_eraserStabilization : brushStabilization());
+        erasing ? eraserStabilization() : brushStabilization());
     const QPointF position = m_strokeStabilizer.begin(
         clampedDocumentPosition(documentPosition), timestamp);
     m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
@@ -2268,34 +2405,57 @@ bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
     return sourceMask.constScanLine(pixel.y())[pixel.x()] >= 128;
 }
 
-void CanvasWidget::beginLasso(const QPointF &documentPosition)
+void CanvasWidget::beginAreaSelection(const QPointF &documentPosition)
 {
     cancelSelectionTransformForBoundary(
         tr("The pending selection transform was canceled before selecting."));
-    m_selectionBeforeLasso = currentSelectionState();
-    m_hasSelectionBeforeLasso = true;
+    m_selectionBeforeArea = currentSelectionState();
+    m_hasSelectionBeforeArea = true;
     clearSelection();
-    m_lassoActive = true;
-    m_lassoPoints.clear();
-    m_lassoPoints.append(clampedDocumentPosition(documentPosition));
+    m_areaSelectionActive = true;
+    m_areaSelectionAnchor = clampedDocumentPosition(documentPosition);
+    m_areaSelectionCurrent = m_areaSelectionAnchor;
+    m_areaSelectionPoints.clear();
+    m_areaSelectionPoints.append(m_areaSelectionAnchor);
     updateSelectionAnimation();
     update();
 }
 
-void CanvasWidget::finishLasso()
+void CanvasWidget::continueAreaSelection(const QPointF &documentPosition)
 {
-    if (!m_lassoActive)
+    if (!m_areaSelectionActive)
     {
         return;
     }
-    const QVector<QPointF> points = m_lassoPoints;
+    m_areaSelectionCurrent = clampedDocumentPosition(documentPosition);
+    if (m_selectionShape == SelectionShape::Freehand
+        && (m_areaSelectionPoints.isEmpty()
+            || pointDistance(
+                   m_areaSelectionCurrent, m_areaSelectionPoints.constLast())
+                   >= 1.0))
+    {
+        m_areaSelectionPoints.append(m_areaSelectionCurrent);
+    }
+    update();
+}
+
+void CanvasWidget::finishAreaSelection()
+{
+    if (!m_areaSelectionActive)
+    {
+        return;
+    }
+    const bool valid = canFinishAreaSelection();
+    const QPainterPath path = areaSelectionPath();
     const SelectionState previousSelection =
-        m_hasSelectionBeforeLasso ? m_selectionBeforeLasso : SelectionState();
-    m_lassoActive = false;
-    m_lassoPoints.clear();
-    m_selectionBeforeLasso = {};
-    m_hasSelectionBeforeLasso = false;
-    if (points.size() < 3)
+        m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+    m_areaSelectionActive = false;
+    m_areaSelectionPoints.clear();
+    m_areaSelectionAnchor = {};
+    m_areaSelectionCurrent = {};
+    m_selectionBeforeArea = {};
+    m_hasSelectionBeforeArea = false;
+    if (!valid)
     {
         pushSelectionChange(previousSelection, {}, tr("Deselect"));
         return;
@@ -2307,23 +2467,64 @@ void CanvasWidget::finishLasso()
     QPainter painter(&mask);
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::white);
-    painter.drawPolygon(QPolygonF(points));
+    painter.drawPath(path);
     painter.end();
     applySelectionMask(std::move(mask), previousSelection);
 }
 
-void CanvasWidget::cancelLasso()
+void CanvasWidget::cancelAreaSelection()
 {
-    if (!m_lassoActive && m_lassoPoints.isEmpty())
+    if (!m_areaSelectionActive && m_areaSelectionPoints.isEmpty())
     {
         return;
     }
-    m_lassoActive = false;
-    m_lassoPoints.clear();
-    m_selectionBeforeLasso = {};
-    m_hasSelectionBeforeLasso = false;
+    m_areaSelectionActive = false;
+    m_areaSelectionPoints.clear();
+    m_areaSelectionAnchor = {};
+    m_areaSelectionCurrent = {};
+    m_selectionBeforeArea = {};
+    m_hasSelectionBeforeArea = false;
     updateSelectionAnimation();
     update();
+}
+
+bool CanvasWidget::canFinishAreaSelection() const
+{
+    if (m_selectionShape == SelectionShape::Freehand)
+    {
+        return m_areaSelectionPoints.size() >= 3;
+    }
+    const QRectF bounds =
+        QRectF(m_areaSelectionAnchor, m_areaSelectionCurrent).normalized();
+    return bounds.width() >= 1.0 && bounds.height() >= 1.0;
+}
+
+QPainterPath CanvasWidget::areaSelectionPath() const
+{
+    QPainterPath path;
+    switch (m_selectionShape)
+    {
+    case SelectionShape::Freehand:
+        if (m_areaSelectionPoints.isEmpty())
+        {
+            return path;
+        }
+        path.moveTo(m_areaSelectionPoints.first());
+        for (int index = 1; index < m_areaSelectionPoints.size(); ++index)
+        {
+            path.lineTo(m_areaSelectionPoints.at(index));
+        }
+        return path;
+    case SelectionShape::Rectangle:
+        path.addRect(
+            QRectF(m_areaSelectionAnchor, m_areaSelectionCurrent).normalized());
+        return path;
+    case SelectionShape::Ellipse:
+        path.addEllipse(
+            QRectF(m_areaSelectionAnchor, m_areaSelectionCurrent).normalized());
+        return path;
+    }
+    return path;
 }
 
 void CanvasWidget::applySelectionMask(
@@ -2953,9 +3154,14 @@ void CanvasWidget::handleCanvasResized(const QSize &previousSize,
             rebuildSelectionOutline();
         }
     }
-    for (QPointF &point : m_lassoPoints)
+    for (QPointF &point : m_areaSelectionPoints)
     {
         point = transform.map(point);
+    }
+    if (m_areaSelectionActive)
+    {
+        m_areaSelectionAnchor = transform.map(m_areaSelectionAnchor);
+        m_areaSelectionCurrent = transform.map(m_areaSelectionCurrent);
     }
     setSelectionMoveMode(false);
     fitToWindow();
@@ -2968,7 +3174,7 @@ void CanvasWidget::rebuildSelectionOutline()
 
 void CanvasWidget::updateSelectionAnimation()
 {
-    const bool active = m_lassoActive || !m_selectionMask.isNull();
+    const bool active = m_areaSelectionActive || !m_selectionMask.isNull();
     if (active && !m_selectionAnimationTimer.isActive())
     {
         m_selectionAnimationTimer.start();
@@ -3026,7 +3232,7 @@ void CanvasWidget::updateSelectionActionBar()
         return;
     }
     if (m_selectionMask.isNull() || m_selectionOutline.isEmpty()
-        || m_lassoActive || m_movingSelection)
+        || m_areaSelectionActive || m_movingSelection)
     {
         m_selectionActionBar->hide();
         return;
@@ -3183,15 +3389,13 @@ void CanvasWidget::drawSelectionOverlay(
     painter.save();
     painter.setTransform(transform);
 
-    if (m_lassoActive && m_lassoPoints.size() >= 2)
+    if (m_areaSelectionActive)
     {
-        QPainterPath lassoPath;
-        lassoPath.moveTo(m_lassoPoints.first());
-        for (int index = 1; index < m_lassoPoints.size(); ++index)
+        const QPainterPath path = areaSelectionPath();
+        if (!path.isEmpty())
         {
-            lassoPath.lineTo(m_lassoPoints[index]);
+            drawSelectionPath(painter, path, m_selectionDashOffset);
         }
-        drawSelectionPath(painter, lassoPath, m_selectionDashOffset);
     }
 
     if (!m_selectionOutline.isEmpty())

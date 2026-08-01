@@ -2,6 +2,7 @@
 
 #include "app/RecoveryStore.hpp"
 #include "brush/BrushPreset.hpp"
+#include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
@@ -14,6 +15,7 @@
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/Icons.hpp"
 #include "ui/ImageSizeDialog.hpp"
+#include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
@@ -79,12 +81,14 @@ namespace
 
 constexpr auto activeToolKey = "drawingTools/activeTool";
 constexpr auto activePresetKey = "drawingTools/brush/presetId";
+constexpr auto activeEraserPresetKey = "drawingTools/eraser/presetId";
 constexpr auto activeColorKey = "drawingTools/brush/color";
 constexpr auto recentColorsKey = "brush/recentColors";
 constexpr auto roughnessKey = "drawingTools/brush/roughness";
 constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
 constexpr auto eraserStabilizationKey = "drawingTools/eraser/stabilization";
+constexpr auto selectionShapeKey = "drawingTools/selection/shape";
 constexpr auto wandReferenceKey = "drawingTools/wand/reference";
 constexpr auto legacyStabilizationKey = "canvas/strokeStabilization";
 constexpr qreal minimumRememberedStrokeWidth = 1.0;
@@ -119,6 +123,17 @@ QString presetWidthKey(const QString &presetId)
 QString presetStabilizationKey(const QString &presetId)
 {
     return QStringLiteral("drawingTools/brush/presetStabilizations/%1")
+        .arg(presetId);
+}
+
+QString eraserPresetWidthKey(const QString &presetId)
+{
+    return QStringLiteral("drawingTools/eraser/presetWidths/%1").arg(presetId);
+}
+
+QString eraserPresetStabilizationKey(const QString &presetId)
+{
+    return QStringLiteral("drawingTools/eraser/presetStabilizations/%1")
         .arg(presetId);
 }
 
@@ -199,6 +214,38 @@ std::optional<CanvasWidget::Tool> toolFromSettingsId(const QString &id)
     if (id == QStringLiteral("bucket"))
     {
         return CanvasWidget::Tool::Bucket;
+    }
+    return std::nullopt;
+}
+
+QString selectionShapeSettingsId(CanvasWidget::SelectionShape shape)
+{
+    switch (shape)
+    {
+    case CanvasWidget::SelectionShape::Freehand:
+        return QStringLiteral("freehand");
+    case CanvasWidget::SelectionShape::Rectangle:
+        return QStringLiteral("rectangle");
+    case CanvasWidget::SelectionShape::Ellipse:
+        return QStringLiteral("ellipse");
+    }
+    return QStringLiteral("freehand");
+}
+
+std::optional<CanvasWidget::SelectionShape> selectionShapeFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("freehand"))
+    {
+        return CanvasWidget::SelectionShape::Freehand;
+    }
+    if (id == QStringLiteral("rectangle"))
+    {
+        return CanvasWidget::SelectionShape::Rectangle;
+    }
+    if (id == QStringLiteral("ellipse"))
+    {
+        return CanvasWidget::SelectionShape::Ellipse;
     }
     return std::nullopt;
 }
@@ -961,7 +1008,7 @@ void MainWindow::createActions()
     m_eraserAction->setObjectName(QStringLiteral("eraserAction"));
     registerShortcut(m_eraserAction, QKeySequence(QStringLiteral("E")));
 
-    m_lassoAction = new QAction(tr("&Lasso select"), this);
+    m_lassoAction = new QAction(tr("&Area select"), this);
     m_lassoAction->setCheckable(true);
     m_lassoAction->setIcon(Icons::toggleIcon(IconGlyph::Lasso));
     m_lassoAction->setObjectName(QStringLiteral("lassoAction"));
@@ -1172,7 +1219,8 @@ void MainWindow::createToolBars()
         addRailButton(m_brushAction, IconGlyph::Brush);
     PopoverToolButton *eraserButton =
         addRailButton(m_eraserAction, IconGlyph::Eraser);
-    addRailButton(m_lassoAction, IconGlyph::Lasso);
+    PopoverToolButton *lassoButton =
+        addRailButton(m_lassoAction, IconGlyph::Lasso);
     PopoverToolButton *wandButton =
         addRailButton(m_wandAction, IconGlyph::Wand);
     addRailButton(m_bucketAction, IconGlyph::Bucket);
@@ -1200,6 +1248,10 @@ void MainWindow::createToolBars()
     eraserPopover->setContentWidget(new EraserPopoverPanel(m_canvas));
     eraserButton->setPopover(eraserPopover);
 
+    auto *lassoPopover = new ToolPopover(this);
+    lassoPopover->setContentWidget(new LassoPopoverPanel(m_canvas));
+    lassoButton->setPopover(lassoPopover);
+
     auto *wandPopover = new ToolPopover(this);
     wandPopover->setContentWidget(new WandPopoverPanel(m_canvas));
     wandButton->setPopover(wandPopover);
@@ -1212,6 +1264,16 @@ void MainWindow::createToolBars()
             if (m_canvas->tool() != CanvasWidget::Tool::Brush)
             {
                 m_brushAction->trigger();
+            }
+        });
+    connect(m_canvas,
+        &CanvasWidget::eraserPresetChanged,
+        this,
+        [this](const QString &)
+        {
+            if (m_canvas->tool() != CanvasWidget::Tool::Eraser)
+            {
+                m_eraserAction->trigger();
             }
         });
 
@@ -1312,20 +1374,57 @@ void MainWindow::restoreDrawingToolSettings()
                                  ? storedPresetId
                                  : defaultPreset.id);
 
-    m_canvas->setEraserWidth(realSetting(settings,
+    const EraserPreset &defaultEraser = EraserPresetCatalog::defaultPreset();
+    const bool hasLegacyEraserWidth = settings.contains(eraserWidthKey);
+    const bool hasLegacyEraserStabilization =
+        settings.contains(eraserStabilizationKey);
+    const qreal legacyEraserWidth = realSetting(settings,
         QString::fromLatin1(eraserWidthKey),
-        6.0,
+        defaultEraser.defaultSize,
         minimumRememberedStrokeWidth,
-        DocumentLimits::maximumStrokeWidth));
-    m_canvas->setEraserStabilization(realSetting(settings,
+        DocumentLimits::maximumStrokeWidth);
+    const qreal legacyEraserStabilization = realSetting(settings,
         QString::fromLatin1(eraserStabilizationKey),
         legacyStabilization,
         0.0,
-        1.0));
-    if (hasLegacyStabilization && !settings.contains(eraserStabilizationKey))
+        1.0);
+    for (const EraserPreset &preset : EraserPresetCatalog::builtIns())
     {
-        settings.setValue(eraserStabilizationKey, legacyStabilization);
+        const qreal widthFallback =
+            preset.id == defaultEraser.id && hasLegacyEraserWidth
+                ? legacyEraserWidth
+                : preset.defaultSize;
+        const QString widthKey = eraserPresetWidthKey(preset.id);
+        m_canvas->setEraserPresetWidth(preset.id,
+            realSetting(settings,
+                widthKey,
+                widthFallback,
+                minimumRememberedStrokeWidth,
+                DocumentLimits::maximumStrokeWidth));
+        const QString stabilizationKey =
+            eraserPresetStabilizationKey(preset.id);
+        m_canvas->setEraserPresetStabilization(preset.id,
+            realSetting(settings,
+                stabilizationKey,
+                legacyEraserStabilization,
+                0.0,
+                1.0));
+        if (hasLegacyEraserWidth && preset.id == defaultEraser.id
+            && !settings.contains(widthKey))
+        {
+            settings.setValue(widthKey, legacyEraserWidth);
+        }
+        if ((hasLegacyEraserStabilization || hasLegacyStabilization)
+            && !settings.contains(stabilizationKey))
+        {
+            settings.setValue(stabilizationKey, legacyEraserStabilization);
+        }
     }
+    const QString storedEraserPresetId =
+        settings.value(activeEraserPresetKey, defaultEraser.id).toString();
+    m_canvas->setEraserPreset(EraserPresetCatalog::find(storedEraserPresetId)
+                                  ? storedEraserPresetId
+                                  : defaultEraser.id);
     m_canvas->setBrushRoughness(realSetting(settings,
         QString::fromLatin1(roughnessKey),
         1.0,
@@ -1358,13 +1457,22 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setWandReference(
         storedReference.value_or(CanvasWidget::WandReference::ActiveLayer));
 
+    const std::optional<CanvasWidget::SelectionShape> storedSelectionShape =
+        selectionShapeFromSettingsId(
+            settings.value(selectionShapeKey).toString());
+    m_canvas->setSelectionShape(
+        storedSelectionShape.value_or(CanvasWidget::SelectionShape::Freehand));
+
     const std::optional<CanvasWidget::Tool> storedTool =
         toolFromSettingsId(settings.value(activeToolKey).toString());
     m_canvas->setTool(storedTool.value_or(CanvasWidget::Tool::Brush));
 
-    if (hasLegacyStabilization)
+    if (hasLegacyStabilization || hasLegacyEraserWidth
+        || hasLegacyEraserStabilization)
     {
         settings.remove(legacyStabilizationKey);
+        settings.remove(eraserWidthKey);
+        settings.remove(eraserStabilizationKey);
         settings.sync();
     }
 }
@@ -1439,9 +1547,23 @@ void MainWindow::connectDrawingToolSettings()
             schedule();
         });
     connect(m_canvas,
+        &CanvasWidget::eraserPresetChanged,
+        this,
+        [schedule](const QString &)
+        {
+            schedule();
+        });
+    connect(m_canvas,
         &CanvasWidget::wandReferenceChanged,
         this,
         [schedule](CanvasWidget::WandReference)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::selectionShapeChanged,
+        this,
+        [schedule](CanvasWidget::SelectionShape)
         {
             schedule();
         });
@@ -1458,20 +1580,28 @@ void MainWindow::saveDrawingToolSettings()
     QSettings settings;
     settings.setValue(activeToolKey, toolSettingsId(m_canvas->tool()));
     settings.setValue(activePresetKey, m_canvas->brushPresetId());
+    settings.setValue(activeEraserPresetKey, m_canvas->eraserPresetId());
     settings.setValue(
         activeColorKey, m_canvas->brushColor().name(QColor::HexArgb));
     settings.setValue(roughnessKey, m_canvas->brushRoughness());
     settings.setValue(antialiasingKey, m_canvas->brushAntialiasing());
-    settings.setValue(eraserWidthKey, m_canvas->eraserWidth());
-    settings.setValue(eraserStabilizationKey, m_canvas->eraserStabilization());
     settings.setValue(
         wandReferenceKey, wandReferenceSettingsId(m_canvas->wandReference()));
+    settings.setValue(selectionShapeKey,
+        selectionShapeSettingsId(m_canvas->selectionShape()));
     for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
     {
         settings.setValue(
             presetWidthKey(preset.id), m_canvas->brushPresetWidth(preset.id));
         settings.setValue(presetStabilizationKey(preset.id),
             m_canvas->brushPresetStabilization(preset.id));
+    }
+    for (const EraserPreset &preset : EraserPresetCatalog::builtIns())
+    {
+        settings.setValue(eraserPresetWidthKey(preset.id),
+            m_canvas->eraserPresetWidth(preset.id));
+        settings.setValue(eraserPresetStabilizationKey(preset.id),
+            m_canvas->eraserPresetStabilization(preset.id));
     }
     settings.sync();
 }
@@ -1896,7 +2026,10 @@ void MainWindow::rotateSelection()
         &accepted);
     if (accepted && !qFuzzyIsNull(degrees))
     {
-        m_canvas->rotateSelection(degrees);
+        if (m_canvas->rotateSelection(degrees))
+        {
+            m_canvas->applySelectionTransform();
+        }
     }
 }
 

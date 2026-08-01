@@ -1,11 +1,13 @@
 #include "ui/WandPopoverPanel.hpp"
 
 #include "ui/CanvasWidget.hpp"
+#include "ui/WandReferenceButton.hpp"
 
-#include <QComboBox>
-#include <QHBoxLayout>
+#include <QButtonGroup>
 #include <QLabel>
-#include <QSignalBlocker>
+#include <QVBoxLayout>
+
+#include <array>
 
 namespace wobble
 {
@@ -13,7 +15,7 @@ namespace wobble
 WandPopoverPanel::WandPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     : QWidget(parent)
 {
-    auto *layout = new QHBoxLayout(this);
+    auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
@@ -21,36 +23,59 @@ WandPopoverPanel::WandPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     label->setProperty("fieldLabel", true);
     layout->addWidget(label);
 
-    auto *combo = new QComboBox(this);
-    combo->setObjectName(QStringLiteral("wandReferenceCombo"));
-    combo->setAccessibleName(tr("Selection reference"));
-    combo->addItem(tr("Active layer"),
-        static_cast<int>(CanvasWidget::WandReference::ActiveLayer));
-    combo->addItem(tr("Reference layers"),
-        static_cast<int>(CanvasWidget::WandReference::ReferenceLayers));
-    combo->addItem(tr("All visible layers"),
-        static_cast<int>(CanvasWidget::WandReference::AllVisibleLayers));
-    combo->setCurrentIndex(
-        combo->findData(static_cast<int>(canvas->wandReference())));
-    label->setBuddy(combo);
-    layout->addWidget(combo, 1);
+    struct Option final
+    {
+        CanvasWidget::WandReference reference;
+        QString title;
+        QString description;
+        QString objectName;
+    };
 
-    connect(combo,
-        &QComboBox::currentIndexChanged,
+    const std::array<Option, 3> options{{
+        {CanvasWidget::WandReference::ActiveLayer,
+            tr("Active layer"),
+            tr("Use only the layer you are editing"),
+            QStringLiteral("wandReferenceActiveButton")},
+        {CanvasWidget::WandReference::ReferenceLayers,
+            tr("Reference layers"),
+            tr("Use layers marked as references"),
+            QStringLiteral("wandReferenceMarkedButton")},
+        {CanvasWidget::WandReference::AllVisibleLayers,
+            tr("All visible layers"),
+            tr("Combine every visible layer"),
+            QStringLiteral("wandReferenceVisibleButton")},
+    }};
+
+    auto *group = new QButtonGroup(this);
+    group->setExclusive(true);
+    for (const Option &option : options)
+    {
+        auto *button = new WandReferenceButton(
+            option.reference, option.title, option.description, this);
+        button->setObjectName(option.objectName);
+        button->setChecked(option.reference == canvas->wandReference());
+        group->addButton(button, static_cast<int>(option.reference));
+        layout->addWidget(button);
+    }
+
+    connect(group,
+        &QButtonGroup::idClicked,
         this,
-        [canvas, combo](int index)
+        [canvas](int id)
         {
-            canvas->setWandReference(static_cast<CanvasWidget::WandReference>(
-                combo->itemData(index).toInt()));
+            canvas->setWandReference(
+                static_cast<CanvasWidget::WandReference>(id));
         });
     connect(canvas,
         &CanvasWidget::wandReferenceChanged,
         this,
-        [combo](CanvasWidget::WandReference reference)
+        [group](CanvasWidget::WandReference reference)
         {
-            QSignalBlocker blocker(combo);
-            combo->setCurrentIndex(
-                combo->findData(static_cast<int>(reference)));
+            if (QAbstractButton *button =
+                    group->button(static_cast<int>(reference)))
+            {
+                button->setChecked(true);
+            }
         });
 }
 
