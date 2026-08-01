@@ -70,6 +70,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/PopoverToolButton.hpp
     src/ui/SelectionActionBar.cpp
     src/ui/SelectionActionBar.hpp
+    src/ui/StrokePropertiesDialog.cpp
+    src/ui/StrokePropertiesDialog.hpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.hpp
     src/ui/Theme.cpp

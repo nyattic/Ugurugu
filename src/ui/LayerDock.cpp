@@ -8,6 +8,7 @@
 #include "ui/LayerThumbnailRenderer.hpp"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -21,6 +22,7 @@
 #include <QWidget>
 
 #include <cmath>
+#include <functional>
 
 namespace wobble
 {
@@ -91,6 +93,14 @@ void LayerDock::buildContent()
         tr("Add layer"));
     buttonLayout->addWidget(m_addButton);
 
+    m_addGroupButton = makeLayerButton(content,
+        IconGlyph::Add,
+        QStringLiteral("layerAddGroupButton"),
+        tr("Add group containing the selected layer"));
+    m_addGroupButton->setText(QStringLiteral("G"));
+    m_addGroupButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    buttonLayout->addWidget(m_addGroupButton);
+
     m_duplicateButton = makeLayerButton(content,
         IconGlyph::Duplicate,
         QStringLiteral("layerDuplicateButton"),
@@ -143,6 +153,27 @@ void LayerDock::buildContent()
 
     layout->addLayout(blendModeLayout);
 
+    auto *groupLayout = new QHBoxLayout;
+    groupLayout->setContentsMargins(10, 0, 10, 0);
+    groupLayout->setSpacing(6);
+
+    auto *groupLabel = new QLabel(tr("GROUP"), content);
+    groupLabel->setProperty("fieldLabel", true);
+    groupLayout->addWidget(groupLabel);
+
+    m_parentGroupCombo = new QComboBox(content);
+    m_parentGroupCombo->setObjectName(QStringLiteral("layerParentGroupCombo"));
+    m_parentGroupCombo->setAccessibleName(tr("Parent layer group"));
+    groupLabel->setBuddy(m_parentGroupCombo);
+    groupLayout->addWidget(m_parentGroupCombo, 1);
+    layout->addLayout(groupLayout);
+
+    m_clipCheck = new QCheckBox(tr("Clip to layer below"), content);
+    m_clipCheck->setObjectName(QStringLiteral("layerClipCheck"));
+    m_clipCheck->setToolTip(
+        tr("Limit this layer to the opacity of the base layer below it"));
+    layout->addWidget(m_clipCheck, 0, Qt::AlignLeft);
+
     auto *opacityLayout = new QHBoxLayout;
     opacityLayout->setContentsMargins(10, 0, 10, 0);
     opacityLayout->setSpacing(6);
@@ -183,7 +214,9 @@ void LayerDock::connectControls()
                 return;
             }
             const QUuid id = current->data(LayerItemRoles::LayerId).toUuid();
-            if (!id.isNull())
+            m_selectedLayerId = id;
+            const Layer *layer = m_controller->document().layer(id);
+            if (layer && layer->kind == LayerKind::Paint)
             {
                 m_controller->setActiveLayer(id);
             }
@@ -248,7 +281,22 @@ void LayerDock::connectControls()
         {
             if (m_controller)
             {
-                m_controller->addLayer();
+                const Layer *selected =
+                    m_controller->document().layer(selectedLayerId());
+                m_controller->addLayer(
+                    selected && selected->kind == LayerKind::Group
+                        ? selected->id
+                        : QUuid());
+            }
+        });
+    connect(m_addGroupButton,
+        &QToolButton::clicked,
+        this,
+        [this]()
+        {
+            if (m_controller)
+            {
+                m_controller->addLayerGroup(selectedLayerId());
             }
         });
     connect(m_duplicateButton,
@@ -352,6 +400,39 @@ void LayerDock::connectControls()
             }
         });
 
+    connect(m_parentGroupCombo,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this](int index)
+        {
+            if (!m_controller || m_syncing || index < 0)
+            {
+                return;
+            }
+            const QUuid id = selectedLayerId();
+            if (!id.isNull())
+            {
+                m_controller->setLayerParentGroup(
+                    id, m_parentGroupCombo->itemData(index).toUuid());
+            }
+        });
+
+    connect(m_clipCheck,
+        &QCheckBox::toggled,
+        this,
+        [this](bool clipped)
+        {
+            if (!m_controller || m_syncing)
+            {
+                return;
+            }
+            const QUuid id = selectedLayerId();
+            if (!id.isNull())
+            {
+                m_controller->setLayerClipToBelow(id, clipped);
+            }
+        });
+
     if (m_controller)
     {
         connect(m_controller,
@@ -393,22 +474,43 @@ void LayerDock::rebuild()
     if (m_controller)
     {
         const Document &document = m_controller->document();
-        for (int index = document.layers.size() - 1; index >= 0; --index)
+        if (!document.layer(m_selectedLayerId))
         {
-            const Layer &layer = document.layers[index];
-            auto *item = new QListWidgetItem(layer.name, m_layerList);
-            item->setData(
-                LayerItemRoles::LayerId, QVariant::fromValue(layer.id));
-            item->setData(LayerItemRoles::Visible, layer.visible);
-            item->setData(LayerItemRoles::Thumbnail,
-                QVariant::fromValue(m_thumbnails.value(layer.id)));
-            item->setFlags(
-                item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
-            if (layer.id == document.activeLayerId)
-            {
-                m_layerList->setCurrentItem(item);
-            }
+            m_selectedLayerId = document.activeLayerId;
         }
+        std::function<void(const QUuid &, int)> appendChildren;
+        appendChildren = [&](const QUuid &parentId, int depth)
+        {
+            for (int index = document.layers.size() - 1; index >= 0; --index)
+            {
+                const Layer &layer = document.layers[index];
+                if (layer.parentGroupId != parentId)
+                {
+                    continue;
+                }
+                auto *item = new QListWidgetItem(layer.name, m_layerList);
+                item->setData(
+                    LayerItemRoles::LayerId, QVariant::fromValue(layer.id));
+                item->setData(LayerItemRoles::Visible, layer.visible);
+                item->setData(LayerItemRoles::Thumbnail,
+                    QVariant::fromValue(m_thumbnails.value(layer.id)));
+                item->setData(
+                    LayerItemRoles::Kind, static_cast<int>(layer.kind));
+                item->setData(LayerItemRoles::Depth, depth);
+                item->setData(LayerItemRoles::Clipped, layer.clipToLayerBelow);
+                item->setFlags(
+                    item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
+                if (layer.id == m_selectedLayerId)
+                {
+                    m_layerList->setCurrentItem(item);
+                }
+                if (layer.kind == LayerKind::Group)
+                {
+                    appendChildren(layer.id, depth + 1);
+                }
+            }
+        };
+        appendChildren({}, 0);
     }
 
     m_layerList->setEnabled(m_layerList->count() > 0);
@@ -417,6 +519,7 @@ void LayerDock::rebuild()
 
 void LayerDock::syncActiveLayer(const QUuid &id)
 {
+    m_selectedLayerId = id;
     QScopedValueRollback syncing(m_syncing, true);
     QSignalBlocker blocker(m_layerList);
     QListWidgetItem *match = nullptr;
@@ -441,18 +544,72 @@ void LayerDock::updateControls()
     const Document *document =
         m_controller ? &m_controller->document() : nullptr;
     const Layer *layer = document ? document->layer(id) : nullptr;
-    const int index = document ? document->layerIndex(id) : -1;
     const bool hasLayer = layer != nullptr;
+    const bool paintLayer = layer && layer->kind == LayerKind::Paint;
     const bool hasCapacity =
         document && document->layers.size() < DocumentLimits::maximumLayers;
 
+    QVector<const Layer *> siblings;
+    if (document && layer)
+    {
+        for (const Layer &candidate : document->layers)
+        {
+            if (candidate.parentGroupId == layer->parentGroupId)
+            {
+                siblings.append(&candidate);
+            }
+        }
+    }
+    const int siblingPosition = layer
+                                    ? std::find_if(siblings.cbegin(),
+                                          siblings.cend(),
+                                          [layer](const Layer *candidate)
+                                          {
+                                              return candidate->id == layer->id;
+                                          })
+                                          - siblings.cbegin()
+                                    : -1;
+
     m_addButton->setEnabled(m_controller && hasCapacity);
-    m_duplicateButton->setEnabled(hasLayer && hasCapacity);
+    m_addGroupButton->setEnabled(m_controller && hasCapacity);
+    m_duplicateButton->setEnabled(paintLayer && hasCapacity);
     m_deleteButton->setEnabled(hasLayer);
-    m_moveUpButton->setEnabled(hasLayer && index < document->layers.size() - 1);
-    m_moveDownButton->setEnabled(hasLayer && index > 0);
+    m_moveUpButton->setEnabled(hasLayer && siblingPosition >= 0
+                               && siblingPosition < siblings.size() - 1);
+    m_moveDownButton->setEnabled(hasLayer && siblingPosition > 0);
     m_blendModeCombo->setEnabled(hasLayer);
     m_opacitySlider->setEnabled(hasLayer);
+    m_clipCheck->setEnabled(paintLayer);
+
+    {
+        const QSignalBlocker blocker(m_parentGroupCombo);
+        m_parentGroupCombo->clear();
+        m_parentGroupCombo->addItem(
+            tr("No group"), QVariant::fromValue(QUuid()));
+        if (document && layer)
+        {
+            for (const Layer &candidate : document->layers)
+            {
+                if (candidate.kind != LayerKind::Group
+                    || candidate.id == layer->id
+                    || document->isLayerDescendantOf(candidate.id, layer->id))
+                {
+                    continue;
+                }
+                m_parentGroupCombo->addItem(
+                    candidate.name, QVariant::fromValue(candidate.id));
+            }
+        }
+        m_parentGroupCombo->setCurrentIndex(
+            layer ? m_parentGroupCombo->findData(
+                        QVariant::fromValue(layer->parentGroupId))
+                  : -1);
+    }
+    m_parentGroupCombo->setEnabled(hasLayer);
+    {
+        const QSignalBlocker blocker(m_clipCheck);
+        m_clipCheck->setChecked(layer && layer->clipToLayerBelow);
+    }
 
     {
         const QSignalBlocker blocker(m_blendModeCombo);
@@ -554,6 +711,16 @@ void LayerDock::scheduleLayerThumbnail(const QUuid &id)
     if (!id.isNull() && !m_regenerateAllThumbnails)
     {
         m_pendingThumbnails.insert(id);
+        if (m_controller)
+        {
+            const Document &document = m_controller->document();
+            const Layer *layer = document.layer(id);
+            while (layer && !layer->parentGroupId.isNull())
+            {
+                m_pendingThumbnails.insert(layer->parentGroupId);
+                layer = document.layer(layer->parentGroupId);
+            }
+        }
     }
     m_thumbnailTimer.start(180);
 }
@@ -576,7 +743,31 @@ void LayerDock::handleReorder(int sourceRow, int insertRow)
     const QUuid id =
         m_layerList->item(sourceRow)->data(LayerItemRoles::LayerId).toUuid();
     const int finalRow = insertRow > sourceRow ? insertRow - 1 : insertRow;
-    const int offset = sourceRow - finalRow;
+    if (finalRow < 0 || finalRow >= m_layerList->count())
+    {
+        return;
+    }
+    const Document &document = m_controller->document();
+    const Layer *source = document.layer(id);
+    const QUuid targetId =
+        m_layerList->item(finalRow)->data(LayerItemRoles::LayerId).toUuid();
+    const Layer *target = document.layer(targetId);
+    if (!source || !target || source->parentGroupId != target->parentGroupId)
+    {
+        return;
+    }
+    QVector<QUuid> siblings;
+    for (int row = 0; row < m_layerList->count(); ++row)
+    {
+        const QUuid siblingId =
+            m_layerList->item(row)->data(LayerItemRoles::LayerId).toUuid();
+        const Layer *sibling = document.layer(siblingId);
+        if (sibling && sibling->parentGroupId == source->parentGroupId)
+        {
+            siblings.append(siblingId);
+        }
+    }
+    const int offset = siblings.indexOf(id) - siblings.indexOf(targetId);
     if (offset != 0 && !id.isNull())
     {
         m_controller->moveLayer(id, offset);

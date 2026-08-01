@@ -144,8 +144,14 @@ public:
     bool removeSelectedContent(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QImage &selectionMask);
+    bool updateStrokeAttributes(const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const std::optional<QColor> &color,
+        const std::optional<qreal> &width,
+        const std::optional<qreal> &roughness);
     void removeStrokes(const QUuid &layerId, const QVector<QUuid> &strokeIds);
-    void addLayer();
+    void addLayer(const QUuid &parentGroupId = {});
+    void addLayerGroup(const QUuid &childId = {});
     void duplicateLayer(const QUuid &id);
     void removeLayer(const QUuid &id);
     void clearLayer(const QUuid &id);
@@ -153,6 +159,8 @@ public:
     void setLayerVisible(const QUuid &id, bool visible);
     void setLayerOpacity(const QUuid &id, qreal opacity);
     void setLayerBlendMode(const QUuid &id, LayerBlendMode mode);
+    void setLayerClipToBelow(const QUuid &id, bool clipped);
+    void setLayerParentGroup(const QUuid &id, const QUuid &groupId);
     void moveLayer(const QUuid &id, int offset);
     void setWobbleAmount(qreal amount);
     void setAnimationFrames(int frames);

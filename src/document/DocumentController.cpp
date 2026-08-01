@@ -623,13 +623,16 @@ struct DocumentController::DocumentDelta
         std::optional<ValueChange<bool>> visible;
         std::optional<ValueChange<qreal>> opacity;
         std::optional<ValueChange<LayerBlendMode>> blendMode;
+        std::optional<ValueChange<QUuid>> parentGroupId;
+        std::optional<ValueChange<bool>> clipToLayerBelow;
         std::optional<ValueChange<QSize>> initialCanvasSize;
         StrokeSequenceDelta strokes;
 
         bool isEmpty() const
         {
-            return !name && !visible && !opacity && !blendMode
-                   && !initialCanvasSize && strokes.isEmpty();
+            return !name && !visible && !opacity && !blendMode && !parentGroupId
+                   && !clipToLayerBelow && !initialCanvasSize
+                   && strokes.isEmpty();
         }
     };
 
@@ -894,6 +897,12 @@ struct DocumentController::DocumentDelta
             recordChange(layer.opacity, afterLayer.opacity, change.opacity);
             recordChange(
                 layer.blendMode, afterLayer.blendMode, change.blendMode);
+            recordChange(layer.parentGroupId,
+                afterLayer.parentGroupId,
+                change.parentGroupId);
+            recordChange(layer.clipToLayerBelow,
+                afterLayer.clipToLayerBelow,
+                change.clipToLayerBelow);
             recordChange(layer.initialCanvasSize,
                 afterLayer.initialCanvasSize,
                 change.initialCanvasSize);
@@ -1146,6 +1155,9 @@ struct DocumentController::DocumentDelta
             applyChange(layer->visible, change.visible, forward);
             applyChange(layer->opacity, change.opacity, forward);
             applyChange(layer->blendMode, change.blendMode, forward);
+            applyChange(layer->parentGroupId, change.parentGroupId, forward);
+            applyChange(
+                layer->clipToLayerBelow, change.clipToLayerBelow, forward);
             applyChange(
                 layer->initialCanvasSize, change.initialCanvasSize, forward);
             if (!applyStrokeDelta(layer->strokes, change.strokes, forward))
@@ -1241,8 +1253,11 @@ struct DocumentController::DocumentDelta
         const LayerChange &later = next.changedLayers[0];
         if (current.id != scope || later.id != scope || current.name
             || later.name || current.visible || later.visible
-            || current.initialCanvasSize || later.initialCanvasSize
-            || !current.strokes.isEmpty() || !later.strokes.isEmpty())
+            || current.blendMode || later.blendMode || current.parentGroupId
+            || later.parentGroupId || current.clipToLayerBelow
+            || later.clipToLayerBelow || current.initialCanvasSize
+            || later.initialCanvasSize || !current.strokes.isEmpty()
+            || !later.strokes.isEmpty())
         {
             return false;
         }
@@ -1270,6 +1285,9 @@ struct DocumentController::DocumentDelta
             normalize(change.name);
             normalize(change.visible);
             normalize(change.opacity);
+            normalize(change.blendMode);
+            normalize(change.parentGroupId);
+            normalize(change.clipToLayerBelow);
             normalize(change.initialCanvasSize);
         }
         changedLayers.removeIf(
@@ -2463,7 +2481,9 @@ void DocumentController::setActiveLayer(const QUuid &id)
         return;
     }
     const Document &current = document();
-    if (current.activeLayerId == id || !current.layer(id))
+    const Layer *layer = current.layer(id);
+    if (current.activeLayerId == id || !layer
+        || layer->kind != LayerKind::Paint)
     {
         return;
     }
@@ -2482,7 +2502,7 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
 {
     const Document &current = document();
     const Layer *layer = current.layer(layerId);
-    if (!layer
+    if (!layer || layer->kind != LayerKind::Paint
         || layer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
         || totalStrokeCount(current) >= DocumentLimits::maximumTotalStrokes
         || stroke.id.isNull() || containsStrokeId(current, stroke.id)
@@ -2974,6 +2994,75 @@ bool DocumentController::removeSelectedContent(const QUuid &layerId,
         std::move(effects));
 }
 
+bool DocumentController::updateStrokeAttributes(const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const std::optional<QColor> &color,
+    const std::optional<qreal> &width,
+    const std::optional<qreal> &roughness)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
+    if (!layer || layer->kind != LayerKind::Paint || strokeIds.isEmpty()
+        || (!color && !width && !roughness) || (color && !color->isValid())
+        || (width
+            && (!std::isfinite(*width)
+                || *width < DocumentLimits::minimumStrokeWidth
+                || *width > DocumentLimits::maximumStrokeWidth))
+        || (roughness
+            && (!std::isfinite(*roughness)
+                || *roughness < DocumentLimits::minimumBrushWobbleScale
+                || *roughness > DocumentLimits::maximumBrushWobbleScale)))
+    {
+        return rejectHistoryMutation();
+    }
+
+    const QSet<QUuid> requested(strokeIds.cbegin(), strokeIds.cend());
+    Document candidate = current;
+    Layer *target = candidate.layer(layerId);
+    bool changed = false;
+    for (Stroke &stroke : target->strokes)
+    {
+        if (!requested.contains(stroke.id))
+        {
+            continue;
+        }
+        if (color
+            && (stroke.mode == StrokeMode::Paint
+                || stroke.mode == StrokeMode::Fill)
+            && stroke.color != *color)
+        {
+            stroke.color = *color;
+            changed = true;
+        }
+        if (width
+            && (stroke.mode == StrokeMode::Paint
+                || stroke.mode == StrokeMode::Erase)
+            && !qFuzzyCompare(stroke.width, *width))
+        {
+            stroke.width = *width;
+            changed = true;
+        }
+        if (roughness
+            && (stroke.mode == StrokeMode::Paint
+                || stroke.mode == StrokeMode::Erase)
+            && !qFuzzyCompare(stroke.brush.wobbleScale, *roughness))
+        {
+            stroke.brush.wobbleScale = *roughness;
+            changed = true;
+        }
+    }
+    if (!changed)
+    {
+        return rejectHistoryMutation();
+    }
+
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    return tryCommitCandidate(
+        tr("Edit stroke properties"), std::move(candidate), std::move(effects));
+}
+
 bool DocumentController::transformStrokes(const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
     const QTransform &transform,
@@ -3200,10 +3289,13 @@ void DocumentController::removeStrokes(
         tr("Delete selection"), std::move(candidate), std::move(effects));
 }
 
-void DocumentController::addLayer()
+void DocumentController::addLayer(const QUuid &parentGroupId)
 {
     const Document &current = document();
-    if (current.layers.size() >= DocumentLimits::maximumLayers)
+    const Layer *requestedGroup = current.layer(parentGroupId);
+    if (current.layers.size() >= DocumentLimits::maximumLayers
+        || (!parentGroupId.isNull()
+            && (!requestedGroup || requestedGroup->kind != LayerKind::Group)))
     {
         failHistoryMacro();
         return;
@@ -3211,9 +3303,29 @@ void DocumentController::addLayer()
     Layer layer;
     layer.name = nextLayerName();
     layer.initialCanvasSize = current.size;
+    if (requestedGroup)
+    {
+        layer.parentGroupId = requestedGroup->id;
+    }
+    else if (const Layer *active = current.layer(current.activeLayerId))
+    {
+        layer.parentGroupId = active->parentGroupId;
+    }
     const QUuid layerId = layer.id;
     Document candidate = current;
-    candidate.layers.append(std::move(layer));
+    const int activeIndex = current.layerIndex(current.activeLayerId);
+    if (requestedGroup)
+    {
+        candidate.layers.append(std::move(layer));
+    }
+    else if (activeIndex >= 0)
+    {
+        candidate.layers.insert(activeIndex + 1, std::move(layer));
+    }
+    else
+    {
+        candidate.layers.append(std::move(layer));
+    }
     candidate.activeLayerId = layerId;
     auto effects = std::make_shared<HistoryEffects>();
     effects->afterDocumentChanged.append(
@@ -3225,11 +3337,53 @@ void DocumentController::addLayer()
         ActiveLayerPolicy::UsePrepared);
 }
 
+void DocumentController::addLayerGroup(const QUuid &childId)
+{
+    const Document &current = document();
+    if (current.layers.size() >= DocumentLimits::maximumLayers)
+    {
+        failHistoryMacro();
+        return;
+    }
+    const Layer *child = current.layer(childId);
+    Layer group;
+    group.kind = LayerKind::Group;
+    group.initialCanvasSize = current.size;
+    group.parentGroupId = child ? child->parentGroupId : QUuid();
+    int number = 1;
+    do
+    {
+        group.name = tr("Group %1").arg(number++);
+    } while (std::any_of(current.layers.cbegin(),
+        current.layers.cend(),
+        [&group](const Layer &layer)
+        {
+            return layer.name == group.name;
+        }));
+
+    Document candidate = current;
+    const int childIndex = current.layerIndex(childId);
+    if (childIndex >= 0)
+    {
+        candidate.layers.insert(childIndex + 1, group);
+        candidate.layer(childId)->parentGroupId = group.id;
+    }
+    else
+    {
+        candidate.layers.append(group);
+    }
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(
+        tr("Add layer group"), std::move(candidate), std::move(effects));
+}
+
 void DocumentController::duplicateLayer(const QUuid &id)
 {
     const Document &current = document();
     const int sourceIndex = current.layerIndex(id);
-    if (sourceIndex < 0
+    if (sourceIndex < 0 || current.layers[sourceIndex].kind != LayerKind::Paint
         || current.layers.size() >= DocumentLimits::maximumLayers)
     {
         failHistoryMacro();
@@ -3273,10 +3427,9 @@ void DocumentController::duplicateLayer(const QUuid &id)
         failHistoryMacro();
         return;
     }
-    const QUuid copyId = copy.id;
     auto effects = std::make_shared<HistoryEffects>();
     effects->afterDocumentChanged.append(
-        HistoryEffects::LayerThumbnail{copyId});
+        HistoryEffects::LayerThumbnailsReset{});
     effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
     tryCommitCandidate(tr("Duplicate layer"),
         std::move(withCopy),
@@ -3294,20 +3447,49 @@ void DocumentController::removeLayer(const QUuid &id)
         return;
     }
     Document candidate = current;
-    candidate.layers.removeAt(index);
-    QUuid nextActive;
-    if (!candidate.layers.isEmpty())
+    QSet<QUuid> removedIds{id};
+    if (current.layers[index].kind == LayerKind::Group)
     {
-        const int nextIndex = index > 0 ? index - 1 : 1;
-        nextActive = current.layers[nextIndex].id;
+        for (const Layer &layer : current.layers)
+        {
+            if (current.isLayerDescendantOf(layer.id, id))
+            {
+                removedIds.insert(layer.id);
+            }
+        }
     }
-    if (candidate.activeLayerId == id)
+    if (removedIds.contains(candidate.activeLayerId))
     {
-        candidate.activeLayerId = nextActive;
+        candidate.activeLayerId = {};
+        const auto choosePaint = [&](int begin, int end, int step)
+        {
+            for (int candidateIndex = begin; candidateIndex != end;
+                candidateIndex += step)
+            {
+                const Layer &candidateLayer = current.layers[candidateIndex];
+                if (!removedIds.contains(candidateLayer.id)
+                    && candidateLayer.kind == LayerKind::Paint)
+                {
+                    candidate.activeLayerId = candidateLayer.id;
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (!choosePaint(index - 1, -1, -1))
+        {
+            choosePaint(index + 1, current.layers.size(), 1);
+        }
     }
+    candidate.layers.removeIf(
+        [&removedIds](const Layer &layer)
+        {
+            return removedIds.contains(layer.id);
+        });
     ensureActiveLayer(candidate);
     auto effects = std::make_shared<HistoryEffects>();
-    effects->afterDocumentChanged.append(HistoryEffects::LayerThumbnail{id});
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
     effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
     tryCommitCandidate(tr("Delete layer"),
         std::move(candidate),
@@ -3319,7 +3501,7 @@ void DocumentController::clearLayer(const QUuid &id)
 {
     const Document &current = document();
     const Layer *layer = current.layer(id);
-    if (!layer
+    if (!layer || layer->kind != LayerKind::Paint
         || (layer->strokes.isEmpty()
             && layer->initialCanvasSize == current.size))
     {
@@ -3364,7 +3546,12 @@ void DocumentController::setLayerVisible(const QUuid &id, bool visible)
     }
     Document candidate = current;
     candidate.layer(id)->visible = visible;
-    tryCommitCandidate(tr("Toggle layer visibility"), std::move(candidate));
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(tr("Toggle layer visibility"),
+        std::move(candidate),
+        std::move(effects));
 }
 
 void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
@@ -3384,9 +3571,12 @@ void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
     }
     Document candidate = current;
     candidate.layer(id)->opacity = normalized;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
     tryCommitCandidate(tr("Change layer opacity"),
         std::move(candidate),
-        {},
+        std::move(effects),
         ActiveLayerPolicy::PreserveCurrentIfPresent,
         layerOpacityMergeId,
         id);
@@ -3403,22 +3593,90 @@ void DocumentController::setLayerBlendMode(const QUuid &id, LayerBlendMode mode)
     }
     Document candidate = current;
     candidate.layer(id)->blendMode = mode;
-    tryCommitCandidate(tr("Change layer blend mode"), std::move(candidate));
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(tr("Change layer blend mode"),
+        std::move(candidate),
+        std::move(effects));
+}
+
+void DocumentController::setLayerClipToBelow(const QUuid &id, bool clipped)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    if (!layer || layer->kind != LayerKind::Paint
+        || layer->clipToLayerBelow == clipped)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.layer(id)->clipToLayerBelow = clipped;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(
+        tr("Change layer clipping"), std::move(candidate), std::move(effects));
+}
+
+void DocumentController::setLayerParentGroup(
+    const QUuid &id, const QUuid &groupId)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    const Layer *group = current.layer(groupId);
+    const bool validParent =
+        groupId.isNull() || (group && group->kind == LayerKind::Group);
+    if (!layer || !validParent || layer->parentGroupId == groupId
+        || id == groupId || current.isLayerDescendantOf(groupId, id))
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.layer(id)->parentGroupId = groupId;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(
+        tr("Move layer into group"), std::move(candidate), std::move(effects));
 }
 
 void DocumentController::moveLayer(const QUuid &id, int offset)
 {
     const Document &current = document();
     const int from = current.layerIndex(id);
-    const int to = from + offset;
-    if (from < 0 || to < 0 || to >= current.layers.size() || from == to)
+    const Layer *layer = current.layer(id);
+    if (from < 0 || !layer || offset == 0)
     {
         failHistoryMacro();
         return;
     }
+    QVector<int> siblingIndexes;
+    for (int index = 0; index < current.layers.size(); ++index)
+    {
+        if (current.layers[index].parentGroupId == layer->parentGroupId)
+        {
+            siblingIndexes.append(index);
+        }
+    }
+    const int siblingPosition = siblingIndexes.indexOf(from);
+    const int targetPosition = siblingPosition + offset;
+    if (siblingPosition < 0 || targetPosition < 0
+        || targetPosition >= siblingIndexes.size())
+    {
+        failHistoryMacro();
+        return;
+    }
+    const int to = siblingIndexes[targetPosition];
     Document candidate = current;
     candidate.layers.move(from, to);
-    tryCommitCandidate(tr("Move layer"), std::move(candidate));
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(
+        tr("Move layer"), std::move(candidate), std::move(effects));
 }
 
 void DocumentController::setWobbleAmount(qreal amount)
@@ -3947,7 +4205,8 @@ void DocumentController::notifyDocumentChanged()
 
 void DocumentController::ensureActiveLayer(Document &document)
 {
-    if (document.layer(document.activeLayerId))
+    const Layer *active = document.layer(document.activeLayerId);
+    if (active && active->kind == LayerKind::Paint)
     {
         return;
     }
@@ -3956,7 +4215,17 @@ void DocumentController::ensureActiveLayer(Document &document)
         document.activeLayerId = {};
         return;
     }
-    document.activeLayerId = document.layers.constLast().id;
+    for (auto layer = document.layers.crbegin();
+        layer != document.layers.crend();
+        ++layer)
+    {
+        if (layer->kind == LayerKind::Paint)
+        {
+            document.activeLayerId = layer->id;
+            return;
+        }
+    }
+    document.activeLayerId = {};
 }
 
 QString DocumentController::nextLayerName() const

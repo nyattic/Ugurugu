@@ -10,6 +10,9 @@ namespace LayerItemRoles
 constexpr int LayerId = Qt::UserRole;
 constexpr int Visible = Qt::UserRole + 1;
 constexpr int Thumbnail = Qt::UserRole + 2;
+constexpr int Kind = Qt::UserRole + 3;
+constexpr int Depth = Qt::UserRole + 4;
+constexpr int Clipped = Qt::UserRole + 5;
 }
 
 class LayerItemDelegate final : public QStyledItemDelegate
@@ -36,9 +39,9 @@ signals:
     void visibilityToggled(const QModelIndex &index);
 
 private:
-    QRect thumbnailRect(const QRect &rowRect) const;
+    QRect thumbnailRect(const QRect &rowRect, int depth) const;
     QRect eyeRect(const QRect &rowRect) const;
-    QRect nameRect(const QRect &rowRect) const;
+    QRect nameRect(const QRect &rowRect, int depth) const;
 };
 
 }

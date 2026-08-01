@@ -16,6 +16,7 @@
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "ui/StrokePropertiesDialog.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -283,6 +284,64 @@ private slots:
         controller.undoStack()->redo();
         QCOMPARE(blendModeCombo->currentData().toInt(),
             static_cast<int>(LayerBlendMode::Overlay));
+    }
+
+    void managesLayerGroupsAndClippingFromDock()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        const QUuid layerId = controller.document().activeLayerId;
+        LayerDock dock(&controller);
+        QToolButton *groupButton = dock.findChild<QToolButton *>(
+            QStringLiteral("layerAddGroupButton"));
+        QComboBox *parentCombo = dock.findChild<QComboBox *>(
+            QStringLiteral("layerParentGroupCombo"));
+        QCheckBox *clipCheck =
+            dock.findChild<QCheckBox *>(QStringLiteral("layerClipCheck"));
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(groupButton);
+        QVERIFY(parentCombo);
+        QVERIFY(clipCheck);
+        QVERIFY(list);
+
+        groupButton->click();
+        QTRY_COMPARE(list->count(), 2);
+        const Layer *layer = controller.document().layer(layerId);
+        QVERIFY(layer);
+        QVERIFY(!layer->parentGroupId.isNull());
+        QCOMPARE(parentCombo->currentData().toUuid(), layer->parentGroupId);
+
+        clipCheck->click();
+        QVERIFY(controller.document().layer(layerId)->clipToLayerBelow);
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(layerId)->clipToLayerBelow);
+    }
+
+    void editsStrokePropertyDialogValues()
+    {
+        StrokePropertiesDialog::Values values;
+        values.colorSupported = true;
+        values.widthSupported = true;
+        values.roughnessSupported = true;
+        values.color = QColor(10, 20, 30);
+        values.width = 8.0;
+        values.roughness = 0.75;
+        StrokePropertiesDialog dialog(values);
+
+        QDoubleSpinBox *width = dialog.findChild<QDoubleSpinBox *>(
+            QStringLiteral("strokeWidthSpin"));
+        QDoubleSpinBox *roughness = dialog.findChild<QDoubleSpinBox *>(
+            QStringLiteral("strokeRoughnessSpin"));
+        QVERIFY(width);
+        QVERIFY(roughness);
+        width->setValue(18.0);
+        roughness->setValue(140.0);
+        QVERIFY(dialog.width().has_value());
+        QVERIFY(dialog.roughness().has_value());
+        QVERIFY(dialog.color().has_value());
+        QCOMPARE(*dialog.width(), 18.0);
+        QCOMPARE(*dialog.roughness(), 1.4);
+        QCOMPARE(*dialog.color(), *values.color);
     }
 
     void editsAndRestoresShortcuts()

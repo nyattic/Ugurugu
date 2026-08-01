@@ -1,5 +1,6 @@
 #include "ui/LayerItemDelegate.hpp"
 
+#include "document/Document.hpp"
 #include "ui/Icons.hpp"
 #include "ui/Theme.hpp"
 
@@ -7,6 +8,8 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+
+#include <algorithm>
 
 namespace wobble
 {
@@ -20,6 +23,7 @@ constexpr int accentBarWidth = 3;
 constexpr int thumbnailWidth = 48;
 constexpr int thumbnailHeight = 32;
 constexpr int eyeSize = 20;
+constexpr int depthIndent = 14;
 
 const QPixmap &eyeOpenPixmap()
 {
@@ -42,10 +46,11 @@ LayerItemDelegate::LayerItemDelegate(QObject *parent)
 {
 }
 
-QRect LayerItemDelegate::thumbnailRect(const QRect &rowRect) const
+QRect LayerItemDelegate::thumbnailRect(const QRect &rowRect, int depth) const
 {
     const int y = rowRect.top() + (rowRect.height() - thumbnailHeight) / 2;
-    return QRect(rowRect.left() + rowPadding + accentBarWidth + 8,
+    return QRect(rowRect.left() + rowPadding + accentBarWidth + 8
+                     + std::max(0, depth) * depthIndent,
         y,
         thumbnailWidth,
         thumbnailHeight);
@@ -57,9 +62,9 @@ QRect LayerItemDelegate::eyeRect(const QRect &rowRect) const
     return QRect(rowRect.right() - rowPadding - eyeSize, y, eyeSize, eyeSize);
 }
 
-QRect LayerItemDelegate::nameRect(const QRect &rowRect) const
+QRect LayerItemDelegate::nameRect(const QRect &rowRect, int depth) const
 {
-    const QRect thumb = thumbnailRect(rowRect);
+    const QRect thumb = thumbnailRect(rowRect, depth);
     const QRect eye = eyeRect(rowRect);
     return QRect(thumb.right() + 10,
         rowRect.top(),
@@ -76,6 +81,10 @@ void LayerItemDelegate::paint(QPainter *painter,
 
     const bool selected = option.state.testFlag(QStyle::State_Selected);
     const bool visible = index.data(LayerItemRoles::Visible).toBool();
+    const int depth = index.data(LayerItemRoles::Depth).toInt();
+    const bool group = index.data(LayerItemRoles::Kind).toInt()
+                       == static_cast<int>(LayerKind::Group);
+    const bool clipped = index.data(LayerItemRoles::Clipped).toBool();
 
     if (selected)
     {
@@ -94,7 +103,7 @@ void LayerItemDelegate::paint(QPainter *painter,
 
     painter->setOpacity(visible ? 1.0 : 0.4);
 
-    const QRect thumbRect = thumbnailRect(option.rect);
+    const QRect thumbRect = thumbnailRect(option.rect, depth);
     const QPixmap thumbnail =
         index.data(LayerItemRoles::Thumbnail).value<QPixmap>();
     QPainterPath thumbClip;
@@ -118,7 +127,19 @@ void LayerItemDelegate::paint(QPainter *painter,
 
     painter->setPen(visible ? Theme::textPrimary() : Theme::textMuted());
     const QString name = index.data(Qt::DisplayRole).toString();
-    const QRect textRect = nameRect(option.rect);
+    QRect textRect = nameRect(option.rect, depth);
+    if (group || clipped)
+    {
+        const QString badge = group ? QStringLiteral("G") : QStringLiteral("↳");
+        const QRect badgeRect(textRect.left(),
+            textRect.top(),
+            option.fontMetrics.horizontalAdvance(badge) + 8,
+            textRect.height());
+        painter->setPen(Theme::accent());
+        painter->drawText(badgeRect, Qt::AlignLeft | Qt::AlignVCenter, badge);
+        textRect.setLeft(badgeRect.right());
+        painter->setPen(visible ? Theme::textPrimary() : Theme::textMuted());
+    }
     painter->drawText(textRect,
         Qt::AlignLeft | Qt::AlignVCenter,
         option.fontMetrics.elidedText(name, Qt::ElideRight, textRect.width()));
@@ -166,7 +187,8 @@ void LayerItemDelegate::updateEditorGeometry(QWidget *editor,
     const QModelIndex &index) const
 {
     Q_UNUSED(index);
-    QRect rect = nameRect(option.rect);
+    const int depth = index.data(LayerItemRoles::Depth).toInt();
+    QRect rect = nameRect(option.rect, depth);
     rect.adjust(-4, 6, 4, -6);
     editor->setGeometry(rect);
 }

@@ -18,6 +18,7 @@
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "ui/StrokePropertiesDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolPopover.hpp"
@@ -49,6 +50,7 @@
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QSet>
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -673,6 +675,20 @@ void MainWindow::createActions()
         m_canvas,
         &CanvasWidget::duplicateSelection);
 
+    m_editStrokePropertiesAction =
+        new QAction(tr("Edit selected stroke properties…"), this);
+    m_editStrokePropertiesAction->setObjectName(
+        QStringLiteral("editStrokePropertiesAction"));
+    m_editStrokePropertiesAction->setIcon(Icons::icon(IconGlyph::Brush));
+    m_editStrokePropertiesAction->setToolTip(
+        tr("Change the color, width, or roughness of selected strokes"));
+    m_editStrokePropertiesAction->setEnabled(false);
+    registerShortcut(m_editStrokePropertiesAction, {});
+    connect(m_editStrokePropertiesAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::editSelectedStrokeProperties);
+
     m_flipSelectionHorizontalAction =
         new QAction(tr("Flip selection horizontally"), this);
     m_flipSelectionHorizontalAction->setObjectName(
@@ -767,6 +783,9 @@ void MainWindow::createActions()
         m_scaleSelectionAction->setEnabled(hasContent);
         m_rotateSelectionAction->setEnabled(hasContent);
         m_duplicateSelectionAction->setEnabled(hasContent);
+        m_editStrokePropertiesAction->setEnabled(
+            hasContent && m_canvas->hasEditableStrokeSelection()
+            && !m_canvas->hasSelectionTransformSession());
         m_flipSelectionHorizontalAction->setEnabled(hasContent);
         m_flipSelectionVerticalAction->setEnabled(hasContent);
         m_deleteSelectionAction->setEnabled(hasContent);
@@ -786,6 +805,8 @@ void MainWindow::createActions()
     {
         m_applySelectionTransformAction->setEnabled(active && dirty);
         m_cancelSelectionTransformAction->setEnabled(active);
+        m_editStrokePropertiesAction->setEnabled(
+            !active && m_canvas->hasEditableStrokeSelection());
     };
     connect(m_canvas,
         &CanvasWidget::selectionTransformSessionChanged,
@@ -806,6 +827,7 @@ void MainWindow::createActions()
     selectionBar->addAction(m_cancelSelectionTransformAction);
     selectionBar->addSeparator();
     selectionBar->addAction(m_duplicateSelectionAction);
+    selectionBar->addAction(m_editStrokePropertiesAction);
     selectionBar->addAction(m_deleteSelectionAction);
     selectionBar->addSeparator();
     selectionBar->addAction(m_deselectSelectionAction);
@@ -1008,6 +1030,7 @@ void MainWindow::createActions()
     addAction(m_applySelectionTransformAction);
     addAction(m_cancelSelectionTransformAction);
     addAction(m_duplicateSelectionAction);
+    addAction(m_editStrokePropertiesAction);
     addAction(m_deleteSelectionAction);
     addAction(m_deselectSelectionAction);
     addAction(escapeCanvasAction);
@@ -1058,6 +1081,7 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_cancelSelectionTransformAction);
     selectionMenu->addSeparator();
     selectionMenu->addAction(m_duplicateSelectionAction);
+    selectionMenu->addAction(m_editStrokePropertiesAction);
     selectionMenu->addAction(m_deleteSelectionAction);
     selectionMenu->addSeparator();
     selectionMenu->addAction(m_deselectSelectionAction);
@@ -1775,6 +1799,90 @@ void MainWindow::rotateSelection()
     {
         m_canvas->rotateSelection(degrees);
     }
+}
+
+void MainWindow::editSelectedStrokeProperties()
+{
+    if (m_canvas->hasSelectionTransformSession())
+    {
+        return;
+    }
+    const QUuid layerId = m_canvas->selectionLayerId();
+    const QVector<QUuid> strokeIds = m_canvas->selectedStrokeIds();
+    const Layer *layer = m_controller.document().layer(layerId);
+    if (!layer || strokeIds.isEmpty())
+    {
+        return;
+    }
+
+    const QSet<QUuid> selected(strokeIds.cbegin(), strokeIds.cend());
+    StrokePropertiesDialog::Values values;
+    bool colorMixed = false;
+    bool widthMixed = false;
+    bool roughnessMixed = false;
+    for (const Stroke &stroke : layer->strokes)
+    {
+        if (!selected.contains(stroke.id))
+        {
+            continue;
+        }
+        if (stroke.mode == StrokeMode::Paint || stroke.mode == StrokeMode::Fill)
+        {
+            if (!values.colorSupported)
+            {
+                values.color = stroke.color;
+            }
+            else if (values.color && *values.color != stroke.color)
+            {
+                colorMixed = true;
+            }
+            values.colorSupported = true;
+        }
+        if (stroke.mode == StrokeMode::Paint
+            || stroke.mode == StrokeMode::Erase)
+        {
+            if (!values.widthSupported)
+            {
+                values.width = stroke.width;
+                values.roughness = stroke.brush.wobbleScale;
+            }
+            else
+            {
+                widthMixed =
+                    widthMixed || !qFuzzyCompare(*values.width, stroke.width);
+                roughnessMixed = roughnessMixed
+                                 || !qFuzzyCompare(*values.roughness,
+                                     stroke.brush.wobbleScale);
+            }
+            values.widthSupported = true;
+            values.roughnessSupported = true;
+        }
+    }
+    if (!values.colorSupported && !values.widthSupported
+        && !values.roughnessSupported)
+    {
+        return;
+    }
+    if (colorMixed)
+    {
+        values.color.reset();
+    }
+    if (widthMixed)
+    {
+        values.width.reset();
+    }
+    if (roughnessMixed)
+    {
+        values.roughness.reset();
+    }
+
+    StrokePropertiesDialog dialog(values, this);
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+    m_controller.updateStrokeAttributes(
+        layerId, strokeIds, dialog.color(), dialog.width(), dialog.roughness());
 }
 
 void MainWindow::writeAutosave()

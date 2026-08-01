@@ -10,6 +10,7 @@
 
 class QLabel;
 class QListWidgetItem;
+class QCheckBox;
 class QComboBox;
 class QSlider;
 class QToolButton;
@@ -44,11 +45,14 @@ private:
     QPointer<DocumentController> m_controller;
     LayerListWidget *m_layerList = nullptr;
     QToolButton *m_addButton = nullptr;
+    QToolButton *m_addGroupButton = nullptr;
     QToolButton *m_duplicateButton = nullptr;
     QToolButton *m_deleteButton = nullptr;
     QToolButton *m_moveUpButton = nullptr;
     QToolButton *m_moveDownButton = nullptr;
     QComboBox *m_blendModeCombo = nullptr;
+    QComboBox *m_parentGroupCombo = nullptr;
+    QCheckBox *m_clipCheck = nullptr;
     QSlider *m_opacitySlider = nullptr;
     QLabel *m_opacityValue = nullptr;
     QTimer m_thumbnailTimer;
@@ -58,6 +62,7 @@ private:
     bool m_syncing = false;
     bool m_opacityDragging = false;
     QUuid m_opacityLayerId;
+    QUuid m_selectedLayerId;
 };
 
 }

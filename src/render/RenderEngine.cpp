@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <numbers>
 
 namespace wobble
@@ -1535,6 +1536,89 @@ void prepareLayerComposition(
     painter.setOpacity(std::clamp(opacity, 0.0, 1.0));
 }
 
+template <typename RenderPaintLayer>
+QImage renderLayerHierarchy(const Document &document,
+    const QSize &outputSize,
+    const QColor &background,
+    RenderPaintLayer renderPaintLayer,
+    RenderEngine::ScaledRenderStats *stats)
+{
+    const auto transparentImage = [&outputSize]()
+    {
+        QImage image(outputSize, QImage::Format_ARGB32_Premultiplied);
+        if (!image.isNull())
+        {
+            image.fill(Qt::transparent);
+        }
+        return image;
+    };
+
+    std::function<QImage(const QUuid &, bool)> renderStack;
+    renderStack = [&](const QUuid &parentGroupId, bool root)
+    {
+        QImage result(outputSize, QImage::Format_ARGB32_Premultiplied);
+        if (result.isNull())
+        {
+            return QImage();
+        }
+        result.fill(root ? background : QColor(Qt::transparent));
+        notePreviewImage(stats, result);
+
+        QImage clippingBase;
+        qreal clippingBaseOpacity = 0.0;
+        for (const Layer &layer : document.layers)
+        {
+            if (layer.parentGroupId != parentGroupId)
+            {
+                continue;
+            }
+            if (!layer.visible || layer.opacity <= 0.0)
+            {
+                if (!layer.clipToLayerBelow)
+                {
+                    clippingBase = transparentImage();
+                    clippingBaseOpacity = 0.0;
+                }
+                continue;
+            }
+
+            QImage layerImage = layer.kind == LayerKind::Group
+                                    ? renderStack(layer.id, false)
+                                    : renderPaintLayer(layer);
+            if (layerImage.isNull())
+            {
+                return QImage();
+            }
+            if (layer.clipToLayerBelow)
+            {
+                if (clippingBase.isNull() || clippingBaseOpacity <= 0.0)
+                {
+                    continue;
+                }
+                QPainter clipper(&layerImage);
+                clipper.setCompositionMode(
+                    QPainter::CompositionMode_DestinationIn);
+                clipper.setOpacity(clippingBaseOpacity);
+                clipper.drawImage(QPoint(0, 0), clippingBase);
+                clipper.end();
+            }
+            else
+            {
+                clippingBase = layerImage;
+                clippingBaseOpacity = std::clamp(layer.opacity, 0.0, 1.0);
+            }
+
+            notePreviewWorkingSet(stats, result, layerImage, clippingBase);
+            QPainter compositor(&result);
+            compositor.setRenderHint(QPainter::Antialiasing, false);
+            prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
+            compositor.drawImage(QPoint(0, 0), layerImage);
+        }
+        return result;
+    };
+    return renderStack({}, true);
+}
+
 QImage renderAtDisplayScale(const Document &document,
     int frameIndex,
     const QSize &outputSize,
@@ -1549,26 +1633,19 @@ QImage renderAtDisplayScale(const Document &document,
         static_cast<qreal>(outputSize.width()) / document.size.width(),
         static_cast<qreal>(outputSize.height()) / document.size.height()};
 
-    QImage result(outputSize, QImage::Format_ARGB32_Premultiplied);
-    if (result.isNull())
-    {
-        return {};
-    }
-    result.fill(document.background);
-    notePreviewImage(stats, result);
-    notePreviewWorkingSet(stats, result);
-
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame =
         ((frameIndex % frameCount) + frameCount) % frameCount;
-    QPainter compositor(&result);
-    compositor.setRenderHint(QPainter::Antialiasing, false);
-
-    for (const Layer &layer : document.layers)
+    const auto renderPaintLayer = [&](const Layer &layer)
     {
-        if (!layer.visible || layer.opacity <= 0.0 || layer.strokes.isEmpty())
+        if (layer.strokes.isEmpty())
         {
-            continue;
+            QImage empty(outputSize, QImage::Format_ARGB32_Premultiplied);
+            if (!empty.isNull())
+            {
+                empty.fill(Qt::transparent);
+            }
+            return empty;
         }
         const QSize initialSize = layer.initialCanvasSize.isValid()
                                       ? layer.initialCanvasSize
@@ -1584,13 +1661,12 @@ QImage renderAtDisplayScale(const Document &document,
                 mapping,
                 stats))
         {
-            return {};
+            return QImage();
         }
-        notePreviewWorkingSet(stats, result, layerImage);
-        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
-        compositor.drawImage(QPoint(0, 0), layerImage);
-    }
-    return result;
+        return layerImage;
+    };
+    return renderLayerHierarchy(
+        document, outputSize, document.background, renderPaintLayer, stats);
 }
 
 QImage renderAtSize(
@@ -1601,25 +1677,20 @@ QImage renderAtSize(
         return {};
     }
 
-    QImage result(outputSize, QImage::Format_ARGB32_Premultiplied);
-    if (result.isNull())
-    {
-        return {};
-    }
-    result.fill(document.background);
-
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame =
         ((frameIndex % frameCount) + frameCount) % frameCount;
 
-    QPainter compositor(&result);
-    compositor.setRenderHint(QPainter::Antialiasing, false);
-
-    for (const Layer &layer : document.layers)
+    const auto renderPaintLayer = [&](const Layer &layer)
     {
-        if (!layer.visible || layer.opacity <= 0.0 || layer.strokes.isEmpty())
+        if (layer.strokes.isEmpty())
         {
-            continue;
+            QImage empty(outputSize, QImage::Format_ARGB32_Premultiplied);
+            if (!empty.isNull())
+            {
+                empty.fill(Qt::transparent);
+            }
+            return empty;
         }
 
         QImage nativeLayer;
@@ -1634,7 +1705,7 @@ QImage renderAtSize(
                 frameCount,
                 initialSize))
         {
-            return {};
+            return QImage();
         }
         const QImage layerImage = nativeLayer.size() == outputSize
                                       ? nativeLayer
@@ -1643,13 +1714,12 @@ QImage renderAtSize(
                                             Qt::FastTransformation);
         if (layerImage.isNull())
         {
-            return {};
+            return QImage();
         }
-        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
-        compositor.drawImage(QPoint(0, 0), layerImage);
-    }
-
-    return result;
+        return layerImage;
+    };
+    return renderLayerHierarchy(
+        document, outputSize, document.background, renderPaintLayer, nullptr);
 }
 
 }
@@ -1699,7 +1769,16 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     }
     LayerSplitFrame split;
     if (!document.size.isValid() || !outputSize.isValid()
-        || document.layerIndex(layerId) < 0)
+        || document.layerIndex(layerId) < 0
+        || document.layer(layerId)->kind != LayerKind::Paint
+        || std::any_of(document.layers.cbegin(),
+            document.layers.cend(),
+            [](const Layer &layer)
+            {
+                return layer.kind == LayerKind::Group
+                       || !layer.parentGroupId.isNull()
+                       || layer.clipToLayerBelow;
+            }))
     {
         return split;
     }

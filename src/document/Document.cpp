@@ -2,6 +2,8 @@
 
 #include "document/DocumentLimits.hpp"
 
+#include <QSet>
+
 #include <cmath>
 
 namespace wobble
@@ -46,6 +48,11 @@ bool isValidLayerBlendMode(LayerBlendMode mode)
            || mode == LayerBlendMode::Screen || mode == LayerBlendMode::Overlay;
 }
 
+bool isValidLayerKind(LayerKind kind)
+{
+    return kind == LayerKind::Paint || kind == LayerKind::Group;
+}
+
 Document Document::createDefault(const QSize &canvasSize)
 {
     Document document;
@@ -80,6 +87,54 @@ int Document::layerIndex(const QUuid &id) const
         }
     }
     return -1;
+}
+
+bool Document::isLayerDescendantOf(
+    const QUuid &layerId, const QUuid &ancestorGroupId) const
+{
+    if (layerId.isNull() || ancestorGroupId.isNull()
+        || layerId == ancestorGroupId)
+    {
+        return false;
+    }
+    const Layer *current = layer(layerId);
+    QSet<QUuid> visited;
+    while (current && !current->parentGroupId.isNull())
+    {
+        if (current->parentGroupId == ancestorGroupId)
+        {
+            return true;
+        }
+        if (visited.contains(current->parentGroupId))
+        {
+            return false;
+        }
+        visited.insert(current->parentGroupId);
+        current = layer(current->parentGroupId);
+    }
+    return false;
+}
+
+int Document::layerDepth(const QUuid &id) const
+{
+    const Layer *current = layer(id);
+    QSet<QUuid> visited;
+    int depth = 0;
+    while (current && !current->parentGroupId.isNull())
+    {
+        if (visited.contains(current->parentGroupId))
+        {
+            return 0;
+        }
+        visited.insert(current->parentGroupId);
+        current = layer(current->parentGroupId);
+        if (!current)
+        {
+            return 0;
+        }
+        ++depth;
+    }
+    return depth;
 }
 
 }

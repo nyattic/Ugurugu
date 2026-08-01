@@ -150,10 +150,21 @@ enum class LayerBlendMode
 
 bool isValidLayerBlendMode(LayerBlendMode mode);
 
+enum class LayerKind
+{
+    Paint,
+    Group
+};
+
+bool isValidLayerKind(LayerKind kind);
+
 struct Layer
 {
     QUuid id = QUuid::createUuid();
     QString name;
+    LayerKind kind = LayerKind::Paint;
+    QUuid parentGroupId;
+    bool clipToLayerBelow = false;
     bool visible = true;
     qreal opacity = 1.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
@@ -176,6 +187,9 @@ struct Document
     Layer *layer(const QUuid &id);
     const Layer *layer(const QUuid &id) const;
     int layerIndex(const QUuid &id) const;
+    bool isLayerDescendantOf(
+        const QUuid &layerId, const QUuid &ancestorGroupId) const;
+    int layerDepth(const QUuid &id) const;
 };
 
 }

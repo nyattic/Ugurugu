@@ -56,6 +56,9 @@ public:
     bool isCanvasMirrored() const;
     bool hasSelection() const;
     bool hasTransformableSelection() const;
+    bool hasEditableStrokeSelection() const;
+    QUuid selectionLayerId() const;
+    QVector<QUuid> selectedStrokeIds() const;
     bool selectionMoveMode() const;
     bool hasSelectionTransformSession() const;
     bool hasPendingSelectionTransform() const;

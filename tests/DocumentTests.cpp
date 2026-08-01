@@ -143,6 +143,9 @@ private slots:
         QVERIFY(document.layers.first().visible);
         QCOMPARE(document.layers.first().opacity, 1.0);
         QCOMPARE(document.layers.first().blendMode, LayerBlendMode::Normal);
+        QCOMPARE(document.layers.first().kind, LayerKind::Paint);
+        QVERIFY(document.layers.first().parentGroupId.isNull());
+        QVERIFY(!document.layers.first().clipToLayerBelow);
         QVERIFY(document.layers.first().strokes.isEmpty());
         QCOMPARE(document.activeLayerId, document.layers.first().id);
         QCOMPARE(document.layerIndex(document.activeLayerId), 0);
@@ -1335,6 +1338,105 @@ private slots:
             LayerBlendMode::Multiply);
     }
 
+    void managesLayerGroupsAndClippingUndoably()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid firstId = controller.document().activeLayerId;
+
+        controller.addLayerGroup(firstId);
+        QCOMPARE(controller.document().layers.size(), 2);
+        const Layer *first = controller.document().layer(firstId);
+        QVERIFY(first);
+        QVERIFY(!first->parentGroupId.isNull());
+        const QUuid groupId = first->parentGroupId;
+        const Layer *group = controller.document().layer(groupId);
+        QVERIFY(group);
+        QCOMPARE(group->kind, LayerKind::Group);
+        QVERIFY(group->strokes.isEmpty());
+        QVERIFY(controller.document().isLayerDescendantOf(firstId, groupId));
+        QCOMPARE(controller.document().layerDepth(firstId), 1);
+
+        controller.addLayer();
+        const QUuid secondId = controller.document().activeLayerId;
+        QCOMPARE(controller.document().layer(secondId)->parentGroupId, groupId);
+        controller.setLayerClipToBelow(secondId, true);
+        QVERIFY(controller.document().layer(secondId)->clipToLayerBelow);
+        controller.setLayerParentGroup(secondId, {});
+        QVERIFY(controller.document().layer(secondId)->parentGroupId.isNull());
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layer(secondId)->parentGroupId, groupId);
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(secondId)->clipToLayerBelow);
+        controller.undoStack()->redo();
+        QVERIFY(controller.document().layer(secondId)->clipToLayerBelow);
+    }
+
+    void editsStrokePropertiesUndoably()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke paint;
+        paint.color = QColor(20, 40, 60);
+        paint.width = 7.0;
+        paint.brush.wobbleScale = 0.5;
+        paint.points = {{QPointF(12.0, 14.0), 1.0}, {QPointF(50.0, 52.0), 1.0}};
+        controller.addStroke(layerId, paint);
+        controller.undoStack()->setClean();
+
+        QVERIFY(controller.updateStrokeAttributes(
+            layerId, {paint.id}, QColor(90, 110, 130), 15.0, 1.75));
+        const Stroke &edited =
+            controller.document().layer(layerId)->strokes.first();
+        QCOMPARE(edited.color, QColor(90, 110, 130));
+        QCOMPARE(edited.width, 15.0);
+        QCOMPARE(edited.brush.wobbleScale, 1.75);
+
+        controller.undoStack()->undo();
+        const Stroke &restored =
+            controller.document().layer(layerId)->strokes.first();
+        QCOMPARE(restored.color, paint.color);
+        QCOMPARE(restored.width, paint.width);
+        QCOMPARE(restored.brush.wobbleScale, paint.brush.wobbleScale);
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document()
+                     .layer(layerId)
+                     ->strokes.first()
+                     .brush.wobbleScale,
+            1.75);
+    }
+
+    void roundTripsLayerHierarchySchema()
+    {
+        Document document = Document::createDefault(QSize(64, 64));
+        Layer group;
+        group.name = QStringLiteral("Group");
+        group.kind = LayerKind::Group;
+        group.opacity = 0.7;
+        group.initialCanvasSize = document.size;
+        document.layers.first().parentGroupId = group.id;
+        document.layers.first().clipToLayerBelow = true;
+        document.layers.append(group);
+
+        const QByteArray json = DocumentSerializer::toJson(document);
+        QVERIFY(!json.isEmpty());
+        const QJsonObject root = QJsonDocument::fromJson(json).object();
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 8);
+        QString error;
+        const std::optional<Document> decoded =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error));
+        QCOMPARE(decoded->layers.last().kind, LayerKind::Group);
+        QCOMPARE(decoded->layers.first().parentGroupId, group.id);
+        QVERIFY(decoded->layers.first().clipToLayerBelow);
+
+        Document cyclic = *decoded;
+        cyclic.layers.last().parentGroupId = cyclic.layers.last().id;
+        QVERIFY(DocumentSerializer::toJson(cyclic).isEmpty());
+    }
+
     void undoActionsCannotBypassHistoryPreflight()
     {
         DocumentController controller;
@@ -1687,7 +1789,7 @@ private slots:
         QVERIFY(!currentJson.isEmpty());
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
-        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 7);
+        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 8);
         QCOMPARE(
             currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 2);
         const std::optional<Document> reloaded =
@@ -2261,7 +2363,7 @@ private slots:
                      .object()
                      .value(QStringLiteral("schemaVersion"))
                      .toInt(),
-            7);
+            8);
         const std::optional<Document> loaded =
             DocumentSerializer::fromJson(json, &error);
         QVERIFY2(loaded.has_value(), qPrintable(error));
@@ -3664,7 +3766,7 @@ private slots:
 
         QTest::newRow("malformed") << QByteArrayLiteral("{");
         QTest::newRow("unsupported-version") << QByteArrayLiteral(
-            R"({"schemaVersion":8,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[]})");
+            R"({"schemaVersion":9,"algorithmVersion":2,"canvas":{"width":10,"height":10},"layers":[]})");
         QTest::newRow("unsupported-algorithm") << QByteArrayLiteral(
             R"({"schemaVersion":2,"algorithmVersion":3,"canvas":{"width":10,"height":10},"layers":[{}]})");
         QTest::newRow("invalid-canvas") << QByteArrayLiteral(

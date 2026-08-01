@@ -166,7 +166,7 @@ using serializer_detail::ImmutableBackings;
 using serializer_detail::PreparedPlan;
 using serializer_detail::StrokeMeta;
 
-constexpr int schemaVersion = 7;
+constexpr int schemaVersion = 8;
 constexpr int algorithmVersion = 2;
 constexpr int serializationFormatGeneration = 1;
 
@@ -899,6 +899,12 @@ QString layerBlendModeName(LayerBlendMode mode)
     return {};
 }
 
+QString layerKindName(LayerKind kind)
+{
+    return kind == LayerKind::Group ? QStringLiteral("group")
+                                    : QStringLiteral("paint");
+}
+
 QJsonArray transformToJson(const QTransform &transform)
 {
     return {transform.m11(),
@@ -1413,6 +1419,24 @@ std::optional<LayerBlendMode> layerBlendModeFromJson(const QJsonValue &value)
     return std::nullopt;
 }
 
+std::optional<LayerKind> layerKindFromJson(const QJsonValue &value)
+{
+    if (!value.isString())
+    {
+        return std::nullopt;
+    }
+    const QString name = value.toString();
+    if (name == QStringLiteral("paint"))
+    {
+        return LayerKind::Paint;
+    }
+    if (name == QStringLiteral("group"))
+    {
+        return LayerKind::Group;
+    }
+    return std::nullopt;
+}
+
 std::optional<QSize> sizeFromJsonArray(const QJsonValue &value)
 {
     if (!value.isArray())
@@ -1874,6 +1898,12 @@ QJsonObject layerToJson(const Layer &layer,
     object.insert(
         QStringLiteral("id"), layer.id.toString(QUuid::WithoutBraces));
     object.insert(QStringLiteral("name"), layer.name);
+    object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
+    object.insert(QStringLiteral("parentGroupId"),
+        layer.parentGroupId.isNull()
+            ? QJsonValue(QJsonValue::Null)
+            : QJsonValue(layer.parentGroupId.toString(QUuid::WithoutBraces)));
+    object.insert(QStringLiteral("clipToLayerBelow"), layer.clipToLayerBelow);
     object.insert(QStringLiteral("visible"), layer.visible);
     object.insert(QStringLiteral("opacity"), layer.opacity);
     object.insert(
@@ -1891,6 +1921,12 @@ QJsonObject layerSkeletonToJson(const Layer &layer)
     object.insert(
         QStringLiteral("id"), layer.id.toString(QUuid::WithoutBraces));
     object.insert(QStringLiteral("name"), layer.name);
+    object.insert(QStringLiteral("kind"), layerKindName(layer.kind));
+    object.insert(QStringLiteral("parentGroupId"),
+        layer.parentGroupId.isNull()
+            ? QJsonValue(QJsonValue::Null)
+            : QJsonValue(layer.parentGroupId.toString(QUuid::WithoutBraces)));
+    object.insert(QStringLiteral("clipToLayerBelow"), layer.clipToLayerBelow);
     object.insert(QStringLiteral("visible"), layer.visible);
     object.insert(QStringLiteral("opacity"), layer.opacity);
     object.insert(
@@ -2232,6 +2268,9 @@ private:
         Layer frozen;
         frozen.id = source.id;
         frozen.name = owningCopy(source.name);
+        frozen.kind = source.kind;
+        frozen.parentGroupId = source.parentGroupId;
+        frozen.clipToLayerBelow = source.clipToLayerBelow;
         frozen.visible = source.visible;
         frozen.opacity = source.opacity;
         frozen.blendMode = source.blendMode;
@@ -2342,11 +2381,16 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
     bool activeLayerFound = false;
     for (const Layer &layer : source.layers)
     {
-        activeLayerFound = activeLayerFound || layer.id == source.activeLayerId;
+        activeLayerFound = activeLayerFound
+                           || (layer.id == source.activeLayerId
+                               && layer.kind == LayerKind::Paint);
         if (layer.name.trimmed().isEmpty()
             || layer.name.size() > DocumentLimits::maximumLayerNameLength
             || !std::isfinite(layer.opacity) || layer.opacity < 0.0
-            || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode))
+            || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
+            || !isValidLayerKind(layer.kind)
+            || (layer.kind == LayerKind::Group
+                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow)))
         {
             setError(error,
                 DocumentSerializer::tr("A layer contains invalid data."));
@@ -2354,8 +2398,30 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             return result;
         }
     }
+    for (const Layer &layer : source.layers)
+    {
+        if (layer.parentGroupId.isNull())
+        {
+            continue;
+        }
+        const Layer *parent = source.layer(layer.parentGroupId);
+        if (!parent || parent->kind != LayerKind::Group
+            || layer.parentGroupId == layer.id
+            || source.isLayerDescendantOf(layer.parentGroupId, layer.id))
+        {
+            setError(error,
+                DocumentSerializer::tr("The layer hierarchy is invalid."));
+            result.status = MetadataReuseStatus::Invalid;
+            return result;
+        }
+    }
     const bool validActiveLayer =
-        source.layers.isEmpty()
+        !std::any_of(source.layers.cbegin(),
+            source.layers.cend(),
+            [](const Layer &layer)
+            {
+                return layer.kind == LayerKind::Paint;
+            })
             ? source.activeLayerId.isNull()
             : !source.activeLayerId.isNull() && activeLayerFound;
     if (!validActiveLayer)
@@ -2464,6 +2530,9 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             Layer frozenLayer;
             frozenLayer.id = layer.id;
             frozenLayer.name = owningStringCopy(layer.name);
+            frozenLayer.kind = layer.kind;
+            frozenLayer.parentGroupId = layer.parentGroupId;
+            frozenLayer.clipToLayerBelow = layer.clipToLayerBelow;
             frozenLayer.visible = layer.visible;
             frozenLayer.opacity = layer.opacity;
             frozenLayer.blendMode = layer.blendMode;
@@ -2726,6 +2795,11 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
         || !object.value(QStringLiteral("visible")).isBool()
         || !object.value(QStringLiteral("opacity")).isDouble()
         || !object.value(QStringLiteral("strokes")).isArray()
+        || (fileSchemaVersion >= 8
+            && (!object.value(QStringLiteral("kind")).isString()
+                || (!object.value(QStringLiteral("parentGroupId")).isString()
+                    && !object.value(QStringLiteral("parentGroupId")).isNull())
+                || !object.value(QStringLiteral("clipToLayerBelow")).isBool()))
         || (fileSchemaVersion >= 7
             && !object.value(QStringLiteral("blendMode")).isString())
         || (fileSchemaVersion >= 6
@@ -2758,6 +2832,26 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
     {
         setError(error, DocumentSerializer::tr("A layer has an invalid name."));
         return std::nullopt;
+    }
+    if (fileSchemaVersion >= 8)
+    {
+        const std::optional<LayerKind> kind =
+            layerKindFromJson(object.value(QStringLiteral("kind")));
+        const QJsonValue parentValue =
+            object.value(QStringLiteral("parentGroupId"));
+        const QUuid parentId =
+            parentValue.isNull() ? QUuid() : QUuid(parentValue.toString());
+        if (!kind || (!parentValue.isNull() && parentId.isNull()))
+        {
+            setError(error,
+                DocumentSerializer::tr(
+                    "A layer has invalid hierarchy fields."));
+            return std::nullopt;
+        }
+        layer.kind = *kind;
+        layer.parentGroupId = parentId;
+        layer.clipToLayerBelow =
+            object.value(QStringLiteral("clipToLayerBelow")).toBool();
     }
     layer.visible = object.value(QStringLiteral("visible")).toBool();
     layer.opacity = object.value(QStringLiteral("opacity")).toDouble();
@@ -2944,12 +3038,16 @@ bool validateDocument(
             return false;
         }
         layerIds.insert(layer.id);
-        activeLayerFound =
-            activeLayerFound || layer.id == document.activeLayerId;
+        activeLayerFound = activeLayerFound
+                           || (layer.id == document.activeLayerId
+                               && layer.kind == LayerKind::Paint);
         if (layer.name.trimmed().isEmpty()
             || layer.name.size() > DocumentLimits::maximumLayerNameLength
             || !std::isfinite(layer.opacity) || layer.opacity < 0.0
             || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
+            || !isValidLayerKind(layer.kind)
+            || (layer.kind == LayerKind::Group
+                && (!layer.strokes.isEmpty() || layer.clipToLayerBelow))
             || layer.strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || layer.strokes.size()
                    > DocumentLimits::maximumTotalStrokes - totalStrokes)
@@ -3147,8 +3245,29 @@ bool validateDocument(
             return false;
         }
     }
+    for (const Layer &layer : document.layers)
+    {
+        if (layer.parentGroupId.isNull())
+        {
+            continue;
+        }
+        const Layer *parent = document.layer(layer.parentGroupId);
+        if (!parent || parent->kind != LayerKind::Group
+            || layer.parentGroupId == layer.id
+            || document.isLayerDescendantOf(layer.parentGroupId, layer.id))
+        {
+            setError(error,
+                DocumentSerializer::tr("The layer hierarchy is invalid."));
+            return false;
+        }
+    }
     const bool validActiveLayer =
-        document.layers.isEmpty()
+        !std::any_of(document.layers.cbegin(),
+            document.layers.cend(),
+            [](const Layer &layer)
+            {
+                return layer.kind == LayerKind::Paint;
+            })
             ? document.activeLayerId.isNull()
             : !document.activeLayerId.isNull() && activeLayerFound;
     if (!validActiveLayer)
@@ -3441,10 +3560,16 @@ DocumentSerializer::rebindActiveLayer(
         return std::nullopt;
     }
     const Document &source = prepared.m_impl->document;
-    const bool valid =
-        source.layers.isEmpty()
-            ? activeLayerId.isNull()
-            : !activeLayerId.isNull() && source.layer(activeLayerId);
+    const Layer *active = source.layer(activeLayerId);
+    const bool hasPaintLayer = std::any_of(source.layers.cbegin(),
+        source.layers.cend(),
+        [](const Layer &layer)
+        {
+            return layer.kind == LayerKind::Paint;
+        });
+    const bool valid = hasPaintLayer
+                           ? active && active->kind == LayerKind::Paint
+                           : activeLayerId.isNull();
     if (!valid)
     {
         return std::nullopt;
@@ -3647,13 +3772,6 @@ std::optional<Document> DocumentSerializer::fromJson(
         setError(error, DocumentSerializer::tr("The layer count is invalid."));
         return std::nullopt;
     }
-    if ((layers.isEmpty() && !activeLayerIdValue.isNull())
-        || (!layers.isEmpty() && !activeLayerIdValue.isString()))
-    {
-        setError(
-            error, DocumentSerializer::tr("The active layer ID is invalid."));
-        return std::nullopt;
-    }
     if (!validateCollectionBudgets(layers, error))
     {
         return std::nullopt;
@@ -3779,6 +3897,12 @@ std::optional<Document> DocumentSerializer::fromJson(
     document.activeLayerId = activeLayerIdValue.isNull()
                                  ? QUuid()
                                  : QUuid(activeLayerIdValue.toString());
+    if (activeLayerIdValue.isString() && document.activeLayerId.isNull())
+    {
+        setError(
+            error, DocumentSerializer::tr("The active layer ID is invalid."));
+        return std::nullopt;
+    }
     if (!validateDocument(document, *fileSchemaVersion, error))
     {
         return std::nullopt;

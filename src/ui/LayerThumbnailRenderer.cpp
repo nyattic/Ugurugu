@@ -22,11 +22,20 @@ QPixmap LayerThumbnailRenderer::render(
 {
     Document single = document;
     single.wobbleAmount = 0.0;
-    Layer visibleLayer = layer;
-    visibleLayer.visible = true;
-    visibleLayer.opacity = 1.0;
-    visibleLayer.blendMode = LayerBlendMode::Normal;
-    single.layers = {visibleLayer};
+    single.layers.removeIf(
+        [&document, &layer](const Layer &candidate)
+        {
+            return candidate.id != layer.id
+                   && !document.isLayerDescendantOf(candidate.id, layer.id);
+        });
+    if (Layer *root = single.layer(layer.id))
+    {
+        root->visible = true;
+        root->opacity = 1.0;
+        root->blendMode = LayerBlendMode::Normal;
+        root->parentGroupId = {};
+        root->clipToLayerBelow = false;
+    }
 
     const QImage image =
         RenderEngine::renderScaled(single, 0, renderSize(single.size));

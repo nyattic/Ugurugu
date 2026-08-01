@@ -684,6 +684,26 @@
         <source>Layer %1</source>
         <translation>레이어 %1</translation>
     </message>
+    <message>
+        <source>Edit stroke properties</source>
+        <translation>선 속성 편집</translation>
+    </message>
+    <message>
+        <source>Group %1</source>
+        <translation>그룹 %1</translation>
+    </message>
+    <message>
+        <source>Add layer group</source>
+        <translation>레이어 그룹 추가</translation>
+    </message>
+    <message>
+        <source>Change layer clipping</source>
+        <translation>레이어 클리핑 변경</translation>
+    </message>
+    <message>
+        <source>Move layer into group</source>
+        <translation>레이어를 그룹으로 이동</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentSerializer</name>
@@ -1047,6 +1067,14 @@
         <source>This rendering algorithm version is not supported.</source>
         <translation>지원하지 않는 렌더링 알고리즘 버전입니다.</translation>
     </message>
+    <message>
+        <source>The layer hierarchy is invalid.</source>
+        <translation>레이어 계층이 올바르지 않습니다.</translation>
+    </message>
+    <message>
+        <source>A layer has invalid hierarchy fields.</source>
+        <translation>레이어 계층 필드가 올바르지 않습니다.</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentUndoStack</name>
@@ -1310,6 +1338,30 @@
         <location filename="../src/ui/LayerDock.cpp" line="405"/>
         <source>%1%</source>
         <translation>%1%</translation>
+    </message>
+    <message>
+        <source>Add group containing the selected layer</source>
+        <translation>선택한 레이어를 포함하는 그룹 추가</translation>
+    </message>
+    <message>
+        <source>GROUP</source>
+        <translation>그룹</translation>
+    </message>
+    <message>
+        <source>Parent layer group</source>
+        <translation>상위 레이어 그룹</translation>
+    </message>
+    <message>
+        <source>Clip to layer below</source>
+        <translation>아래 레이어에 클리핑</translation>
+    </message>
+    <message>
+        <source>Limit this layer to the opacity of the base layer below it</source>
+        <translation>이 레이어를 아래 기준 레이어의 불투명 영역 안에 표시합니다</translation>
+    </message>
+    <message>
+        <source>No group</source>
+        <translation>그룹 없음</translation>
     </message>
 </context>
 <context>
@@ -1921,6 +1973,45 @@ The recovery file was not deleted. You can find it at:
         <translation>이미지를 내보낼 수 없습니다.
 
 %1</translation>
+    </message>
+    <message>
+        <source>Edit selected stroke properties…</source>
+        <translation>선택한 선 속성 편집…</translation>
+    </message>
+    <message>
+        <source>Change the color, width, or roughness of selected strokes</source>
+        <translation>선택한 선의 색상, 굵기 또는 거칠기를 변경합니다</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::StrokePropertiesDialog</name>
+    <message>
+        <source>Edit Stroke Properties</source>
+        <translation>선 속성 편집</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>색상</translation>
+    </message>
+    <message>
+        <source>Width</source>
+        <translation>굵기</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Roughness</source>
+        <translation>거칠기</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+    <message>
+        <source>Select Stroke Color</source>
+        <translation>선 색상 선택</translation>
     </message>
 </context>
 <context>

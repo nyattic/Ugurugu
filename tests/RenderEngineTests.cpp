@@ -1247,6 +1247,87 @@ private slots:
         QCOMPARE(actual.alpha(), reference.alpha());
     }
 
+    void clipsLayerToBaseAlphaWithinGroup()
+    {
+        Document document = Document::createDefault(QSize(32, 32));
+        document.background = Qt::white;
+        document.wobbleAmount = 0.0;
+        Layer &base = document.layers.first();
+        Stroke baseStroke = makeStroke(StrokeMode::Paint,
+            QColor(220, 40, 50),
+            8.0,
+            1,
+            {QPointF(16.0, 16.0)});
+        baseStroke.brush.tipShape = BrushTipShape::Square;
+        baseStroke.brush.sizeDynamics = 0.0;
+        baseStroke.brush.wobbleScale = 0.0;
+        baseStroke.brush.antialiasing = false;
+        base.strokes.append(baseStroke);
+
+        Layer clipped;
+        clipped.name = QStringLiteral("Clipped");
+        clipped.initialCanvasSize = document.size;
+        clipped.clipToLayerBelow = true;
+        Stroke clippedStroke = makeStroke(StrokeMode::Paint,
+            QColor(30, 80, 220),
+            24.0,
+            2,
+            {QPointF(16.0, 16.0)});
+        clippedStroke.brush.tipShape = BrushTipShape::Square;
+        clippedStroke.brush.sizeDynamics = 0.0;
+        clippedStroke.brush.wobbleScale = 0.0;
+        clippedStroke.brush.antialiasing = false;
+        clipped.strokes.append(clippedStroke);
+        document.layers.append(clipped);
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QVERIFY(!rendered.isNull());
+        QCOMPARE(rendered.pixelColor(16, 16), QColor(30, 80, 220));
+        QCOMPARE(rendered.pixelColor(7, 16), QColor(Qt::white));
+
+        document.layers.last().clipToLayerBelow = false;
+        const QImage unclipped = RenderEngine::render(document, 0);
+        QCOMPARE(unclipped.pixelColor(7, 16), QColor(30, 80, 220));
+    }
+
+    void isolatesLayerGroupComposition()
+    {
+        Document document = Document::createDefault(QSize(24, 24));
+        document.background = Qt::white;
+        document.wobbleAmount = 0.0;
+        Layer &child = document.layers.first();
+        Stroke stroke = makeStroke(StrokeMode::Paint,
+            QColor(200, 20, 40),
+            12.0,
+            3,
+            {QPointF(12.0, 12.0)});
+        stroke.brush.tipShape = BrushTipShape::Square;
+        stroke.brush.sizeDynamics = 0.0;
+        stroke.brush.wobbleScale = 0.0;
+        stroke.brush.antialiasing = false;
+        child.strokes.append(stroke);
+
+        Layer group;
+        group.name = QStringLiteral("Group");
+        group.kind = LayerKind::Group;
+        group.opacity = 0.5;
+        group.initialCanvasSize = document.size;
+        child.parentGroupId = group.id;
+        document.layers.append(group);
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QVERIFY(!rendered.isNull());
+        const QColor center = rendered.pixelColor(12, 12);
+        QVERIFY(std::abs(center.red() - 227) <= 1);
+        QVERIFY(std::abs(center.green() - 137) <= 1);
+        QVERIFY(std::abs(center.blue() - 147) <= 1);
+
+        const RenderEngine::LayerSplitFrame split =
+            RenderEngine::renderLayerSplit(
+                document, 0, document.size, child.id);
+        QVERIFY(!split.valid);
+    }
+
     void handlesBlendModesInLayerSplitPreviews()
     {
         Document document = Document::createDefault(QSize(48, 36));

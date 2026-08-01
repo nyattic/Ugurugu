@@ -60,6 +60,7 @@ private:
     void resizeImage();
     void scaleSelection();
     void rotateSelection();
+    void editSelectedStrokeProperties();
     void chooseOpenFile();
     void exportGif();
     void exportImage();
@@ -83,6 +84,7 @@ private:
     QAction *m_scaleSelectionAction = nullptr;
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
+    QAction *m_editStrokePropertiesAction = nullptr;
     QAction *m_moveSelectionAction = nullptr;
     QAction *m_flipSelectionHorizontalAction = nullptr;
     QAction *m_flipSelectionVerticalAction = nullptr;

@@ -353,6 +353,38 @@ bool CanvasWidget::hasTransformableSelection() const
     return !m_selectedStrokes.isEmpty();
 }
 
+bool CanvasWidget::hasEditableStrokeSelection() const
+{
+    const Layer *layer = m_controller->document().layer(m_selectionLayer);
+    return layer
+           && std::any_of(layer->strokes.cbegin(),
+               layer->strokes.cend(),
+               [this](const Stroke &stroke)
+               {
+                   return m_selectedStrokes.contains(stroke.id)
+                          && (stroke.mode == StrokeMode::Paint
+                              || stroke.mode == StrokeMode::Erase
+                              || stroke.mode == StrokeMode::Fill);
+               });
+}
+
+QUuid CanvasWidget::selectionLayerId() const
+{
+    return m_selectionLayer;
+}
+
+QVector<QUuid> CanvasWidget::selectedStrokeIds() const
+{
+    QVector<QUuid> ids(m_selectedStrokes.cbegin(), m_selectedStrokes.cend());
+    std::sort(ids.begin(),
+        ids.end(),
+        [](const QUuid &left, const QUuid &right)
+        {
+            return left.toString() < right.toString();
+        });
+    return ids;
+}
+
 bool CanvasWidget::selectionMoveMode() const
 {
     return m_selectionMoveMode;
@@ -384,7 +416,7 @@ Document CanvasWidget::documentWithPendingSelectionTransform() const
         return document;
     }
     Layer *layer = document.layer(m_selectionTransformSession.layer);
-    if (!layer)
+    if (!layer || layer->kind != LayerKind::Paint)
     {
         return document;
     }
@@ -1633,7 +1665,7 @@ QImage CanvasWidget::interactionPreview(
             layer->strokes.append(std::move(operation));
         }
     }
-    if (!layer)
+    if (!layer || layer->kind != LayerKind::Paint)
     {
         return {};
     }
@@ -1709,7 +1741,7 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     {
         return;
     }
-    if (!layer)
+    if (!layer || layer->kind != LayerKind::Paint)
     {
         emit interactionMessage(tr("Add a layer before using this tool."));
         return;
