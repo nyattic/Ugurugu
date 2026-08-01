@@ -19,6 +19,10 @@ public:
         const Layer &layer,
         const QImage &selectionMask,
         int preferredFrame = 0);
+    static QVector<QUuid> editableStrokeIds(const Document &document,
+        const Layer &layer,
+        const QImage &selectionMask,
+        int frameIndex);
 };
 
 }

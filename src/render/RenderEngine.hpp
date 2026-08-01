@@ -2,6 +2,7 @@
 
 #include "document/Document.hpp"
 
+#include <QHash>
 #include <QImage>
 #include <QPainterPath>
 
@@ -48,6 +49,13 @@ public:
         bool valid = false;
     };
 
+    struct LayerRasterFrame
+    {
+        QHash<QUuid, QImage> paintLayers;
+        QSize outputSize;
+        bool valid = false;
+    };
+
     static QImage render(const Document &document, int frameIndex);
     static QImage renderScaled(const Document &document,
         int frameIndex,
@@ -60,11 +68,25 @@ public:
         const QUuid &layerId,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
+    static LayerRasterFrame renderLayerRasterFrame(const Document &document,
+        int frameIndex,
+        const QSize &outputSize,
+        qint64 maximumBytes,
+        ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
+        ScaledRenderStats *stats = nullptr);
+    static QImage composeLayerRasterFrame(const Document &document,
+        const LayerRasterFrame &frame,
+        const QUuid &replacementLayerId,
+        const QImage &replacementLayer);
     static bool renderStrokesOnLayer(QImage &layerImage,
         const Document &document,
         const QVector<Stroke> &strokes,
         int frameIndex,
         const QSize &outputSize);
+    static QImage renderStrokeCoverage(const Document &document,
+        const Layer &layer,
+        int strokeIndex,
+        int frameIndex);
     static QImage composeLayerSplit(
         const LayerSplitFrame &split, const QImage &layerImage);
     // Replays one selection operation against an already rendered layer

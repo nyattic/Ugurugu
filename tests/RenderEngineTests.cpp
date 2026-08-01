@@ -2,6 +2,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
+#include "document/SelectionVisibility.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QPainter>
@@ -1326,6 +1327,93 @@ private slots:
             RenderEngine::renderLayerSplit(
                 document, 0, document.size, child.id);
         QVERIFY(!split.valid);
+    }
+
+    void cachesHierarchicalLayerRastersForInteraction()
+    {
+        Document document = Document::createDefault(QSize(48, 48));
+        document.background = Qt::white;
+        document.wobbleAmount = 0.0;
+        Layer &base = document.layers.first();
+        base.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(220, 50, 60),
+            20.0,
+            1,
+            {QPointF(24.0, 24.0)}));
+
+        Layer clipped;
+        clipped.name = QStringLiteral("Clipped");
+        clipped.initialCanvasSize = document.size;
+        clipped.clipToLayerBelow = true;
+        clipped.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 90, 220),
+            8.0,
+            2,
+            {QPointF(24.0, 24.0)}));
+
+        Layer group;
+        group.name = QStringLiteral("Group");
+        group.kind = LayerKind::Group;
+        group.initialCanvasSize = document.size;
+        base.parentGroupId = group.id;
+        clipped.parentGroupId = group.id;
+        const QUuid clippedId = clipped.id;
+        document.layers.append(clipped);
+        document.layers.append(group);
+
+        RenderEngine::ScaledRenderStats stats;
+        const RenderEngine::LayerRasterFrame frame =
+            RenderEngine::renderLayerRasterFrame(document,
+                0,
+                document.size,
+                4 * 1024 * 1024,
+                RenderEngine::ScaledRenderMode::DisplayPreview,
+                &stats);
+        QVERIFY(frame.valid);
+        QCOMPARE(frame.paintLayers.size(), 2);
+
+        Stroke active = makeStroke(StrokeMode::Paint,
+            QColor(40, 180, 90),
+            32.0,
+            3,
+            {QPointF(24.0, 24.0)});
+        Document expected = document;
+        expected.layer(clippedId)->strokes.append(active);
+        QImage activeLayer = frame.paintLayers.value(clippedId);
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            activeLayer, document, {active}, 0, document.size));
+        QCOMPARE(RenderEngine::composeLayerRasterFrame(
+                     document, frame, clippedId, activeLayer),
+            RenderEngine::render(expected, 0));
+
+        const RenderEngine::LayerRasterFrame constrained =
+            RenderEngine::renderLayerRasterFrame(document, 0, document.size, 1);
+        QVERIFY(!constrained.valid);
+    }
+
+    void identifiesOnlyEditableStrokesIntersectingSelection()
+    {
+        Document document = Document::createDefault(QSize(96, 64));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        const Stroke left = makeStroke(StrokeMode::Paint,
+            QColor(210, 40, 60),
+            10.0,
+            1,
+            {QPointF(12.0, 32.0), QPointF(36.0, 32.0)});
+        const Stroke right = makeStroke(StrokeMode::Paint,
+            QColor(40, 80, 220),
+            10.0,
+            2,
+            {QPointF(60.0, 32.0), QPointF(84.0, 32.0)});
+        layer.strokes = {left, right};
+        const QImage selection =
+            rectangularMask(document.size, QRect(4, 20, 40, 24));
+
+        const QVector<QUuid> ids = SelectionVisibility::editableStrokeIds(
+            document, layer, selection, 0);
+        QCOMPARE(ids, QVector<QUuid>{left.id});
     }
 
     void handlesBlendModesInLayerSplitPreviews()

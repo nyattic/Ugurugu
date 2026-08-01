@@ -172,6 +172,8 @@ private:
     QImage interactionPreview(Document document, const QSize &renderSize) const;
     const RenderEngine::LayerSplitFrame &previewSplit(
         const QUuid &layerId, const QSize &renderSize);
+    const RenderEngine::LayerRasterFrame &previewLayerRasters(
+        const QSize &renderSize);
     void invalidateFrames();
     void updateTimerInterval();
     void advanceFrame();
@@ -278,6 +280,8 @@ private:
     RenderEngine::LayerSplitFrame m_previewSplit;
     QUuid m_previewSplitLayer;
     int m_previewSplitFrame = -1;
+    RenderEngine::LayerRasterFrame m_previewLayerRasters;
+    int m_previewLayerRasterFrame = -1;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;
@@ -304,6 +308,10 @@ private:
     QSet<QUuid> m_selectedStrokes;
     QUuid m_selectionLayer;
     QImage m_selectionMask;
+    mutable QVector<QUuid> m_editableStrokeIds;
+    mutable qint64 m_editableStrokeMaskKey = 0;
+    mutable QUuid m_editableStrokeLayer;
+    mutable int m_editableStrokeFrame = -1;
     QPainterPath m_selectionOutline;
     qreal m_selectionDashOffset = 0.0;
     bool m_movingSelection = false;

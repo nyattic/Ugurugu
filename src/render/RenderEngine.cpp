@@ -1929,6 +1929,168 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     return split;
 }
 
+RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
+    const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    qint64 maximumBytes,
+    ScaledRenderMode mode,
+    ScaledRenderStats *stats)
+{
+    if (stats)
+    {
+        *stats = {};
+    }
+    LayerRasterFrame frame;
+    if (!document.size.isValid() || !outputSize.isValid() || maximumBytes <= 0)
+    {
+        return frame;
+    }
+    frame.outputSize = outputSize;
+
+    const int frameCount = std::max(1, document.animationFrames);
+    const int normalizedFrame =
+        ((frameIndex % frameCount) + frameCount) % frameCount;
+    const bool displayScaleReplay =
+        mode == ScaledRenderMode::DisplayPreview
+        && canReplayAtDisplayScale(document, outputSize);
+    if (stats)
+    {
+        stats->usedDisplayScaleReplay = displayScaleReplay;
+        stats->usedNativeExactFallback = !displayScaleReplay;
+    }
+    ScaledRenderStats *const previewStats =
+        displayScaleReplay ? stats : nullptr;
+    const PreviewScaleMapping mapping{document.size,
+        outputSize,
+        static_cast<qreal>(outputSize.width()) / document.size.width(),
+        static_cast<qreal>(outputSize.height()) / document.size.height()};
+
+    QImage sharedEmpty;
+    qint64 retainedBytes = 0;
+    for (const Layer &layer : document.layers)
+    {
+        if (layer.kind != LayerKind::Paint)
+        {
+            continue;
+        }
+
+        QImage layerImage;
+        if (layer.strokes.isEmpty())
+        {
+            if (sharedEmpty.isNull())
+            {
+                sharedEmpty =
+                    QImage(outputSize, QImage::Format_ARGB32_Premultiplied);
+                if (sharedEmpty.isNull())
+                {
+                    return frame;
+                }
+                sharedEmpty.fill(Qt::transparent);
+                const qint64 imageBytes = sharedEmpty.sizeInBytes();
+                if (imageBytes > maximumBytes - retainedBytes)
+                {
+                    return frame;
+                }
+                retainedBytes += imageBytes;
+                notePreviewImage(previewStats, sharedEmpty);
+            }
+            layerImage = sharedEmpty;
+        }
+        else
+        {
+            const QSize initialSize =
+                layer.initialCanvasSize.isValid()
+                    ? layer.initialCanvasSize
+                    : DocumentOperations::initialCanvasSize(
+                          layer.strokes, document.size);
+            if (displayScaleReplay)
+            {
+                if (!renderLayerOperationsAtDisplayScale(layerImage,
+                        document,
+                        layer.strokes,
+                        normalizedFrame,
+                        frameCount,
+                        initialSize,
+                        mapping,
+                        previewStats))
+                {
+                    return frame;
+                }
+            }
+            else
+            {
+                QImage native;
+                if (!renderLayerOperations(native,
+                        document,
+                        layer.strokes,
+                        normalizedFrame,
+                        frameCount,
+                        initialSize))
+                {
+                    return frame;
+                }
+                layerImage = native.size() == outputSize
+                                 ? native
+                                 : native.scaled(outputSize,
+                                       Qt::IgnoreAspectRatio,
+                                       Qt::FastTransformation);
+                if (layerImage.isNull())
+                {
+                    return frame;
+                }
+            }
+            const qint64 imageBytes = layerImage.sizeInBytes();
+            if (imageBytes > maximumBytes - retainedBytes)
+            {
+                return frame;
+            }
+            retainedBytes += imageBytes;
+        }
+        if (retainedBytes > maximumBytes)
+        {
+            return frame;
+        }
+        frame.paintLayers.insert(layer.id, std::move(layerImage));
+    }
+    frame.valid = true;
+    return frame;
+}
+
+QImage RenderEngine::composeLayerRasterFrame(const Document &document,
+    const LayerRasterFrame &frame,
+    const QUuid &replacementLayerId,
+    const QImage &replacementLayer)
+{
+    if (!frame.valid || !frame.outputSize.isValid()
+        || (!replacementLayerId.isNull()
+            && (replacementLayer.isNull()
+                || replacementLayer.size() != frame.outputSize)))
+    {
+        return {};
+    }
+    const Layer *replacement = document.layer(replacementLayerId);
+    if (!replacementLayerId.isNull()
+        && (!replacement || replacement->kind != LayerKind::Paint))
+    {
+        return {};
+    }
+    const auto renderPaintLayer = [&](const Layer &layer)
+    {
+        if (layer.id == replacementLayerId)
+        {
+            return replacementLayer;
+        }
+        const auto cached = frame.paintLayers.constFind(layer.id);
+        return cached == frame.paintLayers.cend() ? QImage() : cached.value();
+    };
+    return renderLayerHierarchy(document,
+        frame.outputSize,
+        document.background,
+        renderPaintLayer,
+        nullptr);
+}
+
 bool RenderEngine::renderStrokesOnLayer(QImage &layerImage,
     const Document &document,
     const QVector<Stroke> &strokes,
@@ -2001,6 +2163,112 @@ bool RenderEngine::renderStrokesOnLayer(QImage &layerImage,
         clipPaths,
         scaledClipMasks);
     return true;
+}
+
+QImage RenderEngine::renderStrokeCoverage(const Document &document,
+    const Layer &layer,
+    int strokeIndex,
+    int frameIndex)
+{
+    if (!document.size.isValid() || layer.kind != LayerKind::Paint
+        || strokeIndex < 0 || strokeIndex >= layer.strokes.size())
+    {
+        return {};
+    }
+    const Stroke &source = layer.strokes[strokeIndex];
+    if (source.mode != StrokeMode::Paint && source.mode != StrokeMode::Erase
+        && source.mode != StrokeMode::Fill)
+    {
+        return {};
+    }
+
+    QSize epochSize = layer.initialCanvasSize.isValid()
+                          ? layer.initialCanvasSize
+                          : DocumentOperations::initialCanvasSize(
+                                layer.strokes, document.size);
+    for (int index = 0; index < strokeIndex; ++index)
+    {
+        const Stroke &operation = layer.strokes[index];
+        if (operation.mode == StrokeMode::Reframe)
+        {
+            if (!operation.reframeOp
+                || operation.reframeOp->sourceSize != epochSize)
+            {
+                return {};
+            }
+            epochSize = operation.reframeOp->targetSize;
+        }
+    }
+    if (!epochSize.isValid())
+    {
+        return {};
+    }
+
+    QImage coverage(epochSize, QImage::Format_ARGB32_Premultiplied);
+    if (coverage.isNull())
+    {
+        return {};
+    }
+    coverage.fill(Qt::transparent);
+    const int frameCount = std::max(1, document.animationFrames);
+    const int normalizedFrame =
+        ((frameIndex % frameCount) + frameCount) % frameCount;
+    Stroke probe = source;
+    if (probe.mode == StrokeMode::Erase)
+    {
+        probe.mode = StrokeMode::Paint;
+        probe.color = Qt::white;
+    }
+    else
+    {
+        probe.color = QColor(255, 255, 255, source.color.alpha());
+    }
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
+    renderLayerStrokes(coverage,
+        document,
+        {probe},
+        normalizedFrame,
+        frameCount,
+        1.0,
+        1.0,
+        clipPaths,
+        scaledClipMasks);
+
+    for (int index = strokeIndex + 1; index < layer.strokes.size(); ++index)
+    {
+        const Stroke &operation = layer.strokes[index];
+        if (operation.mode == StrokeMode::PixelSelection)
+        {
+            if (!operation.pixelSelectionOp
+                || !applyPixelSelectionOperation(
+                    coverage, *operation.pixelSelectionOp))
+            {
+                return {};
+            }
+        }
+        else if (operation.mode == StrokeMode::Reframe)
+        {
+            if (!operation.reframeOp
+                || !applyReframeOperation(coverage, *operation.reframeOp))
+            {
+                return {};
+            }
+        }
+        else if (operation.mode == StrokeMode::Erase)
+        {
+            renderLayerStrokes(coverage,
+                document,
+                {operation},
+                normalizedFrame,
+                frameCount,
+                1.0,
+                1.0,
+                clipPaths,
+                scaledClipMasks);
+        }
+    }
+    return coverage.size() == document.size ? coverage : QImage();
 }
 
 QImage RenderEngine::composeLayerSplit(

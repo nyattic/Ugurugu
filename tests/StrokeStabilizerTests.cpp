@@ -72,6 +72,17 @@ private slots:
         QCOMPARE(stabilizer.begin(QPointF(9.0, 12.0), 100), QPointF(9.0, 12.0));
     }
 
+    void finishesAtTheRawPointerPosition()
+    {
+        StrokeStabilizer stabilizer;
+        stabilizer.setStrength(1.0);
+        stabilizer.begin({}, 0);
+        const QPointF filtered = stabilizer.update(QPointF(100.0, 0.0), 8);
+        QVERIFY(filtered.x() < 100.0);
+        QCOMPARE(
+            stabilizer.finish(QPointF(100.0, 0.0), 8), QPointF(100.0, 0.0));
+    }
+
     void clampsStrength()
     {
         StrokeStabilizer stabilizer;

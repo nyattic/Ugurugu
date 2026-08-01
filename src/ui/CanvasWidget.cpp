@@ -3,6 +3,7 @@
 #include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
+#include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
 #include "render/PreviewRenderPolicy.hpp"
 #include "render/RenderEngine.hpp"
@@ -355,17 +356,7 @@ bool CanvasWidget::hasTransformableSelection() const
 
 bool CanvasWidget::hasEditableStrokeSelection() const
 {
-    const Layer *layer = m_controller->document().layer(m_selectionLayer);
-    return layer
-           && std::any_of(layer->strokes.cbegin(),
-               layer->strokes.cend(),
-               [this](const Stroke &stroke)
-               {
-                   return m_selectedStrokes.contains(stroke.id)
-                          && (stroke.mode == StrokeMode::Paint
-                              || stroke.mode == StrokeMode::Erase
-                              || stroke.mode == StrokeMode::Fill);
-               });
+    return !selectedStrokeIds().isEmpty();
 }
 
 QUuid CanvasWidget::selectionLayerId() const
@@ -375,14 +366,24 @@ QUuid CanvasWidget::selectionLayerId() const
 
 QVector<QUuid> CanvasWidget::selectedStrokeIds() const
 {
-    QVector<QUuid> ids(m_selectedStrokes.cbegin(), m_selectedStrokes.cend());
-    std::sort(ids.begin(),
-        ids.end(),
-        [](const QUuid &left, const QUuid &right)
-        {
-            return left.toString() < right.toString();
-        });
-    return ids;
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_selectionLayer);
+    if (!layer || m_selectionMask.isNull())
+    {
+        return {};
+    }
+    const qint64 maskKey = m_selectionMask.cacheKey();
+    if (m_editableStrokeMaskKey != maskKey
+        || m_editableStrokeLayer != m_selectionLayer
+        || m_editableStrokeFrame != m_currentFrame)
+    {
+        m_editableStrokeIds = SelectionVisibility::editableStrokeIds(
+            document, *layer, m_selectionMask, m_currentFrame);
+        m_editableStrokeMaskKey = maskKey;
+        m_editableStrokeLayer = m_selectionLayer;
+        m_editableStrokeFrame = m_currentFrame;
+    }
+    return m_editableStrokeIds;
 }
 
 bool CanvasWidget::selectionMoveMode() const
@@ -1093,6 +1094,26 @@ void CanvasWidget::paintEvent(QPaintEvent *)
                         RenderEngine::composeLayerSplit(split, layerImage);
                 }
             }
+            if (displayedFrame.isNull())
+            {
+                const RenderEngine::LayerRasterFrame &rasters =
+                    previewLayerRasters(renderSize);
+                const auto cached =
+                    rasters.paintLayers.constFind(m_activeStrokeLayer);
+                if (rasters.valid && cached != rasters.paintLayers.cend())
+                {
+                    QImage layerImage = cached.value();
+                    if (RenderEngine::renderStrokesOnLayer(layerImage,
+                            document,
+                            {m_activeStroke},
+                            m_currentFrame,
+                            renderSize))
+                    {
+                        displayedFrame = RenderEngine::composeLayerRasterFrame(
+                            document, rasters, m_activeStrokeLayer, layerImage);
+                    }
+                }
+            }
         }
     }
     else if (hasPendingSelectionTransform())
@@ -1107,6 +1128,26 @@ void CanvasWidget::paintEvent(QPaintEvent *)
             {
                 displayedFrame =
                     RenderEngine::composeLayerSplit(split, layerImage);
+            }
+        }
+        if (displayedFrame.isNull())
+        {
+            const RenderEngine::LayerRasterFrame &rasters =
+                previewLayerRasters(renderSize);
+            const auto cached = rasters.paintLayers.constFind(
+                m_selectionTransformSession.layer);
+            if (rasters.valid && cached != rasters.paintLayers.cend())
+            {
+                QImage layerImage = cached.value();
+                if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
+                        m_selectionTransformSession.previewOperation))
+                {
+                    displayedFrame =
+                        RenderEngine::composeLayerRasterFrame(document,
+                            rasters,
+                            m_selectionTransformSession.layer,
+                            layerImage);
+                }
             }
         }
     }
@@ -1687,6 +1728,23 @@ const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
     return m_previewSplit;
 }
 
+const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
+    const QSize &renderSize)
+{
+    if (m_previewLayerRasterFrame != m_currentFrame
+        || m_previewLayerRasters.outputSize != renderSize)
+    {
+        m_frameCache.clear();
+        m_previewLayerRasters = RenderEngine::renderLayerRasterFrame(
+            displayDocument(),
+            m_currentFrame,
+            renderSize,
+            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024);
+        m_previewLayerRasterFrame = m_currentFrame;
+    }
+    return m_previewLayerRasters;
+}
+
 QSize CanvasWidget::previewRenderSize() const
 {
     const QSize documentSize = m_controller->document().size;
@@ -1704,6 +1762,12 @@ void CanvasWidget::invalidateFrames()
     m_previewSplit = {};
     m_previewSplitLayer = {};
     m_previewSplitFrame = -1;
+    m_previewLayerRasters = {};
+    m_previewLayerRasterFrame = -1;
+    m_editableStrokeIds.clear();
+    m_editableStrokeMaskKey = 0;
+    m_editableStrokeLayer = {};
+    m_editableStrokeFrame = -1;
     const int frames = std::max(1, m_controller->document().animationFrames);
     m_currentFrame %= frames;
     updateTimerInterval();
@@ -1812,6 +1876,21 @@ void CanvasWidget::endStroke(
         return;
     }
     continueStroke(widgetPosition, pressure, timestamp);
+    const QPointF finalPosition = m_strokeStabilizer.finish(
+        clampedDocumentPosition(mapToDocument(widgetPosition)), timestamp);
+    const StrokePoint finalPoint{
+        finalPosition, std::clamp(pressure, 0.05, 1.0)};
+    if (m_activeStroke.points.size() >= DocumentLimits::maximumPointsPerStroke
+        || pointDistance(
+               finalPosition, m_activeStroke.points.constLast().position)
+               < 0.75)
+    {
+        m_activeStroke.points.last() = finalPoint;
+    }
+    else
+    {
+        m_activeStroke.points.append(finalPoint);
+    }
     Stroke completed = m_activeStroke;
     const QUuid layerId = m_activeStrokeLayer;
     m_drawing = false;

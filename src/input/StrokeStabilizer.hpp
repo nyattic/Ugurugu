@@ -14,6 +14,7 @@ public:
     void reset();
     QPointF begin(const QPointF &position, quint64 timestamp);
     QPointF update(const QPointF &position, quint64 timestamp);
+    QPointF finish(const QPointF &position, quint64 timestamp);
 
 private:
     qreal sampleInterval(quint64 timestamp) const;

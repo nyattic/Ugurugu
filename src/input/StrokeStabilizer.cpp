@@ -93,6 +93,18 @@ QPointF StrokeStabilizer::update(const QPointF &position, quint64 timestamp)
     return m_filteredPosition;
 }
 
+QPointF StrokeStabilizer::finish(const QPointF &position, quint64 timestamp)
+{
+    if (!m_initialized)
+    {
+        return begin(position, timestamp);
+    }
+    m_filteredPosition = position;
+    m_filteredVelocity = {};
+    rememberRawSample(position, timestamp);
+    return position;
+}
+
 qreal StrokeStabilizer::sampleInterval(quint64 timestamp) const
 {
     if (timestamp <= m_previousTimestamp)

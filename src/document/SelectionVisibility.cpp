@@ -126,4 +126,40 @@ SelectionVisibility::Result SelectionVisibility::evaluate(
     return result;
 }
 
+QVector<QUuid> SelectionVisibility::editableStrokeIds(const Document &document,
+    const Layer &layer,
+    const QImage &selectionMask,
+    int frameIndex)
+{
+    QVector<QUuid> ids;
+    if (!document.size.isValid() || layer.kind != LayerKind::Paint
+        || selectionMask.isNull() || selectionMask.size() != document.size
+        || selectionMask.format() != QImage::Format_Grayscale8)
+    {
+        return ids;
+    }
+    const QRect bounds = selectedBounds(selectionMask);
+    if (bounds.isEmpty())
+    {
+        return ids;
+    }
+    for (int index = 0; index < layer.strokes.size(); ++index)
+    {
+        const Stroke &stroke = layer.strokes[index];
+        if (stroke.mode != StrokeMode::Paint && stroke.mode != StrokeMode::Erase
+            && stroke.mode != StrokeMode::Fill)
+        {
+            continue;
+        }
+        const QImage coverage = RenderEngine::renderStrokeCoverage(
+            document, layer, index, frameIndex);
+        if (!coverage.isNull()
+            && intersectsVisiblePixels(coverage, selectionMask, bounds))
+        {
+            ids.append(stroke.id);
+        }
+    }
+    return ids;
+}
+
 }
