@@ -684,6 +684,26 @@
         <source>Layer %1</source>
         <translation>レイヤー %1</translation>
     </message>
+    <message>
+        <source>Edit stroke properties</source>
+        <translation>ストロークのプロパティを編集</translation>
+    </message>
+    <message>
+        <source>Group %1</source>
+        <translation>グループ %1</translation>
+    </message>
+    <message>
+        <source>Add layer group</source>
+        <translation>レイヤーグループを追加</translation>
+    </message>
+    <message>
+        <source>Change layer clipping</source>
+        <translation>レイヤーのクリッピングを変更</translation>
+    </message>
+    <message>
+        <source>Move layer into group</source>
+        <translation>レイヤーをグループへ移動</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentSerializer</name>
@@ -1047,6 +1067,14 @@
         <source>This rendering algorithm version is not supported.</source>
         <translation>このレンダリングアルゴリズムのバージョンには対応していません。</translation>
     </message>
+    <message>
+        <source>The layer hierarchy is invalid.</source>
+        <translation>レイヤー階層が正しくありません。</translation>
+    </message>
+    <message>
+        <source>A layer has invalid hierarchy fields.</source>
+        <translation>レイヤー階層の項目が正しくありません。</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentUndoStack</name>
@@ -1310,6 +1338,30 @@
         <location filename="../src/ui/LayerDock.cpp" line="405"/>
         <source>%1%</source>
         <translation>%1%</translation>
+    </message>
+    <message>
+        <source>Add group containing the selected layer</source>
+        <translation>選択したレイヤーを含むグループを追加</translation>
+    </message>
+    <message>
+        <source>GROUP</source>
+        <translation>グループ</translation>
+    </message>
+    <message>
+        <source>Parent layer group</source>
+        <translation>親レイヤーグループ</translation>
+    </message>
+    <message>
+        <source>Clip to layer below</source>
+        <translation>下のレイヤーでクリッピング</translation>
+    </message>
+    <message>
+        <source>Limit this layer to the opacity of the base layer below it</source>
+        <translation>このレイヤーを下の基準レイヤーの不透明領域内に表示します</translation>
+    </message>
+    <message>
+        <source>No group</source>
+        <translation>グループなし</translation>
     </message>
 </context>
 <context>
@@ -1921,6 +1973,45 @@ The recovery file was not deleted. You can find it at:
         <translation>画像を書き出せませんでした。
 
 %1</translation>
+    </message>
+    <message>
+        <source>Edit selected stroke properties…</source>
+        <translation>選択したストロークのプロパティを編集…</translation>
+    </message>
+    <message>
+        <source>Change the color, width, or roughness of selected strokes</source>
+        <translation>選択したストロークの色、太さ、粗さを変更します</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::StrokePropertiesDialog</name>
+    <message>
+        <source>Edit Stroke Properties</source>
+        <translation>ストロークのプロパティを編集</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>色</translation>
+    </message>
+    <message>
+        <source>Width</source>
+        <translation>太さ</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Roughness</source>
+        <translation>粗さ</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+    <message>
+        <source>Select Stroke Color</source>
+        <translation>ストロークの色を選択</translation>
     </message>
 </context>
 <context>
