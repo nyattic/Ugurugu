@@ -120,6 +120,7 @@ SettingsDialog::SettingsDialog(
 {
     setWindowTitle(tr("Settings"));
     setModal(true);
+    ShortcutBinding::resolveAliasConflicts(m_shortcutActions);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(14, 14, 14, 12);
@@ -417,6 +418,7 @@ void SettingsDialog::setShortcut(QAction *action, const QKeySequence &shortcut)
 
     m_shortcutMessage->clear();
     ShortcutBinding::setPrimary(action, shortcut);
+    ShortcutBinding::resolveAliasConflicts(m_shortcutActions);
 }
 
 void SettingsDialog::chooseDefaultSaveFolder()
@@ -464,6 +466,7 @@ void SettingsDialog::restoreDefaults()
             editor->setKeySequence(defaultShortcut(action));
         }
     }
+    ShortcutBinding::resolveAliasConflicts(m_shortcutActions);
     {
         const QSignalBlocker pauseBlocker(m_pauseWhileDrawing);
         const QSignalBlocker wobbleBlocker(m_keepWobbling);

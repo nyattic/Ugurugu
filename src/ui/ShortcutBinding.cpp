@@ -4,6 +4,8 @@
 #include <QSettings>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace wobble
 {
 
@@ -133,6 +135,41 @@ bool ShortcutBinding::hasShortcut(
 {
     return action && !shortcut.isEmpty()
            && action->shortcuts().contains(shortcut);
+}
+
+void ShortcutBinding::resolveAliasConflicts(const QList<QAction *> &actions)
+{
+    QList<QKeySequence> claimedAliases;
+    for (QAction *action : actions)
+    {
+        if (!action)
+        {
+            continue;
+        }
+
+        const QKeySequence actionPrimary = primary(action);
+        QList<QKeySequence> shortcuts;
+        if (!actionPrimary.isEmpty())
+        {
+            shortcuts.append(actionPrimary);
+        }
+
+        for (const QKeySequence &alias : aliases(action))
+        {
+            const bool usedByOtherPrimary = std::ranges::any_of(actions,
+                [action, &alias](const QAction *other)
+                {
+                    return other && other != action && primary(other) == alias;
+                });
+            if (!usedByOtherPrimary && !claimedAliases.contains(alias)
+                && !shortcuts.contains(alias))
+            {
+                shortcuts.append(alias);
+                claimedAliases.append(alias);
+            }
+        }
+        action->setShortcuts(shortcuts);
+    }
 }
 
 void ShortcutBinding::setPrimary(QAction *action, const QKeySequence &shortcut)

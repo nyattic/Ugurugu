@@ -1008,6 +1008,8 @@ void MainWindow::createActions()
     syncToolAction(m_canvas->tool());
     connect(m_canvas, &CanvasWidget::toolChanged, this, syncToolAction);
 
+    ShortcutBinding::resolveAliasConflicts(m_shortcutActions);
+
     addAction(newAction);
     addAction(openAction);
     addAction(m_saveAction);

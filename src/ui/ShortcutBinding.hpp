@@ -18,6 +18,7 @@ public:
     static QKeySequence defaultPrimary(const QAction *action);
     static bool hasShortcut(
         const QAction *action, const QKeySequence &shortcut);
+    static void resolveAliasConflicts(const QList<QAction *> &actions);
     static void setPrimary(QAction *action, const QKeySequence &shortcut);
     static void restoreDefault(QAction *action);
 };

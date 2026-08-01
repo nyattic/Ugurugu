@@ -623,6 +623,45 @@ private slots:
         QVERIFY(!settings.contains(zoomKey));
     }
 
+    void preservesPersistedPrimaryShortcutsOverNewAliases()
+    {
+        const QString zoomKey = QStringLiteral("shortcuts/zoomInAction");
+        const QString otherKey = QStringLiteral("shortcuts/actualSizeAction");
+        SettingValueGuard zoomGuard(zoomKey);
+        SettingValueGuard otherGuard(otherKey);
+        const QKeySequence zoomAlias(QStringLiteral("Ctrl+="));
+        const QKeySequence zoomPrimary(QStringLiteral("Ctrl+I"));
+        QSettings settings;
+        settings.setValue(
+            zoomKey, zoomPrimary.toString(QKeySequence::PortableText));
+        settings.setValue(
+            otherKey, zoomAlias.toString(QKeySequence::PortableText));
+        settings.sync();
+
+        MainWindow window;
+        QAction *zoomAction =
+            window.findChild<QAction *>(QStringLiteral("zoomInAction"));
+        QAction *otherAction =
+            window.findChild<QAction *>(QStringLiteral("actualSizeAction"));
+        QVERIFY(zoomAction);
+        QVERIFY(otherAction);
+        QCOMPARE(ShortcutBinding::primary(zoomAction), zoomPrimary);
+        QCOMPARE(ShortcutBinding::primary(otherAction), zoomAlias);
+        QCOMPARE(zoomAction->shortcuts(), QList<QKeySequence>({zoomPrimary}));
+        QCOMPARE(otherAction->shortcuts(), QList<QKeySequence>({zoomAlias}));
+
+        SettingsDialog dialog(nullptr, {zoomAction, otherAction});
+
+        QKeySequenceEdit *otherEditor = dialog.findChild<QKeySequenceEdit *>(
+            QStringLiteral("actualSizeActionShortcutEdit"));
+        QVERIFY(otherEditor);
+        const QKeySequence replacement(QStringLiteral("Ctrl+K"));
+        otherEditor->setKeySequence(replacement);
+        QTRY_COMPARE(ShortcutBinding::primary(otherAction), replacement);
+        QCOMPARE(zoomAction->shortcuts(),
+            QList<QKeySequence>({zoomPrimary, zoomAlias}));
+    }
+
     void showsApplicationVersionInAboutTab()
     {
         const ApplicationVersionGuard versionGuard;
