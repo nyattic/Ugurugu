@@ -21,6 +21,7 @@ jobs:
   macos:
     name: Build macOS release
     runs-on: macos-15
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
@@ -33,16 +34,20 @@ jobs:
           cache: true
 
       - name: Configure
-        run: cmake --preset macos-release "-DCMAKE_PREFIX_PATH=$QT_ROOT_DIR"
+        run: >-
+          cmake --preset macos-distribution
+          "-DCMAKE_PREFIX_PATH=$QT_ROOT_DIR"
 
       - name: Build
-        run: cmake --build --preset macos-release --parallel
+        run: cmake --build --preset macos-distribution --parallel
 
       - name: Test
-        run: ctest --preset macos-release
+        run: ctest --preset macos-distribution
 
       - name: Install
-        run: cmake --install out/build/macos-release --prefix "$RUNNER_TEMP/install"
+        run: >-
+          cmake --install out/build/macos-distribution
+          --prefix "$RUNNER_TEMP/install"
 
       - name: Verify installed package
         run: |
@@ -51,7 +56,7 @@ jobs:
           mkdir -p "$smoke_root/MacOS"
           ln -s "$application/Contents/Frameworks" "$smoke_root/Frameworks"
           cp \
-            out/build/macos-release/wobblepaint_package_smoke \
+            out/build/macos-distribution/wobblepaint_package_smoke \
             "$smoke_root/MacOS/"
           "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
           codesign --verify --deep --strict "$application"
@@ -92,13 +97,13 @@ jobs:
             --keepParent \
             "$RUNNER_TEMP/install/WagleWaglePaint.app" \
             "$RUNNER_TEMP/sparkle-updates/$archive"
-          out/build/macos-release/wobblepaint_render_release_notes \
+          out/build/macos-distribution/wobblepaint_render_release_notes \
             "release-notes/${version}.en.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
-          out/build/macos-release/wobblepaint_render_release_notes \
+          out/build/macos-distribution/wobblepaint_render_release_notes \
             "release-notes/${version}.ko.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html"
-          out/build/macos-release/wobblepaint_render_release_notes \
+          out/build/macos-distribution/wobblepaint_render_release_notes \
             "release-notes/${version}.ja.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
@@ -115,7 +120,7 @@ jobs:
             exit 1
           fi
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
-            out/build/macos-release/_deps/sparkle-src/bin/generate_appcast \
+            out/build/macos-distribution/_deps/sparkle-src/bin/generate_appcast \
               --ed-key-file - \
               --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
               --release-notes-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
@@ -132,10 +137,36 @@ jobs:
       - name: Verify macOS compatibility
         run: |
           application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          cache="out/build/macos-distribution/CMakeCache.txt"
+          minimum_target=$(sed -n 's/^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]*=//p' "$cache")
+          if [[ ! "$minimum_target" =~ ^[0-9]+([.][0-9]+){0,2}$ ]]; then
+            echo "Invalid macOS deployment target: $minimum_target"
+            exit 1
+          fi
+          version_exceeds() {
+            awk -v candidate="$1" -v target="$2" '
+              BEGIN {
+                candidate_count = split(candidate, candidate_parts, ".")
+                target_count = split(target, target_parts, ".")
+                count = candidate_count > target_count ? candidate_count : target_count
+                for (part_index = 1; part_index <= count; ++part_index) {
+                  candidate_part = candidate_parts[part_index] + 0
+                  target_part = target_parts[part_index] + 0
+                  if (candidate_part > target_part) {
+                    exit 0
+                  }
+                  if (candidate_part < target_part) {
+                    exit 1
+                  }
+                }
+                exit 1
+              }
+            '
+          }
           failed=0
           declared=$(plutil -extract LSMinimumSystemVersion raw -o - "$application/Contents/Info.plist")
-          if [[ "$declared" != "14.0" ]]; then
-            echo "Info.plist declares macOS $declared"
+          if [[ "$declared" != "$minimum_target" ]]; then
+            echo "Info.plist declares macOS $declared instead of $minimum_target"
             failed=1
           fi
           while IFS= read -r binary; do
@@ -143,11 +174,8 @@ jobs:
               continue
             fi
             while IFS= read -r minimum; do
-              major="${minimum%%.*}"
-              remainder="${minimum#*.}"
-              minor="${remainder%%.*}"
-              if [[ -n "$major" && ( "$major" -gt 14 || ( "$major" -eq 14 && "$minor" -gt 0 ) ) ]]; then
-                echo "$binary requires macOS $minimum"
+              if version_exceeds "$minimum" "$minimum_target"; then
+                echo "$binary requires macOS $minimum instead of $minimum_target"
                 failed=1
               fi
             done < <(otool -l "$binary" | awk '$1 == "minos" { print $2 }')
@@ -186,6 +214,35 @@ jobs:
           done < <(find "$application" -type f)
           exit "$failed"
 
+      - name: Create macOS release metadata
+        run: |
+          version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          architecture=$(uname -m)
+          minimum_target=$(sed -n 's/^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]*=//p' out/build/macos-distribution/CMakeCache.txt)
+          cmake_version=$(cmake --version | awk 'NR == 1 { print $3 }')
+          compiler_path=$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' out/build/macos-distribution/CMakeCache.txt)
+          if [[ ! -x "$compiler_path" ]]; then
+            echo "Could not locate the configured C++ compiler"
+            exit 1
+          fi
+          compiler_version=$("$compiler_path" --version | awk 'NR == 1')
+          metadata="artifacts/WagleWaglePaint-macOS-${architecture}-build-metadata.txt"
+          {
+            printf 'project=WagleWaglePaint\n'
+            printf 'version=%s\n' "$version"
+            printf 'git_commit=%s\n' "$GITHUB_SHA"
+            printf 'architecture=%s\n' "$architecture"
+            printf 'qt_version=%s\n' "$QT_VERSION"
+            printf 'macos_deployment_target=%s\n' "$minimum_target"
+            printf 'cmake_version=%s\n' "$cmake_version"
+            printf 'compiler=%s (%s)\n' "$compiler_path" "$compiler_version"
+          } > "$metadata"
+          (
+            cd artifacts
+            artifacts_to_hash=(*)
+            shasum -a 256 "${artifacts_to_hash[@]}" > SHA256SUMS-macOS.txt
+          )
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: macos-release
@@ -195,6 +252,7 @@ jobs:
   windows:
     name: Build Windows release
     runs-on: windows-2022
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
@@ -219,21 +277,23 @@ jobs:
       - name: Configure
         shell: pwsh
         run: |
-          cmake --preset windows-release `
+          cmake --preset windows-distribution `
             "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
 
       - name: Build
         shell: pwsh
-        run: cmake --build --preset windows-release --config Release --parallel
+        run: >-
+          cmake --build --preset windows-distribution
+          --config Release --parallel
 
       - name: Test
         shell: pwsh
-        run: ctest --preset windows-release
+        run: ctest --preset windows-distribution
 
       - name: Install
         shell: pwsh
         run: |
-          cmake --install out/build/windows-release `
+          cmake --install out/build/windows-distribution `
             --config Release `
             --prefix "$env:RUNNER_TEMP\WagleWaglePaint"
 
@@ -277,6 +337,61 @@ jobs:
             -Path "artifacts\WagleWaglePaint-win-Setup.exe" `
             -NewName "WagleWaglePaint-Windows-x64-Setup.exe"
 
+      - name: Create Windows release metadata
+        shell: pwsh
+        run: |
+          $cmake = Get-Content CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\(WagleWaglePaint VERSION ([0-9.]+)') {
+            throw "Could not determine application version"
+          }
+          $version = $Matches[1]
+          $cmakeVersion = (cmake --version | Select-Object -First 1) `
+            -replace '^cmake version ', ''
+          $compilerFile = Get-ChildItem `
+            out/build/windows-distribution `
+            -Recurse `
+            -Filter CMakeCXXCompiler.cmake |
+            Select-Object -First 1
+          if (-not $compilerFile) {
+            throw "Could not locate CMake compiler metadata"
+          }
+          $compilerConfiguration = Get-Content $compilerFile.FullName -Raw
+          $compilerId = [regex]::Match(
+            $compilerConfiguration,
+            'set\(CMAKE_CXX_COMPILER_ID "([^"]+)"\)'
+          ).Groups[1].Value
+          $compilerVersion = [regex]::Match(
+            $compilerConfiguration,
+            'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)'
+          ).Groups[1].Value
+          if ([string]::IsNullOrWhiteSpace($compilerId) -or
+              [string]::IsNullOrWhiteSpace($compilerVersion)) {
+            throw "Could not read CMake compiler metadata"
+          }
+          $metadata = @(
+            "project=WagleWaglePaint"
+            "version=$version"
+            "git_commit=$env:GITHUB_SHA"
+            "architecture=x64"
+            "qt_version=$env:QT_VERSION"
+            "velopack_version=$env:VELOPACK_VERSION"
+            "cmake_version=$cmakeVersion"
+            "compiler=$compilerId $compilerVersion"
+          )
+          $metadataPath = Join-Path artifacts "WagleWaglePaint-Windows-x64-build-metadata.txt"
+          Set-Content -Path $metadataPath -Value $metadata -Encoding utf8
+          $checksums = foreach ($artifact in (Get-ChildItem artifacts -File | Sort-Object Name)) {
+            $hash = (Get-FileHash -Algorithm SHA256 $artifact.FullName).Hash.ToLowerInvariant()
+            "$hash  $($artifact.Name)"
+          }
+          $checksumPath = Join-Path artifacts "SHA256SUMS-Windows.txt"
+          $utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllText(
+            $checksumPath,
+            ($checksums -join "`n") + "`n",
+            $utf8WithoutBom
+          )
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: windows-release
@@ -288,6 +403,7 @@ jobs:
     needs: [macos, windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

@@ -3,6 +3,7 @@
 #include "document/DocumentController.hpp"
 #include "ui/Theme.hpp"
 
+#include <QEvent>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -47,6 +48,11 @@ QSize WobblePreview::sizeHint() const
     return QSize(58, 24);
 }
 
+bool WobblePreview::isAnimationActive() const
+{
+    return m_timer.isActive();
+}
+
 void WobblePreview::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
@@ -86,13 +92,36 @@ void WobblePreview::paintEvent(QPaintEvent *)
 void WobblePreview::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    m_timer.start();
+    m_shown = true;
+    syncAnimationState();
 }
 
 void WobblePreview::hideEvent(QHideEvent *event)
 {
     QWidget::hideEvent(event);
-    m_timer.stop();
+    m_shown = false;
+    syncAnimationState();
+}
+
+void WobblePreview::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::EnabledChange)
+    {
+        syncAnimationState();
+    }
+}
+
+void WobblePreview::syncAnimationState()
+{
+    if (m_shown && isEnabled())
+    {
+        m_timer.start();
+    }
+    else
+    {
+        m_timer.stop();
+    }
 }
 
 }

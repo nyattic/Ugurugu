@@ -86,6 +86,28 @@ class DocumentController final : public QObject
     Q_OBJECT
 
 public:
+    enum class AddStrokeResult
+    {
+        Added,
+        AddedWithResampledPoints,
+        RejectedInvalidLayer,
+        RejectedStrokeLimit,
+        RejectedPointLimit,
+        RejectedInvalidStroke,
+        RejectedMaskLimit,
+        RejectedCommit
+    };
+
+    enum class RenameLayerResult
+    {
+        Renamed,
+        Unchanged,
+        RejectedInvalidLayer,
+        RejectedEmptyName,
+        RejectedNameTooLong,
+        RejectedCommit
+    };
+
     explicit DocumentController(QObject *parent = nullptr);
     ~DocumentController() override;
 
@@ -111,7 +133,7 @@ public:
     bool resizeCanvas(const QSize &size, const QPoint &contentOffset);
 
     void setActiveLayer(const QUuid &id);
-    void addStroke(const QUuid &layerId, Stroke stroke);
+    AddStrokeResult addStroke(const QUuid &layerId, Stroke stroke);
     bool moveStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta,
@@ -155,7 +177,7 @@ public:
     void duplicateLayer(const QUuid &id);
     void removeLayer(const QUuid &id);
     void clearLayer(const QUuid &id);
-    void renameLayer(const QUuid &id, const QString &name);
+    RenameLayerResult renameLayer(const QUuid &id, const QString &name);
     void setLayerVisible(const QUuid &id, bool visible);
     void setLayerOpacity(const QUuid &id, qreal opacity);
     void setLayerBlendMode(const QUuid &id, LayerBlendMode mode);
@@ -233,6 +255,14 @@ private:
             ActiveLayerPolicy::PreserveCurrentIfPresent,
         int mergeId = -1,
         const QUuid &mergeScope = {});
+    bool tryCommitPreparedCandidate(QString text,
+        const PreparedState &before,
+        PreparedState after,
+        std::shared_ptr<const HistoryEffects> effects,
+        ActiveLayerPolicy activeLayerPolicy,
+        int mergeId,
+        const QUuid &mergeScope,
+        const QUuid &appendedStrokeLayerId = {});
     PreparedState prepareState(Document document,
         const PreparedDocument *base = nullptr,
         const DocumentSerializer::ImmutableBackingLease *trusted = nullptr,

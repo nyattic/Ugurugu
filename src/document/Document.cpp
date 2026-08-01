@@ -53,12 +53,14 @@ bool isValidLayerKind(LayerKind kind)
     return kind == LayerKind::Paint || kind == LayerKind::Group;
 }
 
-Document Document::createDefault(const QSize &canvasSize)
+Document Document::createDefault(
+    const QSize &canvasSize, const QString &initialLayerName)
 {
     Document document;
     document.size = canvasSize;
     Layer layer;
-    layer.name = QStringLiteral("Layer 1");
+    layer.name = initialLayerName.isEmpty() ? QStringLiteral("Layer 1")
+                                            : initialLayerName;
     layer.initialCanvasSize = canvasSize;
     document.activeLayerId = layer.id;
     document.layers.append(layer);

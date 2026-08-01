@@ -31,10 +31,16 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/DocumentSerializer.hpp
     src/io/GifWriter.cpp
     src/io/GifWriter.hpp
+    src/render/ImageAffineTransformer.cpp
+    src/render/ImageAffineTransformer.hpp
+    src/render/ImageResampler.cpp
+    src/render/ImageResampler.hpp
     src/render/RenderEngine.cpp
     src/render/RenderEngine.hpp
     src/render/PreviewRenderPolicy.cpp
     src/render/PreviewRenderPolicy.hpp
+    src/render/StrokeCoverageRenderer.cpp
+    src/render/StrokeCoverageRenderer.hpp
 )
 
 set(WOBBLEPAINT_UI_SOURCES
@@ -70,6 +76,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/PopoverToolButton.hpp
     src/ui/SelectionActionBar.cpp
     src/ui/SelectionActionBar.hpp
+    src/ui/ShortcutBinding.cpp
+    src/ui/ShortcutBinding.hpp
     src/ui/StrokePropertiesDialog.cpp
     src/ui/StrokePropertiesDialog.hpp
     src/ui/SettingsDialog.cpp

@@ -33,6 +33,8 @@ public:
             quint64 strokeSerializations = 0;
             quint64 payloadCacheHits = 0;
             quint64 payloadCacheMisses = 0;
+            quint64 fullDocumentPreparations = 0;
+            quint64 incrementalStrokeAppends = 0;
         };
 
         explicit SerializationCache(
@@ -72,6 +74,8 @@ public:
         bool isValid() const;
         const Document &document() const;
         qint64 compactSize() const;
+        qsizetype totalStrokeCount() const;
+        qsizetype totalPointCount() const;
 
     private:
         struct Impl;
@@ -80,6 +84,23 @@ public:
         explicit PreparedDocument(std::shared_ptr<const Impl> impl);
 
         friend class DocumentSerializer;
+    };
+
+    enum class AppendStrokeStatus
+    {
+        Appended,
+        NotApplicable,
+        Invalid,
+        StrokeLimit,
+        PointLimit,
+        MaskLimit,
+        TooLarge
+    };
+
+    struct AppendStrokeResult
+    {
+        AppendStrokeStatus status = AppendStrokeStatus::NotApplicable;
+        PreparedDocument prepared;
     };
 
     // A capability issued only after matching payload backings against an
@@ -120,6 +141,11 @@ public:
         const ImmutableBackingLease *trusted,
         qint64 maximumBytes,
         QString *error = nullptr);
+    static AppendStrokeResult appendStroke(const PreparedDocument &base,
+        const QUuid &layerId,
+        const Stroke &stroke,
+        SerializationCache &cache,
+        qint64 maximumBytes);
     static ImmutableBackingLease retainImmutableBackings(
         const PreparedDocument &source, const QVector<Stroke> &strokes);
     static std::optional<PreparedDocument> rebindActiveLayer(

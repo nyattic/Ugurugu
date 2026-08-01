@@ -3,9 +3,14 @@
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
+#include "render/ImageAffineTransformer.hpp"
+#include "render/ImageResampler.hpp"
+#include "render/PreviewRenderPolicy.hpp"
 #include "render/RenderEngine.hpp"
 
+#include <QElapsedTimer>
 #include <QPainter>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QTransform>
 #include <QtTest>
@@ -210,12 +215,16 @@ QImage renderAdditionalStrokes(QImage base,
 QImage resizedRasterResult(
     const QImage &source, const QSize &targetSize, bool smooth)
 {
-    if (source.isNull() || !targetSize.isValid())
-    {
-        return {};
-    }
+    return ImageResampler::resample(source,
+        targetSize,
+        smooth ? SamplingMode::Smooth : SamplingMode::Nearest);
+}
+
+QImage qtResizedRasterResult(
+    const QImage &source, const QSize &targetSize, bool smooth)
+{
     QImage target(targetSize, QImage::Format_ARGB32_Premultiplied);
-    if (target.isNull())
+    if (source.isNull() || !targetSize.isValid() || target.isNull())
     {
         return {};
     }
@@ -225,6 +234,30 @@ QImage resizedRasterResult(
     painter.drawImage(QRectF(QPointF(), QSizeF(targetSize)),
         source,
         QRectF(QPointF(), QSizeF(source.size())));
+    painter.end();
+    return target;
+}
+
+QImage qtAffineComposite(QImage target,
+    const QRect &targetBounds,
+    const QImage &source,
+    const QRect &sourceBounds,
+    const QTransform &transform,
+    SamplingMode sampling)
+{
+    if (target.isNull() || target.size() != targetBounds.size()
+        || source.isNull() || source.size() != sourceBounds.size())
+    {
+        return {};
+    }
+    QPainter painter(&target);
+    painter.setRenderHint(
+        QPainter::SmoothPixmapTransform, sampling == SamplingMode::Smooth);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    QTransform targetTransform;
+    targetTransform.translate(-targetBounds.left(), -targetBounds.top());
+    painter.setWorldTransform(transform * targetTransform);
+    painter.drawImage(sourceBounds.topLeft(), source);
     painter.end();
     return target;
 }
@@ -272,11 +305,34 @@ QImage clearedSelectionResult(const QImage &before, const QImage &selection)
     return result;
 }
 
+QImage expandedStrokeCoverage(
+    const RenderEngine::StrokeCoverageRegion &coverage, const QSize &size)
+{
+    if (!coverage.valid || !size.isValid())
+    {
+        return {};
+    }
+    QImage expanded(size, QImage::Format_ARGB32_Premultiplied);
+    if (expanded.isNull())
+    {
+        return {};
+    }
+    expanded.fill(Qt::transparent);
+    if (!coverage.image.isNull())
+    {
+        QPainter painter(&expanded);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.drawImage(coverage.bounds.topLeft(), coverage.image);
+    }
+    return expanded;
+}
+
 struct ImageDifference
 {
     quint64 channelDifference = 0;
     quint64 comparedChannels = 0;
     qsizetype visiblyDifferentPixels = 0;
+    int maximumChannelDifference = 0;
 };
 
 ImageDifference imageDifference(
@@ -300,9 +356,51 @@ ImageDifference imageDifference(
             const int green = std::abs(a.green() - b.green());
             const int blue = std::abs(a.blue() - b.blue());
             const int alpha = std::abs(a.alpha() - b.alpha());
+            difference.maximumChannelDifference =
+                std::max(difference.maximumChannelDifference,
+                    std::max({red, green, blue, alpha}));
             difference.channelDifference +=
                 static_cast<quint64>(red + green + blue + alpha);
             if (std::max({red, green, blue, alpha}) > visibleThreshold)
+            {
+                ++difference.visiblyDifferentPixels;
+            }
+        }
+    }
+    return difference;
+}
+
+ImageDifference storedImageDifference(
+    const QImage &left, const QImage &right, int visibleThreshold = 24)
+{
+    ImageDifference difference;
+    if (left.isNull() || right.isNull() || left.size() != right.size())
+    {
+        difference.channelDifference = std::numeric_limits<quint64>::max();
+        return difference;
+    }
+    difference.comparedChannels = static_cast<quint64>(left.width())
+                                  * static_cast<quint64>(left.height()) * 4;
+    for (int y = 0; y < left.height(); ++y)
+    {
+        const auto *leftLine =
+            reinterpret_cast<const QRgb *>(left.constScanLine(y));
+        const auto *rightLine =
+            reinterpret_cast<const QRgb *>(right.constScanLine(y));
+        for (int x = 0; x < left.width(); ++x)
+        {
+            const int red = std::abs(qRed(leftLine[x]) - qRed(rightLine[x]));
+            const int green =
+                std::abs(qGreen(leftLine[x]) - qGreen(rightLine[x]));
+            const int blue = std::abs(qBlue(leftLine[x]) - qBlue(rightLine[x]));
+            const int alpha =
+                std::abs(qAlpha(leftLine[x]) - qAlpha(rightLine[x]));
+            const int maximum = std::max({red, green, blue, alpha});
+            difference.channelDifference +=
+                static_cast<quint64>(red + green + blue + alpha);
+            difference.maximumChannelDifference =
+                std::max(difference.maximumChannelDifference, maximum);
+            if (maximum > visibleThreshold)
             {
                 ++difference.visiblyDifferentPixels;
             }
@@ -392,6 +490,20 @@ private slots:
         QCOMPARE(nativeSized, RenderEngine::render(document, 5));
         QVERIFY(!stats.usedDisplayScaleReplay);
         QVERIFY(stats.usedNativeExactFallback);
+    }
+
+    void roundsPreviewCacheCostUpToWholeKibibytes()
+    {
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(-1), 1);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(0), 1);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(1), 1);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(1024), 1);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(1025), 2);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(2048), 2);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(2049), 3);
+        QCOMPARE(PreviewRenderPolicy::cacheCostKiB(
+                     std::numeric_limits<qsizetype>::max()),
+            std::numeric_limits<int>::max());
     }
 
     void replaysIntegralNearestSelectionAtDisplayScale()
@@ -1416,6 +1528,917 @@ private slots:
         QCOMPARE(ids, QVector<QUuid>{left.id});
     }
 
+    void preservesEditableStrokeVisibilityThroughFramebufferOperations()
+    {
+        Document movedDocument = Document::createDefault(QSize(96, 64));
+        movedDocument.background = Qt::transparent;
+        movedDocument.wobbleAmount = 0.0;
+        Layer &movedLayer = movedDocument.layers.first();
+        Stroke moved = makeStroke(StrokeMode::Paint,
+            QColor(210, 40, 60),
+            16.0,
+            11,
+            {QPointF(16.0, 24.0)});
+        moved.brush.tipShape = BrushTipShape::Square;
+        moved.brush.sizeDynamics = 0.0;
+        movedLayer.strokes.append(moved);
+        const QImage sourceSelection =
+            rectangularMask(movedDocument.size, QRect(8, 16, 16, 16));
+        QTransform shift;
+        shift.translate(48.0, 16.0);
+        const std::optional<PixelSelectionOp> moveOperation =
+            makePixelSelectionOp(sourceSelection, shift, true, true);
+        QVERIFY(moveOperation.has_value());
+        Stroke move;
+        move.mode = StrokeMode::PixelSelection;
+        move.pixelSelectionOp = *moveOperation;
+        movedLayer.strokes.append(move);
+
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     movedDocument, movedLayer, sourceSelection, 0),
+            QVector<QUuid>());
+        const QImage destinationSelection =
+            rectangularMask(movedDocument.size, QRect(56, 32, 16, 16));
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     movedDocument, movedLayer, destinationSelection, 0),
+            QVector<QUuid>{moved.id});
+
+        Document erasedDocument = Document::createDefault(QSize(64, 64));
+        erasedDocument.background = Qt::transparent;
+        erasedDocument.wobbleAmount = 0.0;
+        Layer &erasedLayer = erasedDocument.layers.first();
+        Stroke painted = makeStroke(StrokeMode::Paint,
+            QColor(40, 90, 220),
+            20.0,
+            21,
+            {QPointF(32.0, 32.0)});
+        painted.brush.tipShape = BrushTipShape::Square;
+        painted.brush.sizeDynamics = 0.0;
+        Stroke erased = painted;
+        erased.id = QUuid::createUuid();
+        erased.mode = StrokeMode::Erase;
+        erased.seed = 22;
+        erasedLayer.strokes = {painted, erased};
+        const QImage erasedSelection =
+            rectangularMask(erasedDocument.size, QRect(28, 28, 8, 8));
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     erasedDocument, erasedLayer, erasedSelection, 0),
+            QVector<QUuid>{erased.id});
+
+        Document reframedDocument = Document::createDefault(QSize(96, 72));
+        reframedDocument.background = Qt::transparent;
+        reframedDocument.wobbleAmount = 0.0;
+        Layer &reframedLayer = reframedDocument.layers.first();
+        reframedLayer.initialCanvasSize = QSize(128, 96);
+        Stroke reframed = makeStroke(StrokeMode::Paint,
+            QColor(35, 170, 95),
+            16.0,
+            31,
+            {QPointF(32.0, 32.0)});
+        reframed.brush.tipShape = BrushTipShape::Square;
+        reframed.brush.sizeDynamics = 0.0;
+        reframedLayer.strokes.append(reframed);
+        Stroke crop;
+        crop.mode = StrokeMode::Reframe;
+        crop.reframeOp = ReframeOp{ReframeMode::Canvas,
+            SamplingMode::Nearest,
+            QSize(128, 96),
+            reframedDocument.size,
+            QPoint(-16, -8)};
+        reframedLayer.strokes.append(crop);
+        const QImage reframedSelection =
+            rectangularMask(reframedDocument.size, QRect(12, 20, 8, 8));
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     reframedDocument, reframedLayer, reframedSelection, 0),
+            QVector<QUuid>{reframed.id});
+    }
+
+    void matchesSparseCoverageToLegacyFramebufferReplay()
+    {
+        const auto verify = [](const Document &document, int strokeIndex)
+        {
+            const Layer &layer = document.layers.first();
+            const RenderEngine::StrokeCoveragePlan plan =
+                RenderEngine::prepareStrokeCoverage(document, layer);
+            QVERIFY(plan.valid);
+            RenderEngine::StrokeCoverageStats stats;
+            const RenderEngine::StrokeCoverageRegion sparse =
+                RenderEngine::renderSparseStrokeCoverage(document,
+                    layer,
+                    strokeIndex,
+                    0,
+                    QRect(QPoint(), document.size),
+                    plan,
+                    &stats);
+            QVERIFY(sparse.valid);
+            QCOMPARE(expandedStrokeCoverage(sparse, document.size),
+                RenderEngine::renderStrokeCoverage(
+                    document, layer, strokeIndex, 0));
+            QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+            QCOMPARE(stats.regionalRenders, 1ULL);
+        };
+
+        Document moved = Document::createDefault(QSize(96, 72));
+        moved.background = Qt::transparent;
+        moved.wobbleAmount = 0.0;
+        Layer &movedLayer = moved.layers.first();
+        Stroke source = makeStroke(StrokeMode::Paint,
+            QColor(210, 45, 80),
+            18.0,
+            1,
+            {QPointF(18.0, 20.0), QPointF(42.0, 32.0)});
+        movedLayer.strokes.append(source);
+        const QImage sourceMask =
+            rectangularMask(moved.size, QRect(8, 8, 44, 36));
+        QTransform transform;
+        transform.translate(24.0, 12.0);
+        transform.rotate(11.0);
+        transform.scale(0.9, 1.1);
+        const std::optional<PixelSelectionOp> pixelOperation =
+            makePixelSelectionOp(sourceMask, transform, true, true);
+        QVERIFY(pixelOperation.has_value());
+        QCOMPARE(pixelOperation->sampling, SamplingMode::Smooth);
+        Stroke pixel;
+        pixel.mode = StrokeMode::PixelSelection;
+        pixel.pixelSelectionOp = *pixelOperation;
+        movedLayer.strokes.append(pixel);
+        Stroke erase = makeStroke(StrokeMode::Erase,
+            Qt::black,
+            7.0,
+            2,
+            {QPointF(55.0, 34.0), QPointF(68.0, 42.0)});
+        erase.clipMask = rectangularMask(moved.size, QRect(48, 24, 28, 28));
+        movedLayer.strokes.append(erase);
+        verify(moved, 0);
+
+        Document copied = moved;
+        copied.layers.first().strokes.removeLast();
+        copied.layers.first().strokes[1].pixelSelectionOp->clearSource = false;
+        verify(copied, 0);
+
+        Document cleared = copied;
+        PixelSelectionOp &clearOperation =
+            *cleared.layers.first().strokes[1].pixelSelectionOp;
+        clearOperation.clearSource = true;
+        clearOperation.drawDestination = false;
+        verify(cleared, 0);
+
+        Document nearest = moved;
+        nearest.layers.first().strokes.removeLast();
+        PixelSelectionOp &nearestOperation =
+            *nearest.layers.first().strokes[1].pixelSelectionOp;
+        nearestOperation.transform = QTransform::fromTranslate(24.0, 12.0);
+        nearestOperation.sampling = SamplingMode::Nearest;
+        verify(nearest, 0);
+
+        Document canvasReframe = Document::createDefault(QSize(96, 72));
+        canvasReframe.background = Qt::transparent;
+        canvasReframe.wobbleAmount = 0.0;
+        Layer &canvasLayer = canvasReframe.layers.first();
+        canvasLayer.initialCanvasSize = QSize(128, 96);
+        canvasLayer.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 170, 100),
+            20.0,
+            3,
+            {QPointF(30.0, 30.0), QPointF(72.0, 52.0)}));
+        Stroke crop;
+        crop.mode = StrokeMode::Reframe;
+        crop.reframeOp = ReframeOp{ReframeMode::Canvas,
+            SamplingMode::Nearest,
+            QSize(128, 96),
+            canvasReframe.size,
+            QPoint(-16, -8)};
+        canvasLayer.strokes.append(crop);
+        verify(canvasReframe, 0);
+
+        Document imageReframe = Document::createDefault(QSize(79, 61));
+        imageReframe.background = Qt::transparent;
+        imageReframe.wobbleAmount = 0.0;
+        Layer &imageLayer = imageReframe.layers.first();
+        imageLayer.initialCanvasSize = QSize(97, 73);
+        imageLayer.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(60, 100, 220),
+            17.0,
+            4,
+            {QPointF(21.0, 18.0), QPointF(66.0, 51.0)}));
+        Stroke resize;
+        resize.mode = StrokeMode::Reframe;
+        resize.reframeOp = ReframeOp{ReframeMode::Image,
+            SamplingMode::Smooth,
+            QSize(97, 73),
+            imageReframe.size,
+            {}};
+        imageLayer.strokes.append(resize);
+        verify(imageReframe, 0);
+
+        Document nearestImageReframe = imageReframe;
+        nearestImageReframe.layers.first().strokes.last().reframeOp->sampling =
+            SamplingMode::Nearest;
+        verify(nearestImageReframe, 0);
+
+        Document maskedFill = Document::createDefault(QSize(96, 72));
+        maskedFill.background = Qt::transparent;
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(255, 180, 40, 117);
+        fill.points = {{QPointF(12.0, 18.0), 1.0}};
+        fill.fillMask = rectangularMask(maskedFill.size, QRect(17, 13, 29, 21));
+        fill.clipMask = rectangularMask(maskedFill.size, QRect(20, 11, 31, 19));
+        fill.visibilityClip = QRect(19, 12, 24, 23);
+        maskedFill.layers.first().strokes = {fill};
+        verify(maskedFill, 0);
+
+        Document proceduralFill = Document::createDefault(QSize(96, 72));
+        proceduralFill.background = Qt::transparent;
+        fill.fillMask = {};
+        fill.clipMask =
+            rectangularMask(proceduralFill.size, QRect(8, 9, 37, 31));
+        fill.visibilityClip = QRect(11, 7, 28, 29);
+        proceduralFill.layers.first().strokes = {fill};
+        verify(proceduralFill, 0);
+    }
+
+    void resamplesImageRegionsDeterministicallyNearQtReference()
+    {
+        QRandomGenerator random(0x7391U);
+        QImage source(QSize(73, 47), QImage::Format_ARGB32_Premultiplied);
+        QVERIFY(!source.isNull());
+        for (int y = 0; y < source.height(); ++y)
+        {
+            auto *line = reinterpret_cast<QRgb *>(source.scanLine(y));
+            for (int x = 0; x < source.width(); ++x)
+            {
+                const int alpha = int(random.bounded(256U));
+                line[x] = qRgba(random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    alpha);
+            }
+        }
+
+        const QSize targetSize(119, 61);
+        for (const SamplingMode sampling :
+            {SamplingMode::Nearest, SamplingMode::Smooth})
+        {
+            const QImage full =
+                ImageResampler::resample(source, targetSize, sampling);
+            QVERIFY(!full.isNull());
+            for (const QRect &region :
+                {QRect(0, 0, 1, 1),
+                    QRect(17, 9, 43, 21),
+                    QRect(
+                        targetSize.width() - 1, targetSize.height() - 1, 1, 1)})
+            {
+                QCOMPARE(ImageResampler::resampleRegion(source,
+                             source.rect(),
+                             source.size(),
+                             region,
+                             targetSize,
+                             sampling),
+                    full.copy(region));
+            }
+        }
+
+        QImage singlePixel(1, 1, QImage::Format_ARGB32_Premultiplied);
+        singlePixel.setPixel(0, 0, qRgba(17, 31, 47, 63));
+        const QRect farEdge(4095, 4095, 1, 1);
+        for (const SamplingMode sampling :
+            {SamplingMode::Nearest, SamplingMode::Smooth})
+        {
+            const QImage edge = ImageResampler::resampleRegion(singlePixel,
+                singlePixel.rect(),
+                singlePixel.size(),
+                farEdge,
+                QSize(4096, 4096),
+                sampling);
+            QCOMPARE(edge.size(), QSize(1, 1));
+            QCOMPARE(edge.pixel(0, 0), singlePixel.pixel(0, 0));
+        }
+
+        const QImage deterministic =
+            ImageResampler::resample(source, targetSize, SamplingMode::Smooth);
+        const QImage qtReference =
+            qtResizedRasterResult(source, targetSize, true);
+        const ImageDifference difference =
+            storedImageDifference(deterministic, qtReference, 0);
+        qInfo("deterministic image resize differs from Qt by %llu total "
+              "channel levels, %.4f average, max %d",
+            static_cast<unsigned long long>(difference.channelDifference),
+            double(difference.channelDifference)
+                / double(difference.comparedChannels),
+            difference.maximumChannelDifference);
+        QVERIFY(difference.maximumChannelDifference <= 2);
+        QVERIFY(difference.channelDifference * 100
+                <= difference.comparedChannels * 6);
+    }
+
+    void transformsAffineImagesExactlyAcrossFullAndRegionalTargets()
+    {
+        QRandomGenerator random(0x7391U);
+        const QSize canvasSize(64, 48);
+        const QRect canvasBounds(QPoint(), canvasSize);
+        for (int caseIndex = 0; caseIndex < 500; ++caseIndex)
+        {
+            const int sourceWidth = 6 + int(random.bounded(18U));
+            const int sourceHeight = 6 + int(random.bounded(18U));
+            const QRect sourceBounds(
+                int(random.bounded(quint32(canvasSize.width() - sourceWidth))),
+                int(random.bounded(
+                    quint32(canvasSize.height() - sourceHeight))),
+                sourceWidth,
+                sourceHeight);
+            const QRect contentBounds = sourceBounds.adjusted(2, 2, -2, -2);
+            const QRect croppedBounds = contentBounds.adjusted(-1, -1, 1, 1);
+            QImage source(
+                sourceBounds.size(), QImage::Format_ARGB32_Premultiplied);
+            source.fill(Qt::transparent);
+            for (int y = contentBounds.top(); y <= contentBounds.bottom(); ++y)
+            {
+                auto *line = reinterpret_cast<QRgb *>(
+                    source.scanLine(y - sourceBounds.top()));
+                for (int x = contentBounds.left(); x <= contentBounds.right();
+                    ++x)
+                {
+                    const int alpha = 1 + int(random.bounded(255U));
+                    line[x - sourceBounds.left()] =
+                        qRgba(random.bounded(alpha + 1),
+                            random.bounded(alpha + 1),
+                            random.bounded(alpha + 1),
+                            alpha);
+                }
+            }
+            QImage base(canvasSize, QImage::Format_ARGB32_Premultiplied);
+            for (int y = 0; y < base.height(); ++y)
+            {
+                auto *line = reinterpret_cast<QRgb *>(base.scanLine(y));
+                for (int x = 0; x < base.width(); ++x)
+                {
+                    const int alpha = int(random.bounded(256U));
+                    line[x] = qRgba(random.bounded(alpha + 1),
+                        random.bounded(alpha + 1),
+                        random.bounded(alpha + 1),
+                        alpha);
+                }
+            }
+
+            QTransform transform;
+            const QPointF center = sourceBounds.center();
+            switch (caseIndex % 6)
+            {
+            case 0:
+                transform.translate(
+                    int(random.bounded(17U)) - 8, int(random.bounded(17U)) - 8);
+                break;
+            case 1:
+                transform.translate(qreal(int(random.bounded(17U)) - 8) + 0.375,
+                    qreal(int(random.bounded(17U)) - 8) - 0.4375);
+                break;
+            case 2:
+                transform.translate(center.x(), center.y());
+                transform.rotate(qreal(int(random.bounded(61U)) - 30));
+                transform.translate(-center.x(), -center.y());
+                break;
+            case 3:
+                transform.translate(center.x(), center.y());
+                transform.shear(0.08 * (int(random.bounded(9U)) - 4),
+                    0.06 * (int(random.bounded(9U)) - 4));
+                transform.scale(0.65 + random.generateDouble(),
+                    0.65 + random.generateDouble());
+                transform.translate(-center.x(), -center.y());
+                break;
+            case 4:
+                transform.translate(
+                    caseIndex % 2 == 0 ? 1.0 - 1.0e-12 : 1.0 + 1.0e-12,
+                    caseIndex % 4 == 0 ? -1.0e-12 : 1.0e-12);
+                break;
+            case 5:
+                transform.translate(center.x(), center.y());
+                transform.rotate(-17.0);
+                transform.shear(0.13, -0.09);
+                transform.scale(1.21, 0.83);
+                transform.translate(-center.x(), -center.y());
+                break;
+            }
+            QVERIFY(transform.isInvertible());
+            const SamplingMode sampling = caseIndex % 3 == 0
+                                              ? SamplingMode::Nearest
+                                              : SamplingMode::Smooth;
+
+            QImage full = base;
+            QVERIFY(ImageAffineTransformer::compositeSourceOver(
+                full, canvasBounds, source, sourceBounds, transform, sampling));
+
+            QImage assembled = base;
+            const QImage cropped =
+                source.copy(croppedBounds.translated(-sourceBounds.topLeft()));
+            const QRect effectBounds = ImageAffineTransformer::targetBounds(
+                croppedBounds, canvasSize, transform, sampling);
+            if (!effectBounds.isEmpty())
+            {
+                QImage regional = base.copy(effectBounds);
+                QVERIFY(ImageAffineTransformer::compositeSourceOver(regional,
+                    effectBounds,
+                    cropped,
+                    croppedBounds,
+                    transform,
+                    sampling));
+                QPainter painter(&assembled);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                painter.drawImage(effectBounds.topLeft(), regional);
+                painter.end();
+            }
+            QCOMPARE(full, assembled);
+        }
+    }
+
+    void keepsAffineSelectionSupportAlignedAtHalfAlpha()
+    {
+        const QSize canvasSize(72, 56);
+        const QImage selection =
+            rectangularMask(canvasSize, QRect(11, 9, 27, 19));
+        const QRect sourceBounds(11, 9, 27, 19);
+        QImage payload(
+            sourceBounds.size(), QImage::Format_ARGB32_Premultiplied);
+        payload.fill(Qt::white);
+        const QVector<QTransform> transforms = {
+            QTransform::fromTranslate(7.0, -3.0),
+            QTransform::fromTranslate(7.375, -3.4375),
+            QTransform(1.15, -0.17, 0.12, 0.83, 4.0, 3.0),
+            QTransform(0.91, 0.26, -0.19, 1.08, -2.0, 5.0)};
+        int falsePositives = 0;
+        int falseNegatives = 0;
+        for (qsizetype transformIndex = 0; transformIndex < transforms.size();
+            ++transformIndex)
+        {
+            const QTransform &transform = transforms[transformIndex];
+            const SamplingMode sampling =
+                samplingForSelectionTransform(transform);
+            QImage transformed(canvasSize, QImage::Format_ARGB32_Premultiplied);
+            transformed.fill(Qt::transparent);
+            QVERIFY(ImageAffineTransformer::compositeSourceOver(transformed,
+                QRect(QPoint(), canvasSize),
+                payload,
+                sourceBounds,
+                transform,
+                sampling));
+            const QImage support = transformedSelectionSupport(
+                selection, canvasSize, transform, sampling);
+            QVERIFY(!support.isNull());
+            for (int y = 0; y < canvasSize.height(); ++y)
+            {
+                const auto *transformedLine = reinterpret_cast<const QRgb *>(
+                    transformed.constScanLine(y));
+                const uchar *supportLine = support.constScanLine(y);
+                for (int x = 0; x < canvasSize.width(); ++x)
+                {
+                    const bool transformedContains =
+                        qAlpha(transformedLine[x]) >= 128;
+                    const bool supportContains = supportLine[x] >= 128;
+                    falsePositives +=
+                        !transformedContains && supportContains ? 1 : 0;
+                    falseNegatives +=
+                        transformedContains && !supportContains ? 1 : 0;
+                }
+            }
+        }
+        qInfo("selection support differs from deterministic payload at >=128 "
+              "by %d false positives and %d false negatives",
+            falsePositives,
+            falseNegatives);
+        QCOMPARE(falsePositives, 0);
+        QCOMPARE(falseNegatives, 0);
+    }
+
+    void keepsAffineTransformNearQtReference()
+    {
+        const QSize canvasSize(80, 64);
+        const QRect canvasBounds(QPoint(), canvasSize);
+        const QRect sourceBounds(17, 13, 23, 19);
+        QImage source(sourceBounds.size(), QImage::Format_ARGB32_Premultiplied);
+        source.fill(Qt::transparent);
+        QRandomGenerator random(0x2814U);
+        for (int y = 1; y < source.height() - 1; ++y)
+        {
+            auto *line = reinterpret_cast<QRgb *>(source.scanLine(y));
+            for (int x = 1; x < source.width() - 1; ++x)
+            {
+                const int alpha = int(random.bounded(256U));
+                line[x] = qRgba(random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    alpha);
+            }
+        }
+        QImage base(canvasSize, QImage::Format_ARGB32_Premultiplied);
+        for (int y = 0; y < base.height(); ++y)
+        {
+            auto *line = reinterpret_cast<QRgb *>(base.scanLine(y));
+            for (int x = 0; x < base.width(); ++x)
+            {
+                const int alpha = int(random.bounded(256U));
+                line[x] = qRgba(random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    random.bounded(alpha + 1),
+                    alpha);
+            }
+        }
+        const QVector<QTransform> transforms = {
+            QTransform::fromTranslate(9.0, -4.0),
+            QTransform::fromTranslate(9.375, -4.4375),
+            QTransform(1.21, -0.14, 0.09, 0.82, 3.0, 6.0),
+            QTransform(0.88, 0.31, -0.22, 1.13, -4.0, 2.0)};
+        quint64 totalDifference = 0;
+        quint64 comparedChannels = 0;
+        qsizetype differentPixels = 0;
+        qsizetype comparedPixels = 0;
+        int maximumDifference = 0;
+        for (qsizetype transformIndex = 0; transformIndex < transforms.size();
+            ++transformIndex)
+        {
+            const QTransform &transform = transforms[transformIndex];
+            const SamplingMode sampling =
+                samplingForSelectionTransform(transform);
+            QImage deterministic = base;
+            QVERIFY(ImageAffineTransformer::compositeSourceOver(deterministic,
+                canvasBounds,
+                source,
+                sourceBounds,
+                transform,
+                sampling));
+            const QImage qtReference = qtAffineComposite(
+                base, canvasBounds, source, sourceBounds, transform, sampling);
+            const ImageDifference difference =
+                storedImageDifference(deterministic, qtReference, 0);
+            totalDifference += difference.channelDifference;
+            comparedChannels += difference.comparedChannels;
+            differentPixels += difference.visiblyDifferentPixels;
+            comparedPixels += canvasSize.width() * canvasSize.height();
+            maximumDifference = std::max(
+                maximumDifference, difference.maximumChannelDifference);
+        }
+        qInfo("deterministic affine transform differs from Qt by %llu total "
+              "channel levels, %.4f average, across %lld/%lld pixels, max %d",
+            static_cast<unsigned long long>(totalDifference),
+            double(totalDifference) / double(comparedChannels),
+            static_cast<long long>(differentPixels),
+            static_cast<long long>(comparedPixels),
+            maximumDifference);
+        QVERIFY(maximumDifference <= 10);
+        QVERIFY(totalDifference * 100 <= comparedChannels * 5);
+        QVERIFY(differentPixels * 100 <= comparedPixels * 4);
+    }
+
+    void filtersLargeStrokeSetsBeforeRenderingSelectionCoverage()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        constexpr int strokeCount = 12000;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        layer.strokes.reserve(strokeCount + 1);
+        for (int index = 0; index < strokeCount; ++index)
+        {
+            layer.strokes.append(makeStroke(StrokeMode::Paint,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(index + 1),
+                {QPointF(32.0 + index % 128, 32.0 + index / 128 % 128)}));
+        }
+        const Stroke target = makeStroke(StrokeMode::Paint,
+            QColor(220, 50, 80),
+            8.0,
+            0xfedcba98ULL,
+            {QPointF(4000.0, 4000.0)});
+        layer.strokes.append(target);
+        const QRect selectionBounds(3996, 3996, 9, 9);
+        const QImage selection =
+            rectangularMask(document.size, selectionBounds);
+
+        QElapsedTimer timer;
+        timer.start();
+        const QVector<QUuid> ids = SelectionVisibility::editableStrokeIds(
+            document, layer, selection, 0);
+        const qint64 elapsed = timer.elapsed();
+
+        QCOMPARE(ids, QVector<QUuid>{target.id});
+        QVERIFY2(elapsed < 5000,
+            qPrintable(QStringLiteral("editable stroke lookup took %1 ms")
+                    .arg(elapsed)));
+        const QImage coverage = RenderEngine::renderStrokeCoverageRegion(
+            document, layer, layer.strokes.size() - 1, 0, selectionBounds);
+        QCOMPARE(coverage.size(), selectionBounds.size());
+    }
+
+    void boundsPerStrokeCoverageForFullCanvasSelection()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        constexpr int strokeCount = 1024;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        layer.strokes.reserve(strokeCount);
+        QVector<QUuid> expectedIds;
+        expectedIds.reserve(strokeCount);
+        for (int index = 0; index < strokeCount; ++index)
+        {
+            Stroke stroke = makeStroke(StrokeMode::Paint,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(index + 1),
+                {QPointF(32.0 + index % 32 * 24, 32.0 + index / 32 * 24)});
+            expectedIds.append(stroke.id);
+            layer.strokes.append(std::move(stroke));
+        }
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(255);
+
+        QElapsedTimer timer;
+        timer.start();
+        const QVector<QUuid> ids = SelectionVisibility::editableStrokeIds(
+            document, layer, selection, 0);
+        const qint64 elapsed = timer.elapsed();
+
+        QCOMPARE(ids, expectedIds);
+        QVERIFY2(elapsed < 5000,
+            qPrintable(QStringLiteral("full selection lookup took %1 ms")
+                    .arg(elapsed)));
+    }
+
+    void boundsMaskedAndProceduralFillCoverage()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(210, 90, 35, 173);
+        fill.points = {{QPointF(24.0, 24.0), 1.0}};
+        fill.fillMask = rectangularMask(document.size, QRect(12, 14, 64, 48));
+        document.layers.first().strokes = {fill};
+        QImage selection =
+            rectangularMask(document.size, QRect(20, 20, 24, 20));
+
+        SelectionVisibility::EditableStrokeStats stats;
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     document, document.layers.first(), selection, 0, &stats),
+            QVector<QUuid>{fill.id});
+        QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+        QVERIFY(stats.maximumExplicitImageBytes < 1024ULL * 1024ULL);
+
+        document.layers.first().strokes.first().fillMask = {};
+        stats = {};
+        QCOMPARE(SelectionVisibility::editableStrokeIds(
+                     document, document.layers.first(), selection, 0, &stats),
+            QVector<QUuid>{fill.id});
+        QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+        QVERIFY(stats.maximumExplicitImageBytes < 1024ULL * 1024ULL);
+    }
+
+    void reportsFarCopyCoverageImageBound()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke paint = makeStroke(
+            StrokeMode::Paint, Qt::black, 8.0, 91, {QPointF(24.0, 24.0)});
+        paint.brush.antialiasing = false;
+        PixelSelectionOp copy;
+        copy.canvasSize = document.size;
+        copy.sourceBounds = QRect(0, 0, 64, 64);
+        copy.packedMask = QByteArray(8 * 64, char(0xff));
+        copy.transform = QTransform::fromTranslate(3960.0, 3960.0);
+        copy.sampling = SamplingMode::Nearest;
+        copy.clearSource = false;
+        copy.drawDestination = true;
+        QVERIFY(isValidPixelSelectionOp(copy));
+        Stroke operation;
+        operation.mode = StrokeMode::PixelSelection;
+        operation.pixelSelectionOp = copy;
+        document.layers.first().strokes = {paint, operation};
+
+        const RenderEngine::StrokeCoveragePlan plan =
+            RenderEngine::prepareStrokeCoverage(
+                document, document.layers.first());
+        QVERIFY(plan.valid);
+        RenderEngine::StrokeCoverageStats stats;
+        QElapsedTimer timer;
+        timer.start();
+        const RenderEngine::StrokeCoverageRegion coverage =
+            RenderEngine::renderSparseStrokeCoverage(document,
+                document.layers.first(),
+                0,
+                0,
+                QRect(3960, 3960, 96, 96),
+                plan,
+                &stats);
+        const qint64 elapsed = timer.elapsed();
+        qInfo("4K far-copy coverage took %lld ms, max image %llu bytes",
+            static_cast<long long>(elapsed),
+            static_cast<unsigned long long>(stats.maximumExplicitImageBytes));
+        QVERIFY(coverage.valid);
+        QVERIFY(!coverage.image.isNull());
+        QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+        QVERIFY(stats.maximumExplicitImageBytes <= 64ULL * 1024ULL * 1024ULL);
+        QVERIFY(elapsed < 10000);
+    }
+
+    void benchmarksFullCanvasSelectionAfterFramebufferOperation()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        constexpr int strokeCount = DocumentLimits::maximumStrokesPerLayer - 1;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        layer.strokes.reserve(strokeCount + 1);
+        QVector<QUuid> expectedIds;
+        expectedIds.reserve(strokeCount);
+        for (int index = 0; index < strokeCount; ++index)
+        {
+            Stroke stroke = makeStroke(StrokeMode::Paint,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(index + 1),
+                {QPointF(
+                    32.0 + index % 128 * 31, 32.0 + index / 128 % 128 * 31)});
+            expectedIds.append(stroke.id);
+            layer.strokes.append(std::move(stroke));
+        }
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(255);
+        const std::optional<PixelSelectionOp> pixelOperation =
+            makePixelSelectionOp(selection, QTransform(), true, true);
+        QVERIFY(pixelOperation.has_value());
+        Stroke operation;
+        operation.mode = StrokeMode::PixelSelection;
+        operation.pixelSelectionOp = *pixelOperation;
+        layer.strokes.append(std::move(operation));
+
+        QElapsedTimer timer;
+        timer.start();
+        SelectionVisibility::EditableStrokeStats stats;
+        const QVector<QUuid> ids = SelectionVisibility::editableStrokeIds(
+            document, layer, selection, 0, &stats);
+        const qint64 elapsed = timer.elapsed();
+
+        qInfo("19999-stroke pixel-selection lookup took %lld ms, %llu "
+              "operations, %llu effects, max image %llu bytes",
+            static_cast<long long>(elapsed),
+            static_cast<unsigned long long>(
+                stats.pixelSelectionOperationsReplayed),
+            static_cast<unsigned long long>(stats.effectCandidatesExamined),
+            static_cast<unsigned long long>(stats.maximumExplicitImageBytes));
+        QCOMPARE(ids, expectedIds);
+        QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+        QCOMPARE(stats.regionalRenders, quint64(strokeCount));
+        QCOMPARE(stats.pixelSelectionOperationsReplayed, quint64(strokeCount));
+        QCOMPARE(stats.reframeOperationsReplayed, 0ULL);
+        QCOMPARE(stats.effectCandidatesExamined, quint64(strokeCount));
+        QVERIFY(stats.maximumExplicitImageBytes < 1024ULL * 1024ULL);
+
+        Document reframeDocument = Document::createDefault(QSize(edge, edge));
+        reframeDocument.background = Qt::transparent;
+        reframeDocument.wobbleAmount = 0.0;
+        Layer &reframeLayer = reframeDocument.layers.first();
+        reframeLayer.initialCanvasSize = QSize(edge - 1, edge - 1);
+        reframeLayer.strokes = layer.strokes;
+        reframeLayer.strokes.removeLast();
+        Stroke reframe;
+        reframe.mode = StrokeMode::Reframe;
+        reframe.reframeOp = ReframeOp{ReframeMode::Image,
+            SamplingMode::Smooth,
+            QSize(edge - 1, edge - 1),
+            reframeDocument.size,
+            {}};
+        reframeLayer.strokes.append(std::move(reframe));
+
+        timer.restart();
+        SelectionVisibility::EditableStrokeStats reframeStats;
+        const QVector<QUuid> reframeIds =
+            SelectionVisibility::editableStrokeIds(
+                reframeDocument, reframeLayer, selection, 0, &reframeStats);
+        const qint64 reframeElapsed = timer.elapsed();
+
+        qInfo("19999-stroke image-reframe lookup took %lld ms, %llu "
+              "operations, %llu effects, max image %llu bytes",
+            static_cast<long long>(reframeElapsed),
+            static_cast<unsigned long long>(
+                reframeStats.reframeOperationsReplayed),
+            static_cast<unsigned long long>(
+                reframeStats.effectCandidatesExamined),
+            static_cast<unsigned long long>(
+                reframeStats.maximumExplicitImageBytes));
+        QCOMPARE(reframeIds, expectedIds);
+        QCOMPARE(reframeStats.fullCanvasFallbacks, 0ULL);
+        QCOMPARE(reframeStats.regionalRenders, quint64(strokeCount));
+        QCOMPARE(reframeStats.pixelSelectionOperationsReplayed, 0ULL);
+        QCOMPARE(reframeStats.reframeOperationsReplayed, quint64(strokeCount));
+        QCOMPARE(reframeStats.effectCandidatesExamined, quint64(strokeCount));
+        QVERIFY(reframeStats.maximumExplicitImageBytes < 1024ULL * 1024ULL);
+    }
+
+    void benchmarksMixedPaintAndEraseCoverageEffects()
+    {
+        constexpr int edge = DocumentLimits::maximumCanvasEdge;
+        constexpr int paintCount = 10000;
+        constexpr int eraseCount = 10000;
+        Document document = Document::createDefault(QSize(edge, edge));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+        layer.strokes.reserve(paintCount + eraseCount);
+        for (int index = 0; index < paintCount; ++index)
+        {
+            layer.strokes.append(makeStroke(StrokeMode::Paint,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(index + 1),
+                {QPointF(32.0 + index % 100 * 16, 32.0 + index / 100 * 16)}));
+        }
+        for (int index = 0; index < eraseCount; ++index)
+        {
+            layer.strokes.append(makeStroke(StrokeMode::Erase,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(paintCount + index + 1),
+                {QPointF(2400.0 + index % 100 * 16, 32.0 + index / 100 * 16)}));
+        }
+        QImage selection(document.size, QImage::Format_Grayscale8);
+        selection.fill(255);
+
+        QElapsedTimer timer;
+        timer.start();
+        SelectionVisibility::EditableStrokeStats stats;
+        const QVector<QUuid> ids = SelectionVisibility::editableStrokeIds(
+            document, layer, selection, 0, &stats);
+        const qint64 elapsed = timer.elapsed();
+
+        qInfo("10000-paint/10000-erase lookup took %lld ms, %llu erases, "
+              "%llu effects, max image %llu bytes",
+            static_cast<long long>(elapsed),
+            static_cast<unsigned long long>(stats.eraseOperationsReplayed),
+            static_cast<unsigned long long>(stats.effectCandidatesExamined),
+            static_cast<unsigned long long>(stats.maximumExplicitImageBytes));
+        QCOMPARE(ids.size(), paintCount + eraseCount);
+        QCOMPARE(stats.fullCanvasFallbacks, 0ULL);
+        QCOMPARE(stats.regionalRenders, quint64(paintCount + eraseCount));
+        QVERIFY(stats.eraseOperationsReplayed < 1000000ULL);
+        QVERIFY(stats.effectCandidatesExamined < 2000000ULL);
+
+        Document pixelDocument = Document::createDefault(QSize(edge, edge));
+        pixelDocument.background = Qt::transparent;
+        pixelDocument.wobbleAmount = 0.0;
+        Layer &pixelLayer = pixelDocument.layers.first();
+        pixelLayer.strokes.reserve(paintCount * 2);
+        QVector<QUuid> expectedIds;
+        expectedIds.reserve(paintCount);
+        for (int index = 0; index < paintCount; ++index)
+        {
+            Stroke paint = makeStroke(StrokeMode::Paint,
+                Qt::black,
+                2.0,
+                static_cast<quint64>(index + 1),
+                {QPointF(32.0 + index % 100 * 16, 32.0 + index / 100 * 16)});
+            expectedIds.append(paint.id);
+            pixelLayer.strokes.append(std::move(paint));
+            PixelSelectionOp pixelOperation;
+            pixelOperation.canvasSize = pixelDocument.size;
+            pixelOperation.sourceBounds =
+                QRect(2400 + index % 100 * 16, 32 + index / 100 * 16, 1, 1);
+            pixelOperation.packedMask = QByteArray(1, char(0x80));
+            pixelOperation.sampling = SamplingMode::Nearest;
+            QVERIFY(isValidPixelSelectionOp(pixelOperation));
+            Stroke operation;
+            operation.mode = StrokeMode::PixelSelection;
+            operation.pixelSelectionOp = std::move(pixelOperation);
+            pixelLayer.strokes.append(std::move(operation));
+        }
+
+        timer.restart();
+        SelectionVisibility::EditableStrokeStats pixelStats;
+        const QVector<QUuid> pixelIds = SelectionVisibility::editableStrokeIds(
+            pixelDocument, pixelLayer, selection, 0, &pixelStats);
+        const qint64 pixelElapsed = timer.elapsed();
+
+        qInfo("10000-paint/10000-pixel-selection lookup took %lld ms, %llu "
+              "operations, %llu effects, max image %llu bytes",
+            static_cast<long long>(pixelElapsed),
+            static_cast<unsigned long long>(
+                pixelStats.pixelSelectionOperationsReplayed),
+            static_cast<unsigned long long>(
+                pixelStats.effectCandidatesExamined),
+            static_cast<unsigned long long>(
+                pixelStats.maximumExplicitImageBytes));
+        QCOMPARE(pixelIds, expectedIds);
+        QCOMPARE(pixelStats.fullCanvasFallbacks, 0ULL);
+        QCOMPARE(pixelStats.regionalRenders, quint64(paintCount));
+        QCOMPARE(pixelStats.pixelSelectionOperationsReplayed, 0ULL);
+        QVERIFY(pixelStats.effectCandidatesExamined < 100000ULL);
+    }
+
     void handlesBlendModesInLayerSplitPreviews()
     {
         Document document = Document::createDefault(QSize(48, 36));
@@ -1738,6 +2761,25 @@ private slots:
             RenderEngine::renderScaled(fillDocument, 0, QSize(32, 32));
         QCOMPARE(scaled.pixelColor(10, 16), fill.color);
         QCOMPARE(scaled.pixelColor(22, 16), QColor(Qt::white));
+    }
+
+    void treatsOnlyFillMaskSamplesAtLeastHalfOpaqueAsIncluded()
+    {
+        Document document = Document::createDefault(QSize(16, 16));
+        document.background = Qt::transparent;
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(30, 80, 220);
+        fill.points = {{QPointF(8.0, 8.0), 1.0}};
+        fill.fillMask = QImage(document.size, QImage::Format_Grayscale8);
+        fill.fillMask.fill(0);
+        fill.fillMask.scanLine(3)[3] = 127;
+        fill.fillMask.scanLine(11)[11] = 128;
+        document.layers.first().strokes.append(fill);
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QCOMPARE(rendered.pixelColor(3, 3), QColor(Qt::transparent));
+        QCOMPARE(rendered.pixelColor(11, 11), fill.color);
     }
 
     void canvasCropPreservesDisconnectedFillPixels()

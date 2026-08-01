@@ -537,6 +537,26 @@
         <source>The selected content could not be flipped.</source>
         <translation>선택한 내용을 반전할 수 없습니다.</translation>
     </message>
+    <message>
+        <source>The stroke was simplified because the project point limit was reached.</source>
+        <translation>프로젝트의 점 한도에 도달하여 스트로크를 단순화했습니다.</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because its layer is no longer available.</source>
+        <translation>레이어를 더 이상 사용할 수 없어 스트로크를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because the project stroke limit was reached.</source>
+        <translation>프로젝트의 스트로크 한도에 도달하여 스트로크를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because the project point limit was reached.</source>
+        <translation>프로젝트의 점 한도에 도달하여 스트로크를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added.</source>
+        <translation>스트로크를 추가하지 못했습니다.</translation>
+    </message>
 </context>
 <context>
     <name>wobble::ColorSwatchRow</name>
@@ -703,6 +723,10 @@
     <message>
         <source>Move layer into group</source>
         <translation>레이어를 그룹으로 이동</translation>
+    </message>
+    <message>
+        <source>Layer 1</source>
+        <translation>레이어 1</translation>
     </message>
 </context>
 <context>
@@ -1075,6 +1099,10 @@
         <source>A layer has invalid hierarchy fields.</source>
         <translation>레이어 계층 필드가 올바르지 않습니다.</translation>
     </message>
+    <message>
+        <source>The project contains too much mask data.</source>
+        <translation>프로젝트의 마스크 데이터가 너무 큽니다.</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentUndoStack</name>
@@ -1105,6 +1133,10 @@
         <location filename="../src/ui/FrameScrubber.cpp" line="36"/>
         <source>Frame scrubber</source>
         <translation>프레임 스크러버</translation>
+    </message>
+    <message>
+        <source>Frame %1 of %2</source>
+        <translation>총 %2개 중 %1번째 프레임</translation>
     </message>
 </context>
 <context>
@@ -1362,6 +1394,14 @@
     <message>
         <source>No group</source>
         <translation>그룹 없음</translation>
+    </message>
+    <message>
+        <source>Layer is visible</source>
+        <translation>레이어가 표시되어 있습니다</translation>
+    </message>
+    <message>
+        <source>Layer is hidden</source>
+        <translation>레이어가 숨겨져 있습니다</translation>
     </message>
 </context>
 <context>

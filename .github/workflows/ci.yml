@@ -21,6 +21,7 @@ jobs:
   format:
     name: clang-format
     runs-on: macos-15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
@@ -43,17 +44,40 @@ jobs:
             preset: macos-debug
             qt-host: mac
             qt-arch: clang_64
+            smoke: none
           - name: Windows
             os: windows-2022
             preset: windows-debug
             qt-host: windows
             qt-arch: win64_msvc2022_64
+            smoke: none
           - name: macOS ASan + UBSan
             os: macos-15
             preset: macos-sanitized
             qt-host: mac
             qt-arch: clang_64
+            smoke: none
+          - name: macOS Release package
+            os: macos-15
+            preset: macos-distribution
+            qt-host: mac
+            qt-arch: clang_64
+            smoke: macos
+          - name: macOS Coverage
+            os: macos-15
+            preset: macos-coverage
+            qt-host: mac
+            qt-arch: clang_64
+            smoke: none
+            coverage: true
+          - name: Windows Release install
+            os: windows-2022
+            preset: windows-distribution
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+            smoke: windows
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
@@ -66,21 +90,92 @@ jobs:
           arch: '${{ matrix.qt-arch }}'
           cache: true
 
+      - name: Check translation completeness
+        if: matrix.preset == 'macos-debug'
+        run: |
+          translation_dir="$RUNNER_TEMP/translations"
+          mkdir -p "$translation_dir"
+          cp i18n/wobblepaint_ko.ts i18n/wobblepaint_ja.ts "$translation_dir/"
+          "$QT_ROOT_DIR/bin/lupdate" \
+            src \
+            -extensions cpp,hpp,mm \
+            -no-obsolete \
+            -warnings-are-errors \
+            -ts \
+            "$translation_dir/wobblepaint_ko.ts" \
+            "$translation_dir/wobblepaint_ja.ts"
+          if grep -n 'type="unfinished"' "$translation_dir"/*.ts; then
+            echo "Translations contain unfinished entries"
+            exit 1
+          fi
+
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
 
+      - name: Prepare coverage profiles
+        if: matrix.coverage
+        run: mkdir -p "out/build/${{ matrix.preset }}/profiles"
+
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --parallel 7 --output-on-failure
+
+      - name: Check source coverage
+        if: matrix.coverage
+        run: |
+          profile="out/build/${{ matrix.preset }}/coverage.profdata"
+          xcrun llvm-profdata merge \
+            -sparse \
+            "out/build/${{ matrix.preset }}"/profiles/*.profraw \
+            -o "$profile"
+          coverage_report=$(xcrun llvm-cov report \
+            "out/build/${{ matrix.preset }}/wobblepaint_tests" \
+            -instr-profile="$profile" \
+            -ignore-filename-regex='(/tests/|/_deps/|/out/)')
+          printf '%s\n' "$coverage_report"
+          line_coverage=$(printf '%s\n' "$coverage_report" | awk '/^TOTAL/ { value=$10; gsub("%", "", value); print value }')
+          awk -v coverage="$line_coverage" 'BEGIN { exit !(coverage + 0 >= 70.0) }'
+
+      - name: Test installed macOS package
+        if: matrix.smoke == 'macos'
+        run: >-
+          cmake --build --preset ${{ matrix.preset }}
+          --target wobblepaint_package_smoke_test
+
+      - name: Test installed Windows application
+        if: matrix.smoke == 'windows'
+        shell: pwsh
+        run: |
+          $installRoot = Join-Path $env:RUNNER_TEMP "WagleWaglePaint"
+          cmake --install "out/build/${{ matrix.preset }}" `
+            --config Release `
+            --prefix $installRoot
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $application = Join-Path $installRoot "WagleWaglePaint.exe"
+          $process = Start-Process $application -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            throw "Installed application exited with code $($process.ExitCode)"
+          }
+          Stop-Process -Id $process.Id -Force
 
       - name: Test diagnostics
         if: failure() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          Get-Content out/build/windows-debug/Testing/Temporary/LastTest.log -ErrorAction SilentlyContinue
+          Get-Content "out/build/${{ matrix.preset }}/Testing/Temporary/LastTest.log" -ErrorAction SilentlyContinue
           $env:QT_QPA_PLATFORM = "offscreen"
           $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
-          & out\build\windows-debug\Debug\wobblepaint_tests.exe 2>&1
-          "direct run exit code: $LASTEXITCODE"
+          $testExecutable = Get-ChildItem `
+            "out/build/${{ matrix.preset }}" `
+            -Recurse `
+            -Filter wobblepaint_tests.exe |
+            Select-Object -First 1
+          if ($testExecutable) {
+            & $testExecutable.FullName 2>&1
+            "direct run exit code: $LASTEXITCODE"
+          }

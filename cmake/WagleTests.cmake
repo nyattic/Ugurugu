@@ -32,6 +32,8 @@ foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)
         PROPERTIES
         ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;WOBBLEPAINT_TEST_SUITE=${suite}"
+        TIMEOUT
+        180
     )
     if(WIN32)
         set_tests_properties(
@@ -66,6 +68,43 @@ if(APPLE)
         "-DSMOKE_BUILD_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
         -P
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/PreparePackageSmoke.cmake"
+        VERBATIM
+    )
+    set(
+        WOBBLEPAINT_PACKAGE_SMOKE_ROOT
+        "${CMAKE_CURRENT_BINARY_DIR}/package-smoke"
+    )
+    set(
+        WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/install/WagleWaglePaint.app"
+    )
+    add_custom_target(
+        wobblepaint_package_smoke_test
+        COMMAND
+        "${CMAKE_COMMAND}" -E remove_directory
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}"
+        COMMAND
+        "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}"
+        --prefix "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/install"
+        COMMAND
+        "${CMAKE_COMMAND}" -E make_directory
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS"
+        COMMAND
+        "${CMAKE_COMMAND}" -E create_symlink
+        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}/Contents/Frameworks"
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/Frameworks"
+        COMMAND
+        "${CMAKE_COMMAND}" -E copy
+        "$<TARGET_FILE:wobblepaint_package_smoke>"
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS/"
+        COMMAND
+        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS/wobblepaint_package_smoke"
+        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}"
+        COMMAND
+        /usr/bin/codesign --verify --deep --strict
+        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}"
+        DEPENDS WagleWaglePaint wobblepaint_package_smoke
+        USES_TERMINAL
         VERBATIM
     )
 endif()

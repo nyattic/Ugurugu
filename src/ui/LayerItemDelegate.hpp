@@ -31,6 +31,9 @@ public:
         QAbstractItemModel *model,
         const QStyleOptionViewItem &option,
         const QModelIndex &index) override;
+    QWidget *createEditor(QWidget *parent,
+        const QStyleOptionViewItem &option,
+        const QModelIndex &index) const override;
     void updateEditorGeometry(QWidget *editor,
         const QStyleOptionViewItem &option,
         const QModelIndex &index) const override;

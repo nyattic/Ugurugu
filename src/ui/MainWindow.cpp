@@ -18,6 +18,7 @@
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "ui/ShortcutBinding.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
@@ -463,13 +464,12 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 void MainWindow::createActions()
 {
     const auto registerShortcut =
-        [this](QAction *action, const QKeySequence &defaultShortcut)
+        [this](QAction *action,
+            const QKeySequence &defaultShortcut,
+            const QList<QKeySequence> &aliases = QList<QKeySequence>())
     {
         action->setProperty("shortcutLabel", action->text());
-        action->setProperty("defaultShortcut",
-            defaultShortcut.toString(QKeySequence::PortableText));
-        action->setShortcut(SettingsDialog::shortcutForAction(
-            action->objectName(), defaultShortcut));
+        ShortcutBinding::initialize(action, defaultShortcut, aliases);
         m_shortcutActions.append(action);
     };
 
@@ -855,12 +855,9 @@ void MainWindow::createActions()
 
     auto *zoomInAction = new QAction(tr("Zoom &in"), this);
     zoomInAction->setObjectName(QStringLiteral("zoomInAction"));
-    registerShortcut(zoomInAction, QKeySequence(QKeySequence::ZoomIn));
-    if (zoomInAction->shortcut() == QKeySequence(QKeySequence::ZoomIn))
-    {
-        zoomInAction->setShortcuts(
-            {zoomInAction->shortcut(), QKeySequence(QStringLiteral("Ctrl+="))});
-    }
+    registerShortcut(zoomInAction,
+        QKeySequence(QKeySequence::ZoomIn),
+        {QKeySequence(QStringLiteral("Ctrl+="))});
     connect(zoomInAction, &QAction::triggered, m_canvas, &CanvasWidget::zoomIn);
 
     auto *zoomOutAction = new QAction(tr("Zoom &out"), this);

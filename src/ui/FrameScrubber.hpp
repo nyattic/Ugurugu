@@ -33,6 +33,7 @@ private:
     QRectF trackRect() const;
     int frameAt(const QPointF &position) const;
     void scrubTo(const QPointF &position);
+    void updateAccessibleValue();
 
     DocumentController *m_controller;
     CanvasWidget *m_canvas;

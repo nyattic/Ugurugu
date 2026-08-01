@@ -30,6 +30,16 @@ QVector<QColor> defaultSwatches()
 ColorSwatchRow::ColorSwatchRow(QWidget *parent)
     : QWidget(parent)
 {
+    m_persistTimer.setSingleShot(true);
+    m_persistTimer.setInterval(150);
+    connect(&m_persistTimer,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            persist();
+        });
+
     auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(2, 0, 2, 0);
     layout->setSpacing(4);
@@ -72,6 +82,14 @@ ColorSwatchRow::ColorSwatchRow(QWidget *parent)
     refreshButtons();
 }
 
+ColorSwatchRow::~ColorSwatchRow()
+{
+    if (m_persistTimer.isActive())
+    {
+        persist();
+    }
+}
+
 void ColorSwatchRow::setActiveColor(const QColor &color)
 {
     if (!color.isValid())
@@ -86,7 +104,7 @@ void ColorSwatchRow::setActiveColor(const QColor &color)
         m_recentColors.removeLast();
     }
     refreshButtons();
-    persist();
+    m_persistTimer.start();
 }
 
 void ColorSwatchRow::refreshButtons()

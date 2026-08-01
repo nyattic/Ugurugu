@@ -28,9 +28,6 @@ public:
     static qreal strokeStabilization();
     static QString defaultSaveFolder();
     static QString uiLanguage();
-    static QKeySequence shortcutForAction(
-        const QString &actionName, const QKeySequence &defaultShortcut);
-
     explicit SettingsDialog(QWidget *parent = nullptr,
         const QList<QAction *> &shortcutActions = {});
 

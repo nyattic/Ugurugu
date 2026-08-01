@@ -1,9 +1,11 @@
 #include "ui/LayerItemDelegate.hpp"
 
 #include "document/Document.hpp"
+#include "document/DocumentLimits.hpp"
 #include "ui/Icons.hpp"
 #include "ui/Theme.hpp"
 
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -180,6 +182,18 @@ bool LayerItemDelegate::editorEvent(QEvent *event,
         }
     }
     return QStyledItemDelegate::editorEvent(event, model, option, index);
+}
+
+QWidget *LayerItemDelegate::createEditor(QWidget *parent,
+    const QStyleOptionViewItem &option,
+    const QModelIndex &index) const
+{
+    QWidget *editor = QStyledItemDelegate::createEditor(parent, option, index);
+    if (auto *lineEdit = qobject_cast<QLineEdit *>(editor))
+    {
+        lineEdit->setMaxLength(DocumentLimits::maximumLayerNameLength);
+    }
+    return editor;
 }
 
 void LayerItemDelegate::updateEditorGeometry(QWidget *editor,

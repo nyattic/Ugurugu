@@ -28,8 +28,14 @@ QSize PreviewRenderPolicy::renderSize(
 
 int PreviewRenderPolicy::cacheCostKiB(qsizetype imageBytes)
 {
-    return static_cast<int>(std::clamp<qsizetype>(
-        imageBytes / 1024, 1, std::numeric_limits<int>::max()));
+    if (imageBytes <= 0)
+    {
+        return 1;
+    }
+    const qsizetype kibibytes =
+        imageBytes / 1024 + (imageBytes % 1024 != 0 ? 1 : 0);
+    return static_cast<int>(
+        std::min<qsizetype>(kibibytes, std::numeric_limits<int>::max()));
 }
 
 }

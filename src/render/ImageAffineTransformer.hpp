@@ -1,0 +1,32 @@
+#pragma once
+
+#include "document/Document.hpp"
+
+#include <QImage>
+
+namespace wobble
+{
+
+class ImageAffineTransformer final
+{
+public:
+    static QRect targetBounds(const QRect &sourceBounds,
+        const QSize &targetCanvasSize,
+        const QTransform &transform,
+        SamplingMode sampling);
+
+    static bool compositeSourceOver(QImage &target,
+        const QRect &targetImageBounds,
+        const QImage &source,
+        const QRect &sourceImageBounds,
+        const QTransform &transform,
+        SamplingMode sampling);
+
+    static QImage transformMask(const QImage &source,
+        const QRect &sourceImageBounds,
+        const QRect &targetImageBounds,
+        const QTransform &transform,
+        SamplingMode sampling);
+};
+
+}

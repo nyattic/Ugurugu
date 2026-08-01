@@ -78,6 +78,7 @@ void LayerDock::buildContent()
     layout->setSpacing(8);
 
     m_layerList = new LayerListWidget(content);
+    m_layerList->setAccessibleName(tr("Layers"));
     m_layerList->setEditTriggers(
         QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
     m_layerList->setItemDelegate(new LayerItemDelegate(m_layerList));
@@ -241,7 +242,22 @@ void LayerDock::connectControls()
             const QString name = item->text().trimmed();
             if (!name.isEmpty() && name != layer->name)
             {
-                m_controller->renameLayer(id, name);
+                const DocumentController::RenameLayerResult result =
+                    m_controller->renameLayer(id, name);
+                if (result != DocumentController::RenameLayerResult::Renamed)
+                {
+                    const Layer *currentLayer =
+                        m_controller->document().layer(id);
+                    if (currentLayer)
+                    {
+                        QSignalBlocker blocker(m_layerList);
+                        item->setText(currentLayer->name);
+                    }
+                    else
+                    {
+                        rebuild();
+                    }
+                }
             }
             else if (item->text() != layer->name)
             {
@@ -252,22 +268,27 @@ void LayerDock::connectControls()
 
     auto *delegate =
         qobject_cast<LayerItemDelegate *>(m_layerList->itemDelegate());
+    const auto toggleVisibility = [this](const QModelIndex &index)
+    {
+        if (!m_controller)
+        {
+            return;
+        }
+        const QUuid id = index.data(LayerItemRoles::LayerId).toUuid();
+        const bool visible = index.data(LayerItemRoles::Visible).toBool();
+        if (!id.isNull())
+        {
+            m_controller->setLayerVisible(id, !visible);
+        }
+    };
     connect(delegate,
         &LayerItemDelegate::visibilityToggled,
         this,
-        [this](const QModelIndex &index)
-        {
-            if (!m_controller)
-            {
-                return;
-            }
-            const QUuid id = index.data(LayerItemRoles::LayerId).toUuid();
-            const bool visible = index.data(LayerItemRoles::Visible).toBool();
-            if (!id.isNull())
-            {
-                m_controller->setLayerVisible(id, !visible);
-            }
-        });
+        toggleVisibility);
+    connect(m_layerList,
+        &LayerListWidget::visibilityToggleRequested,
+        this,
+        toggleVisibility);
 
     connect(m_layerList,
         &LayerListWidget::reorderRequested,
@@ -492,6 +513,9 @@ void LayerDock::rebuild()
                 item->setData(
                     LayerItemRoles::LayerId, QVariant::fromValue(layer.id));
                 item->setData(LayerItemRoles::Visible, layer.visible);
+                item->setData(Qt::AccessibleDescriptionRole,
+                    layer.visible ? tr("Layer is visible")
+                                  : tr("Layer is hidden"));
                 item->setData(LayerItemRoles::Thumbnail,
                     QVariant::fromValue(m_thumbnails.value(layer.id)));
                 item->setData(

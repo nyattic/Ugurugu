@@ -161,6 +161,32 @@ qsizetype totalStrokeCount(const Document &document)
     return count;
 }
 
+QVector<StrokePoint> resampleStrokePoints(
+    const QVector<StrokePoint> &source, qsizetype targetCount)
+{
+    Q_ASSERT(targetCount >= 2 && targetCount < source.size());
+    QVector<StrokePoint> result;
+    result.reserve(targetCount);
+    const qsizetype segmentCount = targetCount - 1;
+    const qsizetype lastSourceIndex = source.size() - 1;
+    const qsizetype baseStep = lastSourceIndex / segmentCount;
+    const qsizetype remainderStep = lastSourceIndex % segmentCount;
+    qsizetype sourceIndex = 0;
+    qsizetype remainder = 0;
+    for (qsizetype index = 0; index < targetCount; ++index)
+    {
+        result.append(source[sourceIndex]);
+        sourceIndex += baseStep;
+        remainder += remainderStep;
+        if (remainder >= segmentCount)
+        {
+            ++sourceIndex;
+            remainder -= segmentCount;
+        }
+    }
+    return result;
+}
+
 qsizetype layerPointCount(const Layer &layer)
 {
     qsizetype count = 0;
@@ -184,21 +210,6 @@ bool layerCanProducePixels(const Layer &layer)
             return stroke.mode == StrokeMode::Paint
                    || stroke.mode == StrokeMode::Fill;
         });
-}
-
-bool containsStrokeId(const Document &document, const QUuid &id)
-{
-    for (const Layer &layer : document.layers)
-    {
-        for (const Stroke &stroke : layer.strokes)
-        {
-            if (stroke.id == id)
-            {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 bool isValidInputStrokePoint(const StrokePoint &point, const QSize &size)
@@ -932,6 +943,58 @@ struct DocumentController::DocumentDelta
         {
             delta.beforeLayerOrder = layerIds(before.layers);
             delta.afterLayerOrder = layerIds(after.layers);
+        }
+        return delta;
+    }
+
+    static DocumentDelta appendedStroke(
+        const Document &before, const Document &after, const QUuid &layerId)
+    {
+        DocumentDelta delta;
+        if (before.size != after.size || before.background != after.background
+            || before.animationFrames != after.animationFrames
+            || before.framesPerSecond != after.framesPerSecond
+            || before.wobbleAmount != after.wobbleAmount
+            || before.activeLayerId != after.activeLayerId
+            || before.layers.size() != after.layers.size())
+        {
+            return delta;
+        }
+        for (int index = 0; index < before.layers.size(); ++index)
+        {
+            const Layer &beforeLayer = before.layers[index];
+            const Layer &afterLayer = after.layers[index];
+            if (beforeLayer.id != afterLayer.id
+                || beforeLayer.name != afterLayer.name
+                || beforeLayer.kind != afterLayer.kind
+                || beforeLayer.parentGroupId != afterLayer.parentGroupId
+                || beforeLayer.clipToLayerBelow != afterLayer.clipToLayerBelow
+                || beforeLayer.visible != afterLayer.visible
+                || beforeLayer.opacity != afterLayer.opacity
+                || beforeLayer.blendMode != afterLayer.blendMode
+                || beforeLayer.initialCanvasSize
+                       != afterLayer.initialCanvasSize)
+            {
+                return {};
+            }
+            if (beforeLayer.id == layerId)
+            {
+                if (afterLayer.strokes.size() != beforeLayer.strokes.size() + 1)
+                {
+                    return {};
+                }
+                LayerChange change;
+                change.id = layerId;
+                change.strokes.added.append(
+                    {static_cast<int>(beforeLayer.strokes.size()),
+                        afterLayer.strokes.constLast()});
+                delta.changedLayers.append(std::move(change));
+            }
+            else if (!sameStrokeVectorBacking(
+                         beforeLayer.strokes, afterLayer.strokes))
+            {
+                return {};
+            }
         }
         return delta;
     }
@@ -2095,7 +2158,8 @@ DocumentController::DocumentController(QObject *parent)
     : QObject(parent)
     , m_undoStack(this)
 {
-    m_currentState = prepareState(Document::createDefault());
+    m_currentState =
+        prepareState(Document::createDefault(QSize(1024, 768), tr("Layer 1")));
     Q_ASSERT(m_currentState);
     m_undoStack.setUndoLimit(64);
     m_undoStack.setClean();
@@ -2212,7 +2276,7 @@ void DocumentController::newDocument(const QSize &size)
             DocumentLimits::minimumCanvasEdge,
             DocumentLimits::maximumCanvasEdge));
     const PreparedState prepared =
-        prepareState(Document::createDefault(normalized));
+        prepareState(Document::createDefault(normalized, tr("Layer 1")));
     if (!prepared)
     {
         return;
@@ -2498,14 +2562,31 @@ void DocumentController::setActiveLayer(const QUuid &id)
     emit activeLayerChanged(id);
 }
 
-void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
+DocumentController::AddStrokeResult DocumentController::addStroke(
+    const QUuid &layerId, Stroke stroke)
 {
+    const auto reject = [this](AddStrokeResult result)
+    {
+        failHistoryMacro();
+        return result;
+    };
+    const PreparedState before = editableState();
+    if (!before)
+    {
+        return reject(AddStrokeResult::RejectedCommit);
+    }
     const Document &current = document();
     const Layer *layer = current.layer(layerId);
-    if (!layer || layer->kind != LayerKind::Paint
-        || layer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
-        || totalStrokeCount(current) >= DocumentLimits::maximumTotalStrokes
-        || stroke.id.isNull() || containsStrokeId(current, stroke.id)
+    if (!layer || layer->kind != LayerKind::Paint)
+    {
+        return reject(AddStrokeResult::RejectedInvalidLayer);
+    }
+    if (layer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
+        || before->totalStrokeCount() >= DocumentLimits::maximumTotalStrokes)
+    {
+        return reject(AddStrokeResult::RejectedStrokeLimit);
+    }
+    if (stroke.id.isNull()
         || (stroke.mode != StrokeMode::Paint && stroke.mode != StrokeMode::Erase
             && stroke.mode != StrokeMode::Fill)
         || !stroke.color.isValid() || !std::isfinite(stroke.width)
@@ -2524,22 +2605,8 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
                 || stroke.fillMask.size() != current.size
                 || stroke.fillMask.format() != QImage::Format_Grayscale8)))
     {
-        failHistoryMacro();
-        return;
+        return reject(AddStrokeResult::RejectedInvalidStroke);
     }
-
-    const qsizetype currentPointCount = totalPointCount(current);
-    if (currentPointCount >= DocumentLimits::maximumTotalPoints)
-    {
-        failHistoryMacro();
-        return;
-    }
-    const qsizetype availablePoints =
-        DocumentLimits::maximumTotalPoints - currentPointCount;
-    const qsizetype acceptedPointCount = std::min(stroke.points.size(),
-        std::min(static_cast<qsizetype>(DocumentLimits::maximumPointsPerStroke),
-            availablePoints));
-    stroke.points.resize(acceptedPointCount);
     if (!std::all_of(stroke.points.cbegin(),
             stroke.points.cend(),
             [&current](const StrokePoint &point)
@@ -2547,47 +2614,31 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
                 return isValidInputStrokePoint(point, current.size);
             }))
     {
-        failHistoryMacro();
-        return;
+        return reject(AddStrokeResult::RejectedInvalidStroke);
     }
-    const auto shareExistingMask = [&current](QImage &mask)
+
+    const qsizetype currentPointCount = before->totalPointCount();
+    if (currentPointCount >= DocumentLimits::maximumTotalPoints)
     {
-        if (mask.isNull())
-        {
-            return;
-        }
-        for (const Layer &existingLayer : current.layers)
-        {
-            for (const Stroke &existingStroke : existingLayer.strokes)
-            {
-                for (const QImage *existingMask :
-                    {&existingStroke.clipMask, &existingStroke.fillMask})
-                {
-                    if (!existingMask->isNull()
-                        && (existingMask->cacheKey() == mask.cacheKey()
-                            || *existingMask == mask))
-                    {
-                        mask = *existingMask;
-                        return;
-                    }
-                }
-            }
-        }
-    };
-    shareExistingMask(stroke.clipMask);
-    shareExistingMask(stroke.fillMask);
+        return reject(AddStrokeResult::RejectedPointLimit);
+    }
+    const qsizetype availablePoints =
+        DocumentLimits::maximumTotalPoints - currentPointCount;
+    const qsizetype acceptedPointCount = std::min(stroke.points.size(),
+        std::min(static_cast<qsizetype>(DocumentLimits::maximumPointsPerStroke),
+            availablePoints));
+    const bool pointsResampled = acceptedPointCount < stroke.points.size();
+    if (pointsResampled && acceptedPointCount < 2)
+    {
+        return reject(AddStrokeResult::RejectedPointLimit);
+    }
+    if (pointsResampled)
+    {
+        stroke.points = resampleStrokePoints(stroke.points, acceptedPointCount);
+    }
     if (!canonicalizeStrokeVisibility(stroke, current.size))
     {
-        failHistoryMacro();
-        return;
-    }
-    Document candidate = current;
-    candidate.layer(layerId)->strokes.append(stroke);
-    if (distinctClipMaskBytes(candidate)
-        > DocumentLimits::maximumDistinctClipMaskBytes)
-    {
-        failHistoryMacro();
-        return;
+        return reject(AddStrokeResult::RejectedInvalidStroke);
     }
 
     const QUuid strokeId = stroke.id;
@@ -2596,16 +2647,69 @@ void DocumentController::addStroke(const QUuid &layerId, Stroke stroke)
                                  : packBinaryMask(stroke.clipMask);
     if (!stroke.clipMask.isNull() && !clipMask)
     {
-        failHistoryMacro();
-        return;
+        return reject(AddStrokeResult::RejectedMaskLimit);
     }
     auto effects = std::make_shared<HistoryEffects>();
     effects->beforeDocumentChanged.append(
         HistoryEffects::StrokePresence{layerId, strokeId, clipMask});
     effects->afterDocumentChanged.append(
         HistoryEffects::LayerThumbnail{layerId});
-    tryCommitCandidate(
-        tr("Draw stroke"), std::move(candidate), std::move(effects));
+
+    DocumentSerializer::AppendStrokeResult appended =
+        DocumentSerializer::appendStroke(*before,
+            layerId,
+            stroke,
+            m_serializationCache,
+            DocumentLimits::maximumProjectBytes);
+    switch (appended.status)
+    {
+    case DocumentSerializer::AppendStrokeStatus::Appended:
+    {
+        PreparedState after = std::make_shared<const PreparedDocument>(
+            std::move(appended.prepared));
+        if (!tryCommitPreparedCandidate(tr("Draw stroke"),
+                before,
+                std::move(after),
+                std::move(effects),
+                ActiveLayerPolicy::PreserveCurrentIfPresent,
+                -1,
+                {},
+                layerId))
+        {
+            return AddStrokeResult::RejectedCommit;
+        }
+        return pointsResampled ? AddStrokeResult::AddedWithResampledPoints
+                               : AddStrokeResult::Added;
+    }
+    case DocumentSerializer::AppendStrokeStatus::NotApplicable:
+    {
+        Document candidate = current;
+        candidate.layer(layerId)->strokes.append(stroke);
+        if (distinctClipMaskBytes(candidate)
+            > DocumentLimits::maximumDistinctClipMaskBytes)
+        {
+            return reject(AddStrokeResult::RejectedMaskLimit);
+        }
+        if (!tryCommitCandidate(
+                tr("Draw stroke"), std::move(candidate), std::move(effects)))
+        {
+            return AddStrokeResult::RejectedCommit;
+        }
+        return pointsResampled ? AddStrokeResult::AddedWithResampledPoints
+                               : AddStrokeResult::Added;
+    }
+    case DocumentSerializer::AppendStrokeStatus::StrokeLimit:
+        return reject(AddStrokeResult::RejectedStrokeLimit);
+    case DocumentSerializer::AppendStrokeStatus::PointLimit:
+        return reject(AddStrokeResult::RejectedPointLimit);
+    case DocumentSerializer::AppendStrokeStatus::MaskLimit:
+        return reject(AddStrokeResult::RejectedMaskLimit);
+    case DocumentSerializer::AppendStrokeStatus::Invalid:
+        return reject(AddStrokeResult::RejectedInvalidStroke);
+    case DocumentSerializer::AppendStrokeStatus::TooLarge:
+        return reject(AddStrokeResult::RejectedCommit);
+    }
+    return reject(AddStrokeResult::RejectedCommit);
 }
 
 bool DocumentController::moveStrokes(const QUuid &layerId,
@@ -3518,21 +3622,38 @@ void DocumentController::clearLayer(const QUuid &id)
         tr("Clear layer"), std::move(candidate), std::move(effects));
 }
 
-void DocumentController::renameLayer(const QUuid &id, const QString &name)
+DocumentController::RenameLayerResult DocumentController::renameLayer(
+    const QUuid &id, const QString &name)
 {
+    const auto reject = [this](RenameLayerResult result)
+    {
+        failHistoryMacro();
+        return result;
+    };
     const Document &current = document();
     const Layer *layer = current.layer(id);
     const QString normalized = name.trimmed();
-    if (!layer || normalized.isEmpty()
-        || normalized.size() > DocumentLimits::maximumLayerNameLength
-        || layer->name == normalized)
+    if (!layer)
     {
-        failHistoryMacro();
-        return;
+        return reject(RenameLayerResult::RejectedInvalidLayer);
+    }
+    if (normalized.isEmpty())
+    {
+        return reject(RenameLayerResult::RejectedEmptyName);
+    }
+    if (normalized.size() > DocumentLimits::maximumLayerNameLength)
+    {
+        return reject(RenameLayerResult::RejectedNameTooLong);
+    }
+    if (layer->name == normalized)
+    {
+        return reject(RenameLayerResult::Unchanged);
     }
     Document candidate = current;
     candidate.layer(id)->name = normalized;
-    tryCommitCandidate(tr("Rename layer"), std::move(candidate));
+    return tryCommitCandidate(tr("Rename layer"), std::move(candidate))
+               ? RenameLayerResult::Renamed
+               : RenameLayerResult::RejectedCommit;
 }
 
 void DocumentController::setLayerVisible(const QUuid &id, bool visible)
@@ -3762,6 +3883,37 @@ bool DocumentController::tryCommitCandidate(QString text,
     {
         return false;
     }
+    const PreparedState after =
+        prepareState(std::move(candidate), before.get());
+    if (!after)
+    {
+        failHistoryMacro();
+        return false;
+    }
+    return tryCommitPreparedCandidate(std::move(text),
+        before,
+        after,
+        std::move(effects),
+        activeLayerPolicy,
+        mergeId,
+        mergeScope);
+}
+
+bool DocumentController::tryCommitPreparedCandidate(QString text,
+    const PreparedState &before,
+    PreparedState after,
+    std::shared_ptr<const HistoryEffects> effects,
+    ActiveLayerPolicy activeLayerPolicy,
+    int mergeId,
+    const QUuid &mergeScope,
+    const QUuid &appendedStrokeLayerId)
+{
+    if (!before || !after || before != editableState() || m_undoStack.m_moving
+        || (m_macroTransaction && m_macroTransaction->failed))
+    {
+        failHistoryMacro();
+        return false;
+    }
     if (!effects)
     {
         effects = std::make_shared<const HistoryEffects>();
@@ -3770,16 +3922,11 @@ bool DocumentController::tryCommitCandidate(QString text,
     {
         effects = std::make_shared<const HistoryEffects>(effects->frozenCopy());
     }
-    const PreparedState after =
-        prepareState(std::move(candidate), before.get());
-    if (!after)
-    {
-        failHistoryMacro();
-        return false;
-    }
-
     DocumentDelta delta =
-        DocumentDelta::between(before->document(), after->document());
+        appendedStrokeLayerId.isNull()
+            ? DocumentDelta::between(before->document(), after->document())
+            : DocumentDelta::appendedStroke(
+                  before->document(), after->document(), appendedStrokeLayerId);
     if (delta.isEmpty())
     {
         failHistoryMacro();
@@ -3824,7 +3971,7 @@ bool DocumentController::tryCommitCandidate(QString text,
         afterNode,
         beforeRevision,
         afterRevision,
-        m_currentState->compactSize(),
+        before->compactSize(),
         after->compactSize()));
     return true;
 }

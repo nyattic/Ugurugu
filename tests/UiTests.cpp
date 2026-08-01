@@ -10,13 +10,18 @@
 #include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/ColorSwatchRow.hpp"
+#include "ui/FrameScrubber.hpp"
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/LayerThumbnailRenderer.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "ui/ShortcutBinding.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
+#include "ui/TimelineBar.hpp"
+#include "ui/WobblePreview.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -28,6 +33,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFocusEvent>
+#include <QHideEvent>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QLineEdit>
@@ -36,6 +42,7 @@
 #include <QPointingDevice>
 #include <QPushButton>
 #include <QSettings>
+#include <QShowEvent>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -258,6 +265,93 @@ private slots:
             window.windowTitle().contains(QStringLiteral("WagleWaglePaint")));
     }
 
+    void exposesBrushPresetNameToAccessibility()
+    {
+        const BrushPreset &preset = BrushPresetCatalog::defaultPreset();
+        BrushPresetButton button(preset);
+        QCOMPARE(
+            button.accessibleName(), BrushPresetCatalog::displayName(preset));
+    }
+
+    void tabsToFrameScrubberAndExposesCurrentFrame()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        FrameScrubber scrubber(&controller, &canvas);
+
+        QCOMPARE(scrubber.focusPolicy(), Qt::StrongFocus);
+        QVERIFY(scrubber.focusPolicy() & Qt::TabFocus);
+        QCOMPARE(
+            scrubber.accessibleDescription(), QStringLiteral("Frame 1 of 30"));
+        QTest::keyClick(&scrubber, Qt::Key_Right);
+        QCOMPARE(canvas.currentFrame(), 1);
+        QCOMPARE(
+            scrubber.accessibleDescription(), QStringLiteral("Frame 2 of 30"));
+    }
+
+    void togglesLayerVisibilityFromKeyboard()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        const QUuid layerId = controller.document().activeLayerId;
+        LayerDock dock(&controller);
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(list);
+        QCOMPARE(list->count(), 1);
+        QCOMPARE(list->item(0)->data(Qt::AccessibleDescriptionRole).toString(),
+            QStringLiteral("Layer is visible"));
+
+        QTest::keyClick(list, Qt::Key_Space);
+        QTRY_VERIFY(!controller.document().layer(layerId)->visible);
+        QCOMPARE(list->item(0)->data(Qt::AccessibleDescriptionRole).toString(),
+            QStringLiteral("Layer is hidden"));
+
+        QTest::keyClick(list, Qt::Key_Space);
+        QTRY_VERIFY(controller.document().layer(layerId)->visible);
+    }
+
+    void stopsWobblePreviewWhileTimelineIsDisabled()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        TimelineBar timeline(&controller, &canvas);
+        WobblePreview *preview = timeline.findChild<WobblePreview *>();
+        QVERIFY(preview);
+        QShowEvent showEvent;
+        QApplication::sendEvent(preview, &showEvent);
+        QVERIFY(preview->isAnimationActive());
+
+        timeline.setEnabled(false);
+        QVERIFY(!preview->isAnimationActive());
+        timeline.setEnabled(true);
+        QVERIFY(preview->isAnimationActive());
+        QHideEvent hideEvent;
+        QApplication::sendEvent(preview, &hideEvent);
+        QVERIFY(!preview->isAnimationActive());
+    }
+
+    void debouncesRecentColorPersistence()
+    {
+        const QString key = QStringLiteral("brush/recentColors");
+        QSettings().remove(key);
+        ColorSwatchRow row;
+        const QColor first(20, 40, 60, 80);
+        const QColor second(30, 50, 70, 90);
+        const QColor finalColor(40, 60, 80, 100);
+
+        row.setActiveColor(first);
+        row.setActiveColor(second);
+        QVERIFY(!QSettings().contains(key));
+        QTest::qWait(100);
+        row.setActiveColor(finalColor);
+        QTest::qWait(75);
+        QVERIFY(!QSettings().contains(key));
+        QTRY_COMPARE(QSettings().value(key).toStringList().value(0),
+            finalColor.name(QColor::HexArgb));
+    }
+
     void changesLayerBlendModeFromDock()
     {
         DocumentController controller;
@@ -284,6 +378,66 @@ private slots:
         controller.undoStack()->redo();
         QCOMPARE(blendModeCombo->currentData().toInt(),
             static_cast<int>(LayerBlendMode::Overlay));
+    }
+
+    void restoresRejectedLayerRenameInDock()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        const QUuid layerId = controller.document().activeLayerId;
+        const QString originalName = controller.document().layer(layerId)->name;
+        LayerDock dock(&controller);
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(list);
+        QCOMPARE(list->count(), 1);
+
+        list->item(0)->setText(QString(
+            DocumentLimits::maximumLayerNameLength + 1, QLatin1Char('x')));
+
+        QCOMPARE(controller.document().layer(layerId)->name, originalName);
+        QCOMPARE(list->item(0)->text(), originalName);
+        QCOMPARE(controller.undoStack()->count(), 0);
+    }
+
+    void limitsLayerNameEditorLength()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        LayerDock dock(&controller);
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(list);
+        QCOMPARE(list->count(), 1);
+
+        list->editItem(list->item(0));
+        QLineEdit *editor = list->findChild<QLineEdit *>();
+        QVERIFY(editor);
+        QCOMPARE(editor->maxLength(), DocumentLimits::maximumLayerNameLength);
+    }
+
+    void reportsStrokeCommitFailureFromCanvas()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        const QUuid layerId = controller.document().activeLayerId;
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QSignalSpy messages(&canvas, &CanvasWidget::interactionMessage);
+        const QPoint center = canvas.rect().center();
+
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
+        controller.removeLayer(layerId);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(20, 0));
+
+        QCOMPARE(messages.size(), 1);
+        QCOMPARE(messages.first().first().toString(),
+            QStringLiteral("The stroke could not be added because its layer is "
+                           "no longer available."));
+        QVERIFY(controller.document().layers.isEmpty());
     }
 
     void managesLayerGroupsAndClippingFromDock()
@@ -365,13 +519,13 @@ private slots:
 
         QAction brushAction(QStringLiteral("Brush"));
         brushAction.setObjectName(QStringLiteral("brushAction"));
-        brushAction.setProperty("defaultShortcut", QStringLiteral("B"));
-        brushAction.setShortcut(QKeySequence(QStringLiteral("B")));
+        ShortcutBinding::initialize(
+            &brushAction, QKeySequence(QStringLiteral("B")));
 
         QAction eraserAction(QStringLiteral("Eraser"));
         eraserAction.setObjectName(QStringLiteral("eraserAction"));
-        eraserAction.setProperty("defaultShortcut", QStringLiteral("E"));
-        eraserAction.setShortcut(QKeySequence(QStringLiteral("E")));
+        ShortcutBinding::initialize(
+            &eraserAction, QKeySequence(QStringLiteral("E")));
 
         SettingsDialog dialog(nullptr, {&brushAction, &eraserAction});
         QLineEdit *folderEdit = dialog.findChild<QLineEdit *>(
@@ -412,6 +566,61 @@ private slots:
         QVERIFY(!settings.contains(languageKey));
         QCOMPARE(folderEdit->text(), SettingsDialog::defaultSaveFolder());
         QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("system"));
+    }
+
+    void preservesShortcutAliasesAcrossEditingAndRestore()
+    {
+        const QString zoomKey = QStringLiteral("shortcuts/zoomAction");
+        const QString otherKey = QStringLiteral("shortcuts/otherAction");
+        SettingValueGuard zoomGuard(zoomKey);
+        SettingValueGuard otherGuard(otherKey);
+        QSettings settings;
+        settings.remove(zoomKey);
+        settings.remove(otherKey);
+
+        QAction zoomAction(QStringLiteral("Zoom in"));
+        zoomAction.setObjectName(QStringLiteral("zoomAction"));
+        const QKeySequence zoomDefault(QStringLiteral("Ctrl++"));
+        const QKeySequence zoomAlias(QStringLiteral("Ctrl+="));
+        ShortcutBinding::initialize(&zoomAction, zoomDefault, {zoomAlias});
+
+        QAction otherAction(QStringLiteral("Other"));
+        otherAction.setObjectName(QStringLiteral("otherAction"));
+        const QKeySequence otherDefault(QStringLiteral("O"));
+        ShortcutBinding::initialize(&otherAction, otherDefault);
+
+        SettingsDialog dialog(nullptr, {&zoomAction, &otherAction});
+        QKeySequenceEdit *zoomEditor = dialog.findChild<QKeySequenceEdit *>(
+            QStringLiteral("zoomActionShortcutEdit"));
+        QKeySequenceEdit *otherEditor = dialog.findChild<QKeySequenceEdit *>(
+            QStringLiteral("otherActionShortcutEdit"));
+        QVERIFY(zoomEditor);
+        QVERIFY(otherEditor);
+        QCOMPARE(zoomAction.shortcuts(),
+            QList<QKeySequence>({zoomDefault, zoomAlias}));
+
+        otherEditor->setKeySequence(zoomAlias);
+        QTRY_COMPARE(otherEditor->keySequence(), otherDefault);
+        QCOMPARE(otherAction.shortcuts(), QList<QKeySequence>({otherDefault}));
+
+        const QKeySequence customPrimary(QStringLiteral("Ctrl+I"));
+        zoomEditor->setKeySequence(customPrimary);
+        QTRY_COMPARE(ShortcutBinding::primary(&zoomAction), customPrimary);
+        QCOMPARE(zoomAction.shortcuts(),
+            QList<QKeySequence>({customPrimary, zoomAlias}));
+        QCOMPARE(settings.value(zoomKey).toString(),
+            customPrimary.toString(QKeySequence::PortableText));
+
+        QDialogButtonBox *buttons = dialog.findChild<QDialogButtonBox *>();
+        QVERIFY(buttons);
+        QPushButton *restoreButton =
+            buttons->button(QDialogButtonBox::RestoreDefaults);
+        QVERIFY(restoreButton);
+        QTest::mouseClick(restoreButton, Qt::LeftButton);
+        QCOMPARE(ShortcutBinding::primary(&zoomAction), zoomDefault);
+        QCOMPARE(zoomAction.shortcuts(),
+            QList<QKeySequence>({zoomDefault, zoomAlias}));
+        QVERIFY(!settings.contains(zoomKey));
     }
 
     void showsApplicationVersionInAboutTab()
@@ -3130,6 +3339,25 @@ private slots:
         QCOMPARE(canvas.brushColor(), QColor(Qt::white));
         const Layer &layer = controller.document().layers.first();
         QVERIFY(layer.strokes.isEmpty());
+    }
+
+    void preservesAlphaWhenPickingBrushColor()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        const QColor translucent(255, 0, 0, 128);
+        document.background = translucent;
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+
+        canvas.setBrushColor(Qt::black);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::AltModifier, center);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::AltModifier, center);
+
+        QCOMPARE(canvas.brushColor(), translucent);
     }
 
     void appliesBrushRoughnessToNewStrokes()

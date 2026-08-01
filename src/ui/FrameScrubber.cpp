@@ -30,16 +30,18 @@ FrameScrubber::FrameScrubber(
     , m_canvas(canvas)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFocusPolicy(Qt::ClickFocus);
+    setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
     setAccessibleName(tr("Frame scrubber"));
+    updateAccessibleValue();
 
     connect(m_canvas,
         &CanvasWidget::currentFrameChanged,
         this,
         [this](int)
         {
+            updateAccessibleValue();
             update();
         });
     connect(m_canvas,
@@ -54,6 +56,7 @@ FrameScrubber::FrameScrubber(
         this,
         [this]()
         {
+            updateAccessibleValue();
             update();
         });
 }
@@ -96,6 +99,13 @@ void FrameScrubber::scrubTo(const QPointF &position)
 {
     m_canvas->setAnimating(false);
     m_canvas->setCurrentFrame(frameAt(position));
+}
+
+void FrameScrubber::updateAccessibleValue()
+{
+    const int frames = frameCount();
+    const int current = std::clamp(m_canvas->currentFrame(), 0, frames - 1);
+    setAccessibleDescription(tr("Frame %1 of %2").arg(current + 1).arg(frames));
 }
 
 void FrameScrubber::paintEvent(QPaintEvent *)

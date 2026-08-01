@@ -56,6 +56,41 @@ public:
         bool valid = false;
     };
 
+    struct StrokeCoveragePlan
+    {
+        struct Epoch
+        {
+            QSize canvasSize;
+            int columns = 0;
+            QHash<int, QVector<int>> effectIndexesByCell;
+            QVector<int> globalEffectIndexes;
+        };
+
+        QVector<QSize> canvasBefore;
+        QVector<QRect> primitiveBounds;
+        QVector<int> epochBefore;
+        QVector<Epoch> epochs;
+        bool valid = false;
+    };
+
+    struct StrokeCoverageStats
+    {
+        quint64 fullCanvasFallbacks = 0;
+        quint64 regionalRenders = 0;
+        quint64 pixelSelectionOperationsReplayed = 0;
+        quint64 reframeOperationsReplayed = 0;
+        quint64 eraseOperationsReplayed = 0;
+        quint64 effectCandidatesExamined = 0;
+        quint64 maximumExplicitImageBytes = 0;
+    };
+
+    struct StrokeCoverageRegion
+    {
+        QImage image;
+        QRect bounds;
+        bool valid = false;
+    };
+
     static QImage render(const Document &document, int frameIndex);
     static QImage renderScaled(const Document &document,
         int frameIndex,
@@ -83,10 +118,34 @@ public:
         const QVector<Stroke> &strokes,
         int frameIndex,
         const QSize &outputSize);
+    static bool renderStrokesOnLayerRegion(QImage &layerImage,
+        const Document &document,
+        const QVector<Stroke> &strokes,
+        int frameIndex,
+        const QRect &outputRegion);
     static QImage renderStrokeCoverage(const Document &document,
         const Layer &layer,
         int strokeIndex,
         int frameIndex);
+    static StrokeCoveragePlan prepareStrokeCoverage(
+        const Document &document, const Layer &layer);
+    static QRect conservativeStrokeCoverageBounds(const Document &document,
+        const Layer &layer,
+        int strokeIndex,
+        const StrokeCoveragePlan &plan);
+    static StrokeCoverageRegion renderSparseStrokeCoverage(
+        const Document &document,
+        const Layer &layer,
+        int strokeIndex,
+        int frameIndex,
+        const QRect &outputBounds,
+        const StrokeCoveragePlan &plan,
+        StrokeCoverageStats *stats = nullptr);
+    static QImage renderStrokeCoverageRegion(const Document &document,
+        const Layer &layer,
+        int strokeIndex,
+        int frameIndex,
+        const QRect &outputBounds);
     static QImage composeLayerSplit(
         const LayerSplitFrame &split, const QImage &layerImage);
     // Replays one selection operation against an already rendered layer

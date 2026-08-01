@@ -1,0 +1,25 @@
+#pragma once
+
+#include <QKeySequence>
+#include <QList>
+
+class QAction;
+
+namespace wobble
+{
+
+class ShortcutBinding final
+{
+public:
+    static void initialize(QAction *action,
+        const QKeySequence &defaultPrimary,
+        const QList<QKeySequence> &aliases = {});
+    static QKeySequence primary(const QAction *action);
+    static QKeySequence defaultPrimary(const QAction *action);
+    static bool hasShortcut(
+        const QAction *action, const QKeySequence &shortcut);
+    static void setPrimary(QAction *action, const QKeySequence &shortcut);
+    static void restoreDefault(QAction *action);
+};
+
+}

@@ -63,6 +63,9 @@ struct PreparedPlan
     QHash<QString, QString> binaryIdsByIdentity;
     QHash<QUuid, StrokeMeta> strokes;
     qint64 compactSize = 0;
+    qsizetype totalStrokeCount = 0;
+    qsizetype totalPointCount = 0;
+    quint64 distinctMaskBytes = 0;
 };
 
 struct ImmutableBackings
@@ -165,6 +168,13 @@ using serializer_detail::ClipAssetMeta;
 using serializer_detail::ImmutableBackings;
 using serializer_detail::PreparedPlan;
 using serializer_detail::StrokeMeta;
+
+struct DocumentValidationStats
+{
+    qsizetype totalStrokeCount = 0;
+    qsizetype totalPointCount = 0;
+    quint64 distinctMaskBytes = 0;
+};
 
 constexpr int schemaVersion = 8;
 constexpr int algorithmVersion = 2;
@@ -2549,6 +2559,161 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
     return result;
 }
 
+bool isValidIncrementalStroke(const Stroke &stroke, const QSize &canvasSize)
+{
+    const QRect canvasRect(QPoint(), canvasSize);
+    if ((stroke.mode != StrokeMode::Paint && stroke.mode != StrokeMode::Erase
+            && stroke.mode != StrokeMode::Fill)
+        || stroke.id.isNull() || !stroke.color.isValid()
+        || !std::isfinite(stroke.width)
+        || stroke.width < DocumentLimits::minimumStrokeWidth
+        || stroke.width > DocumentLimits::maximumStrokeWidth
+        || !isValidBrushSettings(stroke.brush) || stroke.points.isEmpty()
+        || stroke.points.size() > DocumentLimits::maximumPointsPerStroke
+        || stroke.pixelSelectionOp || stroke.reframeOp
+        || (stroke.visibilityClip
+            && (stroke.visibilityClip->isEmpty()
+                || !canvasRect.contains(*stroke.visibilityClip)))
+        || (!stroke.clipMask.isNull()
+            && (stroke.clipMask.size() != canvasSize
+                || stroke.clipMask.format() != QImage::Format_Grayscale8))
+        || (!stroke.fillMask.isNull()
+            && (stroke.mode != StrokeMode::Fill
+                || stroke.fillMask.size() != canvasSize
+                || stroke.fillMask.format() != QImage::Format_Grayscale8)))
+    {
+        return false;
+    }
+    return std::all_of(stroke.points.cbegin(),
+        stroke.points.cend(),
+        [](const StrokePoint &point)
+        {
+            return std::isfinite(point.position.x())
+                   && std::isfinite(point.position.y())
+                   && std::abs(point.position.x())
+                          <= DocumentLimits::maximumStoredCoordinateMagnitude
+                   && std::abs(point.position.y())
+                          <= DocumentLimits::maximumStoredCoordinateMagnitude
+                   && std::isfinite(point.pressure) && point.pressure >= 0.0
+                   && point.pressure <= 1.0;
+        });
+}
+
+QVector<StrokePoint> freezeIncrementalPoints(const QVector<StrokePoint> &source)
+{
+    QVector<StrokePoint> frozen;
+    frozen.reserve(source.size());
+    for (const StrokePoint &point : source)
+    {
+        frozen.append(point);
+    }
+    return frozen;
+}
+
+template <typename Cache>
+bool freezeIncrementalClipMask(const QImage &source,
+    PreparedPlan &plan,
+    Cache &cache,
+    qint64 maximumBytes,
+    qint64 &serializedGrowth,
+    QImage &frozen,
+    DocumentSerializer::AppendStrokeStatus &status)
+{
+    if (source.isNull())
+    {
+        frozen = {};
+        return true;
+    }
+    const auto knownId = plan.clipIdsByIdentity.constFind(source.cacheKey());
+    if (knownId != plan.clipIdsByIdentity.cend())
+    {
+        const auto asset = plan.clipAssets.constFind(knownId.value());
+        if (asset == plan.clipAssets.cend()
+            || asset->image.size() != source.size()
+            || asset->image.format() != source.format())
+        {
+            status = DocumentSerializer::AppendStrokeStatus::Invalid;
+            return false;
+        }
+        frozen = asset->image;
+        plan.clipIdsByIdentity.insert(frozen.cacheKey(), knownId.value());
+        return true;
+    }
+
+    const QByteArray bytes = canonicalMaskBytes(source);
+    if (bytes.isEmpty())
+    {
+        status = DocumentSerializer::AppendStrokeStatus::Invalid;
+        return false;
+    }
+    ++cache.statistics.clipMaskContentHashes;
+    const QString id = maskContentId(source.width(), source.height(), bytes);
+    const auto existing = plan.clipAssets.constFind(id);
+    if (existing != plan.clipAssets.cend())
+    {
+        if (existing->image.size() != source.size()
+            || existing->image != source)
+        {
+            status = DocumentSerializer::AppendStrokeStatus::Invalid;
+            return false;
+        }
+        frozen = existing->image;
+        plan.clipIdsByIdentity.insert(frozen.cacheKey(), id);
+        return true;
+    }
+
+    const quint64 maskBytes = source.sizeInBytes();
+    if (maskBytes
+        > DocumentLimits::maximumDistinctClipMaskBytes - plan.distinctMaskBytes)
+    {
+        status = DocumentSerializer::AppendStrokeStatus::MaskLimit;
+        return false;
+    }
+    const QByteArray compressed = compressedPayload(cache, false, id, bytes);
+    frozen = source.copy();
+    if (compressed.isEmpty() || frozen.isNull())
+    {
+        status = DocumentSerializer::AppendStrokeStatus::Invalid;
+        return false;
+    }
+    const qint64 entryBytes =
+        serializedClipMaskSize(id, frozen, compressed.size());
+    if (entryBytes < 0)
+    {
+        status = DocumentSerializer::AppendStrokeStatus::TooLarge;
+        return false;
+    }
+    qint64 assetGrowth = entryBytes;
+    if (!plan.clipAssets.isEmpty())
+    {
+        ++assetGrowth;
+    }
+    if (!addSerializedBytes(serializedGrowth, assetGrowth, maximumBytes))
+    {
+        status = DocumentSerializer::AppendStrokeStatus::TooLarge;
+        return false;
+    }
+    plan.clipAssets.insert(
+        id, ClipAssetMeta{id, frozen, entryBytes, compressed.size()});
+    plan.clipIdsByIdentity.insert(frozen.cacheKey(), id);
+    plan.distinctMaskBytes += maskBytes;
+    return true;
+}
+
+Stroke freezeIncrementalStroke(const Stroke &source)
+{
+    Stroke frozen;
+    frozen.id = source.id;
+    frozen.seed = source.seed;
+    frozen.mode = source.mode;
+    frozen.color = source.color;
+    frozen.width = source.width;
+    frozen.brush = source.brush;
+    frozen.points = freezeIncrementalPoints(source.points);
+    frozen.visibilityClip = source.visibilityClip;
+    return frozen;
+}
+
 QString clipMaskId(const QImage &mask, const ClipMaskTable &table)
 {
     if (mask.isNull())
@@ -2984,8 +3149,10 @@ bool validateCollectionBudgets(const QJsonArray &layers, QString *error)
     return true;
 }
 
-bool validateDocument(
-    const Document &document, int fileSchemaVersion, QString *error)
+bool validateDocument(const Document &document,
+    int fileSchemaVersion,
+    QString *error,
+    DocumentValidationStats *stats = nullptr)
 {
     if (document.size.width() < DocumentLimits::minimumCanvasEdge
         || document.size.height() < DocumentLimits::minimumCanvasEdge
@@ -3095,7 +3262,7 @@ bool validateDocument(
                                     - clipMaskBytes)
                 {
                     setError(error,
-                        QStringLiteral(
+                        DocumentSerializer::tr(
                             "The project contains too much mask data."));
                     return false;
                 }
@@ -3276,6 +3443,12 @@ bool validateDocument(
             error, DocumentSerializer::tr("The active layer ID is invalid."));
         return false;
     }
+    if (stats)
+    {
+        stats->totalStrokeCount = totalStrokes;
+        stats->totalPointCount = totalPoints;
+        stats->distinctMaskBytes = clipMaskBytes;
+    }
     return true;
 }
 
@@ -3387,6 +3560,16 @@ const Document &DocumentSerializer::PreparedDocument::document() const
 qint64 DocumentSerializer::PreparedDocument::compactSize() const
 {
     return m_impl ? m_impl->plan.compactSize : 0;
+}
+
+qsizetype DocumentSerializer::PreparedDocument::totalStrokeCount() const
+{
+    return m_impl ? m_impl->plan.totalStrokeCount : 0;
+}
+
+qsizetype DocumentSerializer::PreparedDocument::totalPointCount() const
+{
+    return m_impl ? m_impl->plan.totalPointCount : 0;
 }
 
 DocumentSerializer::ImmutableBackingLease::ImmutableBackingLease() = default;
@@ -3502,6 +3685,7 @@ std::optional<DocumentSerializer::PreparedDocument> DocumentSerializer::prepare(
         }
     }
 
+    ++cache.m_impl->statistics.fullDocumentPreparations;
     normalizeLayerInitialCanvasSizes(document);
     if (!DocumentOperations::normalizeAndValidate(document))
     {
@@ -3510,7 +3694,8 @@ std::optional<DocumentSerializer::PreparedDocument> DocumentSerializer::prepare(
                                    "operations or too much mask data."));
         return std::nullopt;
     }
-    if (!validateDocument(document, schemaVersion, error))
+    DocumentValidationStats validationStats;
+    if (!validateDocument(document, schemaVersion, error, &validationStats))
     {
         return std::nullopt;
     }
@@ -3544,11 +3729,149 @@ std::optional<DocumentSerializer::PreparedDocument> DocumentSerializer::prepare(
             error, DocumentSerializer::tr("The project is too large to save."));
         return std::nullopt;
     }
+    plan.totalStrokeCount = validationStats.totalStrokeCount;
+    plan.totalPointCount = validationStats.totalPointCount;
+    plan.distinctMaskBytes = validationStats.distinctMaskBytes;
 
     auto impl = std::make_shared<PreparedDocument::Impl>();
     impl->document = std::move(document);
     impl->plan = std::move(plan);
     return PreparedDocument(std::move(impl));
+}
+
+DocumentSerializer::AppendStrokeResult DocumentSerializer::appendStroke(
+    const PreparedDocument &base,
+    const QUuid &layerId,
+    const Stroke &stroke,
+    SerializationCache &cache,
+    qint64 maximumBytes)
+{
+    AppendStrokeResult result;
+    if (!base.m_impl || !cache.m_impl || maximumBytes < 0
+        || maximumBytes > DocumentLimits::maximumProjectBytes)
+    {
+        result.status = AppendStrokeStatus::Invalid;
+        return result;
+    }
+    if (stroke.mode == StrokeMode::PixelSelection
+        || stroke.mode == StrokeMode::Reframe)
+    {
+        return result;
+    }
+
+    const Document &baseDocument = base.m_impl->document;
+    const PreparedPlan &basePlan = base.m_impl->plan;
+    const Layer *baseLayer = baseDocument.layer(layerId);
+    if (!baseLayer || baseLayer->kind != LayerKind::Paint
+        || basePlan.totalStrokeCount != basePlan.strokes.size())
+    {
+        result.status = AppendStrokeStatus::Invalid;
+        return result;
+    }
+    if (baseLayer->strokes.size() >= DocumentLimits::maximumStrokesPerLayer
+        || basePlan.totalStrokeCount >= DocumentLimits::maximumTotalStrokes)
+    {
+        result.status = AppendStrokeStatus::StrokeLimit;
+        return result;
+    }
+    if (stroke.points.size() > DocumentLimits::maximumPointsPerStroke
+        || stroke.points.size()
+               > DocumentLimits::maximumTotalPoints - basePlan.totalPointCount)
+    {
+        result.status = AppendStrokeStatus::PointLimit;
+        return result;
+    }
+    if (basePlan.strokes.contains(stroke.id)
+        || !isValidIncrementalStroke(stroke, baseDocument.size))
+    {
+        result.status = AppendStrokeStatus::Invalid;
+        return result;
+    }
+
+    PreparedPlan plan = basePlan;
+    Stroke frozen = freezeIncrementalStroke(stroke);
+    qint64 serializedGrowth = 0;
+    AppendStrokeStatus status = AppendStrokeStatus::Appended;
+    if (!freezeIncrementalClipMask(stroke.clipMask,
+            plan,
+            *cache.m_impl,
+            maximumBytes,
+            serializedGrowth,
+            frozen.clipMask,
+            status)
+        || !freezeIncrementalClipMask(stroke.fillMask,
+            plan,
+            *cache.m_impl,
+            maximumBytes,
+            serializedGrowth,
+            frozen.fillMask,
+            status))
+    {
+        result.status = status;
+        return result;
+    }
+
+    ClipMaskTable clipMasks;
+    if (!frozen.clipMask.isNull())
+    {
+        clipMasks.idByCacheKey.insert(frozen.clipMask.cacheKey(),
+            plan.clipIdsByIdentity.value(frozen.clipMask.cacheKey()));
+    }
+    if (!frozen.fillMask.isNull())
+    {
+        clipMasks.idByCacheKey.insert(frozen.fillMask.cacheKey(),
+            plan.clipIdsByIdentity.value(frozen.fillMask.cacheKey()));
+    }
+    const BinaryMaskTable binaryMasks;
+    ++cache.m_impl->statistics.strokeSerializations;
+    const qint64 strokeBytes =
+        QJsonDocument(strokeToJson(frozen, clipMasks, binaryMasks))
+            .toJson(QJsonDocument::Compact)
+            .size();
+    if ((!baseLayer->strokes.isEmpty()
+            && !addSerializedBytes(serializedGrowth, 1, maximumBytes))
+        || !addSerializedBytes(serializedGrowth, strokeBytes, maximumBytes))
+    {
+        result.status = AppendStrokeStatus::TooLarge;
+        return result;
+    }
+    qint64 compactSize = basePlan.compactSize;
+    if (!addSerializedBytes(compactSize, serializedGrowth, maximumBytes))
+    {
+        result.status = AppendStrokeStatus::TooLarge;
+        return result;
+    }
+
+    const QString resolvedClipId =
+        frozen.clipMask.isNull()
+            ? QString()
+            : plan.clipIdsByIdentity.value(frozen.clipMask.cacheKey());
+    const QString resolvedFillId =
+        frozen.fillMask.isNull()
+            ? QString()
+            : plan.clipIdsByIdentity.value(frozen.fillMask.cacheKey());
+    plan.strokes.insert(frozen.id,
+        StrokeMeta{frozen, resolvedClipId, resolvedFillId, {}, strokeBytes});
+    plan.compactSize = compactSize;
+    ++plan.totalStrokeCount;
+    plan.totalPointCount += frozen.points.size();
+
+    Document document = baseDocument;
+    Layer *target = document.layer(layerId);
+    if (!target)
+    {
+        result.status = AppendStrokeStatus::Invalid;
+        return result;
+    }
+    target->strokes.append(frozen);
+
+    auto impl = std::make_shared<PreparedDocument::Impl>();
+    impl->document = std::move(document);
+    impl->plan = std::move(plan);
+    result.prepared = PreparedDocument(std::move(impl));
+    result.status = AppendStrokeStatus::Appended;
+    ++cache.m_impl->statistics.incrementalStrokeAppends;
+    return result;
 }
 
 std::optional<DocumentSerializer::PreparedDocument>

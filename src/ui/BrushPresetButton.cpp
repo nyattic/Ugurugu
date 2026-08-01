@@ -56,7 +56,9 @@ BrushPresetButton::BrushPresetButton(const BrushPreset &preset, QWidget *parent)
 {
     setCheckable(true);
     setCursor(Qt::PointingHandCursor);
-    setToolTip(BrushPresetCatalog::displayName(preset));
+    const QString displayName = BrushPresetCatalog::displayName(preset);
+    setToolTip(displayName);
+    setAccessibleName(displayName);
     setAttribute(Qt::WA_Hover);
     m_frames.resize(previewFrameCount);
 }

@@ -26,8 +26,7 @@
         "rhs": "Darwin"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -41,7 +40,6 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
         "BUILD_TESTING": "ON"
       }
     },
@@ -56,8 +54,23 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
         "WOBBLEPAINT_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "macos-distribution",
+      "inherits": "macos-release",
+      "displayName": "macOS Distribution",
+      "cacheVariables": {
+        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.10.3"
+      }
+    },
+    {
+      "name": "macos-coverage",
+      "inherits": "macos-debug",
+      "displayName": "macOS Coverage",
+      "cacheVariables": {
+        "WOBBLEPAINT_ENABLE_COVERAGE": "ON"
       }
     },
     {
@@ -89,6 +102,14 @@
       "cacheVariables": {
         "BUILD_TESTING": "ON"
       }
+    },
+    {
+      "name": "windows-distribution",
+      "inherits": "windows-release",
+      "displayName": "Windows Distribution",
+      "cacheVariables": {
+        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.10.3"
+      }
     }
   ],
   "buildPresets": [
@@ -105,6 +126,14 @@
       "configurePreset": "macos-sanitized"
     },
     {
+      "name": "macos-distribution",
+      "configurePreset": "macos-distribution"
+    },
+    {
+      "name": "macos-coverage",
+      "configurePreset": "macos-coverage"
+    },
+    {
       "name": "windows-debug",
       "configurePreset": "windows-debug",
       "configuration": "Debug"
@@ -112,6 +141,11 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-distribution",
+      "configurePreset": "windows-distribution",
       "configuration": "Release"
     }
   ],
@@ -142,6 +176,23 @@
       }
     },
     {
+      "name": "macos-distribution",
+      "configurePreset": "macos-distribution",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-coverage",
+      "configurePreset": "macos-coverage",
+      "environment": {
+        "LLVM_PROFILE_FILE": "${sourceDir}/out/build/macos-coverage/profiles/wobble-%p-%m.profraw"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "windows-debug",
       "configurePreset": "windows-debug",
       "configuration": "Debug",
@@ -152,6 +203,14 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-distribution",
+      "configurePreset": "windows-distribution",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

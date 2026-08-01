@@ -10,6 +10,22 @@ find_package(
     LinguistTools
 )
 
+set(
+    WOBBLEPAINT_DISTRIBUTION_QT_VERSION
+    ""
+    CACHE STRING
+    "Exact Qt version required for distribution builds"
+)
+if(WOBBLEPAINT_DISTRIBUTION_QT_VERSION
+    AND NOT Qt6_VERSION VERSION_EQUAL WOBBLEPAINT_DISTRIBUTION_QT_VERSION
+)
+    message(
+        FATAL_ERROR
+        "Distribution builds require Qt "
+        "${WOBBLEPAINT_DISTRIBUTION_QT_VERSION}, found ${Qt6_VERSION}"
+    )
+endif()
+
 set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)

@@ -1897,8 +1897,40 @@ void CanvasWidget::endStroke(
     m_activeStroke = Stroke();
     m_activeStrokeLayer = {};
     m_strokeStabilizer.reset();
-    m_controller->addStroke(layerId, std::move(completed));
+    commitStroke(layerId, std::move(completed));
     update();
+}
+
+void CanvasWidget::commitStroke(const QUuid &layerId, Stroke stroke)
+{
+    const DocumentController::AddStrokeResult result =
+        m_controller->addStroke(layerId, std::move(stroke));
+    switch (result)
+    {
+    case DocumentController::AddStrokeResult::Added:
+        return;
+    case DocumentController::AddStrokeResult::AddedWithResampledPoints:
+        emit interactionMessage(tr("The stroke was simplified because the "
+                                   "project point limit was reached."));
+        return;
+    case DocumentController::AddStrokeResult::RejectedInvalidLayer:
+        emit interactionMessage(tr("The stroke could not be added because its "
+                                   "layer is no longer available."));
+        return;
+    case DocumentController::AddStrokeResult::RejectedStrokeLimit:
+        emit interactionMessage(tr("The stroke could not be added because the "
+                                   "project stroke limit was reached."));
+        return;
+    case DocumentController::AddStrokeResult::RejectedPointLimit:
+        emit interactionMessage(tr("The stroke could not be added because the "
+                                   "project point limit was reached."));
+        return;
+    case DocumentController::AddStrokeResult::RejectedInvalidStroke:
+    case DocumentController::AddStrokeResult::RejectedMaskLimit:
+    case DocumentController::AddStrokeResult::RejectedCommit:
+        emit interactionMessage(tr("The stroke could not be added."));
+        return;
+    }
 }
 
 void CanvasWidget::cancelStroke()
@@ -2073,7 +2105,6 @@ void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
     {
         return;
     }
-    color.setAlpha(255);
     setBrushColor(color);
 }
 
@@ -2406,7 +2437,7 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         fillStroke.clipMask = m_selectionMask;
     }
     fillStroke.points.append({clampedDocumentPosition(documentPosition), 1.0});
-    m_controller->addStroke(document.activeLayerId, std::move(fillStroke));
+    commitStroke(document.activeLayerId, std::move(fillStroke));
 }
 
 void CanvasWidget::beginSelectionMove(const QPointF &documentPosition)

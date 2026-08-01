@@ -1,5 +1,7 @@
 #include "ui/SettingsDialog.hpp"
 
+#include "ui/ShortcutBinding.hpp"
+
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -55,11 +57,6 @@ QString systemDefaultSaveFolder()
     return home.isEmpty() ? QDir::currentPath() : QDir(home).absolutePath();
 }
 
-QString shortcutKey(const QString &actionName)
-{
-    return QStringLiteral("shortcuts/%1").arg(actionName);
-}
-
 QString actionLabel(const QAction *action)
 {
     QString label = action->property("shortcutLabel").toString();
@@ -73,9 +70,7 @@ QString actionLabel(const QAction *action)
 
 QKeySequence defaultShortcut(const QAction *action)
 {
-    return QKeySequence::fromString(
-        action->property("defaultShortcut").toString(),
-        QKeySequence::PortableText);
+    return ShortcutBinding::defaultPrimary(action);
 }
 
 }
@@ -116,21 +111,6 @@ QString SettingsDialog::uiLanguage()
         return language;
     }
     return QStringLiteral("system");
-}
-
-QKeySequence SettingsDialog::shortcutForAction(
-    const QString &actionName, const QKeySequence &defaultShortcut)
-{
-    const QSettings settings;
-    const QString key = shortcutKey(actionName);
-    if (!settings.contains(key))
-    {
-        return defaultShortcut;
-    }
-    const QString stored = settings.value(key).toString();
-    const QKeySequence shortcut =
-        QKeySequence::fromString(stored, QKeySequence::PortableText);
-    return !stored.isEmpty() && shortcut.isEmpty() ? defaultShortcut : shortcut;
 }
 
 SettingsDialog::SettingsDialog(
@@ -314,8 +294,8 @@ SettingsDialog::SettingsDialog(
         {
             continue;
         }
-        auto *editor =
-            new QKeySequenceEdit(action->shortcut(), shortcutFormWidget);
+        auto *editor = new QKeySequenceEdit(
+            ShortcutBinding::primary(action), shortcutFormWidget);
         editor->setObjectName(
             action->objectName() + QStringLiteral("ShortcutEdit"));
         editor->setClearButtonEnabled(true);
@@ -421,7 +401,7 @@ void SettingsDialog::setShortcut(QAction *action, const QKeySequence &shortcut)
     for (QAction *other : std::as_const(m_shortcutActions))
     {
         if (other && other != action && !shortcut.isEmpty()
-            && other->shortcut() == shortcut)
+            && ShortcutBinding::hasShortcut(other, shortcut))
         {
             m_shortcutMessage->setText(
                 tr("This shortcut is already assigned to %1.")
@@ -429,24 +409,14 @@ void SettingsDialog::setShortcut(QAction *action, const QKeySequence &shortcut)
             if (QKeySequenceEdit *editor = m_shortcutEditors.value(action))
             {
                 const QSignalBlocker blocker(editor);
-                editor->setKeySequence(action->shortcut());
+                editor->setKeySequence(ShortcutBinding::primary(action));
             }
             return;
         }
     }
 
     m_shortcutMessage->clear();
-    action->setShortcut(shortcut);
-    QSettings settings;
-    const QString key = shortcutKey(action->objectName());
-    if (shortcut == defaultShortcut(action))
-    {
-        settings.remove(key);
-    }
-    else
-    {
-        settings.setValue(key, shortcut.toString(QKeySequence::PortableText));
-    }
+    ShortcutBinding::setPrimary(action, shortcut);
 }
 
 void SettingsDialog::chooseDefaultSaveFolder()
@@ -487,13 +457,11 @@ void SettingsDialog::restoreDefaults()
         {
             continue;
         }
-        const QKeySequence shortcut = defaultShortcut(action);
-        action->setShortcut(shortcut);
-        settings.remove(shortcutKey(action->objectName()));
+        ShortcutBinding::restoreDefault(action);
         if (QKeySequenceEdit *editor = m_shortcutEditors.value(action))
         {
             const QSignalBlocker blocker(editor);
-            editor->setKeySequence(shortcut);
+            editor->setKeySequence(defaultShortcut(action));
         }
     }
     {

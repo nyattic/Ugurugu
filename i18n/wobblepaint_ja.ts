@@ -537,6 +537,26 @@
         <source>The selected content could not be flipped.</source>
         <translation>選択内容を反転できませんでした。</translation>
     </message>
+    <message>
+        <source>The stroke was simplified because the project point limit was reached.</source>
+        <translation>プロジェクトのポイント数の上限に達したため、ストロークを簡略化しました。</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because its layer is no longer available.</source>
+        <translation>レイヤーが利用できなくなったため、ストロークを追加できませんでした。</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because the project stroke limit was reached.</source>
+        <translation>プロジェクトのストローク数の上限に達したため、ストロークを追加できませんでした。</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added because the project point limit was reached.</source>
+        <translation>プロジェクトのポイント数の上限に達したため、ストロークを追加できませんでした。</translation>
+    </message>
+    <message>
+        <source>The stroke could not be added.</source>
+        <translation>ストロークを追加できませんでした。</translation>
+    </message>
 </context>
 <context>
     <name>wobble::ColorSwatchRow</name>
@@ -703,6 +723,10 @@
     <message>
         <source>Move layer into group</source>
         <translation>レイヤーをグループへ移動</translation>
+    </message>
+    <message>
+        <source>Layer 1</source>
+        <translation>レイヤー 1</translation>
     </message>
 </context>
 <context>
@@ -1075,6 +1099,10 @@
         <source>A layer has invalid hierarchy fields.</source>
         <translation>レイヤー階層の項目が正しくありません。</translation>
     </message>
+    <message>
+        <source>The project contains too much mask data.</source>
+        <translation>プロジェクトのマスクデータが大きすぎます。</translation>
+    </message>
 </context>
 <context>
     <name>wobble::DocumentUndoStack</name>
@@ -1105,6 +1133,10 @@
         <location filename="../src/ui/FrameScrubber.cpp" line="36"/>
         <source>Frame scrubber</source>
         <translation>フレームスクラバー</translation>
+    </message>
+    <message>
+        <source>Frame %1 of %2</source>
+        <translation>全%2フレーム中%1フレーム目</translation>
     </message>
 </context>
 <context>
@@ -1362,6 +1394,14 @@
     <message>
         <source>No group</source>
         <translation>グループなし</translation>
+    </message>
+    <message>
+        <source>Layer is visible</source>
+        <translation>レイヤーは表示されています</translation>
+    </message>
+    <message>
+        <source>Layer is hidden</source>
+        <translation>レイヤーは非表示です</translation>
     </message>
 </context>
 <context>

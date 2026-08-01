@@ -1,6 +1,7 @@
 #include "ui/LayerListWidget.hpp"
 
 #include <QDropEvent>
+#include <QKeyEvent>
 
 namespace wobble
 {
@@ -39,6 +40,18 @@ void LayerListWidget::dropEvent(QDropEvent *event)
     event->setDropAction(Qt::IgnoreAction);
     event->accept();
     emit reorderRequested(currentRow(), insertRow);
+}
+
+void LayerListWidget::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier
+        && !event->isAutoRepeat() && currentIndex().isValid())
+    {
+        emit visibilityToggleRequested(currentIndex());
+        event->accept();
+        return;
+    }
+    QListWidget::keyPressEvent(event);
 }
 
 }

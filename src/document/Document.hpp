@@ -183,7 +183,8 @@ struct Document
     QVector<Layer> layers;
     QUuid activeLayerId;
 
-    static Document createDefault(const QSize &size = QSize(1024, 768));
+    static Document createDefault(const QSize &size = QSize(1024, 768),
+        const QString &initialLayerName = {});
     Layer *layer(const QUuid &id);
     const Layer *layer(const QUuid &id) const;
     int layerIndex(const QUuid &id) const;

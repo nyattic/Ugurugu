@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <new>
 
 namespace wobble
 {
@@ -51,6 +52,17 @@ public:
     static quint64 contentRevision(const DocumentController &controller)
     {
         return controller.m_currentContentRevision;
+    }
+
+    static void resetSerializationStats(DocumentController &controller)
+    {
+        controller.m_serializationCache.resetStats();
+    }
+
+    static DocumentSerializer::SerializationCache::Stats serializationStats(
+        const DocumentController &controller)
+    {
+        return controller.m_serializationCache.stats();
     }
 
     static quint64 historyNode(const DocumentController &controller)
@@ -151,6 +163,10 @@ private slots:
         QCOMPARE(document.layerIndex(document.activeLayerId), 0);
         QVERIFY(document.layer(document.activeLayerId) != nullptr);
         QVERIFY(document.layer(QUuid::createUuid()) == nullptr);
+
+        const Document localized =
+            Document::createDefault(size, QStringLiteral("초기 레이어"));
+        QCOMPARE(localized.layers.first().name, QStringLiteral("초기 레이어"));
     }
 
     void undoesAndRedoesStrokeWithCleanState()
@@ -377,6 +393,125 @@ private slots:
         QCOMPARE(controller.document().layer(layerId)->name,
             QStringLiteral("Layer 1"));
         QVERIFY(controller.document().layer(layerId)->visible);
+    }
+
+    void appendsMultipleStrokesIncrementallyInOneMacro()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        DocumentControllerTestAccess::resetSerializationStats(controller);
+
+        QVector<QUuid> strokeIds;
+        controller.undoStack()->beginMacro(QStringLiteral("Stroke batch"));
+        for (int index = 0; index < 4; ++index)
+        {
+            Stroke stroke;
+            stroke.seed = static_cast<quint64>(index + 1);
+            stroke.points = {{QPointF(8.0 + index, 12.0 + index), 1.0},
+                {QPointF(48.0 + index, 52.0 + index), 0.75}};
+            strokeIds.append(stroke.id);
+            QCOMPARE(controller.addStroke(layerId, std::move(stroke)),
+                DocumentController::AddStrokeResult::Added);
+        }
+        QCOMPARE(controller.undoStack()->count(), 0);
+        controller.undoStack()->endMacro();
+
+        QCOMPARE(controller.undoStack()->count(), 1);
+        QCOMPARE(controller.undoStack()->index(), 1);
+        const Layer *appendedLayer = controller.document().layer(layerId);
+        QVERIFY(appendedLayer);
+        QCOMPARE(appendedLayer->strokes.size(), strokeIds.size());
+        for (qsizetype index = 0; index < strokeIds.size(); ++index)
+        {
+            QCOMPARE(appendedLayer->strokes.at(index).id, strokeIds.at(index));
+        }
+        const auto appendedStats =
+            DocumentControllerTestAccess::serializationStats(controller);
+        QCOMPARE(appendedStats.incrementalStrokeAppends, 4ULL);
+        QCOMPARE(appendedStats.fullDocumentPreparations, 0ULL);
+        QCOMPARE(appendedStats.strokeSerializations, 4ULL);
+        QCOMPARE(appendedStats.clipMaskContentHashes, 0ULL);
+        QCOMPARE(appendedStats.binaryMaskContentHashes, 0ULL);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.undoStack()->index(), 0);
+        QCOMPARE(controller.document().layer(layerId)->strokes.size(), 0);
+        controller.undoStack()->redo();
+        QCOMPARE(controller.undoStack()->index(), 1);
+        appendedLayer = controller.document().layer(layerId);
+        QVERIFY(appendedLayer);
+        QCOMPARE(appendedLayer->strokes.size(), strokeIds.size());
+        for (qsizetype index = 0; index < strokeIds.size(); ++index)
+        {
+            QCOMPARE(appendedLayer->strokes.at(index).id, strokeIds.at(index));
+        }
+        const auto replayStats =
+            DocumentControllerTestAccess::serializationStats(controller);
+        QCOMPARE(replayStats.incrementalStrokeAppends,
+            appendedStats.incrementalStrokeAppends);
+        QCOMPARE(replayStats.fullDocumentPreparations, 2ULL);
+        QCOMPARE(replayStats.strokeSerializations,
+            appendedStats.strokeSerializations
+                + static_cast<quint64>(strokeIds.size()));
+    }
+
+    void rollsBackIncrementalStrokeMacroAfterSecondAppendFails()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        controller.setWobbleAmount(2.0);
+        const QByteArray beforeJson =
+            DocumentSerializer::toJson(controller.document());
+        QVERIFY(!beforeJson.isEmpty());
+        const int beforeCount = controller.undoStack()->count();
+        const int beforeIndex = controller.undoStack()->index();
+        const quint64 beforeRevision =
+            DocumentControllerTestAccess::contentRevision(controller);
+        const quint64 beforeNode =
+            DocumentControllerTestAccess::historyNode(controller);
+        QSignalSpy documentChangedSpy(
+            &controller, &DocumentController::documentChanged);
+        DocumentControllerTestAccess::resetSerializationStats(controller);
+
+        Stroke first;
+        first.points = {{QPointF(8.0, 12.0), 1.0}, {QPointF(48.0, 52.0), 0.75}};
+        const QUuid duplicateId = first.id;
+        Stroke duplicate;
+        duplicate.id = duplicateId;
+        duplicate.points = {
+            {QPointF(16.0, 20.0), 0.5}, {QPointF(56.0, 60.0), 1.0}};
+
+        controller.undoStack()->beginMacro(
+            QStringLiteral("Rejected stroke batch"));
+        QCOMPARE(controller.addStroke(layerId, std::move(first)),
+            DocumentController::AddStrokeResult::Added);
+        QCOMPARE(controller.document().layer(layerId)->strokes.size(), 1);
+        QCOMPARE(controller.addStroke(layerId, std::move(duplicate)),
+            DocumentController::AddStrokeResult::RejectedInvalidStroke);
+        controller.undoStack()->endMacro();
+
+        QCOMPARE(controller.undoStack()->count(), beforeCount);
+        QCOMPARE(controller.undoStack()->index(), beforeIndex);
+        QCOMPARE(controller.document().layer(layerId)->strokes.size(), 0);
+        QCOMPARE(DocumentSerializer::toJson(controller.document()), beforeJson);
+        QCOMPARE(documentChangedSpy.count(), 0);
+        QCOMPARE(DocumentControllerTestAccess::contentRevision(controller),
+            beforeRevision);
+        QCOMPARE(
+            DocumentControllerTestAccess::historyNode(controller), beforeNode);
+        const auto stats =
+            DocumentControllerTestAccess::serializationStats(controller);
+        QCOMPARE(stats.incrementalStrokeAppends, 1ULL);
+        QCOMPARE(stats.fullDocumentPreparations, 0ULL);
+        QCOMPARE(stats.strokeSerializations, 1ULL);
+        QCOMPARE(stats.clipMaskContentHashes, 0ULL);
+        QCOMPARE(stats.clipMaskCompressions, 0ULL);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().wobbleAmount,
+            Document::createDefault(QSize(96, 96)).wobbleAmount);
     }
 
     void evictsFarthestHistoryAndMaintainsActions()
@@ -874,6 +1009,7 @@ private slots:
         addBase.layers.first().strokes.resize(strokeLimit - 64);
         controller.loadDocument(std::move(addBase));
         const QUuid addLayerId = controller.document().activeLayerId;
+        DocumentControllerTestAccess::resetSerializationStats(controller);
         timer.restart();
         for (int index = 0; index < 64; ++index)
         {
@@ -881,7 +1017,8 @@ private slots:
             stroke.seed = static_cast<quint64>(strokeLimit + index);
             stroke.points = {
                 {QPointF(1.0 + static_cast<qreal>(index % 62), 32.0), 1.0}};
-            controller.addStroke(addLayerId, std::move(stroke));
+            QCOMPARE(controller.addStroke(addLayerId, std::move(stroke)),
+                DocumentController::AddStrokeResult::Added);
         }
         const qint64 addMs = timer.elapsed();
         const DocumentUndoStack::StorageStats addStorage =
@@ -890,6 +1027,19 @@ private slots:
         QCOMPARE(addStorage.retainedLayers, qsizetype(0));
         QCOMPARE(addStorage.retainedStrokes, qsizetype(64));
         QCOMPARE(addStorage.retainedPreparedDocuments, qsizetype(0));
+        QCOMPARE(controller.document().layer(addLayerId)->strokes.size(),
+            strokeLimit);
+        const auto appendSerialization =
+            DocumentControllerTestAccess::serializationStats(controller);
+        QCOMPARE(appendSerialization.incrementalStrokeAppends, 64ULL);
+        QCOMPARE(appendSerialization.fullDocumentPreparations, 0ULL);
+        QCOMPARE(appendSerialization.strokeSerializations, 64ULL);
+        QCOMPARE(appendSerialization.clipMaskContentHashes, 0ULL);
+        QCOMPARE(appendSerialization.binaryMaskContentHashes, 0ULL);
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layer(addLayerId)->strokes.size(),
+            strokeLimit - 1);
+        controller.undoStack()->redo();
         QCOMPARE(controller.document().layer(addLayerId)->strokes.size(),
             strokeLimit);
 
@@ -3350,6 +3500,348 @@ private slots:
         QCOMPARE(prepared->compactSize(), static_cast<qint64>(json.size()));
     }
 
+    void appendsPreparedStrokeIncrementallyExactly()
+    {
+        Document source = documentWithStrokeCount(512);
+        const QUuid layerId = source.activeLayerId;
+        DocumentSerializer::SerializationCache cache;
+        const auto base = DocumentSerializer::prepare(source, cache);
+        QVERIFY(base.has_value());
+        const QByteArray baseJson = DocumentSerializer::toJson(*base, cache);
+        QVERIFY(!baseJson.isEmpty());
+        const Stroke *baseStrokeBacking =
+            base->document().layers.first().strokes.constData();
+        const StrokePoint *basePointBacking =
+            base->document().layers.first().strokes.first().points.constData();
+
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(8.0, 9.0), 0.25}, {QPointF(48.0, 40.0), 0.75}};
+        stroke.clipMask = QImage(source.size, QImage::Format_Grayscale8);
+        stroke.clipMask.fill(0);
+        for (int y = 8; y < 40; ++y)
+        {
+            std::fill_n(stroke.clipMask.scanLine(y) + 8, 32, 255);
+        }
+        const Stroke expectedStroke = stroke;
+        StrokePoint *rawPoints = stroke.points.data();
+        uchar *rawMask = stroke.clipMask.bits();
+
+        cache.resetStats();
+        DocumentSerializer::AppendStrokeResult appended =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                stroke,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            appended.status, DocumentSerializer::AppendStrokeStatus::Appended);
+        QVERIFY(appended.prepared.isValid());
+        const auto stats = cache.stats();
+        QCOMPARE(stats.incrementalStrokeAppends, 1ULL);
+        QCOMPARE(stats.fullDocumentPreparations, 0ULL);
+        QCOMPARE(stats.strokeSerializations, 1ULL);
+        QCOMPARE(stats.clipMaskContentHashes, 1ULL);
+        QCOMPARE(stats.clipMaskCompressions, 1ULL);
+        QCOMPARE(stats.binaryMaskContentHashes, 0ULL);
+        QCOMPARE(stats.binaryMaskCompressions, 0ULL);
+
+        const Layer &baseLayer = base->document().layers.first();
+        const Layer &appendedLayer =
+            appended.prepared.document().layers.first();
+        QCOMPARE(appendedLayer.strokes.size(), 513);
+        QCOMPARE(appendedLayer.strokes.first().points.constData(),
+            baseLayer.strokes.first().points.constData());
+        const Stroke &stored = appendedLayer.strokes.constLast();
+        QVERIFY(stored.points.constData() != stroke.points.constData());
+        QVERIFY(stored.clipMask.cacheKey() != stroke.clipMask.cacheKey());
+        QVERIFY(DocumentSerializer::retainImmutableBackings(
+            appended.prepared, {stored})
+                .isValid());
+
+        rawPoints[0].pressure = 1.0;
+        rawMask[0] = 255;
+        QCOMPARE(stored.points.first().pressure, 0.25);
+        QCOMPARE(stored.clipMask.constScanLine(0)[0], static_cast<uchar>(0));
+
+        const QByteArray appendedJson =
+            DocumentSerializer::toJson(appended.prepared, cache);
+        QVERIFY(!appendedJson.isEmpty());
+        QCOMPARE(appended.prepared.compactSize(),
+            static_cast<qint64>(appendedJson.size()));
+        QString error;
+        const std::optional<Document> decoded =
+            DocumentSerializer::fromJson(appendedJson, &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error));
+        QCOMPARE(decoded->layers.first().strokes.size(), 513);
+
+        Document expected = base->document();
+        expected.layers.first().strokes.append(expectedStroke);
+        QCOMPARE(appendedJson, DocumentSerializer::toJson(expected));
+
+        const DocumentSerializer::AppendStrokeResult exact =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                expectedStroke,
+                cache,
+                appended.prepared.compactSize());
+        QCOMPARE(
+            exact.status, DocumentSerializer::AppendStrokeStatus::Appended);
+        QCOMPARE(exact.prepared.compactSize(), appended.prepared.compactSize());
+        const DocumentSerializer::AppendStrokeResult oneByteShort =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                expectedStroke,
+                cache,
+                appended.prepared.compactSize() - 1);
+        QCOMPARE(oneByteShort.status,
+            DocumentSerializer::AppendStrokeStatus::TooLarge);
+        QCOMPARE(DocumentSerializer::toJson(*base, cache), baseJson);
+        QCOMPARE(base->document().layers.first().strokes.constData(),
+            baseStrokeBacking);
+        QCOMPARE(
+            base->document().layers.first().strokes.first().points.constData(),
+            basePointBacking);
+
+        Stroke equalMask = expectedStroke;
+        equalMask.id = QUuid::createUuid();
+        equalMask.clipMask = expectedStroke.clipMask.copy();
+        cache.resetStats();
+        DocumentSerializer::AppendStrokeResult reused =
+            DocumentSerializer::appendStroke(appended.prepared,
+                layerId,
+                equalMask,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            reused.status, DocumentSerializer::AppendStrokeStatus::Appended);
+        QCOMPARE(cache.stats().incrementalStrokeAppends, 1ULL);
+        QCOMPARE(cache.stats().fullDocumentPreparations, 0ULL);
+        QCOMPARE(cache.stats().clipMaskContentHashes, 1ULL);
+        QCOMPARE(cache.stats().clipMaskCompressions, 0ULL);
+        const QVector<Stroke> &reusedStrokes =
+            reused.prepared.document().layers.first().strokes;
+        QCOMPARE(reusedStrokes.at(reusedStrokes.size() - 2).clipMask.cacheKey(),
+            reusedStrokes.constLast().clipMask.cacheKey());
+        const QByteArray reusedJson =
+            DocumentSerializer::toJson(reused.prepared, cache);
+        QCOMPARE(reused.prepared.compactSize(),
+            static_cast<qint64>(reusedJson.size()));
+
+        cache.resetStats();
+        const DocumentSerializer::AppendStrokeResult tooLarge =
+            DocumentSerializer::appendStroke(
+                *base, layerId, expectedStroke, cache, base->compactSize());
+        QCOMPARE(
+            tooLarge.status, DocumentSerializer::AppendStrokeStatus::TooLarge);
+        QCOMPARE(cache.stats().incrementalStrokeAppends, 0ULL);
+        QCOMPARE(cache.stats().fullDocumentPreparations, 0ULL);
+        QCOMPARE(DocumentSerializer::toJson(*base, cache), baseJson);
+        QCOMPARE(base->document().layers.first().strokes.constData(),
+            baseStrokeBacking);
+        QCOMPARE(
+            base->document().layers.first().strokes.first().points.constData(),
+            basePointBacking);
+
+        Stroke duplicate = expectedStroke;
+        duplicate.id = baseLayer.strokes.first().id;
+        const DocumentSerializer::AppendStrokeResult invalid =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                duplicate,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            invalid.status, DocumentSerializer::AppendStrokeStatus::Invalid);
+        QCOMPARE(DocumentSerializer::toJson(*base, cache), baseJson);
+        QCOMPARE(base->document().layers.first().strokes.constData(),
+            baseStrokeBacking);
+        QCOMPARE(
+            base->document().layers.first().strokes.first().points.constData(),
+            basePointBacking);
+    }
+
+    void appendsDistinctPreparedFillMasksExactly()
+    {
+        Document source = Document::createDefault(QSize(48, 32));
+        const QUuid layerId = source.activeLayerId;
+        DocumentSerializer::SerializationCache cache;
+        const auto base = DocumentSerializer::prepare(source, cache);
+        QVERIFY(base.has_value());
+
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(20, 120, 230, 190);
+        fill.points = {{QPointF(12.0, 14.0), 1.0}};
+        fill.clipMask = QImage(source.size, QImage::Format_Grayscale8);
+        fill.fillMask = QImage(source.size, QImage::Format_Grayscale8);
+        fill.clipMask.fill(0);
+        fill.fillMask.fill(0);
+        for (int y = 3; y < 25; ++y)
+        {
+            std::fill_n(fill.clipMask.scanLine(y) + 4, 18, 255);
+        }
+        for (int y = 8; y < 29; ++y)
+        {
+            std::fill_n(fill.fillMask.scanLine(y) + 24, 20, 255);
+        }
+        const Stroke expectedFill = fill;
+
+        cache.resetStats();
+        const DocumentSerializer::AppendStrokeResult appended =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                fill,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            appended.status, DocumentSerializer::AppendStrokeStatus::Appended);
+        QVERIFY(appended.prepared.isValid());
+        const auto stats = cache.stats();
+        QCOMPARE(stats.incrementalStrokeAppends, 1ULL);
+        QCOMPARE(stats.fullDocumentPreparations, 0ULL);
+        QCOMPARE(stats.strokeSerializations, 1ULL);
+        QCOMPARE(stats.clipMaskContentHashes, 2ULL);
+        QCOMPARE(stats.clipMaskCompressions, 2ULL);
+
+        const QByteArray appendedJson =
+            DocumentSerializer::toJson(appended.prepared, cache);
+        QVERIFY(!appendedJson.isEmpty());
+        QCOMPARE(appended.prepared.compactSize(),
+            static_cast<qint64>(appendedJson.size()));
+        Document expected = base->document();
+        expected.layers.first().strokes.append(expectedFill);
+        QCOMPARE(appendedJson, DocumentSerializer::toJson(expected));
+
+        const QJsonObject root = QJsonDocument::fromJson(appendedJson).object();
+        QCOMPARE(root.value(QStringLiteral("clipMasks")).toArray().size(), 2);
+        const QJsonObject strokeObject = root.value(QStringLiteral("layers"))
+                                             .toArray()
+                                             .first()
+                                             .toObject()
+                                             .value(QStringLiteral("strokes"))
+                                             .toArray()
+                                             .first()
+                                             .toObject();
+        const QString clipMaskId =
+            strokeObject.value(QStringLiteral("clipMaskId")).toString();
+        const QString fillMaskId =
+            strokeObject.value(QStringLiteral("fillMaskId")).toString();
+        QVERIFY(!clipMaskId.isEmpty());
+        QVERIFY(!fillMaskId.isEmpty());
+        QVERIFY(clipMaskId != fillMaskId);
+    }
+
+    void enforcesIncrementalDistinctMaskBudgetExactly()
+    {
+        QImage appendedMask(QSize(1, 1), QImage::Format_Grayscale8);
+        QVERIFY(!appendedMask.isNull());
+        appendedMask.fill(1);
+        const quint64 appendedMaskBytes = appendedMask.sizeInBytes();
+        QVERIFY(appendedMaskBytes > 0);
+        const quint64 baseMaskBytes =
+            DocumentLimits::maximumDistinctClipMaskBytes - appendedMaskBytes;
+        QVERIFY(baseMaskBytes
+                <= static_cast<quint64>(std::numeric_limits<qsizetype>::max()));
+
+        std::unique_ptr<uchar[]> baseMaskBacking(
+            new (std::nothrow) uchar[static_cast<std::size_t>(baseMaskBytes)]);
+        QVERIFY(baseMaskBacking);
+        baseMaskBacking[0] = 0;
+        QImage baseMask(baseMaskBacking.get(),
+            1,
+            1,
+            static_cast<qsizetype>(baseMaskBytes),
+            QImage::Format_Grayscale8);
+        QVERIFY(!baseMask.isNull());
+        QCOMPARE(static_cast<quint64>(baseMask.sizeInBytes()), baseMaskBytes);
+
+        Document source = Document::createDefault(QSize(1, 1));
+        const QUuid layerId = source.activeLayerId;
+        Stroke existing;
+        existing.points = {{QPointF(0.0, 0.0), 1.0}};
+        existing.clipMask = baseMask;
+        source.layers.first().strokes.append(std::move(existing));
+
+        DocumentSerializer::SerializationCache cache;
+        const auto base = DocumentSerializer::prepare(std::move(source), cache);
+        QVERIFY(base.has_value());
+        baseMask = {};
+        baseMaskBacking.reset();
+        const QByteArray baseJson = DocumentSerializer::toJson(*base, cache);
+        QVERIFY(!baseJson.isEmpty());
+        const qint64 baseMaskKey =
+            base->document().layers.first().strokes.first().clipMask.cacheKey();
+        const StrokePoint *basePoints =
+            base->document().layers.first().strokes.first().points.constData();
+
+        Stroke exact;
+        exact.points = {{QPointF(0.0, 0.0), 0.5}};
+        exact.clipMask = appendedMask;
+        StrokePoint *submittedPoints = exact.points.data();
+        uchar *submittedMask = exact.clipMask.bits();
+        cache.resetStats();
+        DocumentSerializer::AppendStrokeResult appended =
+            DocumentSerializer::appendStroke(*base,
+                layerId,
+                exact,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            appended.status, DocumentSerializer::AppendStrokeStatus::Appended);
+        QVERIFY(appended.prepared.isValid());
+        QCOMPARE(cache.stats().incrementalStrokeAppends, 1ULL);
+        const QByteArray appendedJson =
+            DocumentSerializer::toJson(appended.prepared, cache);
+        QVERIFY(!appendedJson.isEmpty());
+        QCOMPARE(appended.prepared.compactSize(),
+            static_cast<qint64>(appendedJson.size()));
+
+        const Stroke &stored =
+            appended.prepared.document().layers.first().strokes.constLast();
+        submittedPoints[0].pressure = 1.0;
+        submittedMask[0] = 3;
+        QCOMPARE(stored.points.first().pressure, 0.5);
+        QCOMPARE(stored.clipMask.constScanLine(0)[0], static_cast<uchar>(1));
+        QCOMPARE(DocumentSerializer::toJson(*base, cache), baseJson);
+        QCOMPARE(
+            base->document().layers.first().strokes.first().clipMask.cacheKey(),
+            baseMaskKey);
+        QCOMPARE(
+            base->document().layers.first().strokes.first().points.constData(),
+            basePoints);
+
+        Stroke over;
+        over.points = {{QPointF(0.0, 0.0), 1.0}};
+        over.clipMask = QImage(QSize(1, 1), QImage::Format_Grayscale8);
+        QVERIFY(!over.clipMask.isNull());
+        over.clipMask.fill(2);
+        const qint64 appendedMaskKey = stored.clipMask.cacheKey();
+        const StrokePoint *appendedPoints = stored.points.constData();
+        const DocumentSerializer::AppendStrokeResult rejected =
+            DocumentSerializer::appendStroke(appended.prepared,
+                layerId,
+                over,
+                cache,
+                DocumentLimits::maximumProjectBytes);
+        QCOMPARE(
+            rejected.status, DocumentSerializer::AppendStrokeStatus::MaskLimit);
+        QCOMPARE(cache.stats().incrementalStrokeAppends, 1ULL);
+        QCOMPARE(
+            DocumentSerializer::toJson(appended.prepared, cache), appendedJson);
+        QCOMPARE(appended.prepared.document()
+                     .layers.first()
+                     .strokes.constLast()
+                     .clipMask.cacheKey(),
+            appendedMaskKey);
+        QCOMPARE(appended.prepared.document()
+                     .layers.first()
+                     .strokes.constLast()
+                     .points.constData(),
+            appendedPoints);
+        QCOMPARE(DocumentSerializer::toJson(*base, cache), baseJson);
+    }
+
     void reusesPreparedClipMaskAndStrokeMetadata()
     {
         Document source = Document::createDefault(QSize(257, 129));
@@ -3729,14 +4221,20 @@ private slots:
         Stroke stroke;
         stroke.points.fill({QPointF(50.0, 50.0), 0.5},
             DocumentLimits::maximumPointsPerStroke + 1);
-        controller.addStroke(layerId, std::move(stroke));
+        const DocumentController::AddStrokeResult strokeResult =
+            controller.addStroke(layerId, std::move(stroke));
+        QCOMPARE(strokeResult,
+            DocumentController::AddStrokeResult::AddedWithResampledPoints);
         QCOMPARE(
             controller.document().layer(layerId)->strokes.first().points.size(),
             DocumentLimits::maximumPointsPerStroke);
 
         Stroke invalid;
         invalid.points = {{QPointF(150.0, 50.0), 0.5}};
-        controller.addStroke(layerId, std::move(invalid));
+        const DocumentController::AddStrokeResult invalidResult =
+            controller.addStroke(layerId, std::move(invalid));
+        QCOMPARE(invalidResult,
+            DocumentController::AddStrokeResult::RejectedInvalidStroke);
         QCOMPARE(controller.document().layer(layerId)->strokes.size(), 1);
 
         const int undoCount = controller.undoStack()->count();
@@ -3758,6 +4256,71 @@ private slots:
         controller.duplicateLayer(controller.document().activeLayerId);
         QCOMPARE(controller.document().layers.size(), layerCount);
         QCOMPARE(controller.undoStack()->count(), 0);
+    }
+
+    void preservesStrokeEndpointsWhenPointBudgetIsLimited()
+    {
+        Document nearLimit = Document::createDefault(QSize(100, 100));
+        const StrokePoint repeated{QPointF(50.0, 50.0), 0.5};
+        Stroke first;
+        first.points.fill(repeated, DocumentLimits::maximumPointsPerStroke);
+        Stroke second;
+        second.points.fill(repeated,
+            DocumentLimits::maximumTotalPoints
+                - DocumentLimits::maximumPointsPerStroke - 3);
+        nearLimit.layers.first().strokes.append(std::move(first));
+        nearLimit.layers.first().strokes.append(std::move(second));
+
+        DocumentController controller;
+        controller.loadDocument(std::move(nearLimit));
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke stroke;
+        stroke.points = {{QPointF(10.0, 10.0), 0.1},
+            {QPointF(20.0, 20.0), 0.2},
+            {QPointF(30.0, 30.0), 0.3},
+            {QPointF(40.0, 40.0), 0.4},
+            {QPointF(50.0, 50.0), 0.5}};
+        const QVector<StrokePoint> submittedPoints = stroke.points;
+
+        const DocumentController::AddStrokeResult result =
+            controller.addStroke(layerId, std::move(stroke));
+        QCOMPARE(result,
+            DocumentController::AddStrokeResult::AddedWithResampledPoints);
+        const QVector<StrokePoint> &storedPoints =
+            controller.document().layer(layerId)->strokes.constLast().points;
+        QCOMPARE(storedPoints.size(), 3);
+        QCOMPARE(storedPoints.first(), submittedPoints.first());
+        QCOMPARE(storedPoints.at(1), submittedPoints.at(2));
+        QCOMPARE(storedPoints.last(), submittedPoints.last());
+
+        Stroke beyondLimit;
+        beyondLimit.points = {{QPointF(60.0, 60.0), 1.0}};
+        QCOMPARE(controller.addStroke(layerId, std::move(beyondLimit)),
+            DocumentController::AddStrokeResult::RejectedPointLimit);
+        QCOMPARE(controller.document().layer(layerId)->strokes.size(), 3);
+    }
+
+    void reportsLayerRenameOutcomes()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        QCOMPARE(controller.renameLayer(layerId, QStringLiteral("Renamed")),
+            DocumentController::RenameLayerResult::Renamed);
+        QCOMPARE(controller.renameLayer(layerId, QStringLiteral(" Renamed ")),
+            DocumentController::RenameLayerResult::Unchanged);
+        QCOMPARE(controller.renameLayer(layerId, QString()),
+            DocumentController::RenameLayerResult::RejectedEmptyName);
+        QCOMPARE(controller.renameLayer(layerId,
+                     QString(DocumentLimits::maximumLayerNameLength + 1,
+                         QLatin1Char('x'))),
+            DocumentController::RenameLayerResult::RejectedNameTooLong);
+        QCOMPARE(controller.renameLayer(
+                     QUuid::createUuid(), QStringLiteral("Missing")),
+            DocumentController::RenameLayerResult::RejectedInvalidLayer);
+        QCOMPARE(controller.document().layer(layerId)->name,
+            QStringLiteral("Renamed"));
     }
 
     void rejectsInvalidJson_data()

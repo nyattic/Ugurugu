@@ -2,6 +2,7 @@
 
 #include "document/DocumentLimits.hpp"
 #include "document/StrokeMask.hpp"
+#include "render/ImageAffineTransformer.hpp"
 
 #include <QPainter>
 #include <QSet>
@@ -319,7 +320,7 @@ QImage supportFromRenderedRegion(
             const uchar *input = rendered.image.constScanLine(y);
             for (int x = 0; x < rendered.image.width(); ++x)
             {
-                output[x] = input[x] > 0 ? 255 : 0;
+                output[x] = input[x] >= 128 ? 255 : 0;
             }
         }
         else
@@ -328,7 +329,7 @@ QImage supportFromRenderedRegion(
                 reinterpret_cast<const QRgb *>(rendered.image.constScanLine(y));
             for (int x = 0; x < rendered.image.width(); ++x)
             {
-                output[x] = qAlpha(input[x]) > 0 ? 255 : 0;
+                output[x] = qAlpha(input[x]) >= 128 ? 255 : 0;
             }
         }
     }
@@ -713,14 +714,8 @@ QImage transformedSelectionSupport(const QImage &selectionMask,
         return {};
     }
 
-    const bool oneChannelNearest = sampling == SamplingMode::Nearest
-                                   && integralOrthogonalTransform(transform);
-    const bool useFullTargetFallback =
-        sampling == SamplingMode::Nearest && !oneChannelNearest;
-    const QRect targetBounds =
-        useFullTargetFallback
-            ? fullImageBounds(targetSize)
-            : mappedTargetBounds(bounds, targetSize, transform);
+    const QRect targetBounds = ImageAffineTransformer::targetBounds(
+        bounds, targetSize, transform, sampling);
     if (targetBounds.isEmpty())
     {
         QImage support(targetSize, QImage::Format_Grayscale8);
@@ -731,45 +726,35 @@ QImage transformedSelectionSupport(const QImage &selectionMask,
         support.fill(0);
         RenderedMaskRegion empty;
         empty.bounds = targetBounds;
-        recordMemoryStats(memoryStats,
-            bounds,
-            empty,
-            support.sizeInBytes(),
-            useFullTargetFallback);
+        recordMemoryStats(
+            memoryStats, bounds, empty, support.sizeInBytes(), false);
         return support;
     }
 
-    const QImage::Format sourceFormat =
-        oneChannelNearest ? QImage::Format_Alpha8
-                          : QImage::Format_ARGB32_Premultiplied;
-    const QImage::Format targetFormat =
-        useFullTargetFallback ? QImage::Format_ARGB32_Premultiplied
-                              : QImage::Format_Alpha8;
-    QImage source = binarySourceFromMask(selectionMask, bounds, sourceFormat);
+    QImage source =
+        binarySourceFromMask(selectionMask, bounds, QImage::Format_Grayscale8);
     if (source.isNull())
     {
         return {};
     }
-    const RenderedMaskRegion rendered = renderBinarySource(std::move(source),
-        bounds,
-        targetBounds,
-        transform,
-        sampling == SamplingMode::Smooth,
-        targetFormat);
+    RenderedMaskRegion rendered;
+    rendered.bounds = targetBounds;
+    rendered.sourceBytes = source.sizeInBytes();
+    rendered.image = ImageAffineTransformer::transformMask(
+        source, bounds, targetBounds, transform, sampling);
     if (rendered.image.isNull())
     {
         return {};
     }
+    rendered.targetBytes = rendered.image.sizeInBytes();
+    rendered.renderPeakBytes = rendered.sourceBytes + rendered.targetBytes;
     QImage support = supportFromRenderedRegion(rendered, targetSize);
     if (support.isNull())
     {
         return {};
     }
-    recordMemoryStats(memoryStats,
-        bounds,
-        rendered,
-        support.sizeInBytes(),
-        useFullTargetFallback);
+    recordMemoryStats(
+        memoryStats, bounds, rendered, support.sizeInBytes(), false);
     return support;
 }
 

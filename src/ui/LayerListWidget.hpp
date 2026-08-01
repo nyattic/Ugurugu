@@ -14,9 +14,11 @@ public:
 
 signals:
     void reorderRequested(int sourceRow, int insertRow);
+    void visibilityToggleRequested(const QModelIndex &index);
 
 protected:
     void dropEvent(QDropEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 };
 
 }

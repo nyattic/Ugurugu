@@ -268,6 +268,10 @@ bool canonicalizeStrokeVisibility(Stroke &stroke, const QSize &canvasSize)
         {
             return false;
         }
+        if (*stroke.visibilityClip == canvasRect)
+        {
+            stroke.visibilityClip.reset();
+        }
     }
 
     if (!stroke.clipMask.isNull())

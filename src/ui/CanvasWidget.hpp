@@ -185,6 +185,7 @@ private:
         const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
     void endStroke(
         const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
+    void commitStroke(const QUuid &layerId, Stroke stroke);
     void cancelStroke();
     void beginPan(const QPointF &widgetPosition);
     void continuePan(const QPointF &widgetPosition);
