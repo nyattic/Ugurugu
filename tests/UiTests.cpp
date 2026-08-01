@@ -3975,8 +3975,7 @@ private slots:
         QCOMPARE(eraser.brush, EraserPresetCatalog::defaultPreset().settings);
 
         for (const QString &presetId :
-            {QStringLiteral("soft-eraser"),
-                QStringLiteral("kneaded-eraser")})
+            {QStringLiteral("soft-eraser"), QStringLiteral("kneaded-eraser")})
         {
             canvas.setEraserPreset(presetId);
             QTest::mouseClick(&canvas,
@@ -4061,8 +4060,7 @@ private slots:
         CanvasWidget *restored = restoredWindow.findChild<CanvasWidget *>();
         QVERIFY(restored);
         QCOMPARE(restored->brushPresetId(), QStringLiteral("soft-airbrush"));
-        QCOMPARE(
-            restored->eraserPresetId(), QStringLiteral("kneaded-eraser"));
+        QCOMPARE(restored->eraserPresetId(), QStringLiteral("kneaded-eraser"));
         QCOMPARE(restored->brushWidth(), 47.0);
         QCOMPARE(restored->brushStabilization(), 0.64);
         QCOMPARE(restored->eraserWidth(), 49.0);

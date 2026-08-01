@@ -16,6 +16,7 @@
 #include <QtTest>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 
@@ -2208,7 +2209,7 @@ private slots:
         PixelSelectionOp copy;
         copy.canvasSize = document.size;
         copy.sourceBounds = QRect(0, 0, 64, 64);
-        copy.packedMask = QByteArray(8 * 64, char(0xff));
+        copy.packedMask = QByteArray(8 * 64, std::bit_cast<char>(quint8{0xff}));
         copy.transform = QTransform::fromTranslate(3960.0, 3960.0);
         copy.sampling = SamplingMode::Nearest;
         copy.clearSource = false;
@@ -2408,7 +2409,8 @@ private slots:
             pixelOperation.canvasSize = pixelDocument.size;
             pixelOperation.sourceBounds =
                 QRect(2400 + index % 100 * 16, 32 + index / 100 * 16, 1, 1);
-            pixelOperation.packedMask = QByteArray(1, char(0x80));
+            pixelOperation.packedMask =
+                QByteArray(1, std::bit_cast<char>(quint8{0x80}));
             pixelOperation.sampling = SamplingMode::Nearest;
             QVERIFY(isValidPixelSelectionOp(pixelOperation));
             Stroke operation;
