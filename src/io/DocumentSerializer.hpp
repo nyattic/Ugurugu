@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/MemoryBudget.hpp"
 #include "document/Document.hpp"
 
 #include <QCoreApplication>
@@ -7,7 +8,8 @@
 #include <memory>
 #include <optional>
 
-namespace wobble {
+namespace wobble
+{
 
 class DocumentSerializer
 {
@@ -20,9 +22,10 @@ public:
     {
     public:
         static constexpr qint64 maximumPayloadBytes =
-            64LL * 1024LL * 1024LL;
+            MemoryBudget::serializationCacheBytes;
 
-        struct Stats {
+        struct Stats
+        {
             quint64 clipMaskContentHashes = 0;
             quint64 clipMaskCompressions = 0;
             quint64 binaryMaskContentHashes = 0;
@@ -105,48 +108,37 @@ public:
     };
 
     static std::optional<PreparedDocument> prepare(
-        Document document,
-        SerializationCache &cache,
-        QString *error = nullptr);
-    static std::optional<PreparedDocument> prepare(
-        Document document,
+        Document document, SerializationCache &cache, QString *error = nullptr);
+    static std::optional<PreparedDocument> prepare(Document document,
         SerializationCache &cache,
         const PreparedDocument *base,
         qint64 maximumBytes,
         QString *error = nullptr);
-    static std::optional<PreparedDocument> prepare(
-        Document document,
+    static std::optional<PreparedDocument> prepare(Document document,
         SerializationCache &cache,
         const PreparedDocument *base,
         const ImmutableBackingLease *trusted,
         qint64 maximumBytes,
         QString *error = nullptr);
     static ImmutableBackingLease retainImmutableBackings(
-        const PreparedDocument &source,
-        const QVector<Stroke> &strokes);
+        const PreparedDocument &source, const QVector<Stroke> &strokes);
     static std::optional<PreparedDocument> rebindActiveLayer(
-        const PreparedDocument &prepared,
-        const QUuid &activeLayerId);
+        const PreparedDocument &prepared, const QUuid &activeLayerId);
 
-    static bool save(
-        const QString &filePath,
+    static bool save(const QString &filePath,
         const Document &document,
         QString *error = nullptr);
-    static bool save(
-        const QString &filePath,
+    static bool save(const QString &filePath,
         const PreparedDocument &document,
         SerializationCache &cache,
         QString *error = nullptr);
     static std::optional<Document> load(
-        const QString &filePath,
-        QString *error = nullptr);
+        const QString &filePath, QString *error = nullptr);
     static QByteArray toJson(const Document &document);
     static QByteArray toJson(
-        const PreparedDocument &document,
-        SerializationCache &cache);
+        const PreparedDocument &document, SerializationCache &cache);
     static std::optional<Document> fromJson(
-        const QByteArray &data,
-        QString *error = nullptr);
+        const QByteArray &data, QString *error = nullptr);
 };
 
 }

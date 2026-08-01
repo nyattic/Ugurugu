@@ -25,28 +25,28 @@
 #include <algorithm>
 #include <utility>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 const QString animateWhileDrawingKey =
     QStringLiteral("canvas/animateWhileDrawing");
-const QString wobbleAnimationKey =
-    QStringLiteral("canvas/wobbleAnimation");
-const QString defaultSaveFolderKey =
-    QStringLiteral("files/defaultSaveFolder");
-const QString uiLanguageKey =
-    QStringLiteral("appearance/language");
+const QString wobbleAnimationKey = QStringLiteral("canvas/wobbleAnimation");
+const QString defaultSaveFolderKey = QStringLiteral("files/defaultSaveFolder");
+const QString uiLanguageKey = QStringLiteral("appearance/language");
 
 QString systemDefaultSaveFolder()
 {
-    const QString documents = QStandardPaths::writableLocation(
-        QStandardPaths::DocumentsLocation);
-    if (!documents.isEmpty() && QDir(documents).exists()) {
+    const QString documents =
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    if (!documents.isEmpty() && QDir(documents).exists())
+    {
         return QDir(documents).absolutePath();
     }
-    const QString home = QStandardPaths::writableLocation(
-        QStandardPaths::HomeLocation);
+    const QString home =
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
     return home.isEmpty() ? QDir::currentPath() : QDir(home).absolutePath();
 }
 
@@ -58,7 +58,8 @@ QString shortcutKey(const QString &actionName)
 QString actionLabel(const QAction *action)
 {
     QString label = action->property("shortcutLabel").toString();
-    if (label.isEmpty()) {
+    if (label.isEmpty())
+    {
         label = action->text();
     }
     label.remove(QLatin1Char('&'));
@@ -76,61 +77,52 @@ QKeySequence defaultShortcut(const QAction *action)
 
 bool SettingsDialog::wobbleAnimationEnabled()
 {
-    return QSettings()
-        .value(wobbleAnimationKey, true)
-        .toBool();
+    return QSettings().value(wobbleAnimationKey, true).toBool();
 }
 
 bool SettingsDialog::animateWhileDrawing()
 {
-    return QSettings()
-        .value(animateWhileDrawingKey, false)
-        .toBool();
+    return QSettings().value(animateWhileDrawingKey, false).toBool();
 }
 
 QString SettingsDialog::defaultSaveFolder()
 {
-    const QString configured = QSettings()
-        .value(defaultSaveFolderKey)
-        .toString();
+    const QString configured =
+        QSettings().value(defaultSaveFolderKey).toString();
     return !configured.isEmpty() && QDir(configured).exists()
-        ? QDir(configured).absolutePath()
-        : systemDefaultSaveFolder();
+               ? QDir(configured).absolutePath()
+               : systemDefaultSaveFolder();
 }
 
 QString SettingsDialog::uiLanguage()
 {
     const QString language =
         QSettings().value(uiLanguageKey, QStringLiteral("system")).toString();
-    if (language == QStringLiteral("en")
-        || language == QStringLiteral("ko")
-        || language == QStringLiteral("ja")) {
+    if (language == QStringLiteral("en") || language == QStringLiteral("ko")
+        || language == QStringLiteral("ja"))
+    {
         return language;
     }
     return QStringLiteral("system");
 }
 
 QKeySequence SettingsDialog::shortcutForAction(
-    const QString &actionName,
-    const QKeySequence &defaultShortcut)
+    const QString &actionName, const QKeySequence &defaultShortcut)
 {
     const QSettings settings;
     const QString key = shortcutKey(actionName);
-    if (!settings.contains(key)) {
+    if (!settings.contains(key))
+    {
         return defaultShortcut;
     }
     const QString stored = settings.value(key).toString();
-    const QKeySequence shortcut = QKeySequence::fromString(
-        stored,
-        QKeySequence::PortableText);
-    return !stored.isEmpty() && shortcut.isEmpty()
-        ? defaultShortcut
-        : shortcut;
+    const QKeySequence shortcut =
+        QKeySequence::fromString(stored, QKeySequence::PortableText);
+    return !stored.isEmpty() && shortcut.isEmpty() ? defaultShortcut : shortcut;
 }
 
 SettingsDialog::SettingsDialog(
-    QWidget *parent,
-    const QList<QAction *> &shortcutActions)
+    QWidget *parent, const QList<QAction *> &shortcutActions)
     : QDialog(parent)
     , m_shortcutActions(shortcutActions)
 {
@@ -152,26 +144,16 @@ SettingsDialog::SettingsDialog(
 
     m_languageCombo = new QComboBox(generalTab);
     m_languageCombo->setObjectName(QStringLiteral("languageCombo"));
-    m_languageCombo->addItem(
-        tr("System default"),
-        QStringLiteral("system"));
-    m_languageCombo->addItem(
-        QStringLiteral("English"),
-        QStringLiteral("en"));
-    m_languageCombo->addItem(
-        QStringLiteral("한국어"),
-        QStringLiteral("ko"));
-    m_languageCombo->addItem(
-        QStringLiteral("日本語"),
-        QStringLiteral("ja"));
-    const int languageIndex =
-        m_languageCombo->findData(uiLanguage());
+    m_languageCombo->addItem(tr("System default"), QStringLiteral("system"));
+    m_languageCombo->addItem(QStringLiteral("English"), QStringLiteral("en"));
+    m_languageCombo->addItem(QStringLiteral("한국어"), QStringLiteral("ko"));
+    m_languageCombo->addItem(QStringLiteral("日本語"), QStringLiteral("ja"));
+    const int languageIndex = m_languageCombo->findData(uiLanguage());
     m_languageCombo->setCurrentIndex(std::max(0, languageIndex));
     generalLayout->addRow(tr("Language"), m_languageCombo);
 
     auto *restartLabel = new QLabel(
-        tr("Restart WagleWaglePaint to apply language changes."),
-        generalTab);
+        tr("Restart WagleWaglePaint to apply language changes."), generalTab);
     restartLabel->setWordWrap(true);
     generalLayout->addRow(QString(), restartLabel);
     tabs->addTab(generalTab, tr("General"));
@@ -181,35 +163,29 @@ SettingsDialog::SettingsDialog(
     drawingLayout->setContentsMargins(14, 14, 14, 14);
     drawingLayout->setSpacing(8);
 
-    m_wobbleAnimation = new QCheckBox(
-        tr("Wobble animation"),
-        drawingTab);
-    m_wobbleAnimation->setObjectName(
-        QStringLiteral("wobbleAnimationCheck"));
+    m_wobbleAnimation = new QCheckBox(tr("Wobble animation"), drawingTab);
+    m_wobbleAnimation->setObjectName(QStringLiteral("wobbleAnimationCheck"));
     m_wobbleAnimation->setChecked(wobbleAnimationEnabled());
     drawingLayout->addWidget(m_wobbleAnimation);
 
-    m_drawingOptionsLabel = new QLabel(
-        tr("Wobble preview while drawing a stroke"),
-        drawingTab);
+    m_drawingOptionsLabel =
+        new QLabel(tr("Wobble preview while drawing a stroke"), drawingTab);
     drawingLayout->addWidget(m_drawingOptionsLabel);
 
     m_pauseWhileDrawing = new QRadioButton(
-        tr("Pause the wobble until the stroke is finished"),
-        drawingTab);
+        tr("Pause the wobble until the stroke is finished"), drawingTab);
     drawingLayout->addWidget(m_pauseWhileDrawing);
 
-    m_keepWobbling = new QRadioButton(
-        tr("Keep wobbling while drawing"),
-        drawingTab);
+    m_keepWobbling =
+        new QRadioButton(tr("Keep wobbling while drawing"), drawingTab);
     drawingLayout->addWidget(m_keepWobbling);
 
     updateDrawingOptionsEnabled();
-    connect(
-        m_wobbleAnimation,
+    connect(m_wobbleAnimation,
         &QCheckBox::toggled,
         this,
-        [this](bool enabled) {
+        [this](bool enabled)
+        {
             QSettings().setValue(wobbleAnimationKey, enabled);
             emit wobbleAnimationEnabledChanged(enabled);
             updateDrawingOptionsEnabled();
@@ -226,8 +202,7 @@ SettingsDialog::SettingsDialog(
     auto *folderLabel = new QLabel(tr("Default save folder"), filesTab);
     filesLayout->addWidget(folderLabel);
     auto *folderDescription = new QLabel(
-        tr("New projects and exports start in this folder."),
-        filesTab);
+        tr("New projects and exports start in this folder."), filesTab);
     folderDescription->setWordWrap(true);
     filesLayout->addWidget(folderDescription);
 
@@ -241,21 +216,18 @@ SettingsDialog::SettingsDialog(
     auto *chooseFolderButton = new QPushButton(tr("Choose…"), filesTab);
     chooseFolderButton->setObjectName(
         QStringLiteral("chooseDefaultSaveFolderButton"));
-    connect(
-        chooseFolderButton,
+    connect(chooseFolderButton,
         &QPushButton::clicked,
         this,
         &SettingsDialog::chooseDefaultSaveFolder);
     folderRow->addWidget(chooseFolderButton);
     filesLayout->addLayout(folderRow);
 
-    auto *systemDefaultButton = new QPushButton(
-        tr("Use system default"),
-        filesTab);
+    auto *systemDefaultButton =
+        new QPushButton(tr("Use system default"), filesTab);
     systemDefaultButton->setObjectName(
         QStringLiteral("systemDefaultSaveFolderButton"));
-    connect(
-        systemDefaultButton,
+    connect(systemDefaultButton,
         &QPushButton::clicked,
         this,
         &SettingsDialog::resetDefaultSaveFolder);
@@ -283,21 +255,25 @@ SettingsDialog::SettingsDialog(
     shortcutForm->setHorizontalSpacing(18);
     shortcutForm->setVerticalSpacing(8);
 
-    for (QAction *action : std::as_const(m_shortcutActions)) {
-        if (!action || action->objectName().isEmpty()) {
+    for (QAction *action : std::as_const(m_shortcutActions))
+    {
+        if (!action || action->objectName().isEmpty())
+        {
             continue;
         }
-        auto *editor = new QKeySequenceEdit(action->shortcut(), shortcutFormWidget);
-        editor->setObjectName(action->objectName() + QStringLiteral("ShortcutEdit"));
+        auto *editor =
+            new QKeySequenceEdit(action->shortcut(), shortcutFormWidget);
+        editor->setObjectName(
+            action->objectName() + QStringLiteral("ShortcutEdit"));
         editor->setClearButtonEnabled(true);
         editor->setMaximumSequenceLength(1);
         shortcutForm->addRow(actionLabel(action), editor);
         m_shortcutEditors.insert(action, editor);
-        connect(
-            editor,
+        connect(editor,
             &QKeySequenceEdit::keySequenceChanged,
             this,
-            [this, action](const QKeySequence &shortcut) {
+            [this, action](const QKeySequence &shortcut)
+            {
                 setShortcut(action, shortcut);
             });
     }
@@ -318,63 +294,63 @@ SettingsDialog::SettingsDialog(
     aboutLayout->setContentsMargins(14, 14, 14, 14);
     aboutLayout->setSpacing(8);
 
-    auto *applicationNameLabel = new QLabel(
-        QStringLiteral("WagleWaglePaint"),
-        aboutTab);
+    auto *applicationNameLabel =
+        new QLabel(QStringLiteral("WagleWaglePaint"), aboutTab);
     QFont applicationNameFont = applicationNameLabel->font();
     applicationNameFont.setBold(true);
-    applicationNameFont.setPointSize(
-        applicationNameFont.pointSize() + 3);
+    applicationNameFont.setPointSize(applicationNameFont.pointSize() + 3);
     applicationNameLabel->setFont(applicationNameFont);
     aboutLayout->addWidget(applicationNameLabel);
 
     auto *versionLabel = new QLabel(
-        tr("Version %1").arg(QApplication::applicationVersion()),
-        aboutTab);
-    versionLabel->setObjectName(
-        QStringLiteral("applicationVersionLabel"));
+        tr("Version %1").arg(QApplication::applicationVersion()), aboutTab);
+    versionLabel->setObjectName(QStringLiteral("applicationVersionLabel"));
     versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     aboutLayout->addWidget(versionLabel);
     aboutLayout->addStretch(1);
     tabs->addTab(aboutTab, tr("About"));
 
     auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::RestoreDefaults | QDialogButtonBox::Close,
-        this);
+        QDialogButtonBox::RestoreDefaults | QDialogButtonBox::Close, this);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    connect(
-        buttons->button(QDialogButtonBox::RestoreDefaults),
+    connect(buttons->button(QDialogButtonBox::RestoreDefaults),
         &QPushButton::clicked,
         this,
         &SettingsDialog::restoreDefaults);
     layout->addWidget(buttons);
 
-    if (animateWhileDrawing()) {
+    if (animateWhileDrawing())
+    {
         m_keepWobbling->setChecked(true);
-    } else {
+    }
+    else
+    {
         m_pauseWhileDrawing->setChecked(true);
     }
 
-    connect(
-        m_keepWobbling,
+    connect(m_keepWobbling,
         &QRadioButton::toggled,
         this,
-        [this](bool keepWobbling) {
+        [this](bool keepWobbling)
+        {
             QSettings settings;
             settings.setValue(animateWhileDrawingKey, keepWobbling);
             emit animateWhileDrawingChanged(keepWobbling);
         });
-    connect(
-        m_languageCombo,
+    connect(m_languageCombo,
         &QComboBox::currentIndexChanged,
         this,
-        [this](int index) {
+        [this](int index)
+        {
             QSettings settings;
             const QString language =
                 m_languageCombo->itemData(index).toString();
-            if (language == QStringLiteral("system")) {
+            if (language == QStringLiteral("system"))
+            {
                 settings.remove(uiLanguageKey);
-            } else {
+            }
+            else
+            {
                 settings.setValue(uiLanguageKey, language);
             }
         });
@@ -382,23 +358,23 @@ SettingsDialog::SettingsDialog(
     resize(520, 520);
 }
 
-void SettingsDialog::setShortcut(
-    QAction *action,
-    const QKeySequence &shortcut)
+void SettingsDialog::setShortcut(QAction *action, const QKeySequence &shortcut)
 {
-    if (!action) {
+    if (!action)
+    {
         return;
     }
 
-    for (QAction *other : std::as_const(m_shortcutActions)) {
-        if (other
-            && other != action
-            && !shortcut.isEmpty()
-            && other->shortcut() == shortcut) {
+    for (QAction *other : std::as_const(m_shortcutActions))
+    {
+        if (other && other != action && !shortcut.isEmpty()
+            && other->shortcut() == shortcut)
+        {
             m_shortcutMessage->setText(
                 tr("This shortcut is already assigned to %1.")
                     .arg(actionLabel(other)));
-            if (QKeySequenceEdit *editor = m_shortcutEditors.value(action)) {
+            if (QKeySequenceEdit *editor = m_shortcutEditors.value(action))
+            {
                 const QSignalBlocker blocker(editor);
                 editor->setKeySequence(action->shortcut());
             }
@@ -410,23 +386,24 @@ void SettingsDialog::setShortcut(
     action->setShortcut(shortcut);
     QSettings settings;
     const QString key = shortcutKey(action->objectName());
-    if (shortcut == defaultShortcut(action)) {
+    if (shortcut == defaultShortcut(action))
+    {
         settings.remove(key);
-    } else {
-        settings.setValue(
-            key,
-            shortcut.toString(QKeySequence::PortableText));
+    }
+    else
+    {
+        settings.setValue(key, shortcut.toString(QKeySequence::PortableText));
     }
 }
 
 void SettingsDialog::chooseDefaultSaveFolder()
 {
-    const QString selected = QFileDialog::getExistingDirectory(
-        this,
+    const QString selected = QFileDialog::getExistingDirectory(this,
         tr("Choose default save folder"),
         defaultSaveFolder(),
         QFileDialog::ShowDirsOnly);
-    if (selected.isEmpty()) {
+    if (selected.isEmpty())
+    {
         return;
     }
     const QString folder = QDir(selected).absolutePath();
@@ -451,14 +428,17 @@ void SettingsDialog::updateDrawingOptionsEnabled()
 void SettingsDialog::restoreDefaults()
 {
     QSettings settings;
-    for (QAction *action : std::as_const(m_shortcutActions)) {
-        if (!action) {
+    for (QAction *action : std::as_const(m_shortcutActions))
+    {
+        if (!action)
+        {
             continue;
         }
         const QKeySequence shortcut = defaultShortcut(action);
         action->setShortcut(shortcut);
         settings.remove(shortcutKey(action->objectName()));
-        if (QKeySequenceEdit *editor = m_shortcutEditors.value(action)) {
+        if (QKeySequenceEdit *editor = m_shortcutEditors.value(action))
+        {
             const QSignalBlocker blocker(editor);
             editor->setKeySequence(shortcut);
         }

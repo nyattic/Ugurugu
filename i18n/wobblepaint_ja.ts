@@ -1312,10 +1312,16 @@
         <location filename="../src/ui/MainWindow.cpp" line="391"/>
         <source>The recovery file could not be opened.
 
-%1</source>
+%1
+
+The recovery file was not deleted. You can find it at:
+%2</source>
         <translation>復元ファイルを開けませんでした。
 
-%1</translation>
+%1
+
+復元ファイルは削除されていません。次の場所で確認できます：
+%2</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="402"/>

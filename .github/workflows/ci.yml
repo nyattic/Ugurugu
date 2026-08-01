@@ -18,6 +18,20 @@ env:
   QT_FORCE_STDERR_LOGGING: 1
 
 jobs:
+  format:
+    name: clang-format
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Check source formatting
+        run: >-
+          git ls-files -z -- '*.cpp' '*.hpp' '*.mm' |
+          xargs -0 xcrun clang-format --dry-run --Werror
+
+      - name: Test download badge aggregation
+        run: node --test .github/scripts/update-download-badge.test.js
+
   build:
     name: ${{ matrix.name }}
     strategy:
@@ -34,6 +48,11 @@ jobs:
             preset: windows-debug
             qt-host: windows
             qt-arch: win64_msvc2022_64
+          - name: macOS ASan + UBSan
+            os: macos-15
+            preset: macos-sanitized
+            qt-host: mac
+            qt-arch: clang_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -54,7 +73,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }} --parallel
 
       - name: Test
-        run: ctest --preset ${{ matrix.preset }}
+        run: ctest --preset ${{ matrix.preset }} --parallel 7 --output-on-failure
 
       - name: Test diagnostics
         if: failure() && runner.os == 'Windows'

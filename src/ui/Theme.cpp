@@ -7,7 +7,8 @@
 #include <QStringList>
 #include <QStyleFactory>
 
-namespace wobble {
+namespace wobble
+{
 
 QColor Theme::chromeBackground()
 {
@@ -85,10 +86,12 @@ void Theme::apply(QApplication &application)
 
     const int fontId = QFontDatabase::addApplicationFont(
         QStringLiteral(":/fonts/PretendardJP-Medium.otf"));
-    if (fontId >= 0) {
+    if (fontId >= 0)
+    {
         const QStringList families =
             QFontDatabase::applicationFontFamilies(fontId);
-        if (!families.isEmpty()) {
+        if (!families.isEmpty())
+        {
             QFont font = application.font();
             font.setFamilies({families.first()});
             font.setWeight(QFont::Medium);
@@ -115,13 +118,9 @@ void Theme::apply(QApplication &application)
     palette.setColor(QPalette::Disabled, QPalette::Text, textDisabled());
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, textDisabled());
     palette.setColor(
-        QPalette::Disabled,
-        QPalette::Highlight,
-        controlBackground());
+        QPalette::Disabled, QPalette::Highlight, controlBackground());
     palette.setColor(
-        QPalette::Disabled,
-        QPalette::HighlightedText,
-        textDisabled());
+        QPalette::Disabled, QPalette::HighlightedText, textDisabled());
     application.setPalette(palette);
 
     const QString sheet = QStringLiteral(R"(
@@ -353,9 +352,7 @@ QWidget#LayerDockBody {
     resolved.replace(QStringLiteral("%MUTED%"), textMuted().name());
     resolved.replace(QStringLiteral("%DISABLED%"), textDisabled().name());
     resolved.replace(QStringLiteral("%ACCENT%"), accent().name());
-    resolved.replace(
-        QStringLiteral("%ACCENTPRESSED%"),
-        accentPressed().name());
+    resolved.replace(QStringLiteral("%ACCENTPRESSED%"), accentPressed().name());
     resolved.replace(QStringLiteral("%ACCENTTEXT%"), accentText().name());
     application.setStyleSheet(resolved);
 }

@@ -5,18 +5,19 @@
 #include <algorithm>
 #include <cstring>
 
-namespace wobble {
+namespace wobble
+{
 
 QImage transformedMask(
-    const QImage &source,
-    const QSize &targetSize,
-    const QTransform &transform)
+    const QImage &source, const QSize &targetSize, const QTransform &transform)
 {
-    if (source.isNull()) {
+    if (source.isNull())
+    {
         return {};
     }
     QImage target(targetSize, QImage::Format_Grayscale8);
-    if (target.isNull()) {
+    if (target.isNull())
+    {
         return {};
     }
     target.fill(0);
@@ -28,24 +29,25 @@ QImage transformedMask(
     return target;
 }
 
-bool transformMask(
-    QImage &mask,
+bool transformMask(QImage &mask,
     const QSize &targetSize,
     const QTransform &transform,
     QHash<qint64, QImage> &cache)
 {
-    if (mask.isNull()) {
+    if (mask.isNull())
+    {
         return true;
     }
     const qint64 key = mask.cacheKey();
     const auto cached = cache.constFind(key);
-    if (cached != cache.cend()) {
+    if (cached != cache.cend())
+    {
         mask = cached.value();
         return true;
     }
-    const QImage transformed =
-        transformedMask(mask, targetSize, transform);
-    if (transformed.isNull()) {
+    const QImage transformed = transformedMask(mask, targetSize, transform);
+    if (transformed.isNull())
+    {
         return false;
     }
     cache.insert(key, transformed);
@@ -54,40 +56,37 @@ bool transformMask(
 }
 
 QImage maskedPart(
-    const QImage &source,
-    const QImage &selection,
-    bool insideSelection)
+    const QImage &source, const QImage &selection, bool insideSelection)
 {
-    if (selection.isNull()
-        || selection.format() != QImage::Format_Grayscale8
+    if (selection.isNull() || selection.format() != QImage::Format_Grayscale8
         || (!source.isNull()
             && (source.size() != selection.size()
-                || source.format() != QImage::Format_Grayscale8))) {
+                || source.format() != QImage::Format_Grayscale8)))
+    {
         return {};
     }
 
     QImage result(selection.size(), QImage::Format_Grayscale8);
-    if (result.isNull()) {
+    if (result.isNull())
+    {
         return {};
     }
     result.fill(0);
-    for (int y = 0; y < selection.height(); ++y) {
+    for (int y = 0; y < selection.height(); ++y)
+    {
         const uchar *sourceLine =
             source.isNull() ? nullptr : source.constScanLine(y);
         const uchar *selectionLine = selection.constScanLine(y);
         uchar *resultLine = result.scanLine(y);
-        for (int x = 0; x < selection.width(); ++x) {
-            const bool sourceContains =
-                !sourceLine || sourceLine[x] >= 128;
-            const bool selectionContains =
-                selectionLine[x] >= 128;
-            resultLine[x] =
-                sourceContains
-                    && (insideSelection
-                            ? selectionContains
-                            : !selectionContains)
-                ? 255
-                : 0;
+        for (int x = 0; x < selection.width(); ++x)
+        {
+            const bool sourceContains = !sourceLine || sourceLine[x] >= 128;
+            const bool selectionContains = selectionLine[x] >= 128;
+            resultLine[x] = sourceContains
+                                    && (insideSelection ? selectionContains
+                                                        : !selectionContains)
+                                ? 255
+                                : 0;
         }
     }
     return result;
@@ -95,16 +94,20 @@ QImage maskedPart(
 
 bool maskHasContent(const QImage &mask)
 {
-    if (mask.isNull()
-        || mask.format() != QImage::Format_Grayscale8) {
+    if (mask.isNull() || mask.format() != QImage::Format_Grayscale8)
+    {
         return false;
     }
-    for (int y = 0; y < mask.height(); ++y) {
+    for (int y = 0; y < mask.height(); ++y)
+    {
         const uchar *line = mask.constScanLine(y);
-        if (std::any_of(
-                line,
+        if (std::any_of(line,
                 line + mask.width(),
-                [](uchar value) { return value >= 128; })) {
+                [](uchar value)
+                {
+                    return value >= 128;
+                }))
+        {
             return true;
         }
     }
@@ -112,66 +115,74 @@ bool maskHasContent(const QImage &mask)
 }
 
 bool maskHasContent(
-    const QImage &mask,
-    const std::optional<QRect> &visibilityClip)
+    const QImage &mask, const std::optional<QRect> &visibilityClip)
 {
-    if (mask.isNull()
-        || mask.format() != QImage::Format_Grayscale8) {
+    if (mask.isNull() || mask.format() != QImage::Format_Grayscale8)
+    {
         return false;
     }
     QRect bounds = mask.rect();
-    if (visibilityClip) {
+    if (visibilityClip)
+    {
         bounds = bounds.intersected(*visibilityClip);
     }
-    if (bounds.isEmpty()) {
+    if (bounds.isEmpty())
+    {
         return false;
     }
-    for (int y = bounds.top(); y <= bounds.bottom(); ++y) {
+    for (int y = bounds.top(); y <= bounds.bottom(); ++y)
+    {
         const uchar *line = mask.constScanLine(y);
-        if (std::any_of(
-                line + bounds.left(),
+        if (std::any_of(line + bounds.left(),
                 line + bounds.right() + 1,
-                [](uchar value) { return value >= 128; })) {
+                [](uchar value)
+                {
+                    return value >= 128;
+                }))
+        {
             return true;
         }
     }
     return false;
 }
 
-bool masksIntersect(
-    const QImage &first,
+bool masksIntersect(const QImage &first,
     const QImage &second,
     const std::optional<QRect> &visibilityClip)
 {
-    if ((!first.isNull()
-         && first.format() != QImage::Format_Grayscale8)
-        || (!second.isNull()
-            && second.format() != QImage::Format_Grayscale8)
-        || (!first.isNull()
-            && !second.isNull()
-            && first.size() != second.size())) {
+    if ((!first.isNull() && first.format() != QImage::Format_Grayscale8)
+        || (!second.isNull() && second.format() != QImage::Format_Grayscale8)
+        || (!first.isNull() && !second.isNull()
+            && first.size() != second.size()))
+    {
         return false;
     }
 
     const QSize size = !first.isNull() ? first.size() : second.size();
-    if (!size.isValid()) {
+    if (!size.isValid())
+    {
         return false;
     }
     QRect bounds(QPoint(), size);
-    if (visibilityClip) {
+    if (visibilityClip)
+    {
         bounds = bounds.intersected(*visibilityClip);
     }
-    if (bounds.isEmpty()) {
+    if (bounds.isEmpty())
+    {
         return false;
     }
-    for (int y = bounds.top(); y <= bounds.bottom(); ++y) {
+    for (int y = bounds.top(); y <= bounds.bottom(); ++y)
+    {
         const uchar *firstLine =
             first.isNull() ? nullptr : first.constScanLine(y);
         const uchar *secondLine =
             second.isNull() ? nullptr : second.constScanLine(y);
-        for (int x = bounds.left(); x <= bounds.right(); ++x) {
+        for (int x = bounds.left(); x <= bounds.right(); ++x)
+        {
             if ((!firstLine || firstLine[x] >= 128)
-                && (!secondLine || secondLine[x] >= 128)) {
+                && (!secondLine || secondLine[x] >= 128))
+            {
                 return true;
             }
         }
@@ -180,24 +191,26 @@ bool masksIntersect(
 }
 
 std::optional<QImage> materializedVisibilityMask(
-    const Stroke &stroke,
-    const QSize &canvasSize)
+    const Stroke &stroke, const QSize &canvasSize)
 {
     if (!canvasSize.isValid()
         || (!stroke.clipMask.isNull()
             && (stroke.clipMask.size() != canvasSize
-                || stroke.clipMask.format()
-                    != QImage::Format_Grayscale8))) {
+                || stroke.clipMask.format() != QImage::Format_Grayscale8)))
+    {
         return std::nullopt;
     }
 
     const QRect canvasRect(QPoint(), canvasSize);
     std::optional<QRect> clipRect = stroke.visibilityClip;
-    if (clipRect) {
+    if (clipRect)
+    {
         *clipRect = clipRect->intersected(canvasRect);
-        if (clipRect->isEmpty()) {
+        if (clipRect->isEmpty())
+        {
             QImage empty(canvasSize, QImage::Format_Grayscale8);
-            if (empty.isNull()) {
+            if (empty.isNull())
+            {
                 return std::nullopt;
             }
             empty.fill(0);
@@ -205,25 +218,28 @@ std::optional<QImage> materializedVisibilityMask(
         }
     }
 
-    if (!clipRect) {
+    if (!clipRect)
+    {
         return stroke.clipMask;
     }
 
     QImage materialized(canvasSize, QImage::Format_Grayscale8);
-    if (materialized.isNull()) {
+    if (materialized.isNull())
+    {
         return std::nullopt;
     }
     materialized.fill(0);
-    for (int y = clipRect->top(); y <= clipRect->bottom(); ++y) {
+    for (int y = clipRect->top(); y <= clipRect->bottom(); ++y)
+    {
         uchar *target = materialized.scanLine(y) + clipRect->left();
-        if (stroke.clipMask.isNull()) {
+        if (stroke.clipMask.isNull())
+        {
             std::fill(
-                target,
-                target + clipRect->width(),
-                static_cast<uchar>(255));
-        } else {
-            std::memcpy(
-                target,
+                target, target + clipRect->width(), static_cast<uchar>(255));
+        }
+        else
+        {
+            std::memcpy(target,
                 stroke.clipMask.constScanLine(y) + clipRect->left(),
                 static_cast<std::size_t>(clipRect->width()));
         }
@@ -231,71 +247,79 @@ std::optional<QImage> materializedVisibilityMask(
     return materialized;
 }
 
-bool canonicalizeStrokeVisibility(
-    Stroke &stroke,
-    const QSize &canvasSize)
+bool canonicalizeStrokeVisibility(Stroke &stroke, const QSize &canvasSize)
 {
     const QRect canvasRect(QPoint(), canvasSize);
-    if (!canvasSize.isValid()) {
+    if (!canvasSize.isValid())
+    {
         return false;
     }
     if (stroke.mode == StrokeMode::PixelSelection
-        || stroke.mode == StrokeMode::Reframe
-        || stroke.pixelSelectionOp
-        || stroke.reframeOp) {
+        || stroke.mode == StrokeMode::Reframe || stroke.pixelSelectionOp
+        || stroke.reframeOp)
+    {
         return false;
     }
 
-    if (stroke.visibilityClip) {
-        stroke.visibilityClip =
-            stroke.visibilityClip->intersected(canvasRect);
-        if (stroke.visibilityClip->isEmpty()) {
+    if (stroke.visibilityClip)
+    {
+        stroke.visibilityClip = stroke.visibilityClip->intersected(canvasRect);
+        if (stroke.visibilityClip->isEmpty())
+        {
             return false;
         }
     }
 
-    if (!stroke.clipMask.isNull()) {
+    if (!stroke.clipMask.isNull())
+    {
         if (stroke.clipMask.size() != canvasSize
-            || stroke.clipMask.format()
-                != QImage::Format_Grayscale8) {
+            || stroke.clipMask.format() != QImage::Format_Grayscale8)
+        {
             return false;
         }
         bool full = true;
-        for (int y = 0; y < stroke.clipMask.height() && full; ++y) {
+        for (int y = 0; y < stroke.clipMask.height() && full; ++y)
+        {
             const uchar *line = stroke.clipMask.constScanLine(y);
-            full = std::all_of(
-                line,
+            full = std::all_of(line,
                 line + stroke.clipMask.width(),
-                [](uchar value) { return value >= 128; });
+                [](uchar value)
+                {
+                    return value >= 128;
+                });
         }
-        if (full) {
+        if (full)
+        {
             stroke.clipMask = {};
         }
     }
 
     const std::optional<QImage> visibility =
         materializedVisibilityMask(stroke, canvasSize);
-    if (!visibility) {
+    if (!visibility)
+    {
         return false;
     }
-    if (!visibility->isNull() && !maskHasContent(*visibility)) {
+    if (!visibility->isNull() && !maskHasContent(*visibility))
+    {
         return false;
     }
 
-    if (stroke.mode != StrokeMode::Fill) {
+    if (stroke.mode != StrokeMode::Fill)
+    {
         return true;
     }
-    if (stroke.fillMask.isNull()) {
+    if (stroke.fillMask.isNull())
+    {
         return true;
     }
     if (stroke.fillMask.size() != canvasSize
-        || stroke.fillMask.format()
-            != QImage::Format_Grayscale8) {
+        || stroke.fillMask.format() != QImage::Format_Grayscale8)
+    {
         return false;
     }
-    return visibility->isNull()
-        ? maskHasContent(stroke.fillMask)
-        : masksIntersect(stroke.fillMask, *visibility);
+    return visibility->isNull() ? maskHasContent(stroke.fillMask)
+                                : masksIntersect(stroke.fillMask, *visibility);
 }
 
 }

@@ -1,6 +1,10 @@
 #include "brush/BrushPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
+#include "document/SelectionVisibility.hpp"
+#include "io/DocumentSerializer.hpp"
+#include "render/PreviewRenderPolicy.hpp"
+#include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"
@@ -8,11 +12,10 @@
 #include "ui/CanvasWidget.hpp"
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LayerDock.hpp"
+#include "ui/LayerThumbnailRenderer.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
-#include "io/DocumentSerializer.hpp"
-#include "render/RenderEngine.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -28,9 +31,9 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPixmap>
 #include <QPointingDevice>
 #include <QPushButton>
-#include <QPixmap>
 #include <QSettings>
 #include <QSlider>
 #include <QSpinBox>
@@ -46,7 +49,8 @@
 #include <limits>
 #include <utility>
 
-namespace wobble {
+namespace wobble
+{
 
 class SettingValueGuard final
 {
@@ -60,9 +64,12 @@ public:
 
     ~SettingValueGuard()
     {
-        if (m_existed) {
+        if (m_existed)
+        {
             m_settings.setValue(m_key, m_value);
-        } else {
+        }
+        else
+        {
             m_settings.remove(m_key);
         }
     }
@@ -86,9 +93,12 @@ public:
 
     ~EnvironmentVariableGuard()
     {
-        if (m_existed) {
+        if (m_existed)
+        {
             qputenv(m_name.constData(), m_value);
-        } else {
+        }
+        else
+        {
             qunsetenv(m_name.constData());
         }
     }
@@ -155,15 +165,14 @@ private slots:
         const QList<BrushPresetButton *> presetButtons =
             window.findChildren<BrushPresetButton *>();
         QSpinBox *brushSizeSpin =
-            window.findChild<QSpinBox *>(
-                QStringLiteral("brushSizeSpin"));
+            window.findChild<QSpinBox *>(QStringLiteral("brushSizeSpin"));
         QVERIFY(brushSizeSpin);
-        QCOMPARE(
-            presetButtons.size(),
-            BrushPresetCatalog::builtIns().size());
+        QCOMPARE(presetButtons.size(), BrushPresetCatalog::builtIns().size());
         BrushPresetButton *softAirbrushButton = nullptr;
-        for (BrushPresetButton *button : presetButtons) {
-            if (button->presetId() == QStringLiteral("soft-airbrush")) {
+        for (BrushPresetButton *button : presetButtons)
+        {
+            if (button->presetId() == QStringLiteral("soft-airbrush"))
+            {
                 softAirbrushButton = button;
             }
         }
@@ -171,25 +180,21 @@ private slots:
         softAirbrushButton->click();
         QCOMPARE(canvas->brushPresetId(), QStringLiteral("soft-airbrush"));
         QVERIFY(softAirbrushButton->isChecked());
-        QCOMPARE(
-            brushSizeSpin->value(),
-            qRound(
-                BrushPresetCatalog::find(
-                    QStringLiteral("soft-airbrush"))->defaultSize));
+        QCOMPARE(brushSizeSpin->value(),
+            qRound(BrushPresetCatalog::find(QStringLiteral("soft-airbrush"))
+                    ->defaultSize));
 
         QSpinBox *currentFrameSpin =
             window.findChild<QSpinBox *>(QStringLiteral("currentFrameSpin"));
         QVERIFY(currentFrameSpin);
         QCOMPARE(currentFrameSpin->maximum(), 30);
         currentFrameSpin->setFocus(Qt::OtherFocusReason);
-        QTest::mouseClick(
-            currentFrameSpin,
+        QTest::mouseClick(currentFrameSpin,
             Qt::LeftButton,
             Qt::NoModifier,
             currentFrameSpin->rect().center());
         QTRY_VERIFY(!canvas->isAnimating());
-        const int targetFrameValue =
-            currentFrameSpin->value() == 1 ? 2 : 1;
+        const int targetFrameValue = currentFrameSpin->value() == 1 ? 2 : 1;
         currentFrameSpin->setValue(targetFrameValue);
         QCOMPARE(canvas->currentFrame(), targetFrameValue - 1);
 
@@ -202,14 +207,16 @@ private slots:
 
         const QString screenshotPath =
             qEnvironmentVariable("WOBBLEPAINT_TEST_SCREENSHOT");
-        if (!screenshotPath.isEmpty()) {
+        if (!screenshotPath.isEmpty())
+        {
             QVERIFY(window.grab().save(screenshotPath, "PNG"));
             QVERIFY(QFileInfo(screenshotPath).size() > 0);
         }
 
         const QString brushPanelScreenshotPath =
             qEnvironmentVariable("WOBBLEPAINT_BRUSH_PANEL_SCREENSHOT");
-        if (!brushPanelScreenshotPath.isEmpty()) {
+        if (!brushPanelScreenshotPath.isEmpty())
+        {
             BrushPopoverPanel *brushPanel =
                 window.findChild<BrushPopoverPanel *>();
             QVERIFY(brushPanel);
@@ -238,17 +245,16 @@ private slots:
 
         QAction *settingsAction =
             window.findChild<QAction *>(QStringLiteral("settingsAction"));
-        QAction *checkForUpdatesAction =
-            window.findChild<QAction *>(
-                QStringLiteral("checkForUpdatesAction"));
+        QAction *checkForUpdatesAction = window.findChild<QAction *>(
+            QStringLiteral("checkForUpdatesAction"));
         QToolButton *settingsButton =
             window.findChild<QToolButton *>(QStringLiteral("settingsButton"));
         QVERIFY(settingsAction);
         QVERIFY(checkForUpdatesAction);
         QVERIFY(settingsButton);
         QCOMPARE(settingsButton->defaultAction(), settingsAction);
-        QVERIFY(window.windowTitle().contains(
-            QStringLiteral("WagleWaglePaint")));
+        QVERIFY(
+            window.windowTitle().contains(QStringLiteral("WagleWaglePaint")));
     }
 
     void editsAndRestoresShortcuts()
@@ -256,8 +262,7 @@ private slots:
         const QString brushKey = QStringLiteral("shortcuts/brushAction");
         const QString eraserKey = QStringLiteral("shortcuts/eraserAction");
         const QString folderKey = QStringLiteral("files/defaultSaveFolder");
-        const QString languageKey =
-            QStringLiteral("appearance/language");
+        const QString languageKey = QStringLiteral("appearance/language");
         SettingValueGuard brushGuard(brushKey);
         SettingValueGuard eraserGuard(eraserKey);
         SettingValueGuard folderGuard(folderKey);
@@ -281,18 +286,13 @@ private slots:
         eraserAction.setProperty("defaultShortcut", QStringLiteral("E"));
         eraserAction.setShortcut(QKeySequence(QStringLiteral("E")));
 
-        SettingsDialog dialog(
-            nullptr,
-            {&brushAction, &eraserAction});
-        QLineEdit *folderEdit =
-            dialog.findChild<QLineEdit *>(
-                QStringLiteral("defaultSaveFolderEdit"));
-        QKeySequenceEdit *brushEditor =
-            dialog.findChild<QKeySequenceEdit *>(
-                QStringLiteral("brushActionShortcutEdit"));
+        SettingsDialog dialog(nullptr, {&brushAction, &eraserAction});
+        QLineEdit *folderEdit = dialog.findChild<QLineEdit *>(
+            QStringLiteral("defaultSaveFolderEdit"));
+        QKeySequenceEdit *brushEditor = dialog.findChild<QKeySequenceEdit *>(
+            QStringLiteral("brushActionShortcutEdit"));
         QComboBox *languageCombo =
-            dialog.findChild<QComboBox *>(
-                QStringLiteral("languageCombo"));
+            dialog.findChild<QComboBox *>(QStringLiteral("languageCombo"));
         QVERIFY(folderEdit);
         QVERIFY(brushEditor);
         QVERIFY(languageCombo);
@@ -305,61 +305,45 @@ private slots:
         QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("ko"));
 
         brushEditor->setKeySequence(QKeySequence(QStringLiteral("V")));
-        QTRY_COMPARE(
-            brushAction.shortcut(),
-            QKeySequence(QStringLiteral("V")));
-        QCOMPARE(
-            settings.value(brushKey).toString(),
-            QStringLiteral("V"));
+        QTRY_COMPARE(brushAction.shortcut(), QKeySequence(QStringLiteral("V")));
+        QCOMPARE(settings.value(brushKey).toString(), QStringLiteral("V"));
 
         brushEditor->setKeySequence(QKeySequence(QStringLiteral("E")));
         QTRY_COMPARE(
-            brushEditor->keySequence(),
-            QKeySequence(QStringLiteral("V")));
-        QCOMPARE(
-            brushAction.shortcut(),
-            QKeySequence(QStringLiteral("V")));
+            brushEditor->keySequence(), QKeySequence(QStringLiteral("V")));
+        QCOMPARE(brushAction.shortcut(), QKeySequence(QStringLiteral("V")));
 
-        QDialogButtonBox *buttons =
-            dialog.findChild<QDialogButtonBox *>();
+        QDialogButtonBox *buttons = dialog.findChild<QDialogButtonBox *>();
         QVERIFY(buttons);
         QPushButton *restoreButton =
             buttons->button(QDialogButtonBox::RestoreDefaults);
         QVERIFY(restoreButton);
         QTest::mouseClick(restoreButton, Qt::LeftButton);
-        QCOMPARE(
-            brushAction.shortcut(),
-            QKeySequence(QStringLiteral("B")));
+        QCOMPARE(brushAction.shortcut(), QKeySequence(QStringLiteral("B")));
         QVERIFY(!settings.contains(brushKey));
         QVERIFY(!settings.contains(folderKey));
         QVERIFY(!settings.contains(languageKey));
-        QCOMPARE(
-            folderEdit->text(),
-            SettingsDialog::defaultSaveFolder());
+        QCOMPARE(folderEdit->text(), SettingsDialog::defaultSaveFolder());
         QCOMPARE(SettingsDialog::uiLanguage(), QStringLiteral("system"));
     }
 
     void showsApplicationVersionInAboutTab()
     {
         const ApplicationVersionGuard versionGuard;
-        QApplication::setApplicationVersion(
-            QStringLiteral("9.8.7-test"));
+        QApplication::setApplicationVersion(QStringLiteral("9.8.7-test"));
 
         SettingsDialog dialog;
         QTabWidget *tabs = dialog.findChild<QTabWidget *>();
         QLabel *versionLabel = dialog.findChild<QLabel *>(
             QStringLiteral("applicationVersionLabel"));
-        QWidget *aboutTab = dialog.findChild<QWidget *>(
-            QStringLiteral("aboutTab"));
+        QWidget *aboutTab =
+            dialog.findChild<QWidget *>(QStringLiteral("aboutTab"));
         QVERIFY(tabs);
         QVERIFY(versionLabel);
         QVERIFY(aboutTab);
+        QCOMPARE(versionLabel->text(), QStringLiteral("Version 9.8.7-test"));
         QCOMPARE(
-            versionLabel->text(),
-            QStringLiteral("Version 9.8.7-test"));
-        QCOMPARE(
-            tabs->tabText(tabs->indexOf(aboutTab)),
-            QStringLiteral("About"));
+            tabs->tabText(tabs->indexOf(aboutTab)), QStringLiteral("About"));
     }
 
     void configuresCanvasSizeDialog()
@@ -367,14 +351,14 @@ private slots:
         CanvasSizeDialog dialog(QSize(640, 480));
         QCheckBox *relativeCheck = dialog.findChild<QCheckBox *>(
             QStringLiteral("canvasRelativeSizeCheck"));
-        QSpinBox *widthSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("canvasWidthSpin"));
-        QSpinBox *heightSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("canvasHeightSpin"));
-        QSpinBox *offsetXSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("canvasOffsetXSpin"));
-        QSpinBox *offsetYSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("canvasOffsetYSpin"));
+        QSpinBox *widthSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("canvasWidthSpin"));
+        QSpinBox *heightSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("canvasHeightSpin"));
+        QSpinBox *offsetXSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("canvasOffsetXSpin"));
+        QSpinBox *offsetYSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("canvasOffsetYSpin"));
         QToolButton *topLeft = dialog.findChild<QToolButton *>(
             QStringLiteral("canvasAnchorTopLeft"));
         QToolButton *center = dialog.findChild<QToolButton *>(
@@ -431,13 +415,12 @@ private slots:
     void configuresImageSizeDialog()
     {
         ImageSizeDialog dialog(QSize(640, 480));
-        QSpinBox *widthSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("imageWidthSpin"));
-        QSpinBox *heightSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("imageHeightSpin"));
-        QDoubleSpinBox *percentageSpin =
-            dialog.findChild<QDoubleSpinBox *>(
-                QStringLiteral("imageScalePercentSpin"));
+        QSpinBox *widthSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("imageWidthSpin"));
+        QSpinBox *heightSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("imageHeightSpin"));
+        QDoubleSpinBox *percentageSpin = dialog.findChild<QDoubleSpinBox *>(
+            QStringLiteral("imageScalePercentSpin"));
         QCheckBox *keepAspectCheck = dialog.findChild<QCheckBox *>(
             QStringLiteral("imageKeepAspectCheck"));
         QLabel *warningLabel = dialog.findChild<QLabel *>(
@@ -463,8 +446,7 @@ private slots:
         QCOMPARE(distorted.size, QSize(800, 900));
         QVERIFY(qAbs(distorted.horizontalScale - 1.25) < 0.0001);
         QVERIFY(qAbs(distorted.verticalScale - 1.875) < 0.0001);
-        QVERIFY(warningLabel->text().contains(
-            QStringLiteral("distorted")));
+        QVERIFY(warningLabel->text().contains(QStringLiteral("distorted")));
 
         keepAspectCheck->setChecked(true);
         QCOMPARE(dialog.imageSize(), QSize(800, 600));
@@ -477,15 +459,21 @@ private slots:
 
     void unlocksImageSizeDialogForExtremeAspectRatios()
     {
+        QCOMPARE(
+            LayerThumbnailRenderer::renderSize(QSize(1, 4096)), QSize(1, 64));
+        QCOMPARE(
+            LayerThumbnailRenderer::renderSize(QSize(4096, 1)), QSize(96, 1));
+        QCOMPARE(PreviewRenderPolicy::renderSize(QSize(4096, 4096), 16.0),
+            QSize(4096, 4096));
+
         ImageSizeDialog dialog(QSize(4096, 1));
-        QSpinBox *widthSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("imageWidthSpin"));
-        QSpinBox *heightSpin = dialog.findChild<QSpinBox *>(
-            QStringLiteral("imageHeightSpin"));
+        QSpinBox *widthSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("imageWidthSpin"));
+        QSpinBox *heightSpin =
+            dialog.findChild<QSpinBox *>(QStringLiteral("imageHeightSpin"));
         QCheckBox *keepAspectCheck = dialog.findChild<QCheckBox *>(
             QStringLiteral("imageKeepAspectCheck"));
-        QDialogButtonBox *buttons =
-            dialog.findChild<QDialogButtonBox *>();
+        QDialogButtonBox *buttons = dialog.findChild<QDialogButtonBox *>();
         QVERIFY(widthSpin);
         QVERIFY(heightSpin);
         QVERIFY(keepAspectCheck);
@@ -499,24 +487,20 @@ private slots:
 
         widthSpin->setValue(2048);
         QCOMPARE(dialog.imageSize(), QSize(2048, 1));
-        QVERIFY(
-            buttons->button(QDialogButtonBox::Ok)->isEnabled());
+        QVERIFY(buttons->button(QDialogButtonBox::Ok)->isEnabled());
 
         ImageSizeDialog tallDialog(QSize(1, 4096));
-        QCheckBox *tallKeepAspect =
-            tallDialog.findChild<QCheckBox *>(
-                QStringLiteral("imageKeepAspectCheck"));
+        QCheckBox *tallKeepAspect = tallDialog.findChild<QCheckBox *>(
+            QStringLiteral("imageKeepAspectCheck"));
         QVERIFY(tallKeepAspect);
         QVERIFY(!tallKeepAspect->isChecked());
         QVERIFY(!tallKeepAspect->isEnabled());
 
         ImageSizeDialog narrowDialog(QSize(100, 1));
-        QCheckBox *narrowKeepAspect =
-            narrowDialog.findChild<QCheckBox *>(
-                QStringLiteral("imageKeepAspectCheck"));
-        QSpinBox *narrowWidthSpin =
-            narrowDialog.findChild<QSpinBox *>(
-                QStringLiteral("imageWidthSpin"));
+        QCheckBox *narrowKeepAspect = narrowDialog.findChild<QCheckBox *>(
+            QStringLiteral("imageKeepAspectCheck"));
+        QSpinBox *narrowWidthSpin = narrowDialog.findChild<QSpinBox *>(
+            QStringLiteral("imageWidthSpin"));
         QVERIFY(narrowKeepAspect);
         QVERIFY(narrowWidthSpin);
         QVERIFY(narrowKeepAspect->isChecked());
@@ -531,18 +515,9 @@ private slots:
         QTest::addColumn<bool>("closesWindow");
         QTest::addColumn<bool>("savesDocument");
 
-        QTest::newRow("save")
-            << int(Qt::Key_S)
-            << true
-            << true;
-        QTest::newRow("discard")
-            << int(Qt::Key_N)
-            << true
-            << false;
-        QTest::newRow("cancel")
-            << int(Qt::Key_Escape)
-            << false
-            << false;
+        QTest::newRow("save") << int(Qt::Key_S) << true << true;
+        QTest::newRow("discard") << int(Qt::Key_N) << true << false;
+        QTest::newRow("cancel") << int(Qt::Key_Escape) << false << false;
     }
 
     void handlesUnsavedChangesDialogShortcuts()
@@ -555,17 +530,14 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("shortcuts.wagle"));
         QString error;
         QVERIFY2(
             DocumentSerializer::save(
-                filePath,
-                Document::createDefault(QSize(100, 100)),
-                &error),
+                filePath, Document::createDefault(QSize(100, 100)), &error),
             qPrintable(error));
 
         MainWindow window;
@@ -575,8 +547,7 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         QToolButton *addLayerButton =
-            window.findChild<QToolButton *>(
-                QStringLiteral("layerAddButton"));
+            window.findChild<QToolButton *>(QStringLiteral("layerAddButton"));
         QVERIFY(addLayerButton);
         addLayerButton->click();
         QTRY_VERIFY(window.isWindowModified());
@@ -585,43 +556,46 @@ private slots:
         QString saveText;
         QString discardText;
         QString cancelText;
-        QTimer::singleShot(0, &window, [&]() {
-            QDialog *dialog =
-                qobject_cast<QDialog *>(
-                    QApplication::activeModalWidget());
-            if (!dialog) {
-                return;
-            }
-            QPushButton *saveButton =
-                dialog->findChild<QPushButton *>(
+        QTimer::singleShot(0,
+            &window,
+            [&]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                QPushButton *saveButton = dialog->findChild<QPushButton *>(
                     QStringLiteral("unsavedChangesSaveButton"));
-            QPushButton *discardButton =
-                dialog->findChild<QPushButton *>(
+                QPushButton *discardButton = dialog->findChild<QPushButton *>(
                     QStringLiteral("unsavedChangesDiscardButton"));
-            QPushButton *cancelButton =
-                dialog->findChild<QPushButton *>(
+                QPushButton *cancelButton = dialog->findChild<QPushButton *>(
                     QStringLiteral("unsavedChangesCancelButton"));
-            if (!saveButton || !discardButton || !cancelButton) {
-                QTest::keyClick(dialog, Qt::Key_Escape);
-                return;
-            }
-            saveText = saveButton->text();
-            discardText = discardButton->text();
-            cancelText = cancelButton->text();
-            dialogInspected = true;
-            QWidget *keyTarget = QApplication::focusWidget();
-            QTest::keyClick(
-                keyTarget ? keyTarget : dialog,
-                static_cast<Qt::Key>(key));
-        });
-        QTimer::singleShot(1000, &window, []() {
-            QDialog *dialog =
-                qobject_cast<QDialog *>(
-                    QApplication::activeModalWidget());
-            if (dialog) {
-                dialog->reject();
-            }
-        });
+                if (!saveButton || !discardButton || !cancelButton)
+                {
+                    QTest::keyClick(dialog, Qt::Key_Escape);
+                    return;
+                }
+                saveText = saveButton->text();
+                discardText = discardButton->text();
+                cancelText = cancelButton->text();
+                dialogInspected = true;
+                QWidget *keyTarget = QApplication::focusWidget();
+                QTest::keyClick(
+                    keyTarget ? keyTarget : dialog, static_cast<Qt::Key>(key));
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
 
         QCOMPARE(window.close(), closesWindow);
         QVERIFY(dialogInspected);
@@ -632,10 +606,9 @@ private slots:
         const std::optional<Document> savedDocument =
             DocumentSerializer::load(filePath, &error);
         QVERIFY2(savedDocument.has_value(), qPrintable(error));
-        QCOMPARE(
-            savedDocument->layers.size(),
-            savesDocument ? 2 : 1);
-        if (!closesWindow) {
+        QCOMPARE(savedDocument->layers.size(), savesDocument ? 2 : 1);
+        if (!closesWindow)
+        {
             QVERIFY(window.isVisible());
             QVERIFY(window.isWindowModified());
         }
@@ -671,11 +644,7 @@ private slots:
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
 
         QTRY_VERIFY(canvas->hasSelection());
         QVERIFY(undoAction->isEnabled());
@@ -683,7 +652,8 @@ private slots:
 
         const QString screenshotPath =
             qEnvironmentVariable("WOBBLEPAINT_SELECTION_SCREENSHOT");
-        if (!screenshotPath.isEmpty()) {
+        if (!screenshotPath.isEmpty())
+        {
             QVERIFY(window.grab().save(screenshotPath, "PNG"));
             QVERIFY(QFileInfo(screenshotPath).size() > 0);
         }
@@ -717,17 +687,9 @@ private slots:
         const QPoint center = canvas->rect().center();
         const QPoint strokeStart = center - QPoint(150, 0);
         const QPoint strokeEnd = center + QPoint(150, 0);
-        QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            strokeStart);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, strokeStart);
         QTest::mouseMove(canvas, strokeEnd, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            strokeEnd);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, strokeEnd);
         QTRY_VERIFY(window.isWindowModified());
 
         lassoAction->trigger();
@@ -735,19 +697,11 @@ private slots:
         const QPoint topRight = center + QPoint(30, -30);
         const QPoint bottomRight = center + QPoint(30, 30);
         const QPoint bottomLeft = center + QPoint(-30, 30);
-        QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::keyClick(canvas, Qt::Key_Delete);
 
         undoAction->trigger();
@@ -771,14 +725,14 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *bucketAction =
             window.findChild<QAction *>(QStringLiteral("bucketAction"));
-        QAction *scaleAction = window.findChild<QAction *>(
-            QStringLiteral("scaleSelectionAction"));
+        QAction *scaleAction =
+            window.findChild<QAction *>(QStringLiteral("scaleSelectionAction"));
         QAction *rotateAction = window.findChild<QAction *>(
             QStringLiteral("rotateSelectionAction"));
         QAction *duplicateAction = window.findChild<QAction *>(
             QStringLiteral("duplicateSelectionAction"));
-        QAction *moveAction = window.findChild<QAction *>(
-            QStringLiteral("moveSelectionAction"));
+        QAction *moveAction =
+            window.findChild<QAction *>(QStringLiteral("moveSelectionAction"));
         QAction *applyTransformAction = window.findChild<QAction *>(
             QStringLiteral("applySelectionTransformAction"));
         QAction *cancelTransformAction = window.findChild<QAction *>(
@@ -787,12 +741,10 @@ private slots:
             window.findChild<SelectionActionBar *>();
         QToolButton *moveButton = window.findChild<QToolButton *>(
             QStringLiteral("moveSelectionButton"));
-        QToolButton *applyTransformButton =
-            window.findChild<QToolButton *>(
-                QStringLiteral("applySelectionTransformButton"));
-        QToolButton *cancelTransformButton =
-            window.findChild<QToolButton *>(
-                QStringLiteral("cancelSelectionTransformButton"));
+        QToolButton *applyTransformButton = window.findChild<QToolButton *>(
+            QStringLiteral("applySelectionTransformButton"));
+        QToolButton *cancelTransformButton = window.findChild<QToolButton *>(
+            QStringLiteral("cancelSelectionTransformButton"));
         QVERIFY(canvas);
         QVERIFY(brushAction);
         QVERIFY(lassoAction);
@@ -817,35 +769,21 @@ private slots:
 
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 0));
         QTest::mouseMove(canvas, center + QPoint(60, 0), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(60, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(60, 0));
 
         lassoAction->trigger();
         const QPoint topLeft = center - QPoint(90, 50);
         const QPoint topRight = center + QPoint(90, -50);
         const QPoint bottomRight = center + QPoint(90, 50);
         const QPoint bottomLeft = center + QPoint(-90, 50);
-        QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
 
         QTRY_VERIFY(canvas->hasSelection());
         QTRY_VERIFY(canvas->hasTransformableSelection());
@@ -894,14 +832,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -911,16 +846,16 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *applyAction = window.findChild<QAction *>(
             QStringLiteral("applySelectionTransformAction"));
         QAction *cancelAction = window.findChild<QAction *>(
             QStringLiteral("cancelSelectionTransformAction"));
-        QAction *escapeAction = window.findChild<QAction *>(
-            QStringLiteral("escapeCanvasAction"));
-        QAction *undoAction = window.findChild<QAction *>(
-            QStringLiteral("undoAction"));
+        QAction *escapeAction =
+            window.findChild<QAction *>(QStringLiteral("escapeCanvasAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
         QToolButton *applyButton = window.findChild<QToolButton *>(
             QStringLiteral("applySelectionTransformButton"));
         QVERIFY(canvas);
@@ -931,11 +866,8 @@ private slots:
         QVERIFY(undoAction);
         QVERIFY(applyButton);
         QCOMPARE(
-            applyAction->shortcut(),
-            QKeySequence(QStringLiteral("Return")));
-        QCOMPARE(
-            escapeAction->shortcut(),
-            QKeySequence(Qt::Key_Escape));
+            applyAction->shortcut(), QKeySequence(QStringLiteral("Return")));
+        QCOMPARE(escapeAction->shortcut(), QKeySequence(Qt::Key_Escape));
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
@@ -947,11 +879,7 @@ private slots:
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QVERIFY(!window.isWindowModified());
         const QString undoTextBeforeTransform = undoAction->text();
@@ -992,8 +920,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-close.wagle"));
@@ -1002,14 +929,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1019,26 +943,20 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QVERIFY(!window.isWindowModified());
 
@@ -1047,29 +965,37 @@ private slots:
         QTRY_VERIFY(window.isWindowModified());
 
         bool promptShown = false;
-        QTimer::singleShot(0, &window, [&promptShown]() {
-            QDialog *dialog = qobject_cast<QDialog *>(
-                QApplication::activeModalWidget());
-            if (!dialog) {
-                return;
-            }
-            QPushButton *cancelButton =
-                dialog->findChild<QPushButton *>(
+        QTimer::singleShot(0,
+            &window,
+            [&promptShown]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                QPushButton *cancelButton = dialog->findChild<QPushButton *>(
                     QStringLiteral("unsavedChangesCancelButton"));
-            if (!cancelButton) {
-                QTest::keyClick(dialog, Qt::Key_Escape);
-                return;
-            }
-            promptShown = true;
-            cancelButton->click();
-        });
-        QTimer::singleShot(1000, &window, []() {
-            QDialog *dialog = qobject_cast<QDialog *>(
-                QApplication::activeModalWidget());
-            if (dialog) {
-                dialog->reject();
-            }
-        });
+                if (!cancelButton)
+                {
+                    QTest::keyClick(dialog, Qt::Key_Escape);
+                    return;
+                }
+                promptShown = true;
+                cancelButton->click();
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
         QVERIFY(!window.close());
         QVERIFY(promptShown);
         QVERIFY(canvas->hasPendingSelectionTransform());
@@ -1077,13 +1003,17 @@ private slots:
 
         canvas->cancelSelectionTransform();
         QTRY_VERIFY(!window.isWindowModified());
-        QTimer::singleShot(1000, &window, []() {
-            QDialog *dialog = qobject_cast<QDialog *>(
-                QApplication::activeModalWidget());
-            if (dialog) {
-                dialog->reject();
-            }
-        });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
         QVERIFY(window.close());
     }
 
@@ -1093,8 +1023,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-save.wagle"));
@@ -1104,14 +1033,11 @@ private slots:
         source.color = QColor(35, 95, 225);
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1121,12 +1047,12 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *saveAction = window.findChild<QAction *>(
-            QStringLiteral("saveAction"));
-        QAction *stackUndoAction = window.findChild<QAction *>(
-            QStringLiteral("undoStackAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *saveAction =
+            window.findChild<QAction *>(QStringLiteral("saveAction"));
+        QAction *stackUndoAction =
+            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
@@ -1135,26 +1061,19 @@ private slots:
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         QVERIFY(canvas->scaleSelection(0.8));
         QVERIFY(canvas->rotateSelection(20.0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QImage preview = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
+            canvas->documentWithPendingSelectionTransform(), 0);
         const QString stackTextBeforeSave = stackUndoAction->text();
 
         saveAction->trigger();
@@ -1172,10 +1091,8 @@ private slots:
         QCOMPARE(committed.mode, StrokeMode::PixelSelection);
         QVERIFY(committed.pixelSelectionOp.has_value());
         QCOMPARE(RenderEngine::render(*saved, 0), preview);
-        QCOMPARE(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0),
+        QCOMPARE(RenderEngine::render(
+                     canvas->documentWithPendingSelectionTransform(), 0),
             preview);
     }
 
@@ -1185,8 +1102,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-abort.wagle"));
@@ -1195,14 +1111,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
         QFile savedFile(filePath);
         QVERIFY(savedFile.open(QIODevice::ReadOnly));
@@ -1216,12 +1129,12 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *saveAction = window.findChild<QAction *>(
-            QStringLiteral("saveAction"));
-        QAction *stackUndoAction = window.findChild<QAction *>(
-            QStringLiteral("undoStackAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *saveAction =
+            window.findChild<QAction *>(QStringLiteral("saveAction"));
+        QAction *stackUndoAction =
+            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
@@ -1231,18 +1144,12 @@ private slots:
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(30, 30));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(30, 30));
         QTest::mouseMove(canvas, center + QPoint(30, -30), 5);
         QTest::mouseMove(canvas, center + QPoint(30, 30), 5);
         QTest::mouseMove(canvas, center + QPoint(-30, 30), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(30, 30));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(30, 30));
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         canvas->setSelectionMoveMode(true);
@@ -1250,34 +1157,38 @@ private slots:
         QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
         QTest::mouseMove(canvas, center + QPoint(250, 0), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(250, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(250, 0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QTransform rejected = canvas->pendingSelectionTransform();
         QVERIFY(rejected.dx() > 89.0);
         const QString stackTextBeforeSave = stackUndoAction->text();
-        const bool stackEnabledBeforeSave =
-            stackUndoAction->isEnabled();
+        const bool stackEnabledBeforeSave = stackUndoAction->isEnabled();
 
         bool failureShown = false;
-        QTimer::singleShot(0, &window, [&failureShown]() {
-            QDialog *dialog = qobject_cast<QDialog *>(
-                QApplication::activeModalWidget());
-            if (!dialog) {
-                return;
-            }
-            failureShown = true;
-            QTest::keyClick(dialog, Qt::Key_Escape);
-        });
-        QTimer::singleShot(1000, &window, []() {
-            QDialog *dialog = qobject_cast<QDialog *>(
-                QApplication::activeModalWidget());
-            if (dialog) {
-                dialog->reject();
-            }
-        });
+        QTimer::singleShot(0,
+            &window,
+            [&failureShown]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                failureShown = true;
+                QTest::keyClick(dialog, Qt::Key_Escape);
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
         saveAction->trigger();
 
         QVERIFY(failureShown);
@@ -1285,9 +1196,7 @@ private slots:
         QCOMPARE(canvas->pendingSelectionTransform(), rejected);
         QVERIFY(window.isWindowModified());
         QCOMPARE(stackUndoAction->text(), stackTextBeforeSave);
-        QCOMPARE(
-            stackUndoAction->isEnabled(),
-            stackEnabledBeforeSave);
+        QCOMPARE(stackUndoAction->isEnabled(), stackEnabledBeforeSave);
         QFile unchangedFile(filePath);
         QVERIFY(unchangedFile.open(QIODevice::ReadOnly));
         QCOMPARE(unchangedFile.readAll(), savedBytes);
@@ -1295,8 +1204,7 @@ private slots:
 
     void autosavesPendingTransformSnapshotWithoutTouchingHistory()
     {
-        const QString recoveryKey =
-            QStringLiteral("recovery/sourcePath");
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
@@ -1304,9 +1212,7 @@ private slots:
         QVERIFY(directory.isValid());
         const QString recoveryPath =
             directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
-            recoveryPath.toUtf8());
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-autosave.wagle"));
         Document document = Document::createDefault(QSize(100, 100));
@@ -1314,14 +1220,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1331,10 +1234,10 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *stackUndoAction = window.findChild<QAction *>(
-            QStringLiteral("undoStackAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *stackUndoAction =
+            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(stackUndoAction);
@@ -1342,26 +1245,19 @@ private slots:
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         QVERIFY(canvas->rotateSelection(25.0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QString stackTextBefore = stackUndoAction->text();
         const QImage preview = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
+            canvas->documentWithPendingSelectionTransform(), 0);
 
         QEvent deactivate(QEvent::ApplicationDeactivate);
         QApplication::sendEvent(qApp, &deactivate);
@@ -1373,8 +1269,7 @@ private slots:
             DocumentSerializer::load(recoveryPath, &error);
         QVERIFY2(recovered.has_value(), qPrintable(error));
         QCOMPARE(recovered->layers.first().strokes.size(), 2);
-        QCOMPARE(
-            recovered->layers.first().strokes.last().mode,
+        QCOMPARE(recovered->layers.first().strokes.last().mode,
             StrokeMode::PixelSelection);
         QCOMPARE(RenderEngine::render(*recovered, 0), preview);
 
@@ -1389,8 +1284,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("undo-routing.wagle"));
@@ -1399,14 +1293,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1416,18 +1307,18 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *saveAction = window.findChild<QAction *>(
-            QStringLiteral("saveAction"));
-        QAction *undoAction = window.findChild<QAction *>(
-            QStringLiteral("undoAction"));
-        QAction *redoAction = window.findChild<QAction *>(
-            QStringLiteral("redoAction"));
-        QAction *stackUndoAction = window.findChild<QAction *>(
-            QStringLiteral("undoStackAction"));
-        QAction *stackRedoAction = window.findChild<QAction *>(
-            QStringLiteral("redoStackAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *saveAction =
+            window.findChild<QAction *>(QStringLiteral("saveAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *redoAction =
+            window.findChild<QAction *>(QStringLiteral("redoAction"));
+        QAction *stackUndoAction =
+            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
+        QAction *stackRedoAction =
+            window.findChild<QAction *>(QStringLiteral("redoStackAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
@@ -1439,18 +1330,12 @@ private slots:
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         QVERIFY(canvas->rotateSelection(12.0));
@@ -1459,10 +1344,8 @@ private slots:
         QTRY_VERIFY(!window.isWindowModified());
         QTRY_VERIFY(canvas->hasTransformableSelection());
         const QString stackUndoTextClean = stackUndoAction->text();
-        const bool stackUndoEnabledClean =
-            stackUndoAction->isEnabled();
-        const bool stackRedoEnabledClean =
-            stackRedoAction->isEnabled();
+        const bool stackUndoEnabledClean = stackUndoAction->isEnabled();
+        const bool stackRedoEnabledClean = stackRedoAction->isEnabled();
         const QByteArray cleanDocument = DocumentSerializer::toJson(
             canvas->documentWithPendingSelectionTransform());
 
@@ -1477,15 +1360,10 @@ private slots:
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(canvas->hasTransformableSelection());
         QCOMPARE(stackUndoAction->text(), stackUndoTextClean);
-        QCOMPARE(
-            stackUndoAction->isEnabled(),
-            stackUndoEnabledClean);
-        QCOMPARE(
-            stackRedoAction->isEnabled(),
-            stackRedoEnabledClean);
-        QCOMPARE(
-            DocumentSerializer::toJson(
-                canvas->documentWithPendingSelectionTransform()),
+        QCOMPARE(stackUndoAction->isEnabled(), stackUndoEnabledClean);
+        QCOMPARE(stackRedoAction->isEnabled(), stackRedoEnabledClean);
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
             cleanDocument);
         QTRY_VERIFY(!window.isWindowModified());
         QCOMPARE(undoAction->text(), stackUndoAction->text());
@@ -1515,8 +1393,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-undo-text.wagle"));
@@ -1525,14 +1402,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1542,12 +1416,12 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *undoAction = window.findChild<QAction *>(
-            QStringLiteral("undoAction"));
-        QAction *stackUndoAction = window.findChild<QAction *>(
-            QStringLiteral("undoStackAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *stackUndoAction =
+            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(undoAction);
@@ -1555,24 +1429,17 @@ private slots:
         QVERIFY(!undoAction->isEnabled());
 
         const QImage originalFrame = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
+            canvas->documentWithPendingSelectionTransform(), 0);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QVERIFY(!window.isWindowModified());
 
@@ -1586,27 +1453,21 @@ private slots:
         QVERIFY(canvas->hasTransformableSelection());
         QTRY_VERIFY(!window.isWindowModified());
         QCOMPARE(undoAction->text(), stackUndoAction->text());
-        QCOMPARE(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0),
+        QCOMPARE(RenderEngine::render(
+                     canvas->documentWithPendingSelectionTransform(), 0),
             originalFrame);
 
         QVERIFY(canvas->rotateSelection(30.0));
         QVERIFY(canvas->applySelectionTransform());
         QTRY_VERIFY(window.isWindowModified());
-        QVERIFY(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0)
-            != originalFrame);
+        QVERIFY(RenderEngine::render(
+                    canvas->documentWithPendingSelectionTransform(), 0)
+                != originalFrame);
 
         undoAction->trigger();
         QTRY_VERIFY(!window.isWindowModified());
-        QCOMPARE(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0),
+        QCOMPARE(RenderEngine::render(
+                     canvas->documentWithPendingSelectionTransform(), 0),
             originalFrame);
     }
 
@@ -1616,8 +1477,7 @@ private slots:
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
             directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
         const QString filePath =
             directory.filePath(QStringLiteral("pending-resize.wagle"));
@@ -1626,14 +1486,11 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
         QString error;
-        QVERIFY2(
-            DocumentSerializer::save(filePath, document, &error),
+        QVERIFY2(DocumentSerializer::save(filePath, document, &error),
             qPrintable(error));
 
         MainWindow window;
@@ -1643,89 +1500,77 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction = window.findChild<QAction *>(
-            QStringLiteral("lassoAction"));
-        QAction *resizeCanvasAction = window.findChild<QAction *>(
-            QStringLiteral("resizeCanvasAction"));
-        QAction *undoAction = window.findChild<QAction *>(
-            QStringLiteral("undoAction"));
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *resizeCanvasAction =
+            window.findChild<QAction *>(QStringLiteral("resizeCanvasAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(resizeCanvasAction);
         QVERIFY(undoAction);
 
         const QImage originalFrame = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
+            canvas->documentWithPendingSelectionTransform(), 0);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTest::mouseMove(canvas, center + QPoint(100, -70), 5);
         QTest::mouseMove(canvas, center + QPoint(100, 70), 5);
         QTest::mouseMove(canvas, center + QPoint(-100, 70), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(100, 70));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 70));
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         QVERIFY(canvas->rotateSelection(20.0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QImage pendingFrame = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
+            canvas->documentWithPendingSelectionTransform(), 0);
 
         bool dialogHandled = false;
-        QTimer::singleShot(0, &window, [&]() {
-            CanvasSizeDialog *dialog =
-                window.findChild<CanvasSizeDialog *>();
-            if (!dialog) {
-                return;
-            }
-            QSpinBox *width = dialog->findChild<QSpinBox *>(
-                QStringLiteral("canvasWidthSpin"));
-            if (!width) {
-                return;
-            }
-            width->setValue(width->value() + 20);
-            dialogHandled = true;
-            dialog->accept();
-        });
+        QTimer::singleShot(0,
+            &window,
+            [&]()
+            {
+                CanvasSizeDialog *dialog =
+                    window.findChild<CanvasSizeDialog *>();
+                if (!dialog)
+                {
+                    return;
+                }
+                QSpinBox *width = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("canvasWidthSpin"));
+                if (!width)
+                {
+                    return;
+                }
+                width->setValue(width->value() + 20);
+                dialogHandled = true;
+                dialog->accept();
+            });
         resizeCanvasAction->trigger();
         QVERIFY(dialogHandled);
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(!canvas->hasSelectionTransformSession());
-        QCOMPARE(
-            canvas->documentWithPendingSelectionTransform().size,
+        QCOMPARE(canvas->documentWithPendingSelectionTransform().size,
             QSize(120, 100));
         const QImage resizedFrame = RenderEngine::render(
-            canvas->documentWithPendingSelectionTransform(),
-            0);
-        QCOMPARE(
-            resizedFrame.copy(QRect(10, 0, 100, 100)),
-            pendingFrame);
+            canvas->documentWithPendingSelectionTransform(), 0);
+        QCOMPARE(resizedFrame.copy(QRect(10, 0, 100, 100)), pendingFrame);
 
         undoAction->trigger();
-        QCOMPARE(
-            canvas->documentWithPendingSelectionTransform().size,
+        QCOMPARE(canvas->documentWithPendingSelectionTransform().size,
             QSize(100, 100));
-        QCOMPARE(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0),
+        QCOMPARE(RenderEngine::render(
+                     canvas->documentWithPendingSelectionTransform(), 0),
             pendingFrame);
 
         undoAction->trigger();
-        QCOMPARE(
-            RenderEngine::render(
-                canvas->documentWithPendingSelectionTransform(),
-                0),
+        QCOMPARE(RenderEngine::render(
+                     canvas->documentWithPendingSelectionTransform(), 0),
             originalFrame);
         QTRY_VERIFY(!window.isWindowModified());
     }
@@ -1737,9 +1582,7 @@ private slots:
         Stroke source;
         source.width = 10.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
 
@@ -1762,12 +1605,13 @@ private slots:
             QStringLiteral("deleteSelectionAction"),
             QStringLiteral("deselectSelectionAction"),
         };
-        for (int index = 0; index < actionNames.size(); ++index) {
+        for (int index = 0; index < actionNames.size(); ++index)
+        {
             auto *action = new QAction(actionNames[index], &canvas);
             action->setObjectName(actionNames[index]);
             bar->addAction(action);
-            if (index == 2 || index == 4 || index == 6
-                || index == 8) {
+            if (index == 2 || index == 4 || index == 6 || index == 8)
+            {
                 bar->addSeparator();
             }
         }
@@ -1779,18 +1623,12 @@ private slots:
         canvas.setTool(CanvasWidget::Tool::Lasso);
         const QPoint center = canvas.rect().center();
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 60));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 60));
         QTest::mouseMove(&canvas, center + QPoint(60, -60), 5);
         QTest::mouseMove(&canvas, center + QPoint(60, 60), 5);
         QTest::mouseMove(&canvas, center + QPoint(-60, 60), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 60));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 60));
         QTRY_VERIFY(canvas.hasTransformableSelection());
         QTRY_VERIFY(bar->isVisible());
 
@@ -1804,13 +1642,9 @@ private slots:
         QVERIFY(applyButton);
         QVERIFY(cancelButton);
         QVERIFY(canvas.rect().contains(
-            applyButton->mapTo(
-                &canvas,
-                applyButton->rect().center())));
+            applyButton->mapTo(&canvas, applyButton->rect().center())));
         QVERIFY(canvas.rect().contains(
-            cancelButton->mapTo(
-                &canvas,
-                cancelButton->rect().center())));
+            cancelButton->mapTo(&canvas, cancelButton->rect().center())));
     }
 
     void floatingSelectionTransformCommitsOnceAndCancelsLosslessly()
@@ -1822,9 +1656,7 @@ private slots:
         source.color = QColor(35, 95, 225);
         source.width = 12.0;
         source.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
 
@@ -1837,11 +1669,11 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(60.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(60.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
         canvas.setTool(CanvasWidget::Tool::Lasso);
@@ -1853,11 +1685,7 @@ private slots:
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QByteArray originalDocument =
@@ -1870,13 +1698,10 @@ private slots:
         QVERIFY(canvas.scaleSelection(1.2));
         const QTransform afterScale = canvas.pendingSelectionTransform();
         QVERIFY(canvas.rotateSelection(18.0));
-        QVERIFY(
-            canvas.pendingSelectionTransform()
-            != afterScale);
+        QVERIFY(canvas.pendingSelectionTransform() != afterScale);
         QVERIFY(canvas.flipSelectionHorizontally());
         QVERIFY(canvas.hasPendingSelectionTransform());
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
         QCOMPARE(controller.document().layers.first().strokes.size(), 1);
         QCOMPARE(controller.undoStack()->count(), originalUndoCount);
@@ -1885,8 +1710,7 @@ private slots:
         canvas.handleEscape();
         QVERIFY(!canvas.hasSelectionTransformSession());
         QVERIFY(canvas.hasTransformableSelection());
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
         QCOMPARE(controller.undoStack()->count(), originalUndoCount);
         QCOMPARE(controller.undoStack()->index(), originalUndoIndex);
@@ -1894,10 +1718,8 @@ private slots:
         QVERIFY(canvas.scaleSelection(1.2));
         QVERIFY(canvas.rotateSelection(18.0));
         QVERIFY(canvas.flipSelectionHorizontally());
-        const QTransform accumulated =
-            canvas.pendingSelectionTransform();
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        const QTransform accumulated = canvas.pendingSelectionTransform();
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
         QVERIFY(canvas.applySelectionTransform());
         QVERIFY(!canvas.hasSelectionTransformSession());
@@ -1911,40 +1733,31 @@ private slots:
         QCOMPARE(operation.pixelSelectionOp->transform, accumulated);
 
         controller.undoStack()->undo();
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
-        QCOMPARE(
-            RenderEngine::render(controller.document(), 0),
-            originalFrame);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), originalFrame);
 
         QVERIFY(canvas.scaleSelection(1.1));
         QVERIFY(canvas.hasPendingSelectionTransform());
         canvas.setTool(CanvasWidget::Tool::Brush);
         QVERIFY(!canvas.hasSelectionTransformSession());
         QVERIFY(canvas.hasTransformableSelection());
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
 
         QVERIFY(canvas.scaleSelection(1.1));
-        const int beforeDuplicateIndex =
-            controller.undoStack()->index();
+        const int beforeDuplicateIndex = controller.undoStack()->index();
         QVERIFY(canvas.duplicateSelection());
         QVERIFY(!canvas.hasSelectionTransformSession());
-        QCOMPARE(
-            controller.undoStack()->index(),
-            beforeDuplicateIndex + 1);
+        QCOMPARE(controller.undoStack()->index(), beforeDuplicateIndex + 1);
         const Stroke &duplicateOperation =
             controller.document().layers.first().strokes.last();
         QCOMPARE(duplicateOperation.mode, StrokeMode::PixelSelection);
         QVERIFY(duplicateOperation.pixelSelectionOp.has_value());
         QVERIFY(qFuzzyCompare(
-            duplicateOperation.pixelSelectionOp->transform.dx() + 1.0,
-            13.0));
+            duplicateOperation.pixelSelectionOp->transform.dx() + 1.0, 13.0));
         controller.undoStack()->undo();
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
 
         QVERIFY(canvas.scaleSelection(1.1));
@@ -1966,10 +1779,7 @@ private slots:
         Stroke source;
         source.color = QColor(35, 95, 225);
         source.width = 10.0;
-        source.points = {
-            {QPointF(5.0, 50.0), 1.0},
-            {QPointF(30.0, 50.0), 1.0}
-        };
+        source.points = {{QPointF(5.0, 50.0), 1.0}, {QPointF(30.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
 
@@ -1982,16 +1792,16 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const auto sample = [&canvas, &widgetPoint](
-                                const QPixmap &pixmap,
-                                const QPointF &documentPoint) {
+        const auto sample = [&canvas, &widgetPoint](const QPixmap &pixmap,
+                                const QPointF &documentPoint)
+        {
             const QImage image = pixmap.toImage();
             const QPoint widgetPosition = widgetPoint(documentPoint);
             const qreal xScale =
@@ -2000,11 +1810,8 @@ private slots:
                 static_cast<qreal>(image.height()) / canvas.height();
             return image.pixelColor(
                 std::clamp(
-                    qRound(widgetPosition.x() * xScale),
-                    0,
-                    image.width() - 1),
-                std::clamp(
-                    qRound(widgetPosition.y() * yScale),
+                    qRound(widgetPosition.x() * xScale), 0, image.width() - 1),
+                std::clamp(qRound(widgetPosition.y() * yScale),
                     0,
                     image.height() - 1));
         };
@@ -2017,11 +1824,7 @@ private slots:
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QByteArray beforeTransform =
@@ -2035,53 +1838,36 @@ private slots:
         const QPoint partialStart = widgetPoint(QPointF(10.0, 50.0));
         const QPoint partialEnd = widgetPoint(QPointF(-10.0, 50.0));
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            partialStart);
+            &canvas, Qt::LeftButton, Qt::NoModifier, partialStart);
         QTest::mouseMove(&canvas, partialEnd, 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            partialEnd);
+            &canvas, Qt::LeftButton, Qt::NoModifier, partialEnd);
         QVERIFY(canvas.hasPendingSelectionTransform());
         QVERIFY(canvas.pendingSelectionTransform().dx() < -19.0);
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
         const QPixmap partialPreview = canvas.grab();
         QVERIFY(canvas.applySelectionTransform());
         QApplication::processEvents();
         const QPixmap partialCommitted = canvas.grab();
-        QCOMPARE(
-            sample(partialPreview, QPointF(3.0, 50.0)),
+        QCOMPARE(sample(partialPreview, QPointF(3.0, 50.0)),
             sample(partialCommitted, QPointF(3.0, 50.0)));
         QCOMPARE(controller.undoStack()->count(), undoCount + 1);
         QCOMPARE(controller.undoStack()->index(), undoIndex + 1);
 
         controller.undoStack()->undo();
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
-        QCOMPARE(
-            RenderEngine::render(controller.document(), 0),
-            beforeFrame);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), beforeFrame);
 
         canvas.setSelectionMoveMode(true);
         const QPoint outsideStart = widgetPoint(QPointF(10.0, 50.0));
         const QPoint outsideEnd = widgetPoint(QPointF(-80.0, 50.0));
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            outsideStart);
+            &canvas, Qt::LeftButton, Qt::NoModifier, outsideStart);
         QTest::mouseMove(&canvas, outsideEnd, 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            outsideEnd);
+            &canvas, Qt::LeftButton, Qt::NoModifier, outsideEnd);
         QVERIFY(canvas.hasPendingSelectionTransform());
         const QTransform rejected = canvas.pendingSelectionTransform();
         QVERIFY(rejected.dx() < -89.0);
@@ -2089,15 +1875,13 @@ private slots:
         QVERIFY(canvas.hasPendingSelectionTransform());
         QCOMPARE(canvas.pendingSelectionTransform(), rejected);
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
         QCOMPARE(controller.undoStack()->index(), undoIndex);
         canvas.cancelSelectionTransform();
         QVERIFY(!canvas.hasSelectionTransformSession());
         QVERIFY(canvas.hasTransformableSelection());
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
     }
 
     void requiresExplicitSelectionMoveMode()
@@ -2111,13 +1895,11 @@ private slots:
         QAction moveAction(&canvas);
         moveAction.setObjectName(QStringLiteral("moveSelectionAction"));
         moveAction.setCheckable(true);
-        connect(
-            &moveAction,
+        connect(&moveAction,
             &QAction::toggled,
             &canvas,
             &CanvasWidget::setSelectionMoveMode);
-        connect(
-            &canvas,
+        connect(&canvas,
             &CanvasWidget::selectionMoveModeChanged,
             &moveAction,
             &QAction::setChecked);
@@ -2133,35 +1915,21 @@ private slots:
 
         const QPoint center = canvas.rect().center();
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(55, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(55, 0));
         QTest::mouseMove(&canvas, center + QPoint(55, 0), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(55, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(55, 0));
 
         canvas.setTool(CanvasWidget::Tool::Lasso);
         const QPoint topLeft = center - QPoint(90, 55);
         const QPoint topRight = center + QPoint(90, -55);
         const QPoint bottomRight = center + QPoint(90, 55);
         const QPoint bottomLeft = center + QPoint(-90, 55);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
 
         QTRY_VERIFY(canvas.hasTransformableSelection());
         QTRY_VERIFY(actionBar->isVisible());
@@ -2170,19 +1938,11 @@ private slots:
 
         const QByteArray beforeInactiveDrag =
             DocumentSerializer::toJson(controller.document());
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseMove(&canvas, center + QPoint(30, 10), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(30, 10));
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(30, 10));
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             beforeInactiveDrag);
 
         controller.undoStack()->undo();
@@ -2194,43 +1954,26 @@ private slots:
 
         const QByteArray beforeActiveDrag =
             DocumentSerializer::toJson(controller.document());
-        const int undoCountBeforeActiveDrag =
-            controller.undoStack()->count();
-        const int undoIndexBeforeActiveDrag =
-            controller.undoStack()->index();
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center);
+        const int undoCountBeforeActiveDrag = controller.undoStack()->count();
+        const int undoIndexBeforeActiveDrag = controller.undoStack()->index();
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseMove(&canvas, center + QPoint(35, 15), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(35, 15));
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(35, 15));
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             beforeActiveDrag);
         QVERIFY(canvas.hasPendingSelectionTransform());
-        QCOMPARE(
-            controller.undoStack()->count(),
-            undoCountBeforeActiveDrag);
-        QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeActiveDrag);
+        QCOMPARE(controller.undoStack()->count(), undoCountBeforeActiveDrag);
+        QCOMPARE(controller.undoStack()->index(), undoIndexBeforeActiveDrag);
 
         QVERIFY(canvas.applySelectionTransform());
         QVERIFY(!canvas.hasSelectionTransformSession());
-        QVERIFY(
-            DocumentSerializer::toJson(controller.document())
-            != beforeActiveDrag);
+        QVERIFY(DocumentSerializer::toJson(controller.document())
+                != beforeActiveDrag);
         QCOMPARE(
-            controller.undoStack()->count(),
-            undoIndexBeforeActiveDrag + 1);
+            controller.undoStack()->count(), undoIndexBeforeActiveDrag + 1);
         QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeActiveDrag + 1);
+            controller.undoStack()->index(), undoIndexBeforeActiveDrag + 1);
     }
 
     void rejectsSelectionMoveJustOutsideTheCanvas()
@@ -2239,10 +1982,7 @@ private slots:
         document.wobbleAmount = 0.0;
         Stroke stroke;
         stroke.width = 4.0;
-        stroke.points = {
-            {QPointF(1.0, 30.0), 1.0},
-            {QPointF(1.0, 70.0), 1.0}
-        };
+        stroke.points = {{QPointF(1.0, 30.0), 1.0}, {QPointF(1.0, 70.0), 1.0}};
         document.layers.first().strokes.append(stroke);
 
         DocumentController controller;
@@ -2254,11 +1994,11 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
         canvas.setTool(CanvasWidget::Tool::Lasso);
@@ -2266,51 +2006,29 @@ private slots:
         const QPoint topRight = widgetPoint(QPointF(15.0, 20.0));
         const QPoint bottomRight = widgetPoint(QPointF(15.0, 80.0));
         const QPoint bottomLeft = widgetPoint(QPointF(0.0, 80.0));
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas.hasTransformableSelection());
 
         canvas.setSelectionMoveMode(true);
         QVERIFY(canvas.selectionMoveMode());
         const QByteArray before =
             DocumentSerializer::toJson(controller.document());
-        QSignalSpy messages(
-            &canvas,
-            &CanvasWidget::interactionMessage);
-        const QPoint justOutside =
-            widgetPoint(QPointF(-0.25, 50.0));
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            justOutside);
-        QTest::mouseMove(
-            &canvas,
-            justOutside + QPoint(20, 0),
-            5);
-        QTest::mouseRelease(
-            &canvas,
+        QSignalSpy messages(&canvas, &CanvasWidget::interactionMessage);
+        const QPoint justOutside = widgetPoint(QPointF(-0.25, 50.0));
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, justOutside);
+        QTest::mouseMove(&canvas, justOutside + QPoint(20, 0), 5);
+        QTest::mouseRelease(&canvas,
             Qt::LeftButton,
             Qt::NoModifier,
             justOutside + QPoint(20, 0));
 
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            before);
+        QCOMPARE(DocumentSerializer::toJson(controller.document()), before);
         QCOMPARE(messages.size(), 1);
-        QCOMPARE(
-            messages.first().first().toString(),
+        QCOMPARE(messages.first().first().toString(),
             QStringLiteral("Drag inside the selection to move it."));
     }
 
@@ -2321,13 +2039,11 @@ private slots:
         Stroke stroke;
         stroke.width = 5.0;
         stroke.points = {
-            {QPointF(10.0, 50.0), 1.0},
-            {QPointF(90.0, 50.0), 1.0}
-        };
-        stroke.clipMask =
-            QImage(document.size, QImage::Format_Grayscale8);
+            {QPointF(10.0, 50.0), 1.0}, {QPointF(90.0, 50.0), 1.0}};
+        stroke.clipMask = QImage(document.size, QImage::Format_Grayscale8);
         stroke.clipMask.fill(0);
-        for (int y = 0; y < stroke.clipMask.height(); ++y) {
+        for (int y = 0; y < stroke.clipMask.height(); ++y)
+        {
             std::fill_n(stroke.clipMask.scanLine(y), 40, 255);
         }
         document.layers.first().strokes.append(stroke);
@@ -2342,36 +2058,25 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const auto lasso = [&canvas, &widgetPoint](
-                               const QRectF &documentRect) {
-            const QPoint topLeft =
-                widgetPoint(documentRect.topLeft());
-            const QPoint topRight =
-                widgetPoint(documentRect.topRight());
-            const QPoint bottomRight =
-                widgetPoint(documentRect.bottomRight());
-            const QPoint bottomLeft =
-                widgetPoint(documentRect.bottomLeft());
-            QTest::mousePress(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+        const auto lasso = [&canvas, &widgetPoint](const QRectF &documentRect)
+        {
+            const QPoint topLeft = widgetPoint(documentRect.topLeft());
+            const QPoint topRight = widgetPoint(documentRect.topRight());
+            const QPoint bottomRight = widgetPoint(documentRect.bottomRight());
+            const QPoint bottomLeft = widgetPoint(documentRect.bottomLeft());
+            QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
             QTest::mouseMove(&canvas, topRight, 5);
             QTest::mouseMove(&canvas, bottomRight, 5);
             QTest::mouseMove(&canvas, bottomLeft, 5);
             QTest::mouseRelease(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+                &canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         };
 
         canvas.setTool(CanvasWidget::Tool::Lasso);
@@ -2395,9 +2100,7 @@ private slots:
         boundary.color = Qt::black;
         boundary.width = 6.0;
         boundary.points = {
-            {QPointF(50.0, 0.0), 1.0},
-            {QPointF(50.0, 99.0), 1.0}
-        };
+            {QPointF(50.0, 0.0), 1.0}, {QPointF(50.0, 99.0), 1.0}};
         boundary.brush.antialiasing = false;
 
         Stroke fill;
@@ -2415,35 +2118,25 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const auto lassoFillCoverage = [&]() {
-            const QPoint topLeft =
-                widgetPoint(QPointF(58.0, 38.0));
-            const QPoint topRight =
-                widgetPoint(QPointF(83.0, 38.0));
-            const QPoint bottomRight =
-                widgetPoint(QPointF(83.0, 63.0));
-            const QPoint bottomLeft =
-                widgetPoint(QPointF(58.0, 63.0));
-            QTest::mousePress(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+        const auto lassoFillCoverage = [&]()
+        {
+            const QPoint topLeft = widgetPoint(QPointF(58.0, 38.0));
+            const QPoint topRight = widgetPoint(QPointF(83.0, 38.0));
+            const QPoint bottomRight = widgetPoint(QPointF(83.0, 63.0));
+            const QPoint bottomLeft = widgetPoint(QPointF(58.0, 63.0));
+            QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
             QTest::mouseMove(&canvas, topRight, 5);
             QTest::mouseMove(&canvas, bottomRight, 5);
             QTest::mouseMove(&canvas, bottomLeft, 5);
             QTest::mouseRelease(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+                &canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         };
 
         canvas.setTool(CanvasWidget::Tool::Lasso);
@@ -2452,8 +2145,7 @@ private slots:
 
         canvas.deselectSelection();
         document.layers.first().strokes.last().points = {
-            {QPointF(20.0, 50.0), 1.0}
-        };
+            {QPointF(20.0, 50.0), 1.0}};
         controller.loadDocument(document);
         lassoFillCoverage();
         QTRY_VERIFY(canvas.hasSelection());
@@ -2468,31 +2160,21 @@ private slots:
         Stroke paint;
         paint.color = QColor(30, 90, 220);
         paint.width = 12.0;
-        paint.points = {
-            {QPointF(10.0, 50.0), 1.0},
-            {QPointF(35.0, 50.0), 1.0}
-        };
+        paint.points = {{QPointF(10.0, 50.0), 1.0}, {QPointF(35.0, 50.0), 1.0}};
         paint.brush.antialiasing = false;
         document.layers.first().strokes.append(paint);
 
-        QImage sourceMask(
-            document.size,
-            QImage::Format_Grayscale8);
+        QImage sourceMask(document.size, QImage::Format_Grayscale8);
         sourceMask.fill(0);
-        for (int y = 40; y < 61; ++y) {
+        for (int y = 40; y < 61; ++y)
+        {
             std::fill(
-                sourceMask.scanLine(y) + 5,
-                sourceMask.scanLine(y) + 41,
-                255);
+                sourceMask.scanLine(y) + 5, sourceMask.scanLine(y) + 41, 255);
         }
         QTransform shift;
         shift.translate(45.0, 0.0);
         const std::optional<PixelSelectionOp> operation =
-            makePixelSelectionOp(
-                sourceMask,
-                shift,
-                true,
-                true);
+            makePixelSelectionOp(sourceMask, shift, true, true);
         QVERIFY(operation.has_value());
         Stroke move;
         move.mode = StrokeMode::PixelSelection;
@@ -2508,58 +2190,42 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const auto lasso = [&canvas, &widgetPoint](
-                               const QRectF &documentRect) {
-            const QPoint topLeft =
-                widgetPoint(documentRect.topLeft());
-            const QPoint topRight =
-                widgetPoint(documentRect.topRight());
-            const QPoint bottomRight =
-                widgetPoint(documentRect.bottomRight());
-            const QPoint bottomLeft =
-                widgetPoint(documentRect.bottomLeft());
-            QTest::mousePress(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+        const auto lasso = [&canvas, &widgetPoint](const QRectF &documentRect)
+        {
+            const QPoint topLeft = widgetPoint(documentRect.topLeft());
+            const QPoint topRight = widgetPoint(documentRect.topRight());
+            const QPoint bottomRight = widgetPoint(documentRect.bottomRight());
+            const QPoint bottomLeft = widgetPoint(documentRect.bottomLeft());
+            QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
             QTest::mouseMove(&canvas, topRight, 5);
             QTest::mouseMove(&canvas, bottomRight, 5);
             QTest::mouseMove(&canvas, bottomLeft, 5);
             QTest::mouseRelease(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+                &canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         };
 
         canvas.setTool(CanvasWidget::Tool::Lasso);
-        QSignalSpy messages(
-            &canvas,
-            &CanvasWidget::interactionMessage);
+        QSignalSpy messages(&canvas, &CanvasWidget::interactionMessage);
         lasso(QRectF(10.0, 45.0, 20.0, 10.0));
         QTRY_VERIFY(canvas.hasSelection());
         QVERIFY(!canvas.hasTransformableSelection());
         QVERIFY(!messages.isEmpty());
-        QCOMPARE(
-            messages.last().first().toString(),
+        QCOMPARE(messages.last().first().toString(),
             QStringLiteral("No content in the selected area."));
 
         canvas.deselectSelection();
         lasso(QRectF(55.0, 45.0, 25.0, 10.0));
         QTRY_VERIFY(canvas.hasTransformableSelection());
-        QCOMPARE(
-            messages.last().first().toString(),
-            QStringLiteral(
-                "Selected content. Use the action bar to transform "
-                "or remove it."));
+        QCOMPARE(messages.last().first().toString(),
+            QStringLiteral("Selected content. Use the action bar to transform "
+                           "or remove it."));
     }
 
     void selectionAvailabilityChecksEveryAnimationFrame()
@@ -2567,27 +2233,22 @@ private slots:
         Document document = Document::createDefault(QSize(100, 100));
         document.background = Qt::transparent;
         document.animationFrames = 12;
-        document.wobbleAmount =
-            DocumentLimits::maximumWobbleAmount;
+        document.wobbleAmount = DocumentLimits::maximumWobbleAmount;
         Stroke animated;
         animated.seed = 0x7d1a2b3c4d5e6f70ULL;
         animated.color = QColor(35, 100, 225);
         animated.width = 2.0;
         animated.points = {
-            {QPointF(35.0, 50.0), 1.0},
-            {QPointF(65.0, 50.0), 1.0}
-        };
+            {QPointF(35.0, 50.0), 1.0}, {QPointF(65.0, 50.0), 1.0}};
         animated.brush.antialiasing = false;
         document.layers.first().strokes.append(animated);
 
         QVector<QImage> frames;
         frames.reserve(document.animationFrames);
-        for (int frame = 0;
-             frame < document.animationFrames;
-             ++frame) {
+        for (int frame = 0; frame < document.animationFrames; ++frame)
+        {
             QImage layerImage;
-            QVERIFY(RenderEngine::renderStrokesOnLayer(
-                layerImage,
+            QVERIFY(RenderEngine::renderStrokesOnLayer(layerImage,
                 document,
                 document.layers.first().strokes,
                 frame,
@@ -2597,38 +2258,38 @@ private slots:
 
         QPoint laterFrameOnlyPixel(-1, -1);
         const QImage &first = frames.first();
-        for (int y = 4;
-             y < first.height() - 4
-             && laterFrameOnlyPixel.x() < 0;
-             ++y) {
-            for (int x = 4; x < first.width() - 4; ++x) {
+        for (int y = 4; y < first.height() - 4 && laterFrameOnlyPixel.x() < 0;
+            ++y)
+        {
+            for (int x = 4; x < first.width() - 4; ++x)
+            {
                 bool firstNeighborhoodIsTransparent = true;
                 for (int offsetY = -3;
-                     offsetY <= 3
-                     && firstNeighborhoodIsTransparent;
-                     ++offsetY) {
-                    for (int offsetX = -3;
-                         offsetX <= 3;
-                         ++offsetX) {
-                        if (first.pixelColor(
-                                x + offsetX,
-                                y + offsetY).alpha()
-                            != 0) {
+                    offsetY <= 3 && firstNeighborhoodIsTransparent;
+                    ++offsetY)
+                {
+                    for (int offsetX = -3; offsetX <= 3; ++offsetX)
+                    {
+                        if (first.pixelColor(x + offsetX, y + offsetY).alpha()
+                            != 0)
+                        {
                             firstNeighborhoodIsTransparent = false;
                             break;
                         }
                     }
                 }
-                if (!firstNeighborhoodIsTransparent) {
+                if (!firstNeighborhoodIsTransparent)
+                {
                     continue;
                 }
-                const bool paintedLater = std::any_of(
-                    frames.cbegin() + 1,
+                const bool paintedLater = std::any_of(frames.cbegin() + 1,
                     frames.cend(),
-                    [x, y](const QImage &frame) {
+                    [x, y](const QImage &frame)
+                    {
                         return frame.pixelColor(x, y).alpha() != 0;
                     });
-                if (paintedLater) {
+                if (paintedLater)
+                {
                     laterFrameOnlyPixel = QPoint(x, y);
                     break;
                 }
@@ -2646,37 +2307,61 @@ private slots:
         canvas.fitToWindow();
         QCOMPARE(canvas.currentFrame(), 0);
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
         const QPoint seed = widgetPoint(QPointF(
-            laterFrameOnlyPixel.x() + 0.5,
-            laterFrameOnlyPixel.y() + 0.5));
+            laterFrameOnlyPixel.x() + 0.5, laterFrameOnlyPixel.y() + 0.5));
         canvas.setTool(CanvasWidget::Tool::Wand);
-        QTest::mouseClick(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            seed);
+        QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, seed);
 
         QTRY_VERIFY(canvas.hasTransformableSelection());
+    }
+
+    void selectionVisibilitySkipsRedundantStaticFrames()
+    {
+        Document document = Document::createDefault(QSize(64, 64));
+        document.background = Qt::transparent;
+        document.animationFrames = 60;
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        QImage mask(document.size, QImage::Format_Grayscale8);
+        mask.fill(0);
+        mask.scanLine(0)[0] = 255;
+
+        SelectionVisibility::Result result = SelectionVisibility::evaluate(
+            document, document.layers.first(), mask, 23);
+        QVERIFY(result.renderSucceeded);
+        QVERIFY(!result.hasVisiblePixels);
+        QCOMPARE(result.renderedFrames, 1);
+
+        document.wobbleAmount = 1.0;
+        result = SelectionVisibility::evaluate(
+            document, document.layers.first(), mask, 23);
+        QVERIFY(result.renderSucceeded);
+        QVERIFY(!result.hasVisiblePixels);
+        QCOMPARE(result.renderedFrames, document.animationFrames);
     }
 
     void packedSelectionSnapshotRoundTripsWithin4kUndoBudget()
     {
         constexpr int edge = 4096;
-        QImage mask(
-            QSize(edge, edge),
-            QImage::Format_Grayscale8);
+        QImage mask(QSize(edge, edge), QImage::Format_Grayscale8);
         QVERIFY(!mask.isNull());
         quint32 random = 0x6d2b79f5U;
-        for (int y = 0; y < edge; ++y) {
+        for (int y = 0; y < edge; ++y)
+        {
             uchar *line = mask.scanLine(y);
-            for (int x = 0; x < edge; ++x) {
+            for (int x = 0; x < edge; ++x)
+            {
                 random ^= random << 13U;
                 random ^= random >> 17U;
                 random ^= random << 5U;
@@ -2686,32 +2371,25 @@ private slots:
         mask.scanLine(0)[0] = 255;
         mask.scanLine(edge - 1)[edge - 1] = 255;
 
-        const std::optional<PackedMaskRegion> snapshot =
-            packBinaryMask(mask);
+        const std::optional<PackedMaskRegion> snapshot = packBinaryMask(mask);
         QVERIFY(snapshot.has_value());
         QCOMPARE(snapshot->bounds, QRect(QPoint(), mask.size()));
-        QVERIFY(
-            snapshot->packedMask.size()
-            <= qsizetype(2 * 1024 * 1024));
+        QVERIFY(snapshot->packedMask.size() <= qsizetype(2 * 1024 * 1024));
         QCOMPARE(unpackBinaryMask(*snapshot), mask);
 
         DocumentController controller;
         controller.newDocument(mask.size());
         const QUuid layerId = controller.document().activeLayerId;
         QImage restored;
-        QObject::connect(
-            &controller,
+        QObject::connect(&controller,
             &DocumentController::selectionHistoryStateRequested,
             &controller,
-            [&restored](const QUuid &, const QImage &state) {
+            [&restored](const QUuid &, const QImage &state)
+            {
                 restored = state;
             });
         controller.pushSelectionStateCommand(
-            QStringLiteral("4K selection snapshot"),
-            {},
-            {},
-            layerId,
-            mask);
+            QStringLiteral("4K selection snapshot"), {}, {}, layerId, mask);
         QCOMPARE(restored, mask);
         controller.undoStack()->undo();
         QVERIFY(restored.isNull());
@@ -2731,9 +2409,7 @@ private slots:
         stroke.color = QColor(35, 95, 225);
         stroke.width = 12.0;
         stroke.points = {
-            {QPointF(30.0, 50.0), 1.0},
-            {QPointF(70.0, 50.0), 1.0}
-        };
+            {QPointF(30.0, 50.0), 1.0}, {QPointF(70.0, 50.0), 1.0}};
         stroke.brush.antialiasing = false;
         document.layers.first().strokes.append(stroke);
 
@@ -2744,19 +2420,14 @@ private slots:
 
         QImage selection(document.size, QImage::Format_Grayscale8);
         selection.fill(0);
-        for (int y = 35; y <= 65; ++y) {
+        for (int y = 35; y <= 65; ++y)
+        {
             std::fill(
-                selection.scanLine(y) + 20,
-                selection.scanLine(y) + 81,
-                255);
+                selection.scanLine(y) + 20, selection.scanLine(y) + 81, 255);
         }
         const QUuid layerId = controller.document().activeLayerId;
         controller.pushSelectionStateCommand(
-            QStringLiteral("Select"),
-            {},
-            {},
-            layerId,
-            selection);
+            QStringLiteral("Select"), {}, {}, layerId, selection);
         QVERIFY(canvas.hasSelection());
         QVERIFY(canvas.hasTransformableSelection());
 
@@ -2765,24 +2436,20 @@ private slots:
         const int beforeCount = controller.undoStack()->count();
         const int beforeIndex = controller.undoStack()->index();
 
-        controller.undoStack()->beginMacro(
-            QStringLiteral("Resize canvas"));
+        controller.undoStack()->beginMacro(QStringLiteral("Resize canvas"));
         canvas.deselectSelection();
         // Selection changes are journaled while a macro is open; the UI is
         // updated only if the whole document transaction commits.
         QVERIFY(canvas.hasSelection());
-        QVERIFY(!controller.resizeCanvas(
-            controller.document().size,
-            QPoint(
-                static_cast<int>(
-                    DocumentLimits::maximumStoredCoordinateMagnitude)
-                    + 1,
+        QVERIFY(!controller.resizeCanvas(controller.document().size,
+            QPoint(static_cast<int>(
+                       DocumentLimits::maximumStoredCoordinateMagnitude)
+                       + 1,
                 0)));
         controller.undoStack()->endMacro();
 
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeDocument);
+            DocumentSerializer::toJson(controller.document()), beforeDocument);
         QVERIFY(canvas.hasSelection());
         QVERIFY(canvas.hasTransformableSelection());
         QCOMPARE(controller.undoStack()->count(), beforeCount);
@@ -2804,20 +2471,11 @@ private slots:
         const QPoint center = canvas.rect().center();
         canvas.setTool(CanvasWidget::Tool::Lasso);
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 0));
         QTest::mouseMove(&canvas, center, 5);
-        QTest::mouseMove(
-            &canvas,
-            center + QPoint(60, 0),
-            5);
+        QTest::mouseMove(&canvas, center + QPoint(60, 0), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 0));
 
         QVERIFY(!canvas.hasSelection());
         QCOMPARE(controller.undoStack()->count(), undoCount);
@@ -2833,18 +2491,14 @@ private slots:
         destination.color = QColor(220, 35, 35);
         destination.width = 20.0;
         destination.points = {
-            {QPointF(60.0, 50.0), 1.0},
-            {QPointF(90.0, 50.0), 1.0}
-        };
+            {QPointF(60.0, 50.0), 1.0}, {QPointF(90.0, 50.0), 1.0}};
         destination.brush.antialiasing = false;
 
         Stroke source;
         source.color = QColor(25, 90, 220);
         source.width = 20.0;
         source.points = {
-            {QPointF(10.0, 50.0), 1.0},
-            {QPointF(40.0, 50.0), 1.0}
-        };
+            {QPointF(10.0, 50.0), 1.0}, {QPointF(40.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
 
         Stroke hole;
@@ -2852,11 +2506,7 @@ private slots:
         hole.width = 8.0;
         hole.points = {{QPointF(25.0, 50.0), 1.0}};
         hole.brush.antialiasing = false;
-        document.layers.first().strokes = {
-            destination,
-            source,
-            hole
-        };
+        document.layers.first().strokes = {destination, source, hole};
 
         DocumentController controller;
         controller.loadDocument(document);
@@ -2867,53 +2517,38 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(50.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(50.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const auto lasso = [&canvas, &widgetPoint](
-                               const QRectF &documentRect) {
-            const QPoint topLeft =
-                widgetPoint(documentRect.topLeft());
-            const QPoint topRight =
-                widgetPoint(documentRect.topRight());
-            const QPoint bottomRight =
-                widgetPoint(documentRect.bottomRight());
-            const QPoint bottomLeft =
-                widgetPoint(documentRect.bottomLeft());
-            QTest::mousePress(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+        const auto lasso = [&canvas, &widgetPoint](const QRectF &documentRect)
+        {
+            const QPoint topLeft = widgetPoint(documentRect.topLeft());
+            const QPoint topRight = widgetPoint(documentRect.topRight());
+            const QPoint bottomRight = widgetPoint(documentRect.bottomRight());
+            const QPoint bottomLeft = widgetPoint(documentRect.bottomLeft());
+            QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
             QTest::mouseMove(&canvas, topRight, 5);
             QTest::mouseMove(&canvas, bottomRight, 5);
             QTest::mouseMove(&canvas, bottomLeft, 5);
             QTest::mouseRelease(
-                &canvas,
-                Qt::LeftButton,
-                Qt::NoModifier,
-                topLeft);
+                &canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         };
-        const auto sample = [&canvas](
-                                const QPixmap &pixmap,
-                                const QPoint &widgetPosition) {
+        const auto sample =
+            [&canvas](const QPixmap &pixmap, const QPoint &widgetPosition)
+        {
             const QImage image = pixmap.toImage();
             const qreal xScale =
                 static_cast<qreal>(image.width()) / canvas.width();
             const qreal yScale =
                 static_cast<qreal>(image.height()) / canvas.height();
             const int x = std::clamp(
-                qRound(widgetPosition.x() * xScale),
-                0,
-                image.width() - 1);
+                qRound(widgetPosition.x() * xScale), 0, image.width() - 1);
             const int y = std::clamp(
-                qRound(widgetPosition.y() * yScale),
-                0,
-                image.height() - 1);
+                qRound(widgetPosition.y() * yScale), 0, image.height() - 1);
             return image.pixelColor(x, y);
         };
 
@@ -2923,58 +2558,35 @@ private slots:
         canvas.setSelectionMoveMode(true);
         const QByteArray beforeTransform =
             DocumentSerializer::toJson(controller.document());
-        const int undoIndexBeforeTransform =
-            controller.undoStack()->index();
+        const int undoIndexBeforeTransform = controller.undoStack()->index();
 
         const QPoint dragStart = widgetPoint(QPointF(15.0, 50.0));
         const QPoint dragEnd = widgetPoint(QPointF(65.0, 50.0));
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            dragStart);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, dragStart);
         QTest::mouseMove(&canvas, dragEnd, 5);
         QApplication::processEvents();
         const QPixmap preview = canvas.grab();
 
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            dragEnd);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, dragEnd);
         QApplication::processEvents();
         QVERIFY(canvas.hasPendingSelectionTransform());
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
-        QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
+        QCOMPARE(controller.undoStack()->index(), undoIndexBeforeTransform);
         QVERIFY(canvas.applySelectionTransform());
         QApplication::processEvents();
         const QPixmap committed = canvas.grab();
-        QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeTransform + 1);
+        QCOMPARE(controller.undoStack()->index(), undoIndexBeforeTransform + 1);
 
-        const QPoint blueSample =
-            widgetPoint(QPointF(65.0, 50.0));
-        const QPoint holeSample =
-            widgetPoint(QPointF(75.0, 50.0));
-        QCOMPARE(
-            sample(preview, blueSample),
-            sample(committed, blueSample));
-        QCOMPARE(
-            sample(preview, holeSample),
-            sample(committed, holeSample));
-        QCOMPARE(
-            sample(committed, holeSample),
-            destination.color);
+        const QPoint blueSample = widgetPoint(QPointF(65.0, 50.0));
+        const QPoint holeSample = widgetPoint(QPointF(75.0, 50.0));
+        QCOMPARE(sample(preview, blueSample), sample(committed, blueSample));
+        QCOMPARE(sample(preview, holeSample), sample(committed, holeSample));
+        QCOMPARE(sample(committed, holeSample), destination.color);
 
         controller.undoStack()->undo();
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
     }
 
     void sequentialSmoothSelectionTransformLeavesNoSourceFringe()
@@ -2986,9 +2598,7 @@ private slots:
         source.color = QColor(35, 95, 225);
         source.width = 20.0;
         source.points = {
-            {QPointF(20.0, 50.0), 1.0},
-            {QPointF(60.0, 50.0), 1.0}
-        };
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(60.0, 50.0), 1.0}};
         source.brush.antialiasing = false;
         document.layers.first().strokes.append(source);
 
@@ -3001,101 +2611,64 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
 
-        const auto widgetPoint = [&canvas](const QPointF &documentPoint) {
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
             const QPointF center(canvas.rect().center());
-            return (center
-                    + (documentPoint - QPointF(80.0, 50.0))
-                        * canvas.zoom())
+            return (
+                center + (documentPoint - QPointF(80.0, 50.0)) * canvas.zoom())
                 .toPoint();
         };
-        const QPoint topLeft =
-            widgetPoint(QPointF(8.0, 35.0));
-        const QPoint topRight =
-            widgetPoint(QPointF(72.0, 35.0));
-        const QPoint bottomRight =
-            widgetPoint(QPointF(72.0, 65.0));
-        const QPoint bottomLeft =
-            widgetPoint(QPointF(8.0, 65.0));
+        const QPoint topLeft = widgetPoint(QPointF(8.0, 35.0));
+        const QPoint topRight = widgetPoint(QPointF(72.0, 35.0));
+        const QPoint bottomRight = widgetPoint(QPointF(72.0, 65.0));
+        const QPoint bottomLeft = widgetPoint(QPointF(8.0, 65.0));
         canvas.setTool(CanvasWidget::Tool::Lasso);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QByteArray beforeTransform =
             DocumentSerializer::toJson(controller.document());
-        const int undoCountBeforeTransform =
-            controller.undoStack()->count();
-        const int undoIndexBeforeTransform =
-            controller.undoStack()->index();
+        const int undoCountBeforeTransform = controller.undoStack()->count();
+        const int undoIndexBeforeTransform = controller.undoStack()->index();
         QVERIFY(canvas.rotateSelection(27.0));
         QTRY_VERIFY(canvas.hasTransformableSelection());
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
-        QCOMPARE(
-            controller.undoStack()->count(),
-            undoCountBeforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
+        QCOMPARE(controller.undoStack()->count(), undoCountBeforeTransform);
 
         canvas.setSelectionMoveMode(true);
-        const QPoint dragStart =
-            widgetPoint(QPointF(40.0, 50.0));
-        const QPoint dragEnd =
-            widgetPoint(QPointF(120.0, 50.0));
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            dragStart);
+        const QPoint dragStart = widgetPoint(QPointF(40.0, 50.0));
+        const QPoint dragEnd = widgetPoint(QPointF(120.0, 50.0));
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, dragStart);
         QTest::mouseMove(&canvas, dragEnd, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            dragEnd);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, dragEnd);
 
         QVERIFY(canvas.hasPendingSelectionTransform());
         QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
-            beforeTransform);
-        QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeTransform);
+            DocumentSerializer::toJson(controller.document()), beforeTransform);
+        QCOMPARE(controller.undoStack()->index(), undoIndexBeforeTransform);
         QVERIFY(canvas.applySelectionTransform());
-        QCOMPARE(
-            controller.undoStack()->count(),
-            undoCountBeforeTransform + 1);
-        QCOMPARE(
-            controller.undoStack()->index(),
-            undoIndexBeforeTransform + 1);
-        QCOMPARE(
-            controller.document().layers.first().strokes.size(),
-            2);
-        QCOMPARE(
-            controller.document().layers.first().strokes.last().mode,
+        QCOMPARE(controller.undoStack()->count(), undoCountBeforeTransform + 1);
+        QCOMPARE(controller.undoStack()->index(), undoIndexBeforeTransform + 1);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        QCOMPARE(controller.document().layers.first().strokes.last().mode,
             StrokeMode::PixelSelection);
 
-        const QImage rendered =
-            RenderEngine::render(controller.document(), 0);
+        const QImage rendered = RenderEngine::render(controller.document(), 0);
         QVERIFY(!rendered.isNull());
         bool sourceFringeRemains = false;
-        for (int y = 0;
-             y < rendered.height() && !sourceFringeRemains;
-             ++y) {
-            const auto *line = reinterpret_cast<const QRgb *>(
-                rendered.constScanLine(y));
-            for (int x = 0; x < 80; ++x) {
-                if (qAlpha(line[x]) != 0) {
+        for (int y = 0; y < rendered.height() && !sourceFringeRemains; ++y)
+        {
+            const auto *line =
+                reinterpret_cast<const QRgb *>(rendered.constScanLine(y));
+            for (int x = 0; x < 80; ++x)
+            {
+                if (qAlpha(line[x]) != 0)
+                {
                     sourceFringeRemains = true;
                     break;
                 }
@@ -3114,10 +2687,10 @@ private slots:
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
         QAction *lassoAction =
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
-        QAction *resizeCanvasAction = window.findChild<QAction *>(
-            QStringLiteral("resizeCanvasAction"));
-        QAction *resizeImageAction = window.findChild<QAction *>(
-            QStringLiteral("resizeImageAction"));
+        QAction *resizeCanvasAction =
+            window.findChild<QAction *>(QStringLiteral("resizeCanvasAction"));
+        QAction *resizeImageAction =
+            window.findChild<QAction *>(QStringLiteral("resizeImageAction"));
         QAction *undoAction =
             window.findChild<QAction *>(QStringLiteral("undoAction"));
         QVERIFY(canvas);
@@ -3126,169 +2699,147 @@ private slots:
         QVERIFY(resizeImageAction);
         QVERIFY(undoAction);
 
-        const auto expectedFitZoom = [canvas](const QSize &size) {
-            return std::clamp(
-                std::min(
-                    (canvas->width() - 64.0) / size.width(),
-                    (canvas->height() - 64.0) / size.height()),
+        const auto expectedFitZoom = [canvas](const QSize &size)
+        {
+            return std::clamp(std::min((canvas->width() - 64.0) / size.width(),
+                                  (canvas->height() - 64.0) / size.height()),
                 0.01,
                 16.0);
         };
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(60, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 0));
         QTest::mouseMove(canvas, center + QPoint(60, 0), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(60, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(60, 0));
         lassoAction->trigger();
         const QPoint topLeft = center - QPoint(90, 50);
         const QPoint topRight = center + QPoint(90, -50);
         const QPoint bottomRight = center + QPoint(90, 50);
         const QPoint bottomLeft = center + QPoint(-90, 50);
-        QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
         bool canvasDialogHandled = false;
         QSize originalCanvasSize;
         QSize resizedCanvasSize;
         canvas->setZoomPercent(200);
-        QTimer::singleShot(0, &window, [&]() {
-            CanvasSizeDialog *dialog =
-                window.findChild<CanvasSizeDialog *>();
-            if (!dialog) {
-                return;
-            }
-            QSpinBox *width = dialog->findChild<QSpinBox *>(
-                QStringLiteral("canvasWidthSpin"));
-            QSpinBox *height = dialog->findChild<QSpinBox *>(
-                QStringLiteral("canvasHeightSpin"));
-            if (!width || !height) {
-                return;
-            }
-            originalCanvasSize =
-                QSize(width->value(), height->value());
-            width->setValue(width->value() + 24);
-            resizedCanvasSize =
-                QSize(width->value(), height->value());
-            canvasDialogHandled = true;
-            dialog->accept();
-        });
+        QTimer::singleShot(0,
+            &window,
+            [&]()
+            {
+                CanvasSizeDialog *dialog =
+                    window.findChild<CanvasSizeDialog *>();
+                if (!dialog)
+                {
+                    return;
+                }
+                QSpinBox *width = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("canvasWidthSpin"));
+                QSpinBox *height = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("canvasHeightSpin"));
+                if (!width || !height)
+                {
+                    return;
+                }
+                originalCanvasSize = QSize(width->value(), height->value());
+                width->setValue(width->value() + 24);
+                resizedCanvasSize = QSize(width->value(), height->value());
+                canvasDialogHandled = true;
+                dialog->accept();
+            });
         resizeCanvasAction->trigger();
         QVERIFY(canvasDialogHandled);
         QVERIFY(!canvas->hasSelection());
-        QVERIFY(
-            qAbs(canvas->zoom()
-                 - expectedFitZoom(resizedCanvasSize))
-            < 0.000001);
+        QVERIFY(qAbs(canvas->zoom() - expectedFitZoom(resizedCanvasSize))
+                < 0.000001);
         undoAction->trigger();
         QTRY_VERIFY(canvas->hasTransformableSelection());
-        QVERIFY(
-            qAbs(canvas->zoom()
-                 - expectedFitZoom(originalCanvasSize))
-            < 0.000001);
+        QVERIFY(qAbs(canvas->zoom() - expectedFitZoom(originalCanvasSize))
+                < 0.000001);
 
         bool imageDialogHandled = false;
         QSize resizedImageSize;
         canvas->setZoomPercent(175);
-        QTimer::singleShot(0, &window, [&]() {
-            ImageSizeDialog *dialog =
-                window.findChild<ImageSizeDialog *>();
-            if (!dialog) {
-                return;
-            }
-            QDoubleSpinBox *percentage =
-                dialog->findChild<QDoubleSpinBox *>(
-                    QStringLiteral("imageScalePercentSpin"));
-            QSpinBox *width = dialog->findChild<QSpinBox *>(
-                QStringLiteral("imageWidthSpin"));
-            QSpinBox *height = dialog->findChild<QSpinBox *>(
-                QStringLiteral("imageHeightSpin"));
-            if (!percentage || !width || !height) {
-                return;
-            }
-            percentage->setValue(110.0);
-            resizedImageSize =
-                QSize(width->value(), height->value());
-            imageDialogHandled = true;
-            dialog->accept();
-        });
+        QTimer::singleShot(0,
+            &window,
+            [&]()
+            {
+                ImageSizeDialog *dialog = window.findChild<ImageSizeDialog *>();
+                if (!dialog)
+                {
+                    return;
+                }
+                QDoubleSpinBox *percentage =
+                    dialog->findChild<QDoubleSpinBox *>(
+                        QStringLiteral("imageScalePercentSpin"));
+                QSpinBox *width = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("imageWidthSpin"));
+                QSpinBox *height = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("imageHeightSpin"));
+                if (!percentage || !width || !height)
+                {
+                    return;
+                }
+                percentage->setValue(110.0);
+                resizedImageSize = QSize(width->value(), height->value());
+                imageDialogHandled = true;
+                dialog->accept();
+            });
         resizeImageAction->trigger();
         QVERIFY(imageDialogHandled);
         QVERIFY(!canvas->hasSelection());
-        QVERIFY(
-            qAbs(canvas->zoom()
-                 - expectedFitZoom(resizedImageSize))
-            < 0.000001);
+        QVERIFY(qAbs(canvas->zoom() - expectedFitZoom(resizedImageSize))
+                < 0.000001);
         undoAction->trigger();
         QTRY_VERIFY(canvas->hasTransformableSelection());
-        QVERIFY(
-            qAbs(canvas->zoom()
-                 - expectedFitZoom(originalCanvasSize))
-            < 0.000001);
+        QVERIFY(qAbs(canvas->zoom() - expectedFitZoom(originalCanvasSize))
+                < 0.000001);
 
         canvas->deselectSelection();
         QVERIFY(!canvas->hasSelection());
         lassoAction->trigger();
-        QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(canvas, topRight, 5);
         QTest::mouseMove(canvas, bottomRight, 5);
 
         bool activeLassoDialogHandled = false;
         QSize lassoResizeSize;
         canvas->setZoomPercent(150);
-        QTimer::singleShot(0, &window, [&]() {
-            CanvasSizeDialog *dialog =
-                window.findChild<CanvasSizeDialog *>();
-            if (!dialog) {
-                return;
-            }
-            QSpinBox *width = dialog->findChild<QSpinBox *>(
-                QStringLiteral("canvasWidthSpin"));
-            QSpinBox *height = dialog->findChild<QSpinBox *>(
-                QStringLiteral("canvasHeightSpin"));
-            if (!width || !height) {
-                return;
-            }
-            width->setValue(width->value() + 1);
-            lassoResizeSize =
-                QSize(width->value(), height->value());
-            activeLassoDialogHandled = true;
-            dialog->accept();
-        });
+        QTimer::singleShot(0,
+            &window,
+            [&]()
+            {
+                CanvasSizeDialog *dialog =
+                    window.findChild<CanvasSizeDialog *>();
+                if (!dialog)
+                {
+                    return;
+                }
+                QSpinBox *width = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("canvasWidthSpin"));
+                QSpinBox *height = dialog->findChild<QSpinBox *>(
+                    QStringLiteral("canvasHeightSpin"));
+                if (!width || !height)
+                {
+                    return;
+                }
+                width->setValue(width->value() + 1);
+                lassoResizeSize = QSize(width->value(), height->value());
+                activeLassoDialogHandled = true;
+                dialog->accept();
+            });
         resizeCanvasAction->trigger();
         QVERIFY(activeLassoDialogHandled);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            bottomRight);
+            canvas, Qt::LeftButton, Qt::NoModifier, bottomRight);
         QVERIFY(!canvas->hasSelection());
         QVERIFY(
-            qAbs(canvas->zoom()
-                 - expectedFitZoom(lassoResizeSize))
-            < 0.000001);
+            qAbs(canvas->zoom() - expectedFitZoom(lassoResizeSize)) < 0.000001);
     }
 
     void mirrorsTheCanvasAsAViewOnlyToggle()
@@ -3299,17 +2850,15 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *mirrorAction = window.findChild<QAction *>(
-            QStringLiteral("mirrorCanvasAction"));
+        QAction *mirrorAction =
+            window.findChild<QAction *>(QStringLiteral("mirrorCanvasAction"));
         QToolButton *mirrorButton = window.findChild<QToolButton *>(
             QStringLiteral("mirrorCanvasButton"));
         QVERIFY(canvas);
         QVERIFY(mirrorAction);
         QVERIFY(mirrorButton);
         QVERIFY(mirrorAction->isCheckable());
-        QCOMPARE(
-            mirrorAction->shortcut(),
-            QKeySequence(QStringLiteral("M")));
+        QCOMPARE(mirrorAction->shortcut(), QKeySequence(QStringLiteral("M")));
         QVERIFY(!canvas->isCanvasMirrored());
         QVERIFY(!window.isWindowModified());
 
@@ -3333,10 +2882,10 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *zoomInAction = window.findChild<QAction *>(
-            QStringLiteral("zoomInAction"));
-        QAction *zoomOutAction = window.findChild<QAction *>(
-            QStringLiteral("zoomOutAction"));
+        QAction *zoomInAction =
+            window.findChild<QAction *>(QStringLiteral("zoomInAction"));
+        QAction *zoomOutAction =
+            window.findChild<QAction *>(QStringLiteral("zoomOutAction"));
         QVERIFY(canvas);
         QVERIFY(zoomInAction);
         QVERIFY(zoomOutAction);
@@ -3381,12 +2930,12 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QSlider *zoomSlider = window.findChild<QSlider *>(
-            QStringLiteral("zoomSlider"));
-        QSpinBox *zoomSpin = window.findChild<QSpinBox *>(
-            QStringLiteral("zoomPercentSpin"));
-        QAction *actualSizeAction = window.findChild<QAction *>(
-            QStringLiteral("actualSizeAction"));
+        QSlider *zoomSlider =
+            window.findChild<QSlider *>(QStringLiteral("zoomSlider"));
+        QSpinBox *zoomSpin =
+            window.findChild<QSpinBox *>(QStringLiteral("zoomPercentSpin"));
+        QAction *actualSizeAction =
+            window.findChild<QAction *>(QStringLiteral("actualSizeAction"));
         QVERIFY(canvas);
         QVERIFY(zoomSlider);
         QVERIFY(zoomSpin);
@@ -3402,7 +2951,8 @@ private slots:
         QVERIFY(zoomSlider->value() != sliderAt250);
 
         int sliderTarget = zoomSlider->maximum() * 3 / 4;
-        if (sliderTarget == zoomSlider->value()) {
+        if (sliderTarget == zoomSlider->value())
+        {
             sliderTarget = zoomSlider->maximum() / 2;
         }
         zoomSlider->setValue(sliderTarget);
@@ -3428,14 +2978,9 @@ private slots:
         const qreal initialZoom = canvas.zoom();
         canvas.setPanModifierActive(true);
         const QPoint start(200, 200);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::ControlModifier,
-            start);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::ControlModifier, start);
         QTest::mouseMove(&canvas, start + QPoint(120, 0), 5);
-        QTest::mouseRelease(
-            &canvas,
+        QTest::mouseRelease(&canvas,
             Qt::LeftButton,
             Qt::ControlModifier,
             start + QPoint(120, 0));
@@ -3458,16 +3003,8 @@ private slots:
 
         canvas.setBrushColor(Qt::red);
         const QPoint center(200, 200);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::AltModifier,
-            center);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::AltModifier,
-            center);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::AltModifier, center);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::AltModifier, center);
 
         QCOMPARE(canvas.brushColor(), QColor(Qt::white));
         const Layer &layer = controller.document().layers.first();
@@ -3488,17 +3025,10 @@ private slots:
         QCOMPARE(canvas.brushRoughness(), 0.4);
 
         const QPoint center(200, 200);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseMove(&canvas, center + QPoint(40, 0), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(40, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(40, 0));
 
         const Layer &layer = controller.document().layers.first();
         QCOMPARE(layer.strokes.size(), 1);
@@ -3516,19 +3046,14 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
 
         BrushSizeRow brushSizeRow(
-            &canvas,
-            BrushSizeRow::Target::Brush,
-            QStringLiteral("testBrush"));
-        BrushSizeRow eraserSizeRow(
-            &canvas,
+            &canvas, BrushSizeRow::Target::Brush, QStringLiteral("testBrush"));
+        BrushSizeRow eraserSizeRow(&canvas,
             BrushSizeRow::Target::Eraser,
             QStringLiteral("testEraser"));
         QSpinBox *brushSizeSpin =
-            brushSizeRow.findChild<QSpinBox *>(
-                QStringLiteral("testBrushSpin"));
-        QSpinBox *eraserSizeSpin =
-            eraserSizeRow.findChild<QSpinBox *>(
-                QStringLiteral("testEraserSpin"));
+            brushSizeRow.findChild<QSpinBox *>(QStringLiteral("testBrushSpin"));
+        QSpinBox *eraserSizeSpin = eraserSizeRow.findChild<QSpinBox *>(
+            QStringLiteral("testEraserSpin"));
         QVERIFY(brushSizeSpin);
         QVERIFY(eraserSizeSpin);
 
@@ -3557,20 +3082,13 @@ private slots:
         const QPoint center = canvas.rect().center();
         canvas.setTool(CanvasWidget::Tool::Brush);
         QTest::mouseClick(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(40, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(40, 0));
         canvas.setTool(CanvasWidget::Tool::Eraser);
         QTest::mouseClick(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(40, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(40, 0));
 
         canvas.setTool(CanvasWidget::Tool::Lasso);
-        QPointingDevice eraserStylus(
-            QStringLiteral("Test eraser stylus"),
+        QPointingDevice eraserStylus(QStringLiteral("Test eraser stylus"),
             2,
             QInputDevice::DeviceType::Stylus,
             QPointingDevice::PointerType::Eraser,
@@ -3578,12 +3096,10 @@ private slots:
                 | QInputDevice::Capability::Pressure,
             1,
             1);
-        const QPointF tabletPosition =
-            QPointF(center) + QPointF(0.0, 40.0);
+        const QPointF tabletPosition = QPointF(center) + QPointF(0.0, 40.0);
         const QPointF globalTabletPosition =
             canvas.mapToGlobal(tabletPosition.toPoint());
-        QTabletEvent tabletHover(
-            QEvent::TabletMove,
+        QTabletEvent tabletHover(QEvent::TabletMove,
             &eraserStylus,
             tabletPosition,
             globalTabletPosition,
@@ -3600,8 +3116,7 @@ private slots:
         QCOMPARE(canvas.cursor().shape(), Qt::BlankCursor);
         QTest::mouseMove(&canvas, center + QPoint(10, 40));
         QCOMPARE(canvas.cursor().shape(), Qt::CrossCursor);
-        QTabletEvent tabletPress(
-            QEvent::TabletPress,
+        QTabletEvent tabletPress(QEvent::TabletPress,
             &eraserStylus,
             tabletPosition,
             globalTabletPosition,
@@ -3615,8 +3130,7 @@ private slots:
             Qt::LeftButton,
             Qt::LeftButton);
         QApplication::sendEvent(&canvas, &tabletPress);
-        QTabletEvent tabletRelease(
-            QEvent::TabletRelease,
+        QTabletEvent tabletRelease(QEvent::TabletRelease,
             &eraserStylus,
             tabletPosition,
             globalTabletPosition,
@@ -3661,26 +3175,19 @@ private slots:
             canvas->setTool(CanvasWidget::Tool::Eraser);
 
             QVERIFY(window.close());
-            QCOMPARE(
-                QSettings()
-                    .value(QStringLiteral(
-                        "drawingTools/brush/presetId"))
-                    .toString(),
+            QCOMPARE(QSettings()
+                         .value(QStringLiteral("drawingTools/brush/presetId"))
+                         .toString(),
                 QStringLiteral("soft-airbrush"));
         }
 
         QSettings persistedSettings;
         persistedSettings.sync();
-        QCOMPARE(
-            persistedSettings.status(),
-            QSettings::NoError);
+        QCOMPARE(persistedSettings.status(), QSettings::NoError);
         MainWindow restoredWindow;
-        CanvasWidget *restored =
-            restoredWindow.findChild<CanvasWidget *>();
+        CanvasWidget *restored = restoredWindow.findChild<CanvasWidget *>();
         QVERIFY(restored);
-        QCOMPARE(
-            restored->brushPresetId(),
-            QStringLiteral("soft-airbrush"));
+        QCOMPARE(restored->brushPresetId(), QStringLiteral("soft-airbrush"));
         QCOMPARE(restored->brushWidth(), 47.0);
         QCOMPARE(restored->eraserWidth(), 57.0);
         QCOMPARE(restored->brushRoughness(), 0.37);
@@ -3688,20 +3195,16 @@ private slots:
         QCOMPARE(restored->brushColor(), rememberedColor);
         QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
 
-        QAction *eraserAction = restoredWindow.findChild<QAction *>(
-            QStringLiteral("eraserAction"));
-        QSpinBox *brushSizeSpin =
-            restoredWindow.findChild<QSpinBox *>(
-                QStringLiteral("brushSizeSpin"));
-        QSpinBox *eraserSizeSpin =
-            restoredWindow.findChild<QSpinBox *>(
-                QStringLiteral("eraserSizeSpin"));
-        QSpinBox *roughnessSpin =
-            restoredWindow.findChild<QSpinBox *>(
-                QStringLiteral("brushRoughnessSpin"));
-        QCheckBox *antialiasingToggle =
-            restoredWindow.findChild<QCheckBox *>(
-                QStringLiteral("brushAntialiasingToggle"));
+        QAction *eraserAction =
+            restoredWindow.findChild<QAction *>(QStringLiteral("eraserAction"));
+        QSpinBox *brushSizeSpin = restoredWindow.findChild<QSpinBox *>(
+            QStringLiteral("brushSizeSpin"));
+        QSpinBox *eraserSizeSpin = restoredWindow.findChild<QSpinBox *>(
+            QStringLiteral("eraserSizeSpin"));
+        QSpinBox *roughnessSpin = restoredWindow.findChild<QSpinBox *>(
+            QStringLiteral("brushRoughnessSpin"));
+        QCheckBox *antialiasingToggle = restoredWindow.findChild<QCheckBox *>(
+            QStringLiteral("brushAntialiasingToggle"));
         QVERIFY(eraserAction);
         QVERIFY(brushSizeSpin);
         QVERIFY(eraserSizeSpin);
@@ -3722,8 +3225,10 @@ private slots:
 
         BrushPresetButton *selectedPresetButton = nullptr;
         for (BrushPresetButton *button :
-             restoredWindow.findChildren<BrushPresetButton *>()) {
-            if (button->presetId() == QStringLiteral("soft-airbrush")) {
+            restoredWindow.findChildren<BrushPresetButton *>())
+        {
+            if (button->presetId() == QStringLiteral("soft-airbrush"))
+            {
                 selectedPresetButton = button;
                 break;
             }
@@ -3736,12 +3241,9 @@ private slots:
     {
         const QColor recentColor(42, 91, 137, 173);
         QSettings settings;
-        settings.setValue(
-            QStringLiteral("brush/recentColors"),
-            QStringList {
-                QStringLiteral("not-a-color"),
-                recentColor.name(QColor::HexArgb)
-            });
+        settings.setValue(QStringLiteral("brush/recentColors"),
+            QStringList{QStringLiteral("not-a-color"),
+                recentColor.name(QColor::HexArgb)});
         settings.sync();
 
         MainWindow window;
@@ -3751,42 +3253,30 @@ private slots:
         QVERIFY(window.close());
         settings.sync();
         QCOMPARE(settings.status(), QSettings::NoError);
-        QCOMPARE(
-            settings
-                .value(QStringLiteral("drawingTools/brush/color"))
-                .toString(),
+        QCOMPARE(settings.value(QStringLiteral("drawingTools/brush/color"))
+                     .toString(),
             recentColor.name(QColor::HexArgb));
     }
 
     void sanitizesInvalidDrawingToolSettings()
     {
         QSettings settings;
-        settings.setValue(
-            QStringLiteral("drawingTools/activeTool"),
+        settings.setValue(QStringLiteral("drawingTools/activeTool"),
             QStringLiteral("transform"));
-        settings.setValue(
-            QStringLiteral("drawingTools/brush/presetId"),
+        settings.setValue(QStringLiteral("drawingTools/brush/presetId"),
             QStringLiteral("missing-brush"));
-        settings.setValue(
-            QStringLiteral("drawingTools/brush/color"),
+        settings.setValue(QStringLiteral("drawingTools/brush/color"),
             QStringLiteral("not-a-color"));
-        settings.setValue(
-            QStringLiteral("drawingTools/brush/roughness"),
+        settings.setValue(QStringLiteral("drawingTools/brush/roughness"),
             std::numeric_limits<double>::infinity());
-        settings.setValue(
-            QStringLiteral("drawingTools/brush/antialiasing"),
+        settings.setValue(QStringLiteral("drawingTools/brush/antialiasing"),
             QStringLiteral("sometimes"));
         settings.setValue(
-            QStringLiteral(
-                "drawingTools/brush/presetWidths/ink-pen"),
-            9999.0);
+            QStringLiteral("drawingTools/brush/presetWidths/ink-pen"), 9999.0);
         settings.setValue(
-            QStringLiteral(
-                "drawingTools/brush/presetWidths/g-pen"),
+            QStringLiteral("drawingTools/brush/presetWidths/g-pen"),
             std::numeric_limits<double>::quiet_NaN());
-        settings.setValue(
-            QStringLiteral("drawingTools/eraser/width"),
-            -100.0);
+        settings.setValue(QStringLiteral("drawingTools/eraser/width"), -100.0);
         settings.sync();
 
         MainWindow window;
@@ -3794,31 +3284,23 @@ private slots:
         QVERIFY(canvas);
         QCOMPARE(canvas->tool(), CanvasWidget::Tool::Brush);
         QCOMPARE(
-            canvas->brushPresetId(),
-            BrushPresetCatalog::defaultPreset().id);
-        QCOMPARE(
-            canvas->brushWidth(),
-            DocumentLimits::maximumStrokeWidth);
+            canvas->brushPresetId(), BrushPresetCatalog::defaultPreset().id);
+        QCOMPARE(canvas->brushWidth(), DocumentLimits::maximumStrokeWidth);
         QCOMPARE(canvas->eraserWidth(), 1.0);
         QCOMPARE(canvas->brushRoughness(), 1.0);
         QVERIFY(!canvas->brushAntialiasing());
         QCOMPARE(canvas->brushColor(), QColor(Qt::black));
 
         canvas->setBrushPreset(QStringLiteral("g-pen"));
-        QCOMPARE(
-            canvas->brushWidth(),
-            BrushPresetCatalog::find(
-                QStringLiteral("g-pen"))->defaultSize);
+        QCOMPARE(canvas->brushWidth(),
+            BrushPresetCatalog::find(QStringLiteral("g-pen"))->defaultSize);
 
         const qreal brushWidth = canvas->brushWidth();
         const qreal eraserWidth = canvas->eraserWidth();
         const qreal roughness = canvas->brushRoughness();
-        canvas->setBrushWidth(
-            std::numeric_limits<qreal>::quiet_NaN());
-        canvas->setEraserWidth(
-            std::numeric_limits<qreal>::infinity());
-        canvas->setBrushRoughness(
-            std::numeric_limits<qreal>::quiet_NaN());
+        canvas->setBrushWidth(std::numeric_limits<qreal>::quiet_NaN());
+        canvas->setEraserWidth(std::numeric_limits<qreal>::infinity());
+        canvas->setBrushRoughness(std::numeric_limits<qreal>::quiet_NaN());
         QCOMPARE(canvas->brushWidth(), brushWidth);
         QCOMPARE(canvas->eraserWidth(), eraserWidth);
         QCOMPARE(canvas->brushRoughness(), roughness);
@@ -3833,16 +3315,16 @@ private slots:
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
         QListWidget *layerList = window.findChild<QListWidget *>();
-        QToolButton *addButton = window.findChild<QToolButton *>(
-            QStringLiteral("layerAddButton"));
+        QToolButton *addButton =
+            window.findChild<QToolButton *>(QStringLiteral("layerAddButton"));
         QToolButton *deleteButton = window.findChild<QToolButton *>(
             QStringLiteral("layerDeleteButton"));
-        QAction *undoAction = window.findChild<QAction *>(
-            QStringLiteral("undoAction"));
-        QAction *redoAction = window.findChild<QAction *>(
-            QStringLiteral("redoAction"));
-        QAction *clearLayerAction = window.findChild<QAction *>(
-            QStringLiteral("clearLayerAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *redoAction =
+            window.findChild<QAction *>(QStringLiteral("redoAction"));
+        QAction *clearLayerAction =
+            window.findChild<QAction *>(QStringLiteral("clearLayerAction"));
         QVERIFY(canvas);
         QVERIFY(layerList);
         QVERIFY(addButton);
@@ -3862,16 +3344,11 @@ private slots:
         QVERIFY(window.isWindowModified());
 
         QSignalSpy interactionMessages(
-            canvas,
-            &CanvasWidget::interactionMessage);
+            canvas, &CanvasWidget::interactionMessage);
         QTest::mouseClick(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            canvas->rect().center());
+            canvas, Qt::LeftButton, Qt::NoModifier, canvas->rect().center());
         QCOMPARE(interactionMessages.size(), 1);
-        QCOMPARE(
-            interactionMessages.first().first().toString(),
+        QCOMPARE(interactionMessages.first().first().toString(),
             QStringLiteral("Add a layer before using this tool."));
 
         undoAction->trigger();
@@ -3909,15 +3386,9 @@ private slots:
 
         const QPoint leftOfCenter(100, 200);
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            leftOfCenter);
+            &canvas, Qt::LeftButton, Qt::NoModifier, leftOfCenter);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            leftOfCenter);
+            &canvas, Qt::LeftButton, Qt::NoModifier, leftOfCenter);
 
         const Layer &layer = controller.document().layers.first();
         QCOMPARE(layer.strokes.size(), 1);
@@ -3942,42 +3413,26 @@ private slots:
         const QPoint topRight = center + QPoint(50, -50);
         const QPoint bottomRight = center + QPoint(50, 50);
         const QPoint bottomLeft = center + QPoint(-50, 50);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QVERIFY(canvas.hasSelection());
 
         canvas.setTool(CanvasWidget::Tool::Brush);
         QVERIFY(canvas.hasSelection());
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(120, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 0));
         QTest::mouseMove(&canvas, center + QPoint(120, 0), 5);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(120, 0));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 0));
         QCOMPARE(controller.document().layers.first().strokes.size(), 1);
         QVERIFY(!controller.document()
-                     .layers.first()
-                     .strokes.first()
-                     .clipMask.isNull());
-        QImage rendered = RenderEngine::render(
-            controller.document(),
-            0);
+                .layers.first()
+                .strokes.first()
+                .clipMask.isNull());
+        QImage rendered = RenderEngine::render(controller.document(), 0);
         QCOMPARE(rendered.pixelColor(20, 50), QColor(Qt::white));
         QCOMPARE(rendered.pixelColor(50, 50), QColor(Qt::black));
 
@@ -3985,36 +3440,28 @@ private slots:
         canvas.setTool(CanvasWidget::Tool::Bucket);
         QVERIFY(canvas.hasSelection());
         QTest::mouseClick(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(0, 25));
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(0, 25));
         QCOMPARE(controller.document().layers.first().strokes.size(), 2);
         QVERIFY(!controller.document()
-                     .layers.first()
-                     .strokes.last()
-                     .clipMask.isNull());
+                .layers.first()
+                .strokes.last()
+                .clipMask.isNull());
         rendered = RenderEngine::render(controller.document(), 0);
-        QCOMPARE(
-            rendered.pixelColor(50, 42),
-            canvas.brushColor());
+        QCOMPARE(rendered.pixelColor(50, 42), canvas.brushColor());
         QCOMPARE(rendered.pixelColor(20, 42), QColor(Qt::white));
     }
 
     void autosavesModifiedWork()
     {
-        const QString recoveryKey =
-            QStringLiteral("recovery/sourcePath");
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
             QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
         QTemporaryDir recoveryDirectory;
         QVERIFY(recoveryDirectory.isValid());
-        const QString recoveryPath = recoveryDirectory.filePath(
-            QStringLiteral("recovery.wagle"));
-        qputenv(
-            "WAGLEWAGLEPAINT_RECOVERY_PATH",
-            recoveryPath.toUtf8());
+        const QString recoveryPath =
+            recoveryDirectory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
 
         MainWindow window;
         window.resize(1000, 680);
@@ -4025,16 +3472,10 @@ private slots:
 
         const QPoint center = canvas->rect().center();
         QTest::mousePress(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(40, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(40, 0));
         QTest::mouseMove(canvas, center + QPoint(40, 0), 5);
         QTest::mouseRelease(
-            canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(40, 0));
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(40, 0));
         QTRY_VERIFY(window.isWindowModified());
 
         QEvent deactivate(QEvent::ApplicationDeactivate);
@@ -4056,27 +3497,21 @@ private slots:
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-        CanvasWidget *windowCanvas =
-            window.findChild<CanvasWidget *>();
+        CanvasWidget *windowCanvas = window.findChild<CanvasWidget *>();
         QAction *undoAction =
             window.findChild<QAction *>(QStringLiteral("undoAction"));
         QVERIFY(windowCanvas);
         QVERIFY(undoAction);
 
         const QPoint windowCenter = windowCanvas->rect().center();
-        QTest::mousePress(
-            windowCanvas,
+        QTest::mousePress(windowCanvas,
             Qt::LeftButton,
             Qt::NoModifier,
             windowCenter - QPoint(30, 0));
-        QTest::mouseMove(
-            windowCanvas,
-            windowCenter + QPoint(30, 0),
-            5);
+        QTest::mouseMove(windowCanvas, windowCenter + QPoint(30, 0), 5);
         QEvent deactivate(QEvent::ApplicationDeactivate);
         QApplication::sendEvent(qApp, &deactivate);
-        QTest::mouseRelease(
-            windowCanvas,
+        QTest::mouseRelease(windowCanvas,
             Qt::LeftButton,
             Qt::NoModifier,
             windowCenter + QPoint(30, 0));
@@ -4091,8 +3526,7 @@ private slots:
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
 
-        QPointingDevice stylus(
-            QStringLiteral("Test stylus"),
+        QPointingDevice stylus(QStringLiteral("Test stylus"),
             1,
             QInputDevice::DeviceType::Stylus,
             QPointingDevice::PointerType::Pen,
@@ -4101,10 +3535,8 @@ private slots:
             1,
             1);
         const QPointF center = canvas.rect().center();
-        const QPointF globalCenter =
-            canvas.mapToGlobal(center.toPoint());
-        QTabletEvent tabletPress(
-            QEvent::TabletPress,
+        const QPointF globalCenter = canvas.mapToGlobal(center.toPoint());
+        QTabletEvent tabletPress(QEvent::TabletPress,
             &stylus,
             center,
             globalCenter,
@@ -4119,13 +3551,10 @@ private slots:
             Qt::LeftButton);
         QApplication::sendEvent(&canvas, &tabletPress);
 
-        QFocusEvent focusOut(
-            QEvent::FocusOut,
-            Qt::ActiveWindowFocusReason);
+        QFocusEvent focusOut(QEvent::FocusOut, Qt::ActiveWindowFocusReason);
         QApplication::sendEvent(&canvas, &focusOut);
 
-        QTabletEvent tabletRelease(
-            QEvent::TabletRelease,
+        QTabletEvent tabletRelease(QEvent::TabletRelease,
             &stylus,
             center,
             globalCenter,
@@ -4142,32 +3571,19 @@ private slots:
         QVERIFY(controller.document().layers.first().strokes.isEmpty());
 
         QTest::mouseClick(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center.toPoint());
-        QCOMPARE(
-            controller.document().layers.first().strokes.size(),
-            1);
+            &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
 
         canvas.setPanModifierActive(true);
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center.toPoint());
+            &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
         QCOMPARE(canvas.cursor().shape(), Qt::ClosedHandCursor);
         QEvent ungrabMouse(QEvent::UngrabMouse);
         QApplication::sendEvent(&canvas, &ungrabMouse);
         QCOMPARE(canvas.cursor().shape(), Qt::BlankCursor);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center.toPoint());
-        QCOMPARE(
-            controller.document().layers.first().strokes.size(),
-            1);
+            &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
     }
 
     void deactivationRestoresLassoAndCancelsSelectionMove()
@@ -4177,9 +3593,7 @@ private slots:
         Stroke stroke;
         stroke.width = 8.0;
         stroke.points = {
-            {QPointF(20.0, 50.0), 1.0},
-            {QPointF(80.0, 50.0), 1.0}
-        };
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(80.0, 50.0), 1.0}};
         document.layers.first().strokes = {stroke};
 
         DocumentController controller;
@@ -4196,66 +3610,39 @@ private slots:
         const QPoint topRight = center + QPoint(120, -80);
         const QPoint bottomRight = center + QPoint(120, 80);
         const QPoint bottomLeft = center + QPoint(-120, 80);
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QTest::mouseMove(&canvas, topRight, 5);
         QTest::mouseMove(&canvas, bottomRight, 5);
         QTest::mouseMove(&canvas, bottomLeft, 5);
-        QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            topLeft);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QVERIFY(canvas.hasSelection());
         QVERIFY(canvas.hasTransformableSelection());
 
         const QByteArray documentBeforeMove =
             DocumentSerializer::toJson(controller.document());
-        QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseMove(&canvas, center + QPoint(50, 20), 5);
-        QFocusEvent moveFocusOut(
-            QEvent::FocusOut,
-            Qt::ActiveWindowFocusReason);
+        QFocusEvent moveFocusOut(QEvent::FocusOut, Qt::ActiveWindowFocusReason);
         QApplication::sendEvent(&canvas, &moveFocusOut);
         QTest::mouseRelease(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center + QPoint(50, 20));
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(50, 20));
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             documentBeforeMove);
         QVERIFY(canvas.hasSelection());
         QVERIFY(canvas.hasTransformableSelection());
 
         const QPoint outsideSelection = center + QPoint(140, 140);
         QTest::mousePress(
-            &canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            outsideSelection);
-        QTest::mouseMove(
-            &canvas,
-            outsideSelection - QPoint(30, 0),
-            5);
+            &canvas, Qt::LeftButton, Qt::NoModifier, outsideSelection);
+        QTest::mouseMove(&canvas, outsideSelection - QPoint(30, 0), 5);
         QFocusEvent lassoFocusOut(
-            QEvent::FocusOut,
-            Qt::ActiveWindowFocusReason);
+            QEvent::FocusOut, Qt::ActiveWindowFocusReason);
         QApplication::sendEvent(&canvas, &lassoFocusOut);
-        QTest::mouseRelease(
-            &canvas,
+        QTest::mouseRelease(&canvas,
             Qt::LeftButton,
             Qt::NoModifier,
             outsideSelection - QPoint(30, 0));
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()),
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
             documentBeforeMove);
         QVERIFY(canvas.hasSelection());
         QVERIFY(canvas.hasTransformableSelection());
@@ -4270,8 +3657,8 @@ private slots:
 
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
         QListWidget *layerList = window.findChild<QListWidget *>();
-        QToolButton *addButton = window.findChild<QToolButton *>(
-            QStringLiteral("layerAddButton"));
+        QToolButton *addButton =
+            window.findChild<QToolButton *>(QStringLiteral("layerAddButton"));
         QVERIFY(canvas);
         QVERIFY(layerList);
         QVERIFY(addButton);

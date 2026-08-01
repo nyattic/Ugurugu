@@ -1,0 +1,51 @@
+find_program(
+    WOBBLEPAINT_CLANG_FORMAT
+    NAMES clang-format
+    HINTS
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+)
+if(WOBBLEPAINT_CLANG_FORMAT)
+    file(
+        GLOB_RECURSE
+        WOBBLEPAINT_FORMAT_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/*.hpp"
+    )
+    add_custom_target(
+        wobblepaint_format
+        COMMAND
+        "${WOBBLEPAINT_CLANG_FORMAT}"
+        -i
+        ${WOBBLEPAINT_FORMAT_SOURCES}
+        VERBATIM
+    )
+    add_custom_target(
+        wobblepaint_format_check
+        COMMAND
+        "${WOBBLEPAINT_CLANG_FORMAT}"
+        --dry-run
+        --Werror
+        ${WOBBLEPAINT_FORMAT_SOURCES}
+        VERBATIM
+    )
+endif()
+
+if(APPLE)
+    add_executable(
+        wobblepaint_render_release_notes
+        tools/RenderReleaseNotes.cpp
+    )
+    target_link_libraries(
+        wobblepaint_render_release_notes
+        PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    wobblepaint_target_defaults(wobblepaint_render_release_notes)
+endif()

@@ -2,7 +2,8 @@
 
 #include <QToolButton>
 
-namespace wobble {
+namespace wobble
+{
 
 class WobblePlayButton final : public QToolButton
 {

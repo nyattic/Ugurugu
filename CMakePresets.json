@@ -46,6 +46,21 @@
       }
     },
     {
+      "name": "macos-sanitized",
+      "inherits": "base",
+      "displayName": "macOS ASan + UBSan",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
+        "WOBBLEPAINT_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
       "name": "windows-debug",
       "inherits": "base",
       "displayName": "Windows Debug",
@@ -86,6 +101,10 @@
       "configurePreset": "macos-release"
     },
     {
+      "name": "macos-sanitized",
+      "configurePreset": "macos-sanitized"
+    },
+    {
       "name": "windows-debug",
       "configurePreset": "windows-debug",
       "configuration": "Debug"
@@ -107,6 +126,17 @@
     {
       "name": "macos-release",
       "configurePreset": "macos-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-sanitized",
+      "configurePreset": "macos-sanitized",
+      "environment": {
+        "ASAN_OPTIONS": "halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
       "output": {
         "outputOnFailure": true
       }

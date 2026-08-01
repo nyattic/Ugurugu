@@ -19,27 +19,25 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 constexpr int minimumDialogEdge = DocumentLimits::minimumCanvasEdge;
 constexpr int previewMargin = 18;
 
 QRectF centeredFittedRect(
-    const QSize &source,
-    const QSize &largest,
-    const QRectF &viewport)
+    const QSize &source, const QSize &largest, const QRectF &viewport)
 {
-    if (!source.isValid() || !largest.isValid() || viewport.isEmpty()) {
+    if (!source.isValid() || !largest.isValid() || viewport.isEmpty())
+    {
         return {};
     }
-    const qreal scale = std::min(
-        viewport.width() / largest.width(),
+    const qreal scale = std::min(viewport.width() / largest.width(),
         viewport.height() / largest.height());
-    const QSizeF displayed(
-        source.width() * scale,
-        source.height() * scale);
+    const QSizeF displayed(source.width() * scale, source.height() * scale);
     return QRectF(
         viewport.center()
             - QPointF(displayed.width() / 2.0, displayed.height() / 2.0),
@@ -60,9 +58,7 @@ public:
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
 
-    void setGeometryState(
-        const QSize &currentSize,
-        const QSize &targetSize)
+    void setGeometryState(const QSize &currentSize, const QSize &targetSize)
     {
         m_currentSize = currentSize;
         m_targetSize = targetSize;
@@ -75,15 +71,15 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        const QRectF frame =
-            QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
         QPainterPath framePath;
         framePath.addRoundedRect(frame, 10.0, 10.0);
         painter.fillPath(framePath, Theme::canvasBackground());
         painter.setPen(QPen(Theme::border(), 1.0));
         painter.drawPath(framePath);
 
-        if (!m_currentSize.isValid() || !m_targetSize.isValid()) {
+        if (!m_currentSize.isValid() || !m_targetSize.isValid())
+        {
             return;
         }
 
@@ -91,10 +87,7 @@ protected:
             std::max(m_currentSize.width(), m_targetSize.width()),
             std::max(m_currentSize.height(), m_targetSize.height()));
         const QRectF viewport = frame.adjusted(
-            previewMargin,
-            previewMargin,
-            -previewMargin,
-            -previewMargin);
+            previewMargin, previewMargin, -previewMargin, -previewMargin);
         const QRectF displayedCurrent =
             centeredFittedRect(m_currentSize, largest, viewport);
         const QRectF displayedTarget =
@@ -123,17 +116,12 @@ private:
     QSize m_targetSize;
 };
 
-ImageSizeDialog::ImageSizeDialog(
-    const QSize &currentSize,
-    QWidget *parent)
+ImageSizeDialog::ImageSizeDialog(const QSize &currentSize, QWidget *parent)
     : QDialog(parent)
-    , m_currentSize(
-          std::clamp(
-              currentSize.width(),
-              minimumDialogEdge,
-              DocumentLimits::maximumCanvasEdge),
-          std::clamp(
-              currentSize.height(),
+    , m_currentSize(std::clamp(currentSize.width(),
+                        minimumDialogEdge,
+                        DocumentLimits::maximumCanvasEdge),
+          std::clamp(currentSize.height(),
               minimumDialogEdge,
               DocumentLimits::maximumCanvasEdge))
 {
@@ -146,8 +134,7 @@ ImageSizeDialog::ImageSizeDialog(
     mainLayout->setSpacing(14);
 
     auto *description = new QLabel(
-        tr("Scale the artwork and brush sizes to new pixel dimensions."),
-        this);
+        tr("Scale the artwork and brush sizes to new pixel dimensions."), this);
     description->setWordWrap(true);
     mainLayout->addWidget(description);
 
@@ -173,9 +160,7 @@ ImageSizeDialog::ImageSizeDialog(
 
     m_widthSpin = new QSpinBox(controls);
     m_widthSpin->setObjectName(QStringLiteral("imageWidthSpin"));
-    m_widthSpin->setRange(
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
+    m_widthSpin->setRange(minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_widthSpin->setValue(m_currentSize.width());
     m_widthSpin->setSuffix(tr(" px"));
     m_widthSpin->setAccessibleName(tr("Image width"));
@@ -184,66 +169,58 @@ ImageSizeDialog::ImageSizeDialog(
     m_heightSpin = new QSpinBox(controls);
     m_heightSpin->setObjectName(QStringLiteral("imageHeightSpin"));
     m_heightSpin->setRange(
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
+        minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_heightSpin->setValue(m_currentSize.height());
     m_heightSpin->setSuffix(tr(" px"));
     m_heightSpin->setAccessibleName(tr("Image height"));
     sizeForm->addRow(tr("Height"), m_heightSpin);
 
     m_percentageSpin = new QDoubleSpinBox(controls);
-    m_percentageSpin->setObjectName(
-        QStringLiteral("imageScalePercentSpin"));
+    m_percentageSpin->setObjectName(QStringLiteral("imageScalePercentSpin"));
     m_percentageSpin->setDecimals(1);
     m_percentageSpin->setSingleStep(10.0);
     m_percentageSpin->setSuffix(tr(" %"));
     m_percentageSpin->setAccessibleName(tr("Uniform scale"));
     m_percentageSpin->setToolTip(
         tr("Changing this value scales both dimensions uniformly."));
-    const qreal minimumPercentage = std::max(
-        100.0 * minimumDialogEdge / m_currentSize.width(),
-        100.0 * minimumDialogEdge / m_currentSize.height());
+    const qreal minimumPercentage =
+        std::max(100.0 * minimumDialogEdge / m_currentSize.width(),
+            100.0 * minimumDialogEdge / m_currentSize.height());
     const qreal maximumPercentage = std::min(
-        100.0 * DocumentLimits::maximumCanvasEdge
-            / m_currentSize.width(),
-        100.0 * DocumentLimits::maximumCanvasEdge
-            / m_currentSize.height());
+        100.0 * DocumentLimits::maximumCanvasEdge / m_currentSize.width(),
+        100.0 * DocumentLimits::maximumCanvasEdge / m_currentSize.height());
     m_percentageSpin->setRange(minimumPercentage, maximumPercentage);
     m_percentageSpin->setValue(100.0);
     sizeForm->addRow(tr("Uniform scale"), m_percentageSpin);
     controlsLayout->addLayout(sizeForm);
 
-    m_keepAspectCheck = new QCheckBox(
-        tr("Keep aspect ratio"),
-        controls);
-    m_keepAspectCheck->setObjectName(
-        QStringLiteral("imageKeepAspectCheck"));
+    m_keepAspectCheck = new QCheckBox(tr("Keep aspect ratio"), controls);
+    m_keepAspectCheck->setObjectName(QStringLiteral("imageKeepAspectCheck"));
     m_keepAspectCheck->setAccessibleName(tr("Keep image aspect ratio"));
     const qreal aspectRatio =
-        static_cast<qreal>(m_currentSize.width())
-        / m_currentSize.height();
-    const int smallestAspectWidth = std::clamp(
-        qCeil(minimumDialogEdge * aspectRatio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    const int largestAspectWidth = std::clamp(
-        qFloor(DocumentLimits::maximumCanvasEdge * aspectRatio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    const int smallestAspectHeight = std::clamp(
-        qCeil(minimumDialogEdge / aspectRatio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    const int largestAspectHeight = std::clamp(
-        qFloor(DocumentLimits::maximumCanvasEdge / aspectRatio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    const bool aspectResizable =
-        smallestAspectWidth != largestAspectWidth
-        || smallestAspectHeight != largestAspectHeight;
+        static_cast<qreal>(m_currentSize.width()) / m_currentSize.height();
+    const int smallestAspectWidth =
+        std::clamp(qCeil(minimumDialogEdge * aspectRatio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    const int largestAspectWidth =
+        std::clamp(qFloor(DocumentLimits::maximumCanvasEdge * aspectRatio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    const int smallestAspectHeight =
+        std::clamp(qCeil(minimumDialogEdge / aspectRatio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    const int largestAspectHeight =
+        std::clamp(qFloor(DocumentLimits::maximumCanvasEdge / aspectRatio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    const bool aspectResizable = smallestAspectWidth != largestAspectWidth
+                                 || smallestAspectHeight != largestAspectHeight;
     m_keepAspectCheck->setChecked(aspectResizable);
     m_keepAspectCheck->setEnabled(aspectResizable);
-    if (!aspectResizable) {
+    if (!aspectResizable)
+    {
         m_keepAspectCheck->setToolTip(
             tr("No other size can keep this aspect ratio within the "
                "canvas size limits."));
@@ -261,19 +238,16 @@ ImageSizeDialog::ImageSizeDialog(
     previewLayout->addWidget(m_preview, 1);
 
     m_sizeSummaryLabel = new QLabel(previewColumn);
-    m_sizeSummaryLabel->setObjectName(
-        QStringLiteral("imageSizeSummaryLabel"));
+    m_sizeSummaryLabel->setObjectName(QStringLiteral("imageSizeSummaryLabel"));
     m_sizeSummaryLabel->setAlignment(Qt::AlignCenter);
-    m_sizeSummaryLabel->setTextInteractionFlags(
-        Qt::TextSelectableByMouse);
+    m_sizeSummaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLayout->addWidget(m_sizeSummaryLabel);
 
     m_scaleSummaryLabel = new QLabel(previewColumn);
     m_scaleSummaryLabel->setObjectName(
         QStringLiteral("imageScaleSummaryLabel"));
     m_scaleSummaryLabel->setAlignment(Qt::AlignCenter);
-    m_scaleSummaryLabel->setTextInteractionFlags(
-        Qt::TextSelectableByMouse);
+    m_scaleSummaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLayout->addWidget(m_scaleSummaryLabel);
 
     m_distortionWarningLabel = new QLabel(previewColumn);
@@ -286,8 +260,7 @@ ImageSizeDialog::ImageSizeDialog(
     previewLayout->addWidget(m_distortionWarningLabel);
 
     m_buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-        this);
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     QPushButton *okButton = m_buttons->button(QDialogButtonBox::Ok);
     okButton->setObjectName(QStringLiteral("imageSizeOkButton"));
     okButton->setDefault(true);
@@ -297,23 +270,28 @@ ImageSizeDialog::ImageSizeDialog(
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     mainLayout->addWidget(m_buttons);
 
-    connect(
-        m_widthSpin,
+    connect(m_widthSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { updateFromWidth(); });
-    connect(
-        m_heightSpin,
+        [this](int)
+        {
+            updateFromWidth();
+        });
+    connect(m_heightSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { updateFromHeight(); });
-    connect(
-        m_percentageSpin,
+        [this](int)
+        {
+            updateFromHeight();
+        });
+    connect(m_percentageSpin,
         &QDoubleSpinBox::valueChanged,
         this,
-        [this](double) { updateFromPercentage(); });
-    connect(
-        m_keepAspectCheck,
+        [this](double)
+        {
+            updateFromPercentage();
+        });
+    connect(m_keepAspectCheck,
         &QCheckBox::toggled,
         this,
         &ImageSizeDialog::setKeepAspectRatio);
@@ -325,11 +303,7 @@ ImageSizeDialog::ImageSizeDialog(
 
 ImageSizeDialog::Result ImageSizeDialog::result() const
 {
-    return {
-        imageSize(),
-        horizontalScale(),
-        verticalScale()
-    };
+    return {imageSize(), horizontalScale(), verticalScale()};
 }
 
 QSize ImageSizeDialog::imageSize() const
@@ -339,34 +313,31 @@ QSize ImageSizeDialog::imageSize() const
 
 qreal ImageSizeDialog::horizontalScale() const
 {
-    return static_cast<qreal>(m_widthSpin->value())
-        / m_currentSize.width();
+    return static_cast<qreal>(m_widthSpin->value()) / m_currentSize.width();
 }
 
 qreal ImageSizeDialog::verticalScale() const
 {
-    return static_cast<qreal>(m_heightSpin->value())
-        / m_currentSize.height();
+    return static_cast<qreal>(m_heightSpin->value()) / m_currentSize.height();
 }
 
 void ImageSizeDialog::setKeepAspectRatio(bool keep)
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     m_syncing = true;
     updateDimensionRanges();
-    if (keep) {
+    if (keep)
+    {
         const qreal ratio =
-            static_cast<qreal>(m_currentSize.width())
-            / m_currentSize.height();
-        const int width = std::clamp(
-            m_widthSpin->value(),
+            static_cast<qreal>(m_currentSize.width()) / m_currentSize.height();
+        const int width = std::clamp(m_widthSpin->value(),
             m_widthSpin->minimum(),
             m_widthSpin->maximum());
         m_widthSpin->setValue(width);
-        m_heightSpin->setValue(std::clamp(
-            qRound(width / ratio),
+        m_heightSpin->setValue(std::clamp(qRound(width / ratio),
             m_heightSpin->minimum(),
             m_heightSpin->maximum()));
     }
@@ -377,16 +348,16 @@ void ImageSizeDialog::setKeepAspectRatio(bool keep)
 
 void ImageSizeDialog::updateFromWidth()
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     m_syncing = true;
-    if (m_keepAspectCheck->isChecked()) {
+    if (m_keepAspectCheck->isChecked())
+    {
         const qreal ratio =
-            static_cast<qreal>(m_currentSize.width())
-            / m_currentSize.height();
-        m_heightSpin->setValue(std::clamp(
-            qRound(m_widthSpin->value() / ratio),
+            static_cast<qreal>(m_currentSize.width()) / m_currentSize.height();
+        m_heightSpin->setValue(std::clamp(qRound(m_widthSpin->value() / ratio),
             m_heightSpin->minimum(),
             m_heightSpin->maximum()));
     }
@@ -397,16 +368,16 @@ void ImageSizeDialog::updateFromWidth()
 
 void ImageSizeDialog::updateFromHeight()
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     m_syncing = true;
-    if (m_keepAspectCheck->isChecked()) {
+    if (m_keepAspectCheck->isChecked())
+    {
         const qreal ratio =
-            static_cast<qreal>(m_currentSize.width())
-            / m_currentSize.height();
-        m_widthSpin->setValue(std::clamp(
-            qRound(m_heightSpin->value() * ratio),
+            static_cast<qreal>(m_currentSize.width()) / m_currentSize.height();
+        m_widthSpin->setValue(std::clamp(qRound(m_heightSpin->value() * ratio),
             m_widthSpin->minimum(),
             m_widthSpin->maximum()));
     }
@@ -417,17 +388,16 @@ void ImageSizeDialog::updateFromHeight()
 
 void ImageSizeDialog::updateFromPercentage()
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     const qreal factor = m_percentageSpin->value() / 100.0;
     m_syncing = true;
-    m_widthSpin->setValue(std::clamp(
-        qRound(m_currentSize.width() * factor),
+    m_widthSpin->setValue(std::clamp(qRound(m_currentSize.width() * factor),
         m_widthSpin->minimum(),
         m_widthSpin->maximum()));
-    m_heightSpin->setValue(std::clamp(
-        qRound(m_currentSize.height() * factor),
+    m_heightSpin->setValue(std::clamp(qRound(m_currentSize.height() * factor),
         m_heightSpin->minimum(),
         m_heightSpin->maximum()));
     m_syncing = false;
@@ -436,42 +406,35 @@ void ImageSizeDialog::updateFromPercentage()
 
 void ImageSizeDialog::updateDimensionRanges()
 {
-    const bool keepAspect =
-        m_keepAspectCheck && m_keepAspectCheck->isChecked();
-    if (!keepAspect) {
+    const bool keepAspect = m_keepAspectCheck && m_keepAspectCheck->isChecked();
+    if (!keepAspect)
+    {
         m_widthSpin->setRange(
-            minimumDialogEdge,
-            DocumentLimits::maximumCanvasEdge);
+            minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
         m_heightSpin->setRange(
-            minimumDialogEdge,
-            DocumentLimits::maximumCanvasEdge);
+            minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
         return;
     }
 
     const qreal ratio =
-        static_cast<qreal>(m_currentSize.width())
-        / m_currentSize.height();
-    const int minimumWidth = std::clamp(
-        qCeil(minimumDialogEdge * ratio),
+        static_cast<qreal>(m_currentSize.width()) / m_currentSize.height();
+    const int minimumWidth = std::clamp(qCeil(minimumDialogEdge * ratio),
         minimumDialogEdge,
         DocumentLimits::maximumCanvasEdge);
-    const int maximumWidth = std::clamp(
-        qFloor(DocumentLimits::maximumCanvasEdge * ratio),
+    const int maximumWidth =
+        std::clamp(qFloor(DocumentLimits::maximumCanvasEdge * ratio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    const int minimumHeight = std::clamp(qCeil(minimumDialogEdge / ratio),
         minimumDialogEdge,
         DocumentLimits::maximumCanvasEdge);
-    const int minimumHeight = std::clamp(
-        qCeil(minimumDialogEdge / ratio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    const int maximumHeight = std::clamp(
-        qFloor(DocumentLimits::maximumCanvasEdge / ratio),
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
-    m_widthSpin->setRange(
-        std::min(minimumWidth, maximumWidth),
+    const int maximumHeight =
+        std::clamp(qFloor(DocumentLimits::maximumCanvasEdge / ratio),
+            minimumDialogEdge,
+            DocumentLimits::maximumCanvasEdge);
+    m_widthSpin->setRange(std::min(minimumWidth, maximumWidth),
         std::max(minimumWidth, maximumWidth));
-    m_heightSpin->setRange(
-        std::min(minimumHeight, maximumHeight),
+    m_heightSpin->setRange(std::min(minimumHeight, maximumHeight),
         std::max(minimumHeight, maximumHeight));
 }
 
@@ -480,14 +443,12 @@ void ImageSizeDialog::updatePresentation()
     const QSize targetSize = imageSize();
     const qreal horizontalPercent = horizontalScale() * 100.0;
     const qreal verticalPercent = verticalScale() * 100.0;
-    m_sizeSummaryLabel->setText(
-        tr("%1 × %2 px  →  %3 × %4 px")
+    m_sizeSummaryLabel->setText(tr("%1 × %2 px  →  %3 × %4 px")
             .arg(m_currentSize.width())
             .arg(m_currentSize.height())
             .arg(targetSize.width())
             .arg(targetSize.height()));
-    m_scaleSummaryLabel->setText(
-        tr("Width %1%  ·  Height %2%")
+    m_scaleSummaryLabel->setText(tr("Width %1%  ·  Height %2%")
             .arg(horizontalPercent, 0, 'f', 1)
             .arg(verticalPercent, 0, 'f', 1));
     m_preview->setGeometryState(m_currentSize, targetSize);
@@ -495,18 +456,20 @@ void ImageSizeDialog::updatePresentation()
     const bool distorted =
         !m_keepAspectCheck->isChecked()
         && !qFuzzyCompare(horizontalScale(), verticalScale());
-    if (distorted) {
+    if (distorted)
+    {
         m_distortionWarningLabel->setText(
             tr("The aspect ratio will change and the artwork will be "
                "distorted."));
         m_distortionWarningLabel->setStyleSheet(
             QStringLiteral("color: %1;").arg(Theme::accent().name()));
-    } else {
+    }
+    else
+    {
         m_distortionWarningLabel->setText(
             tr("Artwork and brush sizes scale with the image."));
         m_distortionWarningLabel->setStyleSheet(
-            QStringLiteral("color: %1;")
-                .arg(Theme::textMuted().name()));
+            QStringLiteral("color: %1;").arg(Theme::textMuted().name()));
     }
 
     m_buttons->button(QDialogButtonBox::Ok)
@@ -517,12 +480,12 @@ void ImageSizeDialog::updatePercentageFromDimensions()
 {
     const qreal horizontalPercent = horizontalScale() * 100.0;
     const qreal verticalPercent = verticalScale() * 100.0;
-    const qreal representative = m_keepAspectCheck->isChecked()
-        ? horizontalPercent
-        : std::sqrt(horizontalPercent * verticalPercent);
+    const qreal representative =
+        m_keepAspectCheck->isChecked()
+            ? horizontalPercent
+            : std::sqrt(horizontalPercent * verticalPercent);
     const QSignalBlocker blocker(m_percentageSpin);
-    m_percentageSpin->setValue(std::clamp(
-        representative,
+    m_percentageSpin->setValue(std::clamp(representative,
         m_percentageSpin->minimum(),
         m_percentageSpin->maximum()));
 }

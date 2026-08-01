@@ -18,26 +18,24 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 const QVector<BrushCategory> &orderedCategories()
 {
-    static const QVector<BrushCategory> categories {
-        BrushCategory::Pen,
+    static const QVector<BrushCategory> categories{BrushCategory::Pen,
         BrushCategory::Marker,
         BrushCategory::Airbrush,
-        BrushCategory::Spray
-    };
+        BrushCategory::Spray};
     return categories;
 }
 
 }
 
-BrushPopoverPanel::BrushPopoverPanel(
-    CanvasWidget *canvas,
-    QWidget *parent)
+BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     : QWidget(parent)
     , m_canvas(canvas)
 {
@@ -54,11 +52,10 @@ BrushPopoverPanel::BrushPopoverPanel(
     auto *presetGroup = new QButtonGroup(this);
     presetGroup->setExclusive(true);
 
-    for (int categoryIndex = 0;
-         categoryIndex < orderedCategories().size();
-         ++categoryIndex) {
-        const BrushCategory category =
-            orderedCategories().at(categoryIndex);
+    for (int categoryIndex = 0; categoryIndex < orderedCategories().size();
+        ++categoryIndex)
+    {
+        const BrushCategory category = orderedCategories().at(categoryIndex);
 
         auto *tab = new QToolButton(this);
         tab->setText(BrushPresetCatalog::categoryName(category));
@@ -73,18 +70,20 @@ BrushPopoverPanel::BrushPopoverPanel(
         grid->setContentsMargins(0, 0, 0, 0);
         grid->setSpacing(6);
         int cell = 0;
-        for (const BrushPreset &preset : BrushPresetCatalog::builtIns()) {
-            if (preset.category != category) {
+        for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
+        {
+            if (preset.category != category)
+            {
                 continue;
             }
             auto *button = new BrushPresetButton(preset, page);
             presetGroup->addButton(button);
             grid->addWidget(button, cell / 2, cell % 2);
-            connect(
-                button,
+            connect(button,
                 &QAbstractButton::clicked,
                 this,
-                [this, button]() {
+                [this, button]()
+                {
                     m_canvas->setBrushPreset(button->presetId());
                 });
             m_presetButtons.append(button);
@@ -94,20 +93,17 @@ BrushPopoverPanel::BrushPopoverPanel(
         m_stack->addWidget(page);
     }
     tabRow->addStretch(1);
-    connect(
-        m_tabGroup,
+    connect(m_tabGroup,
         &QButtonGroup::idClicked,
         m_stack,
         &QStackedWidget::setCurrentIndex);
 
     layout->addLayout(tabRow);
     layout->addWidget(m_stack);
-    layout->addWidget(
-        new BrushSizeRow(
-            canvas,
-            BrushSizeRow::Target::Brush,
-            QStringLiteral("brushSize"),
-            this));
+    layout->addWidget(new BrushSizeRow(canvas,
+        BrushSizeRow::Target::Brush,
+        QStringLiteral("brushSize"),
+        this));
 
     auto *roughnessRow = new QWidget(this);
     auto *roughnessLayout = new QHBoxLayout(roughnessRow);
@@ -118,8 +114,8 @@ BrushPopoverPanel::BrushPopoverPanel(
     roughnessLabel->setProperty("fieldLabel", true);
     roughnessLayout->addWidget(roughnessLabel);
 
-    const int maximumPercent = static_cast<int>(
-        DocumentLimits::maximumBrushWobbleScale * 100.0);
+    const int maximumPercent =
+        static_cast<int>(DocumentLimits::maximumBrushWobbleScale * 100.0);
 
     auto *roughnessSlider = new QSlider(Qt::Horizontal, roughnessRow);
     roughnessSlider->setObjectName(QStringLiteral("brushRoughnessSlider"));
@@ -137,30 +133,28 @@ BrushPopoverPanel::BrushPopoverPanel(
     roughnessLabel->setBuddy(roughnessSpin);
     roughnessLayout->addWidget(roughnessSpin);
 
-    const int initialRoughness =
-        qRound(canvas->brushRoughness() * 100.0);
+    const int initialRoughness = qRound(canvas->brushRoughness() * 100.0);
     roughnessSpin->setValue(initialRoughness);
     roughnessSlider->setValue(initialRoughness);
 
-    connect(
-        roughnessSpin,
+    connect(roughnessSpin,
         &QSpinBox::valueChanged,
         this,
-        [this, roughnessSlider](int value) {
+        [this, roughnessSlider](int value)
+        {
             m_canvas->setBrushRoughness(value / 100.0);
             QSignalBlocker blocker(roughnessSlider);
             roughnessSlider->setValue(value);
         });
-    connect(
-        roughnessSlider,
+    connect(roughnessSlider,
         &QSlider::valueChanged,
         roughnessSpin,
         qOverload<int>(&QSpinBox::setValue));
-    connect(
-        canvas,
+    connect(canvas,
         &CanvasWidget::brushRoughnessChanged,
         this,
-        [roughnessSpin, roughnessSlider](qreal roughness) {
+        [roughnessSpin, roughnessSlider](qreal roughness)
+        {
             const int value = qRound(roughness * 100.0);
             QSignalBlocker spinBlocker(roughnessSpin);
             QSignalBlocker sliderBlocker(roughnessSlider);
@@ -181,25 +175,24 @@ BrushPopoverPanel::BrushPopoverPanel(
     antialiasLayout->addStretch(1);
 
     auto *antialiasToggle = new QCheckBox(antialiasRow);
-    antialiasToggle->setObjectName(
-        QStringLiteral("brushAntialiasingToggle"));
+    antialiasToggle->setObjectName(QStringLiteral("brushAntialiasingToggle"));
     antialiasToggle->setToolTip(tr("Smooth stroke edges"));
     antialiasToggle->setAccessibleName(tr("Anti-aliasing"));
     antialiasToggle->setChecked(canvas->brushAntialiasing());
     antialiasLayout->addWidget(antialiasToggle);
 
-    connect(
-        antialiasToggle,
+    connect(antialiasToggle,
         &QCheckBox::toggled,
         this,
-        [this](bool checked) {
+        [this](bool checked)
+        {
             m_canvas->setBrushAntialiasing(checked);
         });
-    connect(
-        canvas,
+    connect(canvas,
         &CanvasWidget::brushAntialiasingChanged,
         this,
-        [antialiasToggle](bool antialiasing) {
+        [antialiasToggle](bool antialiasing)
+        {
             QSignalBlocker blocker(antialiasToggle);
             antialiasToggle->setChecked(antialiasing);
         });
@@ -207,14 +200,12 @@ BrushPopoverPanel::BrushPopoverPanel(
     layout->addWidget(antialiasRow);
 
     m_previewTimer.setInterval(120);
-    connect(
-        &m_previewTimer,
+    connect(&m_previewTimer,
         &QTimer::timeout,
         this,
         &BrushPopoverPanel::advancePreviews);
 
-    connect(
-        canvas,
+    connect(canvas,
         &CanvasWidget::brushPresetChanged,
         this,
         &BrushPopoverPanel::syncToPreset);
@@ -223,9 +214,12 @@ BrushPopoverPanel::BrushPopoverPanel(
 
 void BrushPopoverPanel::setAnimationActive(bool active)
 {
-    if (active) {
+    if (active)
+    {
         m_previewTimer.start();
-    } else {
+    }
+    else
+    {
         m_previewTimer.stop();
     }
 }
@@ -233,17 +227,21 @@ void BrushPopoverPanel::setAnimationActive(bool active)
 void BrushPopoverPanel::syncToPreset(const QString &presetId)
 {
     const BrushPreset *preset = BrushPresetCatalog::find(presetId);
-    if (!preset) {
+    if (!preset)
+    {
         return;
     }
-    for (BrushPresetButton *button : m_presetButtons) {
-        if (button->presetId() == presetId) {
+    for (BrushPresetButton *button : m_presetButtons)
+    {
+        if (button->presetId() == presetId)
+        {
             button->setChecked(true);
         }
     }
     const int categoryIndex =
         static_cast<int>(orderedCategories().indexOf(preset->category));
-    if (categoryIndex >= 0) {
+    if (categoryIndex >= 0)
+    {
         m_tabGroup->button(categoryIndex)->setChecked(true);
         m_stack->setCurrentIndex(categoryIndex);
     }
@@ -253,7 +251,8 @@ void BrushPopoverPanel::advancePreviews()
 {
     m_previewFrame =
         (m_previewFrame + 1) % BrushPresetButton::previewFrameCount;
-    for (BrushPresetButton *button : m_presetButtons) {
+    for (BrushPresetButton *button : m_presetButtons)
+    {
         button->setPreviewFrame(m_previewFrame);
     }
 }

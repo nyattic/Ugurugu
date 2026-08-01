@@ -7,7 +7,8 @@
 
 #include <cstdio>
 
-namespace {
+namespace
+{
 
 int fail(const QString &message)
 {
@@ -25,8 +26,7 @@ QString escaped(QString text)
 
 QString withInlineMarkup(const QString &text)
 {
-    static const QRegularExpression codePattern(
-        QStringLiteral("`([^`]+)`"));
+    static const QRegularExpression codePattern(QStringLiteral("`([^`]+)`"));
     static const QRegularExpression boldPattern(
         QStringLiteral("\\*\\*([^*]+)\\*\\*"));
     static const QRegularExpression emphasisPattern(
@@ -38,9 +38,7 @@ QString withInlineMarkup(const QString &text)
     result.replace(codePattern, QStringLiteral("<code>\\1</code>"));
     result.replace(boldPattern, QStringLiteral("<strong>\\1</strong>"));
     result.replace(emphasisPattern, QStringLiteral("<em>\\1</em>"));
-    result.replace(
-        linkPattern,
-        QStringLiteral("<a href=\"\\2\">\\1</a>"));
+    result.replace(linkPattern, QStringLiteral("<a href=\"\\2\">\\1</a>"));
     return result;
 }
 
@@ -51,71 +49,77 @@ QString bodyFromMarkdown(const QString &markdown)
     QStringList listItems;
     QString listItem;
 
-    const auto flushParagraph = [&]() {
-        if (!paragraph.isEmpty()) {
-            blocks.append(
-                QStringLiteral("<p>%1</p>")
-                    .arg(withInlineMarkup(
-                        paragraph.join(QLatin1Char(' ')))));
+    const auto flushParagraph = [&]()
+    {
+        if (!paragraph.isEmpty())
+        {
+            blocks.append(QStringLiteral("<p>%1</p>")
+                    .arg(withInlineMarkup(paragraph.join(QLatin1Char(' ')))));
             paragraph.clear();
         }
     };
-    const auto flushListItem = [&]() {
-        if (!listItem.isEmpty()) {
+    const auto flushListItem = [&]()
+    {
+        if (!listItem.isEmpty())
+        {
             listItems.append(
-                QStringLiteral("<li>%1</li>")
-                    .arg(withInlineMarkup(listItem)));
+                QStringLiteral("<li>%1</li>").arg(withInlineMarkup(listItem)));
             listItem.clear();
         }
     };
-    const auto flushList = [&]() {
+    const auto flushList = [&]()
+    {
         flushListItem();
-        if (!listItems.isEmpty()) {
+        if (!listItems.isEmpty())
+        {
             blocks.append(
-                QStringLiteral("<ul>%1</ul>")
-                    .arg(listItems.join(QString())));
+                QStringLiteral("<ul>%1</ul>").arg(listItems.join(QString())));
             listItems.clear();
         }
     };
 
     const QStringList lines = markdown.split(QLatin1Char('\n'));
-    for (const QString &line : lines) {
+    for (const QString &line : lines)
+    {
         const QString trimmed = line.trimmed();
-        if (trimmed.isEmpty()) {
+        if (trimmed.isEmpty())
+        {
             flushParagraph();
             continue;
         }
-        if (trimmed.startsWith(QStringLiteral("### "))) {
+        if (trimmed.startsWith(QStringLiteral("### ")))
+        {
             flushParagraph();
             flushList();
-            blocks.append(
-                QStringLiteral("<h3>%1</h3>")
+            blocks.append(QStringLiteral("<h3>%1</h3>")
                     .arg(withInlineMarkup(trimmed.mid(4))));
             continue;
         }
-        if (trimmed.startsWith(QStringLiteral("## "))) {
+        if (trimmed.startsWith(QStringLiteral("## ")))
+        {
             flushParagraph();
             flushList();
-            blocks.append(
-                QStringLiteral("<h2>%1</h2>")
+            blocks.append(QStringLiteral("<h2>%1</h2>")
                     .arg(withInlineMarkup(trimmed.mid(3))));
             continue;
         }
-        if (trimmed.startsWith(QStringLiteral("# "))) {
+        if (trimmed.startsWith(QStringLiteral("# ")))
+        {
             flushParagraph();
             flushList();
-            blocks.append(
-                QStringLiteral("<h1>%1</h1>")
+            blocks.append(QStringLiteral("<h1>%1</h1>")
                     .arg(withInlineMarkup(trimmed.mid(2))));
             continue;
         }
-        if (trimmed.startsWith(QStringLiteral("- "))) {
+        if (trimmed.startsWith(QStringLiteral("- ")))
+        {
             flushParagraph();
             flushListItem();
             listItem = trimmed.mid(2);
             continue;
         }
-        if (!listItem.isEmpty() && line.startsWith(QLatin1Char(' '))) {
+        if (!listItem.isEmpty() && line.startsWith(QLatin1Char(' ')))
+        {
             listItem += QLatin1Char(' ') + trimmed;
             continue;
         }
@@ -222,33 +226,38 @@ strong { font-weight: 700; }
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
-    if (application.arguments().size() != 3) {
-        return fail(QStringLiteral(
-            "Usage: wobblepaint_render_release_notes <input.md> <output.html>"));
+    if (application.arguments().size() != 3)
+    {
+        return fail(QStringLiteral("Usage: wobblepaint_render_release_notes "
+                                   "<input.md> <output.html>"));
     }
 
     QFile input(application.arguments().at(1));
-    if (!input.open(QIODevice::ReadOnly)) {
+    if (!input.open(QIODevice::ReadOnly))
+    {
         return fail(QStringLiteral("Could not open %1: %2")
-            .arg(input.fileName(), input.errorString()));
+                .arg(input.fileName(), input.errorString()));
     }
 
-    const QString html = documentFromBody(
-        bodyFromMarkdown(QString::fromUtf8(input.readAll())));
+    const QString html =
+        documentFromBody(bodyFromMarkdown(QString::fromUtf8(input.readAll())));
 
     QSaveFile output(application.arguments().at(2));
-    if (!output.open(QIODevice::WriteOnly)) {
+    if (!output.open(QIODevice::WriteOnly))
+    {
         return fail(QStringLiteral("Could not open %1: %2")
-            .arg(output.fileName(), output.errorString()));
+                .arg(output.fileName(), output.errorString()));
     }
     const QByteArray bytes = html.toUtf8();
-    if (output.write(bytes) != bytes.size()) {
+    if (output.write(bytes) != bytes.size())
+    {
         return fail(QStringLiteral("Could not write %1: %2")
-            .arg(output.fileName(), output.errorString()));
+                .arg(output.fileName(), output.errorString()));
     }
-    if (!output.commit()) {
+    if (!output.commit())
+    {
         return fail(QStringLiteral("Could not commit %1: %2")
-            .arg(output.fileName(), output.errorString()));
+                .arg(output.fileName(), output.errorString()));
     }
 
     return 0;

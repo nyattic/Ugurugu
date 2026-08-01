@@ -5,7 +5,8 @@
 #include <QImage>
 #include <QPainterPath>
 
-namespace wobble {
+namespace wobble
+{
 
 class RenderEngine
 {
@@ -15,12 +16,14 @@ public:
     // and smaller on at least one. NativeExact always renders the native
     // framebuffer first and only then scales it; use it for saved/exported
     // pixels and comparisons.
-    enum class ScaledRenderMode {
+    enum class ScaledRenderMode
+    {
         DisplayPreview,
         NativeExact
     };
 
-    struct ScaledRenderStats {
+    struct ScaledRenderStats
+    {
         bool usedDisplayScaleReplay = false;
         bool usedNativeExactFallback = false;
         // DisplayPreview diagnostics for renderer-owned QImages only.
@@ -34,7 +37,8 @@ public:
         quint64 pixelSelectionOperationsReplayed = 0;
     };
 
-    struct LayerSplitFrame {
+    struct LayerSplitFrame
+    {
         QImage below;
         QImage layerBase;
         QImage above;
@@ -44,48 +48,38 @@ public:
     };
 
     static QImage render(const Document &document, int frameIndex);
-    static QImage renderScaled(
-        const Document &document,
+    static QImage renderScaled(const Document &document,
         int frameIndex,
         const QSize &outputSize,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
-    static LayerSplitFrame renderLayerSplit(
-        const Document &document,
+    static LayerSplitFrame renderLayerSplit(const Document &document,
         int frameIndex,
         const QSize &outputSize,
         const QUuid &layerId,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
-    static bool renderStrokesOnLayer(
-        QImage &layerImage,
+    static bool renderStrokesOnLayer(QImage &layerImage,
         const Document &document,
         const QVector<Stroke> &strokes,
         int frameIndex,
         const QSize &outputSize);
     static QImage composeLayerSplit(
-        const LayerSplitFrame &split,
-        const QImage &layerImage);
+        const LayerSplitFrame &split, const QImage &layerImage);
     // Replays one selection operation against an already rendered layer
     // framebuffer. DisplayPreview applies the scale-conjugated operation
     // directly when layerImage is no larger than operation.canvasSize on
     // either axis and smaller on at least one; otherwise the framebuffer must
     // be native-sized.
-    static bool replayPixelSelectionOnLayer(
-        QImage &layerImage,
+    static bool replayPixelSelectionOnLayer(QImage &layerImage,
         const PixelSelectionOp &operation,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
-    static QPainterPath strokePath(
-        const Stroke &stroke,
+    static QPainterPath strokePath(const Stroke &stroke,
         int frameIndex,
         int frameCount,
         qreal wobbleAmount);
     static QImage fillRegionMask(const QImage &image, const QPoint &seed);
-    // Atomically normalizes framebuffer epochs and validates mask memory.
-    // Seed-only Fill strokes remain procedural for every animation frame.
-    static bool normalizeAndValidateOperations(
-        Document &document);
 };
 
 }

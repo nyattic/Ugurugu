@@ -1,0 +1,95 @@
+set(WOBBLEPAINT_CORE_SOURCES
+    src/app/Logging.cpp
+    src/app/Logging.hpp
+    src/app/MemoryBudget.hpp
+    src/app/RecoveryStore.cpp
+    src/app/RecoveryStore.hpp
+    src/app/ReleaseNotes.cpp
+    src/app/ReleaseNotes.hpp
+    src/app/UpdateCheckPolicy.cpp
+    src/app/UpdateCheckPolicy.hpp
+    src/brush/BrushPreset.cpp
+    src/brush/BrushPreset.hpp
+    src/document/Document.cpp
+    src/document/Document.hpp
+    src/document/DocumentController.cpp
+    src/document/DocumentController.hpp
+    src/document/DocumentLimits.hpp
+    src/document/DocumentOperations.cpp
+    src/document/DocumentOperations.hpp
+    src/document/SelectionOperation.cpp
+    src/document/SelectionOperation.hpp
+    src/document/SelectionVisibility.cpp
+    src/document/SelectionVisibility.hpp
+    src/document/StrokeMask.cpp
+    src/document/StrokeMask.hpp
+    src/io/AnimationExportPolicy.cpp
+    src/io/AnimationExportPolicy.hpp
+    src/io/DocumentSerializer.cpp
+    src/io/DocumentSerializer.hpp
+    src/io/GifWriter.cpp
+    src/io/GifWriter.hpp
+    src/render/RenderEngine.cpp
+    src/render/RenderEngine.hpp
+    src/render/PreviewRenderPolicy.cpp
+    src/render/PreviewRenderPolicy.hpp
+)
+
+set(WOBBLEPAINT_UI_SOURCES
+    src/ui/BrushPopoverPanel.cpp
+    src/ui/BrushPopoverPanel.hpp
+    src/ui/BrushPresetButton.cpp
+    src/ui/BrushPresetButton.hpp
+    src/ui/BrushSizeRow.cpp
+    src/ui/BrushSizeRow.hpp
+    src/ui/CanvasSizeDialog.cpp
+    src/ui/CanvasSizeDialog.hpp
+    src/ui/CanvasWidget.cpp
+    src/ui/CanvasWidget.hpp
+    src/ui/ColorSwatchRow.cpp
+    src/ui/ColorSwatchRow.hpp
+    src/ui/FrameScrubber.cpp
+    src/ui/FrameScrubber.hpp
+    src/ui/Icons.cpp
+    src/ui/Icons.hpp
+    src/ui/ImageSizeDialog.cpp
+    src/ui/ImageSizeDialog.hpp
+    src/ui/LayerDock.cpp
+    src/ui/LayerDock.hpp
+    src/ui/LayerItemDelegate.cpp
+    src/ui/LayerItemDelegate.hpp
+    src/ui/LayerListWidget.cpp
+    src/ui/LayerListWidget.hpp
+    src/ui/LayerThumbnailRenderer.cpp
+    src/ui/LayerThumbnailRenderer.hpp
+    src/ui/MainWindow.cpp
+    src/ui/MainWindow.hpp
+    src/ui/PopoverToolButton.cpp
+    src/ui/PopoverToolButton.hpp
+    src/ui/SelectionActionBar.cpp
+    src/ui/SelectionActionBar.hpp
+    src/ui/SettingsDialog.cpp
+    src/ui/SettingsDialog.hpp
+    src/ui/Theme.cpp
+    src/ui/Theme.hpp
+    src/ui/TimelineBar.cpp
+    src/ui/TimelineBar.hpp
+    src/ui/ToolPopover.cpp
+    src/ui/ToolPopover.hpp
+    src/ui/WobblePlayButton.cpp
+    src/ui/WobblePlayButton.hpp
+    src/ui/WobblePreview.cpp
+    src/ui/WobblePreview.hpp
+)
+
+set(WOBBLEPAINT_TEST_SOURCES
+    tests/AppPolicyTests.cpp
+    tests/DocumentTests.cpp
+    tests/GifWriterTests.cpp
+    tests/MaskRegressionTests.cpp
+    tests/ReleaseNotesTests.cpp
+    tests/RenderEngineTests.cpp
+    tests/TestMain.cpp
+    tests/TestSuites.hpp
+    tests/UiTests.cpp
+)

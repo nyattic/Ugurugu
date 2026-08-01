@@ -2,7 +2,8 @@
 
 #include <QWidget>
 
-namespace wobble {
+namespace wobble
+{
 
 class CanvasWidget;
 
@@ -11,13 +12,13 @@ class BrushSizeRow final : public QWidget
     Q_OBJECT
 
 public:
-    enum class Target {
+    enum class Target
+    {
         Brush,
         Eraser
     };
 
-    BrushSizeRow(
-        CanvasWidget *canvas,
+    BrushSizeRow(CanvasWidget *canvas,
         Target target,
         const QString &objectNamePrefix,
         QWidget *parent = nullptr);

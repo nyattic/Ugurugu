@@ -36,8 +36,6 @@ struct DocumentLimits final
     static constexpr qint64 maximumProjectBytes = 32LL * 1024LL * 1024LL;
     static constexpr quint64 maximumDistinctClipMaskBytes =
         256ULL * 1024ULL * 1024ULL;
-    static constexpr quint64 maximumGifWorkingBytes =
-        768ULL * 1024ULL * 1024ULL;
 };
 
 }

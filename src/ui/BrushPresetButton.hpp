@@ -4,7 +4,8 @@
 #include <QImage>
 #include <QVector>
 
-namespace wobble {
+namespace wobble
+{
 
 struct BrushPreset;
 

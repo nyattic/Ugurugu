@@ -16,7 +16,8 @@
 namespace wobble
 {
 
-enum class StrokeMode {
+enum class StrokeMode
+{
     Paint,
     Erase,
     Fill,
@@ -24,12 +25,14 @@ enum class StrokeMode {
     Reframe
 };
 
-enum class SamplingMode {
+enum class SamplingMode
+{
     Nearest,
     Smooth
 };
 
-struct PackedMaskRegion {
+struct PackedMaskRegion
+{
     QSize canvasSize;
     QRect bounds;
     // One bit per pixel, padded to a whole byte per row.
@@ -38,7 +41,8 @@ struct PackedMaskRegion {
     bool operator==(const PackedMaskRegion &) const = default;
 };
 
-struct PixelSelectionOp {
+struct PixelSelectionOp
+{
     QSize canvasSize;
     QRect sourceBounds;
     // One bit per pixel in sourceBounds, padded to a whole byte per row.
@@ -52,12 +56,14 @@ struct PixelSelectionOp {
     bool operator==(const PixelSelectionOp &) const = default;
 };
 
-enum class ReframeMode {
+enum class ReframeMode
+{
     Canvas,
     Image
 };
 
-struct ReframeOp {
+struct ReframeOp
+{
     ReframeMode mode = ReframeMode::Canvas;
     SamplingMode sampling = SamplingMode::Nearest;
     QSize sourceSize;
@@ -67,18 +73,21 @@ struct ReframeOp {
     bool operator==(const ReframeOp &) const = default;
 };
 
-enum class BrushEngine {
+enum class BrushEngine
+{
     Line,
     Airbrush,
     Spray
 };
 
-enum class BrushTipShape {
+enum class BrushTipShape
+{
     Round,
     Square
 };
 
-struct BrushSettings {
+struct BrushSettings
+{
     BrushEngine engine = BrushEngine::Line;
     BrushTipShape tipShape = BrushTipShape::Round;
     qreal opacity = 1.0;
@@ -100,14 +109,16 @@ struct BrushSettings {
 
 bool isValidBrushSettings(const BrushSettings &settings);
 
-struct StrokePoint {
+struct StrokePoint
+{
     QPointF position;
     qreal pressure = 1.0;
 
     bool operator==(const StrokePoint &) const = default;
 };
 
-struct Stroke {
+struct Stroke
+{
     QUuid id = QUuid::createUuid();
     quint64 seed = 0;
     StrokeMode mode = StrokeMode::Paint;
@@ -129,7 +140,8 @@ struct Stroke {
     std::optional<ReframeOp> reframeOp;
 };
 
-struct Layer {
+struct Layer
+{
     QUuid id = QUuid::createUuid();
     QString name;
     bool visible = true;
@@ -139,7 +151,8 @@ struct Layer {
     QVector<Stroke> strokes;
 };
 
-struct Document {
+struct Document
+{
     QSize size = QSize(1024, 768);
     QColor background = Qt::white;
     int animationFrames = 30;

@@ -4,29 +4,22 @@
 
 #import <Sparkle/Sparkle.h>
 
-namespace wobble {
+namespace wobble
+{
 
 class UpdateController::Impl
 {
 public:
-    void start(bool checkInBackground)
+    void start()
     {
-        if (controller) {
+        if (controller)
+        {
             return;
         }
-        controller = [
-            [SPUStandardUpdaterController alloc]
-            initWithStartingUpdater:YES
-            updaterDelegate:nil
-            userDriverDelegate:nil
-        ];
-        SPUUpdater *updater = controller.updater;
-        if (checkInBackground && updater.automaticallyChecksForUpdates) {
-            // A scheduled check may still be hours away when a release is
-            // published. Sparkle permits one background check immediately
-            // after the updater starts.
-            [updater checkForUpdatesInBackground];
-        }
+        controller =
+            [[SPUStandardUpdaterController alloc] initWithStartingUpdater:YES
+                                                          updaterDelegate:nil
+                                                       userDriverDelegate:nil];
     }
 
     SPUStandardUpdaterController *controller = nil;
@@ -40,16 +33,22 @@ UpdateController::UpdateController(QWidget *, QObject *parent)
     : QObject(parent)
     , m_impl(std::make_unique<Impl>())
 {
-    QTimer::singleShot(0, this, [this]() {
-        m_impl->start(true);
-    });
+    QTimer::singleShot(0,
+        this,
+        [this]()
+        {
+            // Sparkle applies SUEnableAutomaticChecks and
+            // SUScheduledCheckInterval. Do not force another request on every
+            // application launch.
+            m_impl->start();
+        });
 }
 
 UpdateController::~UpdateController() = default;
 
 void UpdateController::checkForUpdates()
 {
-    m_impl->start(false);
+    m_impl->start();
     [m_impl->controller checkForUpdates:nil];
 }
 

@@ -4,7 +4,8 @@
 
 class QApplication;
 
-namespace wobble {
+namespace wobble
+{
 
 struct Theme final
 {

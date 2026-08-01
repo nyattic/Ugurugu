@@ -14,7 +14,8 @@ class QPushButton;
 class QSlider;
 class QSpinBox;
 
-namespace wobble {
+namespace wobble
+{
 
 class CanvasWidget;
 class ColorSwatchRow;
@@ -54,7 +55,6 @@ private:
     bool saveToFile(const QString &filePath);
     void writeAutosave();
     void clearAutosave();
-    QString autosavePath() const;
     void newDocument();
     void resizeCanvas();
     void resizeImage();
@@ -65,8 +65,7 @@ private:
     void exportImage();
     void applyWobbleAnimationEnabled(bool enabled);
     QString normalizedPath(
-        const QString &filePath,
-        const QString &extension) const;
+        const QString &filePath, const QString &extension) const;
     QString saveDialogStartPath(const QString &extension) const;
 
     DocumentController m_controller;

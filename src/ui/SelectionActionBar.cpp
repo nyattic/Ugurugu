@@ -12,9 +12,11 @@
 
 #include <algorithm>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 constexpr int shadowMargin = 10;
 constexpr int framePadding = 5;
@@ -26,10 +28,12 @@ constexpr qreal frameRadius = 10.0;
 QString actionButtonName(const QAction *action, int fallbackIndex)
 {
     QString name = action ? action->objectName() : QString();
-    if (name.endsWith(QStringLiteral("Action"))) {
+    if (name.endsWith(QStringLiteral("Action")))
+    {
         name.chop(6);
     }
-    if (!name.isEmpty()) {
+    if (!name.isEmpty())
+    {
         return name + QStringLiteral("Button");
     }
     return QStringLiteral("selectionActionButton%1").arg(fallbackIndex);
@@ -37,7 +41,8 @@ QString actionButtonName(const QAction *action, int fallbackIndex)
 
 QString actionLabel(const QAction *action)
 {
-    if (!action) {
+    if (!action)
+    {
         return {};
     }
     QString label = action->text();
@@ -47,13 +52,13 @@ QString actionLabel(const QAction *action)
 
 void syncButtonMetadata(QToolButton *button, const QAction *action)
 {
-    if (!button || !action) {
+    if (!button || !action)
+    {
         return;
     }
     const QString label = actionLabel(action);
     button->setAccessibleName(label);
-    button->setToolTip(
-        action->toolTip().isEmpty() ? label : action->toolTip());
+    button->setToolTip(action->toolTip().isEmpty() ? label : action->toolTip());
 }
 
 }
@@ -68,8 +73,7 @@ SelectionActionBar::SelectionActionBar(QWidget *parent)
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     m_layout = new QHBoxLayout(this);
-    m_layout->setContentsMargins(
-        shadowMargin + framePadding,
+    m_layout->setContentsMargins(shadowMargin + framePadding,
         shadowMargin + framePadding,
         shadowMargin + framePadding,
         shadowMargin + framePadding);
@@ -78,7 +82,8 @@ SelectionActionBar::SelectionActionBar(QWidget *parent)
 
 QToolButton *SelectionActionBar::addAction(QAction *action)
 {
-    if (!action) {
+    if (!action)
+    {
         return nullptr;
     }
 
@@ -91,9 +96,13 @@ QToolButton *SelectionActionBar::addAction(QAction *action)
     button->setFocusPolicy(Qt::StrongFocus);
     button->setDefaultAction(action);
     syncButtonMetadata(button, action);
-    connect(action, &QAction::changed, button, [button, action]() {
-        syncButtonMetadata(button, action);
-    });
+    connect(action,
+        &QAction::changed,
+        button,
+        [button, action]()
+        {
+            syncButtonMetadata(button, action);
+        });
     m_layout->addWidget(button);
     updateGeometry();
     adjustSize();
@@ -104,14 +113,12 @@ void SelectionActionBar::addSeparator()
 {
     auto *separator = new QFrame(this);
     separator->setObjectName(
-        QStringLiteral("selectionActionSeparator%1")
-            .arg(++m_separatorCount));
+        QStringLiteral("selectionActionSeparator%1").arg(++m_separatorCount));
     separator->setFrameShape(QFrame::VLine);
     separator->setFrameShadow(QFrame::Plain);
     separator->setLineWidth(1);
     separator->setFixedHeight(separatorHeight);
-    separator->setStyleSheet(
-        QStringLiteral("color: %1;")
+    separator->setStyleSheet(QStringLiteral("color: %1;")
             .arg(Theme::border().name(QColor::HexArgb)));
     m_layout->addWidget(separator, 0, Qt::AlignVCenter);
     updateGeometry();
@@ -120,13 +127,9 @@ void SelectionActionBar::addSeparator()
 
 QSize SelectionActionBar::sizeHint() const
 {
-    const QSize layoutHint = m_layout
-        ? m_layout->sizeHint()
-        : QSize();
-    return layoutHint.expandedTo(
-        QSize(
-            shadowMargin * 2 + framePadding * 2,
-            shadowMargin * 2 + framePadding * 2 + buttonExtent));
+    const QSize layoutHint = m_layout ? m_layout->sizeHint() : QSize();
+    return layoutHint.expandedTo(QSize(shadowMargin * 2 + framePadding * 2,
+        shadowMargin * 2 + framePadding * 2 + buttonExtent));
 }
 
 QSize SelectionActionBar::minimumSizeHint() const
@@ -140,22 +143,21 @@ void SelectionActionBar::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    const QRectF frame = QRectF(rect()).adjusted(
-        shadowMargin + 0.5,
+    const QRectF frame = QRectF(rect()).adjusted(shadowMargin + 0.5,
         shadowMargin + 0.5,
         -shadowMargin - 0.5,
         -shadowMargin - 0.5);
-    if (!frame.isValid()) {
+    if (!frame.isValid())
+    {
         return;
     }
 
     painter.setPen(Qt::NoPen);
-    for (int step = shadowMargin - 2; step > 0; --step) {
+    for (int step = shadowMargin - 2; step > 0; --step)
+    {
         QColor shadow(Qt::black);
         shadow.setAlphaF(
-            0.035
-            * (1.0
-               - static_cast<qreal>(step) / (shadowMargin - 2)));
+            0.035 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 2)));
         QPainterPath blur;
         blur.addRoundedRect(
             frame.adjusted(-step, -step + 2.0, step, step + 2.0),

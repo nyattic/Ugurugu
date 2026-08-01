@@ -5,16 +5,19 @@
 #include <QString>
 #include <QVector>
 
-namespace wobble {
+namespace wobble
+{
 
-enum class BrushCategory {
+enum class BrushCategory
+{
     Pen,
     Marker,
     Airbrush,
     Spray
 };
 
-struct BrushPreset {
+struct BrushPreset
+{
     QString id;
     BrushCategory category = BrushCategory::Pen;
     const char *sourceName = "";

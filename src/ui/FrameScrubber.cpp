@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 constexpr qreal trackRadius = 6.0;
 constexpr qreal slotMargin = 2.0;
@@ -22,9 +24,7 @@ constexpr qreal slotMargin = 2.0;
 }
 
 FrameScrubber::FrameScrubber(
-    DocumentController *controller,
-    CanvasWidget *canvas,
-    QWidget *parent)
+    DocumentController *controller, CanvasWidget *canvas, QWidget *parent)
     : QWidget(parent)
     , m_controller(controller)
     , m_canvas(canvas)
@@ -35,21 +35,27 @@ FrameScrubber::FrameScrubber(
     setCursor(Qt::PointingHandCursor);
     setAccessibleName(tr("Frame scrubber"));
 
-    connect(
-        m_canvas,
+    connect(m_canvas,
         &CanvasWidget::currentFrameChanged,
         this,
-        [this](int) { update(); });
-    connect(
-        m_canvas,
+        [this](int)
+        {
+            update();
+        });
+    connect(m_canvas,
         &CanvasWidget::animatingChanged,
         this,
-        [this](bool) { update(); });
-    connect(
-        m_controller,
+        [this](bool)
+        {
+            update();
+        });
+    connect(m_controller,
         &DocumentController::documentChanged,
         this,
-        [this]() { update(); });
+        [this]()
+        {
+            update();
+        });
 }
 
 QSize FrameScrubber::sizeHint() const
@@ -77,7 +83,8 @@ int FrameScrubber::frameAt(const QPointF &position) const
     const QRectF track = trackRect();
     const int frames = frameCount();
     const qreal slotWidth = track.width() / frames;
-    if (slotWidth <= 0.0) {
+    if (slotWidth <= 0.0)
+    {
         return 0;
     }
     const int frame =
@@ -99,61 +106,53 @@ void FrameScrubber::paintEvent(QPaintEvent *)
     const QRectF track = trackRect();
     const int frames = frameCount();
     const qreal slotWidth = track.width() / frames;
-    const int current =
-        std::clamp(m_canvas->currentFrame(), 0, frames - 1);
+    const int current = std::clamp(m_canvas->currentFrame(), 0, frames - 1);
 
     QPainterPath trackPath;
     trackPath.addRoundedRect(track, trackRadius, trackRadius);
     painter.fillPath(trackPath, Theme::statusBackground());
 
-    if (m_hoverFrame >= 0
-        && m_hoverFrame < frames
-        && m_hoverFrame != current) {
-        const QRectF hoverRect(
-            track.left() + slotWidth * m_hoverFrame,
+    if (m_hoverFrame >= 0 && m_hoverFrame < frames && m_hoverFrame != current)
+    {
+        const QRectF hoverRect(track.left() + slotWidth * m_hoverFrame,
             track.top() + slotMargin,
             slotWidth,
             track.height() - slotMargin * 2.0);
         painter.setPen(Qt::NoPen);
         painter.setBrush(Theme::controlBackground());
         painter.drawRoundedRect(
-            hoverRect.adjusted(0.5, 0.0, -0.5, 0.0),
-            4.0,
-            4.0);
+            hoverRect.adjusted(0.5, 0.0, -0.5, 0.0), 4.0, 4.0);
     }
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(Theme::textDisabled());
-    for (int frame = 0; frame < frames; ++frame) {
-        if (frame == current) {
+    for (int frame = 0; frame < frames; ++frame)
+    {
+        if (frame == current)
+        {
             continue;
         }
         const QPointF center(
-            track.left() + slotWidth * (frame + 0.5),
-            track.center().y());
+            track.left() + slotWidth * (frame + 0.5), track.center().y());
         painter.drawEllipse(center, 1.4, 1.4);
     }
 
-    const QRectF playhead(
-        track.left() + slotWidth * current,
+    const QRectF playhead(track.left() + slotWidth * current,
         track.top() + slotMargin,
         std::max(slotWidth, 6.0),
         track.height() - slotMargin * 2.0);
     painter.setBrush(Theme::accent());
-    painter.drawRoundedRect(
-        playhead.adjusted(0.5, 0.0, -0.5, 0.0),
-        4.0,
-        4.0);
+    painter.drawRoundedRect(playhead.adjusted(0.5, 0.0, -0.5, 0.0), 4.0, 4.0);
 
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(
-        QPen(hasFocus() ? Theme::accent() : Theme::border(), 1.0));
+    painter.setPen(QPen(hasFocus() ? Theme::accent() : Theme::border(), 1.0));
     painter.drawPath(trackPath);
 }
 
 void FrameScrubber::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton)
+    {
         m_dragging = true;
         scrubTo(event->position());
         return;
@@ -163,12 +162,14 @@ void FrameScrubber::mousePressEvent(QMouseEvent *event)
 
 void FrameScrubber::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_dragging) {
+    if (m_dragging)
+    {
         scrubTo(event->position());
         return;
     }
     const int hovered = frameAt(event->position());
-    if (hovered != m_hoverFrame) {
+    if (hovered != m_hoverFrame)
+    {
         m_hoverFrame = hovered;
         update();
     }
@@ -176,7 +177,8 @@ void FrameScrubber::mouseMoveEvent(QMouseEvent *event)
 
 void FrameScrubber::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton)
+    {
         m_dragging = false;
         return;
     }
@@ -194,12 +196,14 @@ void FrameScrubber::keyPressEvent(QKeyEvent *event)
 {
     const int frames = frameCount();
     const int current = m_canvas->currentFrame();
-    if (event->key() == Qt::Key_Left) {
+    if (event->key() == Qt::Key_Left)
+    {
         m_canvas->setAnimating(false);
         m_canvas->setCurrentFrame((current + frames - 1) % frames);
         return;
     }
-    if (event->key() == Qt::Key_Right) {
+    if (event->key() == Qt::Key_Right)
+    {
         m_canvas->setAnimating(false);
         m_canvas->setCurrentFrame((current + 1) % frames);
         return;

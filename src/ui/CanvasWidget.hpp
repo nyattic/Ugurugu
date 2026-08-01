@@ -17,7 +17,8 @@ class QMouseEvent;
 class QTabletEvent;
 class QWheelEvent;
 
-namespace wobble {
+namespace wobble
+{
 
 class SelectionActionBar;
 
@@ -26,7 +27,8 @@ class CanvasWidget final : public QWidget
     Q_OBJECT
 
 public:
-    enum class Tool {
+    enum class Tool
+    {
         Brush,
         Eraser,
         Lasso,
@@ -35,8 +37,7 @@ public:
     };
 
     explicit CanvasWidget(
-        DocumentController *controller,
-        QWidget *parent = nullptr);
+        DocumentController *controller, QWidget *parent = nullptr);
 
     Tool tool() const;
     QColor brushColor() const;
@@ -71,6 +72,7 @@ public:
     bool deleteSelection();
     void deselectSelection();
     void setSelectionActionBar(SelectionActionBar *actionBar);
+    void releaseTransientRenderCaches();
 
 public slots:
     void setTool(Tool tool);
@@ -133,13 +135,15 @@ protected:
     void leaveEvent(QEvent *event) override;
 
 private:
-    struct SelectionState {
+    struct SelectionState
+    {
         QSet<QUuid> strokes;
         QUuid layer;
         QImage mask;
     };
 
-    struct FloatingTransformSession {
+    struct FloatingTransformSession
+    {
         bool active = false;
         QUuid layer;
         QVector<QUuid> strokeIds;
@@ -153,20 +157,18 @@ private:
     QTransform documentTransform() const;
     qreal fitZoom() const;
     Document displayDocument() const;
-    QPointF mapToDocument(const QPointF &widgetPosition, bool *inside = nullptr) const;
+    QPointF mapToDocument(
+        const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
     QImage frameImage(int frame);
     const RenderEngine::LayerSplitFrame &previewSplit(
-        const QUuid &layerId,
-        const QSize &renderSize);
+        const QUuid &layerId, const QSize &renderSize);
     void invalidateFrames();
     void updateTimerInterval();
     void advanceFrame();
     void beginStroke(
-        const QPointF &widgetPosition,
-        qreal pressure,
-        bool tabletEraser);
+        const QPointF &widgetPosition, qreal pressure, bool tabletEraser);
     void continueStroke(const QPointF &widgetPosition, qreal pressure);
     void endStroke(const QPointF &widgetPosition, qreal pressure);
     void cancelStroke();
@@ -190,13 +192,11 @@ private:
     void finishLasso();
     void cancelLasso();
     void applySelectionMask(
-        QImage mask,
-        const SelectionState &previousSelection);
+        QImage mask, const SelectionState &previousSelection);
     SelectionState selectionStateForMask(QImage mask) const;
     SelectionState currentSelectionState() const;
     void restoreSelectionState(const SelectionState &state);
-    void pushSelectionChange(
-        const SelectionState &previousSelection,
+    void pushSelectionChange(const SelectionState &previousSelection,
         const SelectionState &nextSelection,
         const QString &text);
     void computeWandSelection(const QPointF &documentPosition);
@@ -213,28 +213,23 @@ private:
     QPainterPath displayedSelectionOutline() const;
     QRectF displayedSelectionBounds() const;
     QPointF safeSelectionDeltaForBounds(
-        const QPointF &delta,
-        const QRectF &bounds) const;
+        const QPointF &delta, const QRectF &bounds) const;
     void clearSelection();
     void pruneSelection();
-    void transformSelectionOverlay(
-        const QUuid &layerId,
+    void transformSelectionOverlay(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform);
-    void handleStrokesDuplicated(
-        const QUuid &layerId,
+    void handleStrokesDuplicated(const QUuid &layerId,
         const QVector<QUuid> &sourceIds,
         const QVector<QUuid> &duplicateIds,
         const QPointF &delta,
         bool duplicated);
-    void handleSelectionOverlayTransition(
-        const QUuid &layerId,
+    void handleSelectionOverlayTransition(const QUuid &layerId,
         const QVector<QUuid> &fromStrokeIds,
         const QVector<QUuid> &toStrokeIds,
         const QImage &fromMask,
         const QImage &toMask);
-    void handleCanvasResized(
-        const QSize &previousSize,
+    void handleCanvasResized(const QSize &previousSize,
         const QSize &currentSize,
         const QTransform &transform);
     void rebuildSelectionOutline();
@@ -265,6 +260,8 @@ private:
     bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
+    QImage m_colorPickFrame;
+    int m_colorPickFrameIndex = -1;
     RenderEngine::LayerSplitFrame m_previewSplit;
     QUuid m_previewSplitLayer;
     int m_previewSplitFrame = -1;

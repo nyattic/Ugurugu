@@ -9,9 +9,11 @@
 
 #include <algorithm>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 constexpr int shadowMargin = 18;
 constexpr qreal frameRadius = 12.0;
@@ -23,8 +25,7 @@ ToolPopover::ToolPopover(QWidget *parent)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(
-        shadowMargin + 14,
+    layout->setContentsMargins(shadowMargin + 14,
         shadowMargin + 12,
         shadowMargin + 14,
         shadowMargin + 12);
@@ -37,23 +38,21 @@ void ToolPopover::setContentWidget(QWidget *content)
 
 void ToolPopover::popupBeside(QWidget *anchor)
 {
-    if (m_lastHide.isValid() && m_lastHide.elapsed() < 160) {
+    if (m_lastHide.isValid() && m_lastHide.elapsed() < 160)
+    {
         m_lastHide.invalidate();
         return;
     }
     adjustSize();
     QPoint target = anchor->mapToGlobal(
         QPoint(anchor->width() + 6 - shadowMargin, -6 - shadowMargin));
-    if (const QScreen *screen = anchor->screen()) {
+    if (const QScreen *screen = anchor->screen())
+    {
         const QRect available = screen->availableGeometry();
         target.setX(std::clamp(
-            target.x(),
-            available.left(),
-            available.right() - width() + 1));
+            target.x(), available.left(), available.right() - width() + 1));
         target.setY(std::clamp(
-            target.y(),
-            available.top(),
-            available.bottom() - height() + 1));
+            target.y(), available.top(), available.bottom() - height() + 1));
     }
     move(target);
     show();
@@ -64,25 +63,20 @@ void ToolPopover::paintEvent(QPaintEvent *event)
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF frame = QRectF(rect()).adjusted(
-        shadowMargin + 0.5,
+    const QRectF frame = QRectF(rect()).adjusted(shadowMargin + 0.5,
         shadowMargin + 0.5,
         -shadowMargin - 0.5,
         -shadowMargin - 0.5);
 
     painter.setPen(Qt::NoPen);
-    for (int step = shadowMargin - 3; step > 0; --step) {
+    for (int step = shadowMargin - 3; step > 0; --step)
+    {
         QColor shadow(Qt::black);
         shadow.setAlphaF(
-            0.030
-            * (1.0 - static_cast<qreal>(step) / (shadowMargin - 3)));
+            0.030 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 3)));
         QPainterPath blur;
         blur.addRoundedRect(
-            frame.adjusted(
-                -step,
-                -step + 2.0,
-                step,
-                step + 2.0),
+            frame.adjusted(-step, -step + 2.0, step, step + 2.0),
             frameRadius + step,
             frameRadius + step);
         painter.fillPath(blur, shadow);

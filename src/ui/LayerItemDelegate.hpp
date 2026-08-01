@@ -2,9 +2,11 @@
 
 #include <QStyledItemDelegate>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace LayerItemRoles {
+namespace LayerItemRoles
+{
 constexpr int LayerId = Qt::UserRole;
 constexpr int Visible = Qt::UserRole + 1;
 constexpr int Thumbnail = Qt::UserRole + 2;
@@ -17,20 +19,16 @@ class LayerItemDelegate final : public QStyledItemDelegate
 public:
     explicit LayerItemDelegate(QObject *parent = nullptr);
 
-    void paint(
-        QPainter *painter,
+    void paint(QPainter *painter,
         const QStyleOptionViewItem &option,
         const QModelIndex &index) const override;
-    QSize sizeHint(
-        const QStyleOptionViewItem &option,
+    QSize sizeHint(const QStyleOptionViewItem &option,
         const QModelIndex &index) const override;
-    bool editorEvent(
-        QEvent *event,
+    bool editorEvent(QEvent *event,
         QAbstractItemModel *model,
         const QStyleOptionViewItem &option,
         const QModelIndex &index) override;
-    void updateEditorGeometry(
-        QWidget *editor,
+    void updateEditorGeometry(QWidget *editor,
         const QStyleOptionViewItem &option,
         const QModelIndex &index) const override;
 

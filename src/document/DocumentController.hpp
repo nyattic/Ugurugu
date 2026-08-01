@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/MemoryBudget.hpp"
 #include "document/Document.hpp"
 #include "io/DocumentSerializer.hpp"
 
@@ -11,7 +12,8 @@
 class QAction;
 class QUndoCommand;
 
-namespace wobble {
+namespace wobble
+{
 
 class DocumentController;
 class DocumentControllerTestAccess;
@@ -25,7 +27,8 @@ class DocumentUndoStack final : public QObject
     Q_OBJECT
 
 public:
-    struct StorageStats {
+    struct StorageStats
+    {
         qsizetype retainedLayers = 0;
         qsizetype retainedStrokes = 0;
         qsizetype retainedPreparedDocuments = 0;
@@ -38,7 +41,7 @@ public:
     };
 
     static constexpr qint64 maximumResidentBytes =
-        256LL * 1024LL * 1024LL;
+        MemoryBudget::historyResidentBytes;
 
     explicit DocumentUndoStack(DocumentController *owner);
     ~DocumentUndoStack() override;
@@ -89,12 +92,11 @@ public:
     const Document &document() const;
     DocumentUndoStack *undoStack();
     bool isModified() const;
-    bool selectionHasVisibleLayerPixels(
-        const QUuid &layerId,
+    void releaseTransientCaches();
+    bool selectionHasVisibleLayerPixels(const QUuid &layerId,
         const QImage &selectionMask,
         int preferredFrame = 0) const;
-    void pushSelectionStateCommand(
-        const QString &text,
+    void pushSelectionStateCommand(const QString &text,
         const QUuid &beforeLayerId,
         const QImage &beforeMask,
         const QUuid &afterLayerId,
@@ -103,59 +105,46 @@ public:
     void newDocument(const QSize &size);
     void loadDocument(Document document);
     void loadRecoveredDocument(Document document);
-    bool saveDocument(
-        const QString &filePath,
-        QString *error = nullptr);
+    bool saveDocument(const QString &filePath, QString *error = nullptr);
     void markSaved();
     bool resizeImage(const QSize &size);
-    bool resizeCanvas(
-        const QSize &size,
-        const QPoint &contentOffset);
+    bool resizeCanvas(const QSize &size, const QPoint &contentOffset);
 
     void setActiveLayer(const QUuid &id);
     void addStroke(const QUuid &layerId, Stroke stroke);
-    bool moveStrokes(
-        const QUuid &layerId,
+    bool moveStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta,
         const QImage &selectionMask = {});
-    bool scaleStrokes(
-        const QUuid &layerId,
+    bool scaleStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &center,
         qreal factor,
         const QImage &selectionMask = {});
-    bool rotateStrokes(
-        const QUuid &layerId,
+    bool rotateStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &center,
         qreal degrees,
         const QImage &selectionMask = {});
-    bool flipStrokes(
-        const QUuid &layerId,
+    bool flipStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &center,
         bool horizontal,
         const QImage &selectionMask = {});
     // Commits an already accumulated affine floating-selection transform as
     // one undoable document operation.
-    bool transformSelection(
-        const QUuid &layerId,
+    bool transformSelection(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform,
         const QImage &selectionMask = {});
-    bool duplicateStrokes(
-        const QUuid &layerId,
+    bool duplicateStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta,
         const QImage &selectionMask = {});
-    bool removeSelectedContent(
-        const QUuid &layerId,
+    bool removeSelectedContent(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QImage &selectionMask);
-    void removeStrokes(
-        const QUuid &layerId,
-        const QVector<QUuid> &strokeIds);
+    void removeStrokes(const QUuid &layerId, const QVector<QUuid> &strokeIds);
     void addLayer();
     void duplicateLayer(const QUuid &id);
     void removeLayer(const QUuid &id);
@@ -175,36 +164,30 @@ signals:
     void modifiedChanged(bool modified);
     void layerThumbnailChanged(const QUuid &id);
     void layerThumbnailsReset();
-    void canvasResized(
-        const QSize &previousSize,
+    void canvasResized(const QSize &previousSize,
         const QSize &currentSize,
         const QTransform &transform);
-    void strokesTransformed(
-        const QUuid &layerId,
+    void strokesTransformed(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform);
-    void strokesDuplicated(
-        const QUuid &layerId,
+    void strokesDuplicated(const QUuid &layerId,
         const QVector<QUuid> &sourceIds,
         const QVector<QUuid> &duplicateIds,
         const QPointF &delta,
         bool duplicated);
     // Exact UI selection transition emitted by selection-aware document
     // commands. Undo emits the same transition with both sides swapped.
-    void selectionOverlayTransition(
-        const QUuid &layerId,
+    void selectionOverlayTransition(const QUuid &layerId,
         const QVector<QUuid> &fromStrokeIds,
         const QVector<QUuid> &toStrokeIds,
         const QImage &fromMask,
         const QImage &toMask);
-    void strokePresenceChanged(
-        const QUuid &layerId,
+    void strokePresenceChanged(const QUuid &layerId,
         const QUuid &strokeId,
         const QImage &clipMask,
         bool present);
     void selectionHistoryStateRequested(
-        const QUuid &layerId,
-        const QImage &mask);
+        const QUuid &layerId, const QImage &mask);
 
 private:
     struct DocumentDelta;
@@ -213,60 +196,51 @@ private:
     class DocumentCommand;
     class TransientCommand;
 
-    enum class CommitDirection {
+    enum class CommitDirection
+    {
         Forward,
         Reverse
     };
 
-    enum class ActiveLayerPolicy {
+    enum class ActiveLayerPolicy
+    {
         PreserveCurrentIfPresent,
         UsePrepared
     };
 
-    using PreparedDocument =
-        DocumentSerializer::PreparedDocument;
-    using PreparedState =
-        std::shared_ptr<const PreparedDocument>;
+    using PreparedDocument = DocumentSerializer::PreparedDocument;
+    using PreparedState = std::shared_ptr<const PreparedDocument>;
 
-    bool transformStrokes(
-        const QUuid &layerId,
+    bool transformStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform,
         qreal widthScale,
         const QString &text,
         const QImage &selectionMask);
-    bool tryCommitCandidate(
-        QString text,
+    bool tryCommitCandidate(QString text,
         Document candidate,
         std::shared_ptr<const HistoryEffects> effects = {},
         ActiveLayerPolicy activeLayerPolicy =
             ActiveLayerPolicy::PreserveCurrentIfPresent,
         int mergeId = -1,
         const QUuid &mergeScope = {});
-    PreparedState prepareState(
-        Document document,
+    PreparedState prepareState(Document document,
         const PreparedDocument *base = nullptr,
         const DocumentSerializer::ImmutableBackingLease *trusted = nullptr,
         bool historyPreflight = false);
-    void applyPreparedState(
-        const PreparedState &state,
+    void applyPreparedState(const PreparedState &state,
         ActiveLayerPolicy activeLayerPolicy,
         const HistoryEffects &effects,
         CommitDirection direction,
         quint64 historyNode,
         quint64 contentRevision);
-    bool preflightHistoryMovement(
-        const QUndoCommand *command,
-        bool forward);
-    void applyHistoryMovement(
-        QUndoCommand *command,
-        bool forward);
+    bool preflightHistoryMovement(const QUndoCommand *command, bool forward);
+    void applyHistoryMovement(QUndoCommand *command, bool forward);
     void clearHistoryPreflight(const QUndoCommand *command);
     DocumentUndoStack::StorageStats historyStorageStats(
         const QUndoCommand *command) const;
     void notifyDocumentChanged();
-    void dispatchHistoryEffects(
-        const HistoryEffects &effects,
+    void dispatchHistoryEffects(const HistoryEffects &effects,
         CommitDirection direction,
         bool documentChanged);
     void beginHistoryMacro(const QString &text);
@@ -275,9 +249,7 @@ private:
     bool rejectHistoryMutation();
     bool hasOpenHistoryMacro() const;
     const PreparedState &editableState() const;
-    void normalizeMergedNoOp(
-        quint64 historyNode,
-        quint64 contentRevision);
+    void normalizeMergedNoOp(quint64 historyNode, quint64 contentRevision);
     static void ensureActiveLayer(Document &document);
     QString nextLayerName() const;
 

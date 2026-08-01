@@ -21,9 +21,11 @@
 
 #include <algorithm>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 constexpr int minimumDialogEdge = DocumentLimits::minimumCanvasEdge;
 constexpr int anchorColumnCount = 3;
@@ -39,7 +41,8 @@ public:
 
     void setSignedDisplay(bool signedDisplay)
     {
-        if (m_signedDisplay == signedDisplay) {
+        if (m_signedDisplay == signedDisplay)
+        {
             return;
         }
         m_signedDisplay = signedDisplay;
@@ -50,7 +53,8 @@ protected:
     QString textFromValue(int value) const override
     {
         QString text = locale().toString(value);
-        if (m_signedDisplay && value > 0) {
+        if (m_signedDisplay && value > 0)
+        {
             text.prepend(QLatin1Char('+'));
         }
         return text;
@@ -62,7 +66,8 @@ private:
 
 int alignedOffset(int delta, int alignment)
 {
-    switch (alignment) {
+    switch (alignment)
+    {
     case 0:
         return 0;
     case 1:
@@ -82,19 +87,18 @@ QString signedPixels(int value)
 }
 
 QRectF fittedRect(
-    const QRectF &worldRect,
-    const QRectF &viewport,
-    const QRectF &source)
+    const QRectF &worldRect, const QRectF &viewport, const QRectF &source)
 {
-    if (worldRect.isEmpty() || viewport.isEmpty() || source.isEmpty()) {
+    if (worldRect.isEmpty() || viewport.isEmpty() || source.isEmpty())
+    {
         return {};
     }
-    const qreal scale = std::min(
-        viewport.width() / worldRect.width(),
+    const qreal scale = std::min(viewport.width() / worldRect.width(),
         viewport.height() / worldRect.height());
     const QPointF worldCenter = worldRect.center();
     const QPointF viewportCenter = viewport.center();
-    const auto mapPoint = [&](const QPointF &point) {
+    const auto mapPoint = [&](const QPointF &point)
+    {
         return viewportCenter + (point - worldCenter) * scale;
     };
     return QRectF(mapPoint(source.topLeft()), mapPoint(source.bottomRight()))
@@ -115,8 +119,7 @@ public:
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
 
-    void setGeometryState(
-        const QSize &currentSize,
+    void setGeometryState(const QSize &currentSize,
         const QSize &targetSize,
         const QPoint &contentOffset)
     {
@@ -132,37 +135,29 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        const QRectF frame =
-            QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
         QPainterPath framePath;
         framePath.addRoundedRect(frame, 10.0, 10.0);
         painter.fillPath(framePath, Theme::canvasBackground());
         painter.setPen(QPen(Theme::border(), 1.0));
         painter.drawPath(framePath);
 
-        if (!m_currentSize.isValid() || !m_targetSize.isValid()) {
+        if (!m_currentSize.isValid() || !m_targetSize.isValid())
+        {
             return;
         }
 
-        const QRectF targetRect{
-            QPointF(),
-            QSizeF(m_targetSize)};
+        const QRectF targetRect{QPointF(), QSizeF(m_targetSize)};
         const QRectF artworkRect{
-            QPointF(m_contentOffset),
-            QSizeF(m_currentSize)};
+            QPointF(m_contentOffset), QSizeF(m_currentSize)};
         QRectF world = targetRect.united(artworkRect);
-        const qreal padding = std::max(
-            1.0,
-            std::max(world.width(), world.height()) * 0.08);
+        const qreal padding =
+            std::max(1.0, std::max(world.width(), world.height()) * 0.08);
         world.adjust(-padding, -padding, padding, padding);
 
         const QRectF viewport = frame.adjusted(
-            previewMargin,
-            previewMargin,
-            -previewMargin,
-            -previewMargin);
-        const QRectF displayedTarget =
-            fittedRect(world, viewport, targetRect);
+            previewMargin, previewMargin, -previewMargin, -previewMargin);
+        const QRectF displayedTarget = fittedRect(world, viewport, targetRect);
         const QRectF displayedArtwork =
             fittedRect(world, viewport, artworkRect);
 
@@ -193,17 +188,12 @@ private:
     QPoint m_contentOffset;
 };
 
-CanvasSizeDialog::CanvasSizeDialog(
-    const QSize &currentSize,
-    QWidget *parent)
+CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
     : QDialog(parent)
-    , m_currentSize(
-          std::clamp(
-              currentSize.width(),
-              minimumDialogEdge,
-              DocumentLimits::maximumCanvasEdge),
-          std::clamp(
-              currentSize.height(),
+    , m_currentSize(std::clamp(currentSize.width(),
+                        minimumDialogEdge,
+                        DocumentLimits::maximumCanvasEdge),
+          std::clamp(currentSize.height(),
               minimumDialogEdge,
               DocumentLimits::maximumCanvasEdge))
 {
@@ -216,8 +206,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     mainLayout->setSpacing(14);
 
     auto *description = new QLabel(
-        tr("Change the canvas bounds without scaling the artwork."),
-        this);
+        tr("Change the canvas bounds without scaling the artwork."), this);
     description->setWordWrap(true);
     mainLayout->addWidget(description);
 
@@ -237,8 +226,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     controlsLayout->addWidget(sizeHeading);
 
     m_relativeCheck = new QCheckBox(tr("Relative size"), controls);
-    m_relativeCheck->setObjectName(
-        QStringLiteral("canvasRelativeSizeCheck"));
+    m_relativeCheck->setObjectName(QStringLiteral("canvasRelativeSizeCheck"));
     m_relativeCheck->setAccessibleName(tr("Use relative canvas size"));
     controlsLayout->addWidget(m_relativeCheck);
 
@@ -250,9 +238,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     m_widthLabel = new QLabel(tr("Width"), controls);
     m_widthSpin = new DimensionSpinBox(controls);
     m_widthSpin->setObjectName(QStringLiteral("canvasWidthSpin"));
-    m_widthSpin->setRange(
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
+    m_widthSpin->setRange(minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_widthSpin->setValue(m_currentSize.width());
     m_widthSpin->setSuffix(tr(" px"));
     m_widthSpin->setAccessibleName(tr("Canvas width"));
@@ -263,8 +249,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     m_heightSpin = new DimensionSpinBox(controls);
     m_heightSpin->setObjectName(QStringLiteral("canvasHeightSpin"));
     m_heightSpin->setRange(
-        minimumDialogEdge,
-        DocumentLimits::maximumCanvasEdge);
+        minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_heightSpin->setValue(m_currentSize.height());
     m_heightSpin->setSuffix(tr(" px"));
     m_heightSpin->setAccessibleName(tr("Canvas height"));
@@ -287,8 +272,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     m_anchorGroup = new QButtonGroup(this);
     m_anchorGroup->setExclusive(true);
 
-    const QStringList anchorNames = {
-        tr("Top left"),
+    const QStringList anchorNames = {tr("Top left"),
         tr("Top center"),
         tr("Top right"),
         tr("Middle left"),
@@ -296,8 +280,7 @@ CanvasSizeDialog::CanvasSizeDialog(
         tr("Middle right"),
         tr("Bottom left"),
         tr("Bottom center"),
-        tr("Bottom right")
-    };
+        tr("Bottom right")};
     const QStringList anchorObjectNames = {
         QStringLiteral("canvasAnchorTopLeft"),
         QStringLiteral("canvasAnchorTopCenter"),
@@ -307,9 +290,9 @@ CanvasSizeDialog::CanvasSizeDialog(
         QStringLiteral("canvasAnchorMiddleRight"),
         QStringLiteral("canvasAnchorBottomLeft"),
         QStringLiteral("canvasAnchorBottomCenter"),
-        QStringLiteral("canvasAnchorBottomRight")
-    };
-    for (int anchorId = 0; anchorId < anchorNames.size(); ++anchorId) {
+        QStringLiteral("canvasAnchorBottomRight")};
+    for (int anchorId = 0; anchorId < anchorNames.size(); ++anchorId)
+    {
         auto *button = new QToolButton(anchorWidget);
         button->setObjectName(anchorObjectNames[anchorId]);
         button->setText(QStringLiteral("●"));
@@ -318,15 +301,13 @@ CanvasSizeDialog::CanvasSizeDialog(
         button->setToolTip(anchorNames[anchorId]);
         button->setAccessibleName(anchorNames[anchorId]);
         button->setStyleSheet(
-            QStringLiteral(
-                "QToolButton { background: %1; color: %2; "
-                "border: 1px solid %3; border-radius: 5px; }"
-                "QToolButton:hover { background: %4; color: %5; }"
-                "QToolButton:focus { border-color: %6; }"
-                "QToolButton:checked { background: %6; color: %7; "
-                "border-color: %6; }")
-                .arg(
-                    Theme::statusBackground().name(),
+            QStringLiteral("QToolButton { background: %1; color: %2; "
+                           "border: 1px solid %3; border-radius: 5px; }"
+                           "QToolButton:hover { background: %4; color: %5; }"
+                           "QToolButton:focus { border-color: %6; }"
+                           "QToolButton:checked { background: %6; color: %7; "
+                           "border-color: %6; }")
+                .arg(Theme::statusBackground().name(),
                     Theme::textMuted().name(),
                     Theme::border().name(),
                     Theme::hoverBackground().name(),
@@ -335,9 +316,7 @@ CanvasSizeDialog::CanvasSizeDialog(
                     Theme::accentText().name()));
         m_anchorGroup->addButton(button, anchorId);
         anchorLayout->addWidget(
-            button,
-            anchorId / anchorColumnCount,
-            anchorId % anchorColumnCount);
+            button, anchorId / anchorColumnCount, anchorId % anchorColumnCount);
     }
     m_anchorGroup->button(4)->setChecked(true);
     placementLayout->addWidget(anchorWidget, 0, Qt::AlignTop);
@@ -350,22 +329,18 @@ CanvasSizeDialog::CanvasSizeDialog(
     m_offsetXSpin = new DimensionSpinBox(controls);
     m_offsetXSpin->setObjectName(QStringLiteral("canvasOffsetXSpin"));
     m_offsetXSpin->setRange(
-        -DocumentLimits::maximumCanvasEdge,
-        DocumentLimits::maximumCanvasEdge);
+        -DocumentLimits::maximumCanvasEdge, DocumentLimits::maximumCanvasEdge);
     m_offsetXSpin->setSuffix(tr(" px"));
-    static_cast<DimensionSpinBox *>(m_offsetXSpin)
-        ->setSignedDisplay(true);
+    static_cast<DimensionSpinBox *>(m_offsetXSpin)->setSignedDisplay(true);
     m_offsetXSpin->setAccessibleName(tr("Artwork horizontal offset"));
     offsetForm->addRow(tr("X offset"), m_offsetXSpin);
 
     m_offsetYSpin = new DimensionSpinBox(controls);
     m_offsetYSpin->setObjectName(QStringLiteral("canvasOffsetYSpin"));
     m_offsetYSpin->setRange(
-        -DocumentLimits::maximumCanvasEdge,
-        DocumentLimits::maximumCanvasEdge);
+        -DocumentLimits::maximumCanvasEdge, DocumentLimits::maximumCanvasEdge);
     m_offsetYSpin->setSuffix(tr(" px"));
-    static_cast<DimensionSpinBox *>(m_offsetYSpin)
-        ->setSignedDisplay(true);
+    static_cast<DimensionSpinBox *>(m_offsetYSpin)->setSignedDisplay(true);
     m_offsetYSpin->setAccessibleName(tr("Artwork vertical offset"));
     offsetForm->addRow(tr("Y offset"), m_offsetYSpin);
     placementLayout->addLayout(offsetForm);
@@ -382,8 +357,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     previewLayout->addWidget(m_preview, 1);
 
     m_summaryLabel = new QLabel(previewColumn);
-    m_summaryLabel->setObjectName(
-        QStringLiteral("canvasSizeSummaryLabel"));
+    m_summaryLabel->setObjectName(QStringLiteral("canvasSizeSummaryLabel"));
     m_summaryLabel->setAlignment(Qt::AlignCenter);
     m_summaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLayout->addWidget(m_summaryLabel);
@@ -392,13 +366,11 @@ CanvasSizeDialog::CanvasSizeDialog(
     m_offsetSummaryLabel->setObjectName(
         QStringLiteral("canvasOffsetSummaryLabel"));
     m_offsetSummaryLabel->setAlignment(Qt::AlignCenter);
-    m_offsetSummaryLabel->setTextInteractionFlags(
-        Qt::TextSelectableByMouse);
+    m_offsetSummaryLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     previewLayout->addWidget(m_offsetSummaryLabel);
 
     m_changeHintLabel = new QLabel(previewColumn);
-    m_changeHintLabel->setObjectName(
-        QStringLiteral("canvasChangeHintLabel"));
+    m_changeHintLabel->setObjectName(QStringLiteral("canvasChangeHintLabel"));
     m_changeHintLabel->setAlignment(Qt::AlignCenter);
     m_changeHintLabel->setWordWrap(true);
     m_changeHintLabel->setMinimumHeight(
@@ -406,8 +378,7 @@ CanvasSizeDialog::CanvasSizeDialog(
     previewLayout->addWidget(m_changeHintLabel);
 
     m_buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-        this);
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     QPushButton *okButton = m_buttons->button(QDialogButtonBox::Ok);
     okButton->setObjectName(QStringLiteral("canvasSizeOkButton"));
     okButton->setDefault(true);
@@ -417,33 +388,39 @@ CanvasSizeDialog::CanvasSizeDialog(
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     mainLayout->addWidget(m_buttons);
 
-    connect(
-        m_relativeCheck,
+    connect(m_relativeCheck,
         &QCheckBox::toggled,
         this,
         &CanvasSizeDialog::setRelativeMode);
-    connect(
-        m_widthSpin,
+    connect(m_widthSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { handleSizeChanged(); });
-    connect(
-        m_heightSpin,
+        [this](int)
+        {
+            handleSizeChanged();
+        });
+    connect(m_heightSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { handleSizeChanged(); });
-    connect(
-        m_offsetXSpin,
+        [this](int)
+        {
+            handleSizeChanged();
+        });
+    connect(m_offsetXSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { handleOffsetChanged(); });
-    connect(
-        m_offsetYSpin,
+        [this](int)
+        {
+            handleOffsetChanged();
+        });
+    connect(m_offsetYSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int) { handleOffsetChanged(); });
-    connect(
-        m_anchorGroup,
+        [this](int)
+        {
+            handleOffsetChanged();
+        });
+    connect(m_anchorGroup,
         &QButtonGroup::idClicked,
         this,
         &CanvasSizeDialog::applyAnchor);
@@ -470,11 +447,10 @@ QPoint CanvasSizeDialog::contentOffset() const
 
 void CanvasSizeDialog::setRelativeMode(bool relative)
 {
-    const QSize targetSize = relative
-        ? QSize(m_widthSpin->value(), m_heightSpin->value())
-        : QSize(
-              m_currentSize.width() + m_widthSpin->value(),
-              m_currentSize.height() + m_heightSpin->value());
+    const QSize targetSize =
+        relative ? QSize(m_widthSpin->value(), m_heightSpin->value())
+                 : QSize(m_currentSize.width() + m_widthSpin->value(),
+                       m_currentSize.height() + m_heightSpin->value());
     m_syncing = true;
 
     auto *widthSpin = static_cast<DimensionSpinBox *>(m_widthSpin);
@@ -482,30 +458,27 @@ void CanvasSizeDialog::setRelativeMode(bool relative)
     widthSpin->setSignedDisplay(relative);
     heightSpin->setSignedDisplay(relative);
 
-    if (relative) {
+    if (relative)
+    {
         m_widthLabel->setText(tr("Width change"));
         m_heightLabel->setText(tr("Height change"));
-        m_widthSpin->setRange(
-            minimumDialogEdge - m_currentSize.width(),
+        m_widthSpin->setRange(minimumDialogEdge - m_currentSize.width(),
             DocumentLimits::maximumCanvasEdge - m_currentSize.width());
-        m_heightSpin->setRange(
-            minimumDialogEdge - m_currentSize.height(),
+        m_heightSpin->setRange(minimumDialogEdge - m_currentSize.height(),
             DocumentLimits::maximumCanvasEdge - m_currentSize.height());
-        m_widthSpin->setValue(
-            targetSize.width() - m_currentSize.width());
-        m_heightSpin->setValue(
-            targetSize.height() - m_currentSize.height());
+        m_widthSpin->setValue(targetSize.width() - m_currentSize.width());
+        m_heightSpin->setValue(targetSize.height() - m_currentSize.height());
         m_widthSpin->setAccessibleName(tr("Canvas width change"));
         m_heightSpin->setAccessibleName(tr("Canvas height change"));
-    } else {
+    }
+    else
+    {
         m_widthLabel->setText(tr("Width"));
         m_heightLabel->setText(tr("Height"));
         m_widthSpin->setRange(
-            minimumDialogEdge,
-            DocumentLimits::maximumCanvasEdge);
+            minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
         m_heightSpin->setRange(
-            minimumDialogEdge,
-            DocumentLimits::maximumCanvasEdge);
+            minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
         m_widthSpin->setValue(targetSize.width());
         m_heightSpin->setValue(targetSize.height());
         m_widthSpin->setAccessibleName(tr("Canvas width"));
@@ -518,11 +491,13 @@ void CanvasSizeDialog::setRelativeMode(bool relative)
 
 void CanvasSizeDialog::handleSizeChanged()
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     const int anchorId = m_anchorGroup->checkedId();
-    if (anchorId >= 0) {
+    if (anchorId >= 0)
+    {
         const QPoint anchored = offsetForAnchor(anchorId, requestedSize());
         m_syncing = true;
         m_offsetXSpin->setValue(anchored.x());
@@ -534,7 +509,8 @@ void CanvasSizeDialog::handleSizeChanged()
 
 void CanvasSizeDialog::handleOffsetChanged()
 {
-    if (m_syncing) {
+    if (m_syncing)
+    {
         return;
     }
     syncAnchorFromOffset();
@@ -543,14 +519,16 @@ void CanvasSizeDialog::handleOffsetChanged()
 
 void CanvasSizeDialog::applyAnchor(int anchorId)
 {
-    if (anchorId < 0 || anchorId >= anchorColumnCount * anchorColumnCount) {
+    if (anchorId < 0 || anchorId >= anchorColumnCount * anchorColumnCount)
+    {
         return;
     }
     const QPoint anchored = offsetForAnchor(anchorId, requestedSize());
     m_syncing = true;
     m_offsetXSpin->setValue(anchored.x());
     m_offsetYSpin->setValue(anchored.y());
-    if (QAbstractButton *button = m_anchorGroup->button(anchorId)) {
+    if (QAbstractButton *button = m_anchorGroup->button(anchorId))
+    {
         button->setChecked(true);
     }
     m_syncing = false;
@@ -562,14 +540,17 @@ void CanvasSizeDialog::syncAnchorFromOffset()
     const QPoint offset = contentOffset();
     int matchingId = -1;
     const int currentId = m_anchorGroup->checkedId();
-    if (currentId >= 0
-        && offsetForAnchor(currentId, requestedSize()) == offset) {
+    if (currentId >= 0 && offsetForAnchor(currentId, requestedSize()) == offset)
+    {
         matchingId = currentId;
-    } else {
-        for (int anchorId = 0;
-             anchorId < anchorColumnCount * anchorColumnCount;
-             ++anchorId) {
-            if (offsetForAnchor(anchorId, requestedSize()) == offset) {
+    }
+    else
+    {
+        for (int anchorId = 0; anchorId < anchorColumnCount * anchorColumnCount;
+            ++anchorId)
+        {
+            if (offsetForAnchor(anchorId, requestedSize()) == offset)
+            {
                 matchingId = anchorId;
                 break;
             }
@@ -577,7 +558,8 @@ void CanvasSizeDialog::syncAnchorFromOffset()
     }
 
     m_anchorGroup->setExclusive(false);
-    for (QAbstractButton *button : m_anchorGroup->buttons()) {
+    for (QAbstractButton *button : m_anchorGroup->buttons())
+    {
         button->setChecked(m_anchorGroup->id(button) == matchingId);
     }
     m_anchorGroup->setExclusive(true);
@@ -587,41 +569,44 @@ void CanvasSizeDialog::updatePresentation()
 {
     const QSize targetSize = requestedSize();
     const QPoint offset = contentOffset();
-    m_summaryLabel->setText(
-        tr("%1 × %2 px  →  %3 × %4 px")
+    m_summaryLabel->setText(tr("%1 × %2 px  →  %3 × %4 px")
             .arg(m_currentSize.width())
             .arg(m_currentSize.height())
             .arg(targetSize.width())
             .arg(targetSize.height()));
-    m_offsetSummaryLabel->setText(
-        tr("Artwork offset: X %1, Y %2")
+    m_offsetSummaryLabel->setText(tr("Artwork offset: X %1, Y %2")
             .arg(signedPixels(offset.x()), signedPixels(offset.y())));
     m_preview->setGeometryState(m_currentSize, targetSize, offset);
 
     const QRect targetRect(QPoint(), targetSize);
     const QRect artworkRect(offset, m_currentSize);
-    if (!targetRect.intersects(artworkRect)) {
+    if (!targetRect.intersects(artworkRect))
+    {
         m_changeHintLabel->setText(
             tr("The artwork is entirely outside the new canvas."));
         m_changeHintLabel->setStyleSheet(
             QStringLiteral("color: %1;").arg(Theme::accent().name()));
-    } else if (!targetRect.contains(artworkRect)) {
+    }
+    else if (!targetRect.contains(artworkRect))
+    {
         m_changeHintLabel->setText(
             tr("Artwork outside the new canvas will be clipped."));
         m_changeHintLabel->setStyleSheet(
             QStringLiteral("color: %1;").arg(Theme::accent().name()));
-    } else if (targetRect != artworkRect) {
+    }
+    else if (targetRect != artworkRect)
+    {
         m_changeHintLabel->setText(
             tr("The expanded area uses the canvas background."));
         m_changeHintLabel->setStyleSheet(
-            QStringLiteral("color: %1;")
-                .arg(Theme::textMuted().name()));
-    } else {
+            QStringLiteral("color: %1;").arg(Theme::textMuted().name()));
+    }
+    else
+    {
         m_changeHintLabel->setText(
             tr("The canvas and artwork bounds are unchanged."));
         m_changeHintLabel->setStyleSheet(
-            QStringLiteral("color: %1;")
-                .arg(Theme::textMuted().name()));
+            QStringLiteral("color: %1;").arg(Theme::textMuted().name()));
     }
 
     m_buttons->button(QDialogButtonBox::Ok)
@@ -630,22 +615,19 @@ void CanvasSizeDialog::updatePresentation()
 
 QSize CanvasSizeDialog::requestedSize() const
 {
-    if (m_relativeCheck && m_relativeCheck->isChecked()) {
-        return QSize(
-            m_currentSize.width() + m_widthSpin->value(),
+    if (m_relativeCheck && m_relativeCheck->isChecked())
+    {
+        return QSize(m_currentSize.width() + m_widthSpin->value(),
             m_currentSize.height() + m_heightSpin->value());
     }
     return QSize(m_widthSpin->value(), m_heightSpin->value());
 }
 
-QPoint CanvasSizeDialog::offsetForAnchor(
-    int anchorId,
-    const QSize &size) const
+QPoint CanvasSizeDialog::offsetForAnchor(int anchorId, const QSize &size) const
 {
     const int row = anchorId / anchorColumnCount;
     const int column = anchorId % anchorColumnCount;
-    return QPoint(
-        alignedOffset(size.width() - m_currentSize.width(), column),
+    return QPoint(alignedOffset(size.width() - m_currentSize.width(), column),
         alignedOffset(size.height() - m_currentSize.height(), row));
 }
 

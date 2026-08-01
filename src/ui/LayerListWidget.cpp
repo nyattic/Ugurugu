@@ -2,7 +2,8 @@
 
 #include <QDropEvent>
 
-namespace wobble {
+namespace wobble
+{
 
 LayerListWidget::LayerListWidget(QWidget *parent)
     : QListWidget(parent)
@@ -15,14 +16,16 @@ LayerListWidget::LayerListWidget(QWidget *parent)
 
 void LayerListWidget::dropEvent(QDropEvent *event)
 {
-    if (event->source() != this) {
+    if (event->source() != this)
+    {
         event->ignore();
         return;
     }
 
     const QModelIndex target = indexAt(event->position().toPoint());
     int insertRow = target.isValid() ? target.row() : count();
-    switch (dropIndicatorPosition()) {
+    switch (dropIndicatorPosition())
+    {
     case QAbstractItemView::BelowItem:
         insertRow += 1;
         break;

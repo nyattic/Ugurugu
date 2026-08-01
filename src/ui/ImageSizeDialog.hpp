@@ -9,7 +9,8 @@ class QDoubleSpinBox;
 class QLabel;
 class QSpinBox;
 
-namespace wobble {
+namespace wobble
+{
 
 class ImageGeometryPreview;
 
@@ -18,15 +19,15 @@ class ImageSizeDialog final : public QDialog
     Q_OBJECT
 
 public:
-    struct Result {
+    struct Result
+    {
         QSize size;
         qreal horizontalScale = 1.0;
         qreal verticalScale = 1.0;
     };
 
     explicit ImageSizeDialog(
-        const QSize &currentSize,
-        QWidget *parent = nullptr);
+        const QSize &currentSize, QWidget *parent = nullptr);
 
     Result result() const;
     QSize imageSize() const;

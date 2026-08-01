@@ -2,21 +2,19 @@
 
 #include <QCoreApplication>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
-constexpr auto penCategoryName =
-    QT_TRANSLATE_NOOP("BrushPresets", "Pen");
-constexpr auto markerCategoryName =
-    QT_TRANSLATE_NOOP("BrushPresets", "Marker");
+constexpr auto penCategoryName = QT_TRANSLATE_NOOP("BrushPresets", "Pen");
+constexpr auto markerCategoryName = QT_TRANSLATE_NOOP("BrushPresets", "Marker");
 constexpr auto airbrushCategoryName =
     QT_TRANSLATE_NOOP("BrushPresets", "Airbrush");
-constexpr auto sprayCategoryName =
-    QT_TRANSLATE_NOOP("BrushPresets", "Spray");
+constexpr auto sprayCategoryName = QT_TRANSLATE_NOOP("BrushPresets", "Spray");
 
-BrushSettings lineBrush(
-    qreal opacity,
+BrushSettings lineBrush(qreal opacity,
     qreal sizeDynamics,
     BrushTipShape tipShape = BrushTipShape::Round)
 {
@@ -28,8 +26,7 @@ BrushSettings lineBrush(
     return settings;
 }
 
-BrushSettings airbrush(
-    qreal opacity,
+BrushSettings airbrush(qreal opacity,
     qreal flow,
     qreal hardness,
     qreal spacing,
@@ -47,8 +44,7 @@ BrushSettings airbrush(
     return settings;
 }
 
-BrushSettings spray(
-    BrushTipShape tipShape,
+BrushSettings spray(BrushTipShape tipShape,
     qreal opacity,
     qreal flow,
     qreal spacing,
@@ -80,97 +76,71 @@ BrushSettings spray(
 
 const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
 {
-    static const QVector<BrushPreset> presets {
-        {
-            QStringLiteral("ink-pen"),
+    static const QVector<BrushPreset> presets{
+        {QStringLiteral("ink-pen"),
             BrushCategory::Pen,
             QT_TRANSLATE_NOOP("BrushPresets", "Ink Pen"),
             lineBrush(1.0, 0.8),
-            6.0
-        },
-        {
-            QStringLiteral("g-pen"),
+            6.0},
+        {QStringLiteral("g-pen"),
             BrushCategory::Pen,
             QT_TRANSLATE_NOOP("BrushPresets", "G-Pen"),
             lineBrush(1.0, 0.95),
-            7.0
-        },
-        {
-            QStringLiteral("round-pen"),
+            7.0},
+        {QStringLiteral("round-pen"),
             BrushCategory::Pen,
             QT_TRANSLATE_NOOP("BrushPresets", "Round Pen"),
             lineBrush(1.0, 0.6),
-            8.0
-        },
-        {
-            QStringLiteral("monoline"),
+            8.0},
+        {QStringLiteral("monoline"),
             BrushCategory::Pen,
             QT_TRANSLATE_NOOP("BrushPresets", "Monoline"),
             lineBrush(1.0, 0.0),
-            6.0
-        },
-        {
-            QStringLiteral("bold-ink"),
+            6.0},
+        {QStringLiteral("bold-ink"),
             BrushCategory::Pen,
             QT_TRANSLATE_NOOP("BrushPresets", "Bold Ink"),
             lineBrush(1.0, 0.35),
-            16.0
-        },
-        {
-            QStringLiteral("opaque-marker"),
+            16.0},
+        {QStringLiteral("opaque-marker"),
             BrushCategory::Marker,
             QT_TRANSLATE_NOOP("BrushPresets", "Opaque Marker"),
             lineBrush(0.92, 0.12, BrushTipShape::Square),
-            20.0
-        },
-        {
-            QStringLiteral("transparent-marker"),
+            20.0},
+        {QStringLiteral("transparent-marker"),
             BrushCategory::Marker,
             QT_TRANSLATE_NOOP("BrushPresets", "Transparent Marker"),
             lineBrush(0.38, 0.05, BrushTipShape::Square),
-            28.0
-        },
-        {
-            QStringLiteral("highlighter"),
+            28.0},
+        {QStringLiteral("highlighter"),
             BrushCategory::Marker,
             QT_TRANSLATE_NOOP("BrushPresets", "Highlighter"),
             lineBrush(0.22, 0.0, BrushTipShape::Square),
-            36.0
-        },
-        {
-            QStringLiteral("soft-airbrush"),
+            36.0},
+        {QStringLiteral("soft-airbrush"),
             BrushCategory::Airbrush,
             QT_TRANSLATE_NOOP("BrushPresets", "Soft Airbrush"),
             airbrush(0.9, 0.11, 0.0, 0.09, 0.15, 0.75),
-            64.0
-        },
-        {
-            QStringLiteral("hard-airbrush"),
+            64.0},
+        {QStringLiteral("hard-airbrush"),
             BrushCategory::Airbrush,
             QT_TRANSLATE_NOOP("BrushPresets", "Hard Airbrush"),
             airbrush(0.95, 0.18, 0.72, 0.12, 0.25, 0.55),
-            48.0
-        },
-        {
-            QStringLiteral("dense-airbrush"),
+            48.0},
+        {QStringLiteral("dense-airbrush"),
             BrushCategory::Airbrush,
             QT_TRANSLATE_NOOP("BrushPresets", "Dense Airbrush"),
             airbrush(1.0, 0.28, 0.35, 0.08, 0.2, 0.45),
-            44.0
-        },
-        {
-            QStringLiteral("fine-mist"),
+            44.0},
+        {QStringLiteral("fine-mist"),
             BrushCategory::Airbrush,
             QT_TRANSLATE_NOOP("BrushPresets", "Fine Mist"),
             airbrush(0.75, 0.07, 0.12, 0.07, 0.05, 0.85),
-            34.0
-        },
-        {
-            QStringLiteral("pixel-spray"),
+            34.0},
+        {QStringLiteral("pixel-spray"),
             BrushCategory::Spray,
             QT_TRANSLATE_NOOP("BrushPresets", "Pixel Spray"),
-            spray(
-                BrushTipShape::Square,
+            spray(BrushTipShape::Square,
                 1.0,
                 0.55,
                 0.13,
@@ -180,14 +150,11 @@ const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
                 0.15,
                 0.65,
                 0.4),
-            44.0
-        },
-        {
-            QStringLiteral("rough-spray"),
+            44.0},
+        {QStringLiteral("rough-spray"),
             BrushCategory::Spray,
             QT_TRANSLATE_NOOP("BrushPresets", "Rough Spray"),
-            spray(
-                BrushTipShape::Round,
+            spray(BrushTipShape::Round,
                 0.9,
                 0.38,
                 0.14,
@@ -197,14 +164,11 @@ const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
                 0.2,
                 0.55,
                 0.85),
-            58.0
-        },
-        {
-            QStringLiteral("dust-spray"),
+            58.0},
+        {QStringLiteral("dust-spray"),
             BrushCategory::Spray,
             QT_TRANSLATE_NOOP("BrushPresets", "Dust Spray"),
-            spray(
-                BrushTipShape::Square,
+            spray(BrushTipShape::Square,
                 0.8,
                 0.28,
                 0.1,
@@ -214,14 +178,11 @@ const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
                 0.05,
                 0.8,
                 0.6),
-            52.0
-        },
-        {
-            QStringLiteral("droplet-spray"),
+            52.0},
+        {QStringLiteral("droplet-spray"),
             BrushCategory::Spray,
             QT_TRANSLATE_NOOP("BrushPresets", "Droplet Spray"),
-            spray(
-                BrushTipShape::Round,
+            spray(BrushTipShape::Round,
                 1.0,
                 0.68,
                 0.2,
@@ -231,14 +192,11 @@ const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
                 0.3,
                 0.35,
                 0.75),
-            72.0
-        },
-        {
-            QStringLiteral("wobble-spray"),
+            72.0},
+        {QStringLiteral("wobble-spray"),
             BrushCategory::Spray,
             QT_TRANSLATE_NOOP("BrushPresets", "Wobble Spray"),
-            spray(
-                BrushTipShape::Square,
+            spray(BrushTipShape::Square,
                 0.95,
                 0.48,
                 0.13,
@@ -249,9 +207,7 @@ const QVector<BrushPreset> &BrushPresetCatalog::builtIns()
                 0.65,
                 0.55,
                 true),
-            48.0
-        }
-    };
+            48.0}};
     return presets;
 }
 
@@ -262,8 +218,10 @@ const BrushPreset &BrushPresetCatalog::defaultPreset()
 
 const BrushPreset *BrushPresetCatalog::find(const QString &id)
 {
-    for (const BrushPreset &preset : builtIns()) {
-        if (preset.id == id) {
+    for (const BrushPreset &preset : builtIns())
+    {
+        if (preset.id == id)
+        {
             return &preset;
         }
     }
@@ -272,30 +230,22 @@ const BrushPreset *BrushPresetCatalog::find(const QString &id)
 
 QString BrushPresetCatalog::displayName(const BrushPreset &preset)
 {
-    return QCoreApplication::translate(
-        "BrushPresets",
-        preset.sourceName);
+    return QCoreApplication::translate("BrushPresets", preset.sourceName);
 }
 
 QString BrushPresetCatalog::categoryName(BrushCategory category)
 {
-    switch (category) {
+    switch (category)
+    {
     case BrushCategory::Pen:
-        return QCoreApplication::translate(
-            "BrushPresets",
-            penCategoryName);
+        return QCoreApplication::translate("BrushPresets", penCategoryName);
     case BrushCategory::Marker:
-        return QCoreApplication::translate(
-            "BrushPresets",
-            markerCategoryName);
+        return QCoreApplication::translate("BrushPresets", markerCategoryName);
     case BrushCategory::Airbrush:
         return QCoreApplication::translate(
-            "BrushPresets",
-            airbrushCategoryName);
+            "BrushPresets", airbrushCategoryName);
     case BrushCategory::Spray:
-        return QCoreApplication::translate(
-            "BrushPresets",
-            sprayCategoryName);
+        return QCoreApplication::translate("BrushPresets", sprayCategoryName);
     }
     return {};
 }

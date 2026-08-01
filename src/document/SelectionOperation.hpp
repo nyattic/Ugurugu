@@ -6,13 +6,15 @@
 
 #include <optional>
 
-namespace wobble {
+namespace wobble
+{
 
 // Explicit image surfaces owned by one selection transform. Input masks and
 // QPainter-internal allocations are not included. peakLiveImageBytes is the
 // maximum sum of surfaces that are alive at the same time, including the
 // returned full-size support image when applicable.
-struct SelectionTransformMemoryStats {
+struct SelectionTransformMemoryStats
+{
     QRect sourceBounds;
     QRect targetBounds;
     quint64 sourceImageBytes = 0;
@@ -24,22 +26,16 @@ struct SelectionTransformMemoryStats {
     bool usedFullTargetFallback = false;
 };
 
-std::optional<PackedMaskRegion> packBinaryMask(
-    const QImage &mask);
+std::optional<PackedMaskRegion> packBinaryMask(const QImage &mask);
 
-bool isValidPackedMaskRegion(
-    const PackedMaskRegion &region);
+bool isValidPackedMaskRegion(const PackedMaskRegion &region);
 
 bool packedMaskContains(
-    const PackedMaskRegion &region,
-    int documentX,
-    int documentY);
+    const PackedMaskRegion &region, int documentX, int documentY);
 
-QImage unpackBinaryMask(
-    const PackedMaskRegion &region);
+QImage unpackBinaryMask(const PackedMaskRegion &region);
 
-SamplingMode samplingForSelectionTransform(
-    const QTransform &transform);
+SamplingMode samplingForSelectionTransform(const QTransform &transform);
 
 std::optional<PackedMaskRegion> transformedPackedMask(
     const PackedMaskRegion &region,
@@ -55,20 +51,16 @@ std::optional<PixelSelectionOp> makePixelSelectionOp(
 
 bool isValidPixelSelectionOp(const PixelSelectionOp &operation);
 
-QImage transformedSelectionSupport(
-    const QImage &selectionMask,
+QImage transformedSelectionSupport(const QImage &selectionMask,
     const QSize &targetSize,
     const QTransform &transform,
     SamplingMode sampling,
     SelectionTransformMemoryStats *memoryStats = nullptr);
 
 bool pixelSelectionContains(
-    const PixelSelectionOp &operation,
-    int documentX,
-    int documentY);
+    const PixelSelectionOp &operation, int documentX, int documentY);
 
-QImage unpackPixelSelectionMask(
-    const PixelSelectionOp &operation);
+QImage unpackPixelSelectionMask(const PixelSelectionOp &operation);
 
 quint64 packedSelectionBytes(const Document &document);
 

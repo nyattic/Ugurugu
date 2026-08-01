@@ -2,7 +2,8 @@
 
 #include <QWidget>
 
-namespace wobble {
+namespace wobble
+{
 
 class CanvasWidget;
 class DocumentController;
@@ -12,8 +13,7 @@ class FrameScrubber final : public QWidget
     Q_OBJECT
 
 public:
-    FrameScrubber(
-        DocumentController *controller,
+    FrameScrubber(DocumentController *controller,
         CanvasWidget *canvas,
         QWidget *parent = nullptr);
 

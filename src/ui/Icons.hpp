@@ -4,9 +4,11 @@
 #include <QIcon>
 #include <QPixmap>
 
-namespace wobble {
+namespace wobble
+{
 
-enum class IconGlyph {
+enum class IconGlyph
+{
     Brush,
     Eraser,
     Undo,
@@ -40,8 +42,7 @@ struct Icons final
 {
     static QIcon icon(IconGlyph glyph);
     static QIcon toggleIcon(IconGlyph glyph);
-    static QPixmap pixmap(
-        IconGlyph glyph,
+    static QPixmap pixmap(IconGlyph glyph,
         int size,
         const QColor &color,
         qreal wobblePhase = 0.0,

@@ -12,19 +12,20 @@
 #include <string>
 #include <vector>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 QString currentLogFilePath;
 
 void qtMessageHandler(
-    QtMsgType type,
-    const QMessageLogContext &,
-    const QString &message)
+    QtMsgType type, const QMessageLogContext &, const QString &message)
 {
     const std::string text = message.toUtf8().toStdString();
-    switch (type) {
+    switch (type)
+    {
     case QtDebugMsg:
         spdlog::debug("{}", text);
         break;
@@ -55,11 +56,11 @@ void Logging::initialize()
         QDir(directory).filePath(QStringLiteral("WagleWaglePaint.log"));
 
     std::vector<spdlog::sink_ptr> sinks;
-    sinks.push_back(
-        std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+    sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
     QString fileLoggingError;
 
-    try {
+    try
+    {
 #if defined(SPDLOG_WCHAR_FILENAMES)
         const spdlog::filename_t path =
             QDir::toNativeSeparators(currentLogFilePath).toStdWString();
@@ -67,19 +68,16 @@ void Logging::initialize()
         const spdlog::filename_t path =
             currentLogFilePath.toUtf8().toStdString();
 #endif
-        sinks.push_back(
-            std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-                path,
-                2 * 1024 * 1024,
-                3));
-    } catch (const spdlog::spdlog_ex &error) {
+        sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            path, 2 * 1024 * 1024, 3));
+    }
+    catch (const spdlog::spdlog_ex &error)
+    {
         fileLoggingError = QString::fromUtf8(error.what());
     }
 
     auto logger = std::make_shared<spdlog::logger>(
-        "waglewaglepaint",
-        sinks.begin(),
-        sinks.end());
+        "waglewaglepaint", sinks.begin(), sinks.end());
     logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 #if defined(QT_DEBUG)
     logger->set_level(spdlog::level::debug);
@@ -90,11 +88,10 @@ void Logging::initialize()
     spdlog::set_default_logger(logger);
     qInstallMessageHandler(qtMessageHandler);
     spdlog::info(
-        "Logging initialized at {}",
-        currentLogFilePath.toUtf8().constData());
-    if (!fileLoggingError.isEmpty()) {
-        spdlog::warn(
-            "File logging is unavailable: {}",
+        "Logging initialized at {}", currentLogFilePath.toUtf8().constData());
+    if (!fileLoggingError.isEmpty())
+    {
+        spdlog::warn("File logging is unavailable: {}",
             fileLoggingError.toUtf8().constData());
     }
 }

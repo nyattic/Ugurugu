@@ -12,10 +12,10 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble {
+namespace wobble
+{
 
-BrushSizeRow::BrushSizeRow(
-    CanvasWidget *canvas,
+BrushSizeRow::BrushSizeRow(CanvasWidget *canvas,
     Target target,
     const QString &objectNamePrefix,
     QWidget *parent)
@@ -46,40 +46,41 @@ BrushSizeRow::BrushSizeRow(
 
     auto *spin = new QSpinBox(this);
     spin->setObjectName(objectNamePrefix + QStringLiteral("Spin"));
-    spin->setRange(
-        minimum,
+    spin->setRange(minimum,
         static_cast<int>(std::floor(DocumentLimits::maximumStrokeWidth)));
     spin->setSuffix(tr(" px"));
     spin->setAccessibleName(accessibleName);
     label->setBuddy(spin);
     layout->addWidget(spin);
 
-    const int initial = qRound(
-        controlsEraser ? canvas->eraserWidth() : canvas->brushWidth());
+    const int initial =
+        qRound(controlsEraser ? canvas->eraserWidth() : canvas->brushWidth());
     spin->setValue(initial);
-    slider->setValue(
-        std::clamp(initial, slider->minimum(), slider->maximum()));
+    slider->setValue(std::clamp(initial, slider->minimum(), slider->maximum()));
 
-    connect(
-        spin,
+    connect(spin,
         &QSpinBox::valueChanged,
         this,
-        [canvas, controlsEraser, slider](int value) {
-            if (controlsEraser) {
+        [canvas, controlsEraser, slider](int value)
+        {
+            if (controlsEraser)
+            {
                 canvas->setEraserWidth(value);
-            } else {
+            }
+            else
+            {
                 canvas->setBrushWidth(value);
             }
             QSignalBlocker blocker(slider);
             slider->setValue(
                 std::clamp(value, slider->minimum(), slider->maximum()));
         });
-    connect(
-        slider,
+    connect(slider,
         &QSlider::valueChanged,
         spin,
         qOverload<int>(&QSpinBox::setValue));
-    const auto syncControls = [spin, slider](qreal width) {
+    const auto syncControls = [spin, slider](qreal width)
+    {
         const int value = qRound(width);
         QSignalBlocker spinBlocker(spin);
         QSignalBlocker sliderBlocker(slider);
@@ -87,18 +88,13 @@ BrushSizeRow::BrushSizeRow(
         slider->setValue(
             std::clamp(value, slider->minimum(), slider->maximum()));
     };
-    if (controlsEraser) {
-        connect(
-            canvas,
-            &CanvasWidget::eraserWidthChanged,
-            this,
-            syncControls);
-    } else {
-        connect(
-            canvas,
-            &CanvasWidget::brushWidthChanged,
-            this,
-            syncControls);
+    if (controlsEraser)
+    {
+        connect(canvas, &CanvasWidget::eraserWidthChanged, this, syncControls);
+    }
+    else
+    {
+        connect(canvas, &CanvasWidget::brushWidthChanged, this, syncControls);
     }
 }
 

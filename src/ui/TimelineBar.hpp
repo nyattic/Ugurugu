@@ -8,7 +8,8 @@ class QLabel;
 class QSlider;
 class QSpinBox;
 
-namespace wobble {
+namespace wobble
+{
 
 class CanvasWidget;
 class DocumentController;
@@ -21,8 +22,7 @@ class TimelineBar final : public QWidget
     Q_OBJECT
 
 public:
-    TimelineBar(
-        DocumentController *controller,
+    TimelineBar(DocumentController *controller,
         CanvasWidget *canvas,
         QWidget *parent = nullptr);
     ~TimelineBar() override;

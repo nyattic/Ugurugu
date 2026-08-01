@@ -8,7 +8,8 @@ class QPaintEvent;
 class QShowEvent;
 class QToolButton;
 
-namespace wobble {
+namespace wobble
+{
 
 class SelectionActionBar final : public QWidget
 {

@@ -5,7 +5,7 @@
 # WagleWaglePaint
 
 [![Latest Release](https://img.shields.io/github/v/release/nyattic/WagleWaglePaint?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/nyattic/WagleWaglePaint/total?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FWagleWaglePaint%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/WagleWaglePaint/releases)
 ![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
@@ -40,6 +40,8 @@ Shake Art DELUXE와 PS1 스타일 버텍스 지터에서 영감을 받았으며,
 
 릴리즈 페이지의 `.zip`, `.nupkg`, `appcast.xml`, `.json` 파일은 자동
 업데이트에 사용되는 파일입니다. 일반 설치에는 필요하지 않습니다.
+상단 다운로드 배지는 설치 파일과 실제 업데이트 패키지만 합산하며,
+자동 업데이트 확인용 메타데이터 요청은 제외합니다.
 
 ## 설치
 
@@ -136,5 +138,7 @@ macOS에서는 Sparkle, Windows에서는 Velopack을 통해 다운로드·설치
 WagleWaglePaint는 [GNU General Public License v3.0](LICENSE)으로
 배포됩니다. 내장된 Pretendard JP 폰트는
 [SIL Open Font License 1.1](resources/fonts/OFL.txt)을 따릅니다.
+그 밖의 의존성별 저작권 및 라이선스 정보는
+[서드파티 고지](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.
 
 Copyright (C) 2026 Nyabi (nyattic)

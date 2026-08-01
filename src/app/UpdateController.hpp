@@ -6,7 +6,8 @@
 
 class QWidget;
 
-namespace wobble {
+namespace wobble
+{
 
 class UpdateController final : public QObject
 {
@@ -15,9 +16,7 @@ class UpdateController final : public QObject
 public:
     static void initialize();
 
-    explicit UpdateController(
-        QWidget *window,
-        QObject *parent = nullptr);
+    explicit UpdateController(QWidget *window, QObject *parent = nullptr);
     ~UpdateController() override;
 
 public slots:

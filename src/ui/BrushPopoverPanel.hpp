@@ -7,7 +7,8 @@
 class QButtonGroup;
 class QStackedWidget;
 
-namespace wobble {
+namespace wobble
+{
 
 class BrushPresetButton;
 class CanvasWidget;
@@ -17,9 +18,7 @@ class BrushPopoverPanel final : public QWidget
     Q_OBJECT
 
 public:
-    explicit BrushPopoverPanel(
-        CanvasWidget *canvas,
-        QWidget *parent = nullptr);
+    explicit BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent = nullptr);
 
     void setAnimationActive(bool active);
 

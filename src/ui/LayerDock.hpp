@@ -13,7 +13,8 @@ class QListWidgetItem;
 class QSlider;
 class QToolButton;
 
-namespace wobble {
+namespace wobble
+{
 
 class DocumentController;
 class LayerListWidget;
@@ -24,8 +25,7 @@ class LayerDock final : public QDockWidget
 
 public:
     explicit LayerDock(
-        DocumentController *controller,
-        QWidget *parent = nullptr);
+        DocumentController *controller, QWidget *parent = nullptr);
 
 private:
     void buildContent();

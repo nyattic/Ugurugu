@@ -19,14 +19,18 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble {
+namespace wobble
+{
 
-namespace {
+namespace
+{
 
 bool isObjectOrDescendantOf(QObject *object, const QObject *ancestor)
 {
-    while (object) {
-        if (object == ancestor) {
+    while (object)
+    {
+        if (object == ancestor)
+        {
             return true;
         }
         object = object->parent();
@@ -37,9 +41,7 @@ bool isObjectOrDescendantOf(QObject *object, const QObject *ancestor)
 }
 
 TimelineBar::TimelineBar(
-    DocumentController *controller,
-    CanvasWidget *canvas,
-    QWidget *parent)
+    DocumentController *controller, CanvasWidget *canvas, QWidget *parent)
     : QWidget(parent)
     , m_controller(controller)
     , m_canvas(canvas)
@@ -53,7 +55,8 @@ TimelineBar::TimelineBar(
 
 TimelineBar::~TimelineBar()
 {
-    if (qApp) {
+    if (qApp)
+    {
         qApp->removeEventFilter(this);
     }
 }
@@ -66,7 +69,8 @@ bool TimelineBar::eventFilter(QObject *watched, QEvent *event)
         && (event->type() == QEvent::FocusIn
             || event->type() == QEvent::MouseButtonPress
             || event->type() == QEvent::Wheel
-            || event->type() == QEvent::KeyPress)) {
+            || event->type() == QEvent::KeyPress))
+    {
         m_canvas->setAnimating(false);
     }
     return QWidget::eventFilter(watched, event);
@@ -97,8 +101,7 @@ void TimelineBar::buildLayout()
 
     m_framesSpin = new QSpinBox(this);
     m_framesSpin->setObjectName(QStringLiteral("framesSpin"));
-    m_framesSpin->setRange(
-        DocumentLimits::minimumAnimationFrames,
+    m_framesSpin->setRange(DocumentLimits::minimumAnimationFrames,
         DocumentLimits::maximumAnimationFrames);
     m_framesSpin->setAccessibleName(tr("Animation frames"));
     m_framesSpin->setToolTip(tr("Animation frames"));
@@ -122,8 +125,7 @@ void TimelineBar::buildLayout()
 
     m_wobbleSlider = new QSlider(Qt::Horizontal, this);
     m_wobbleSlider->setObjectName(QStringLiteral("wobbleSlider"));
-    m_wobbleSlider->setRange(
-        qRound(DocumentLimits::minimumWobbleAmount * 10.0),
+    m_wobbleSlider->setRange(qRound(DocumentLimits::minimumWobbleAmount * 10.0),
         qRound(DocumentLimits::maximumWobbleAmount * 10.0));
     m_wobbleSlider->setFixedWidth(96);
     m_wobbleSlider->setToolTip(tr("Wobble strength"));
@@ -132,8 +134,7 @@ void TimelineBar::buildLayout()
 
     m_wobbleSpin = new QDoubleSpinBox(this);
     m_wobbleSpin->setObjectName(QStringLiteral("wobbleSpin"));
-    m_wobbleSpin->setRange(
-        DocumentLimits::minimumWobbleAmount,
+    m_wobbleSpin->setRange(DocumentLimits::minimumWobbleAmount,
         DocumentLimits::maximumWobbleAmount);
     m_wobbleSpin->setDecimals(1);
     m_wobbleSpin->setSingleStep(0.1);
@@ -149,8 +150,7 @@ void TimelineBar::buildLayout()
 
     m_fpsSpin = new QSpinBox(this);
     m_fpsSpin->setObjectName(QStringLiteral("fpsSpin"));
-    m_fpsSpin->setRange(
-        qRound(DocumentLimits::minimumFramesPerSecond),
+    m_fpsSpin->setRange(qRound(DocumentLimits::minimumFramesPerSecond),
         qRound(DocumentLimits::maximumFramesPerSecond));
     m_fpsSpin->setToolTip(tr("Playback speed (frames per second)"));
     m_fpsSpin->setAccessibleName(tr("Playback speed"));
@@ -161,77 +161,93 @@ void TimelineBar::buildLayout()
 void TimelineBar::connectControls()
 {
     m_playButton->setChecked(m_canvas->isAnimating());
-    connect(
-        m_playButton,
+    connect(m_playButton,
         &QToolButton::toggled,
         m_canvas,
         &CanvasWidget::setAnimating);
-    connect(
-        m_canvas,
+    connect(m_canvas,
         &CanvasWidget::animatingChanged,
         m_playButton,
         &WobblePlayButton::setChecked);
 
-    connect(
-        m_currentFrameSpin,
+    connect(m_currentFrameSpin,
         &QSpinBox::valueChanged,
         this,
-        [this](int value) {
-            if (!m_syncing) {
+        [this](int value)
+        {
+            if (!m_syncing)
+            {
                 m_canvas->setAnimating(false);
                 m_canvas->setCurrentFrame(value - 1);
             }
         });
-    connect(
-        m_canvas,
+    connect(m_canvas,
         &CanvasWidget::currentFrameChanged,
         this,
-        [this](int frame) {
-            if (m_canvas->isAnimating()) {
+        [this](int frame)
+        {
+            if (m_canvas->isAnimating())
+            {
                 return;
             }
             const QSignalBlocker spinBlocker(m_currentFrameSpin);
             m_currentFrameSpin->setValue(frame + 1);
         });
-    connect(
-        m_canvas,
+    connect(m_canvas,
         &CanvasWidget::animatingChanged,
         this,
-        [this](bool animating) {
-            if (animating) {
+        [this](bool animating)
+        {
+            if (animating)
+            {
                 return;
             }
             const QSignalBlocker spinBlocker(m_currentFrameSpin);
             m_currentFrameSpin->setValue(m_canvas->currentFrame() + 1);
         });
 
-    connect(m_wobbleSlider, &QSlider::valueChanged, this, [this](int value) {
-        if (!m_syncing) {
-            m_controller->setWobbleAmount(value / 10.0);
-        }
-    });
-    connect(
-        m_wobbleSpin,
+    connect(m_wobbleSlider,
+        &QSlider::valueChanged,
+        this,
+        [this](int value)
+        {
+            if (!m_syncing)
+            {
+                m_controller->setWobbleAmount(value / 10.0);
+            }
+        });
+    connect(m_wobbleSpin,
         &QDoubleSpinBox::valueChanged,
         this,
-        [this](double value) {
-            if (!m_syncing) {
+        [this](double value)
+        {
+            if (!m_syncing)
+            {
                 m_controller->setWobbleAmount(value);
             }
         });
-    connect(m_framesSpin, &QSpinBox::valueChanged, this, [this](int value) {
-        if (!m_syncing) {
-            m_controller->setAnimationFrames(value);
-        }
-    });
-    connect(m_fpsSpin, &QSpinBox::valueChanged, this, [this](int value) {
-        if (!m_syncing) {
-            m_controller->setFramesPerSecond(value);
-        }
-    });
+    connect(m_framesSpin,
+        &QSpinBox::valueChanged,
+        this,
+        [this](int value)
+        {
+            if (!m_syncing)
+            {
+                m_controller->setAnimationFrames(value);
+            }
+        });
+    connect(m_fpsSpin,
+        &QSpinBox::valueChanged,
+        this,
+        [this](int value)
+        {
+            if (!m_syncing)
+            {
+                m_controller->setFramesPerSecond(value);
+            }
+        });
 
-    connect(
-        m_controller,
+    connect(m_controller,
         &DocumentController::documentChanged,
         this,
         &TimelineBar::syncFromDocument);
@@ -244,7 +260,8 @@ void TimelineBar::syncFromDocument()
     const int frames = std::max(1, document.animationFrames);
 
     m_currentFrameSpin->setMaximum(frames);
-    if (!m_canvas->isAnimating()) {
+    if (!m_canvas->isAnimating())
+    {
         m_currentFrameSpin->setValue(m_canvas->currentFrame() + 1);
     }
 

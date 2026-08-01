@@ -9,40 +9,48 @@
 
 #include <numbers>
 
-namespace wobble {
+namespace wobble
+{
 
 PopoverToolButton::PopoverToolButton(QWidget *parent)
     : QToolButton(parent)
 {
     m_longPressTimer.setSingleShot(true);
     m_longPressTimer.setInterval(480);
-    connect(&m_longPressTimer, &QTimer::timeout, this, [this]() {
-        if (!isDown()) {
-            return;
-        }
-        setDown(false);
-        if (defaultAction() && !defaultAction()->isChecked()) {
-            defaultAction()->trigger();
-        }
-        openPopover();
-    });
+    connect(&m_longPressTimer,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            if (!isDown())
+            {
+                return;
+            }
+            setDown(false);
+            if (defaultAction() && !defaultAction()->isChecked())
+            {
+                defaultAction()->trigger();
+            }
+            openPopover();
+        });
 
     m_hoverAnimation.setDuration(420);
     m_hoverAnimation.setStartValue(0.0);
     m_hoverAnimation.setEndValue(2.0 * std::numbers::pi_v<qreal>);
-    connect(
-        &m_hoverAnimation,
+    connect(&m_hoverAnimation,
         &QVariantAnimation::valueChanged,
         this,
-        [this](const QVariant &value) {
+        [this](const QVariant &value)
+        {
             applyWobbleFrame(value.toReal());
         });
-    connect(
-        &m_hoverAnimation,
+    connect(&m_hoverAnimation,
         &QVariantAnimation::finished,
         this,
-        [this]() {
-            if (defaultAction()) {
+        [this]()
+        {
+            if (defaultAction())
+            {
                 setIcon(defaultAction()->icon());
             }
         });
@@ -63,7 +71,8 @@ void PopoverToolButton::setHoverGlyph(IconGlyph glyph)
 void PopoverToolButton::enterEvent(QEnterEvent *event)
 {
     if (m_hasHoverGlyph
-        && m_hoverAnimation.state() != QAbstractAnimation::Running) {
+        && m_hoverAnimation.state() != QAbstractAnimation::Running)
+    {
         m_hoverAnimation.start();
     }
     QToolButton::enterEvent(event);
@@ -74,21 +83,17 @@ void PopoverToolButton::applyWobbleFrame(qreal phase)
     const QColor color =
         isChecked() ? Theme::accentText() : Theme::textPrimary();
     const int size = iconSize().width();
-    setIcon(
-        QIcon(
-            Icons::pixmap(
-                m_hoverGlyph,
-                size,
-                color,
-                phase,
-                devicePixelRatio())));
+    setIcon(QIcon(
+        Icons::pixmap(m_hoverGlyph, size, color, phase, devicePixelRatio())));
 }
 
 void PopoverToolButton::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton)
+    {
         m_checkedAtPress = isChecked();
-        if (m_popover) {
+        if (m_popover)
+        {
             m_longPressTimer.start();
         }
     }
@@ -98,11 +103,11 @@ void PopoverToolButton::mousePressEvent(QMouseEvent *event)
 void PopoverToolButton::mouseReleaseEvent(QMouseEvent *event)
 {
     m_longPressTimer.stop();
-    const bool insideRelease =
-        event->button() == Qt::LeftButton
-        && rect().contains(event->position().toPoint());
+    const bool insideRelease = event->button() == Qt::LeftButton
+                               && rect().contains(event->position().toPoint());
     QToolButton::mouseReleaseEvent(event);
-    if (m_popover && insideRelease && m_checkedAtPress) {
+    if (m_popover && insideRelease && m_checkedAtPress)
+    {
         openPopover();
     }
 }
@@ -110,7 +115,8 @@ void PopoverToolButton::mouseReleaseEvent(QMouseEvent *event)
 void PopoverToolButton::paintEvent(QPaintEvent *event)
 {
     QToolButton::paintEvent(event);
-    if (!m_popover) {
+    if (!m_popover)
+    {
         return;
     }
     QPainter painter(this);
@@ -122,13 +128,13 @@ void PopoverToolButton::paintEvent(QPaintEvent *event)
     indicator.lineTo(corner + QPointF(0.0, -5.0));
     indicator.closeSubpath();
     painter.fillPath(
-        indicator,
-        isChecked() ? Theme::accentText() : Theme::textMuted());
+        indicator, isChecked() ? Theme::accentText() : Theme::textMuted());
 }
 
 void PopoverToolButton::openPopover()
 {
-    if (m_popover) {
+    if (m_popover)
+    {
         m_popover->popupBeside(this);
     }
 }

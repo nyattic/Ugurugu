@@ -3,7 +3,8 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace wobble {
+namespace wobble
+{
 
 class DocumentController;
 
@@ -13,8 +14,7 @@ class WobblePreview final : public QWidget
 
 public:
     explicit WobblePreview(
-        DocumentController *controller,
-        QWidget *parent = nullptr);
+        DocumentController *controller, QWidget *parent = nullptr);
 
     QSize sizeHint() const override;
 

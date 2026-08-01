@@ -2,10 +2,9 @@
 
 #include <QString>
 
-namespace wobble {
+namespace wobble
+{
 
-QString localizedReleaseNotes(
-    const QString &markdown,
-    const QString &language);
+QString localizedReleaseNotes(const QString &markdown, const QString &language);
 
 }

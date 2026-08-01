@@ -10,7 +10,8 @@ class QDialogButtonBox;
 class QLabel;
 class QSpinBox;
 
-namespace wobble {
+namespace wobble
+{
 
 class CanvasGeometryPreview;
 
@@ -19,14 +20,14 @@ class CanvasSizeDialog final : public QDialog
     Q_OBJECT
 
 public:
-    struct Result {
+    struct Result
+    {
         QSize size;
         QPoint contentOffset;
     };
 
     explicit CanvasSizeDialog(
-        const QSize &currentSize,
-        QWidget *parent = nullptr);
+        const QSize &currentSize, QWidget *parent = nullptr);
 
     Result result() const;
     QSize canvasSize() const;

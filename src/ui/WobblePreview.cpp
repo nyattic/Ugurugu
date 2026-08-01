@@ -10,11 +10,10 @@
 #include <cmath>
 #include <numbers>
 
-namespace wobble {
+namespace wobble
+{
 
-WobblePreview::WobblePreview(
-    DocumentController *controller,
-    QWidget *parent)
+WobblePreview::WobblePreview(DocumentController *controller, QWidget *parent)
     : QWidget(parent)
     , m_controller(controller)
 {
@@ -23,17 +22,24 @@ WobblePreview::WobblePreview(
     setToolTip(tr("Live preview of the wobble strength"));
 
     m_timer.setInterval(120);
-    connect(&m_timer, &QTimer::timeout, this, [this]() {
-        m_phase += 1.0;
-        if (m_controller->document().wobbleAmount > 0.0) {
-            update();
-        }
-    });
-    connect(
-        m_controller,
+    connect(&m_timer,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            m_phase += 1.0;
+            if (m_controller->document().wobbleAmount > 0.0)
+            {
+                update();
+            }
+        });
+    connect(m_controller,
         &DocumentController::documentChanged,
         this,
-        [this]() { update(); });
+        [this]()
+        {
+            update();
+        });
 }
 
 QSize WobblePreview::sizeHint() const
@@ -52,30 +58,28 @@ void WobblePreview::paintEvent(QPaintEvent *)
 
     QPainterPath line;
     bool started = false;
-    for (qreal x = 5.0; x <= width() - 5.0; x += 2.0) {
-        const qreal y = centerY
+    for (qreal x = 5.0; x <= width() - 5.0; x += 2.0)
+    {
+        const qreal y =
+            centerY
             + amplitude
-                * (0.62 * std::sin(x * 0.16 + m_phase)
-                   + 0.38
-                       * std::sin(
-                           x * 0.37
-                           + m_phase * 1.4
-                           + std::numbers::pi_v<qreal> / 3.0));
-        if (!started) {
+                  * (0.62 * std::sin(x * 0.16 + m_phase)
+                      + 0.38
+                            * std::sin(x * 0.37 + m_phase * 1.4
+                                       + std::numbers::pi_v<qreal> / 3.0));
+        if (!started)
+        {
             line.moveTo(x, y);
             started = true;
-        } else {
+        }
+        else
+        {
             line.lineTo(x, y);
         }
     }
 
     painter.setPen(
-        QPen(
-            Theme::accent(),
-            2.0,
-            Qt::SolidLine,
-            Qt::RoundCap,
-            Qt::RoundJoin));
+        QPen(Theme::accent(), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(line);
 }
 
