@@ -11,7 +11,7 @@
 
 <p align="center"><a href="README.md">KR</a> · <b>EN</b> · <a href="README.ja.md">JP</a></p>
 
-A native drawing app where every line wobbles. Draw once and your
+A wobbly drawing app where every line wiggles. Draw once and your
 sketch comes alive as a crisp, boiling-line animation ready to export
 as a looping GIF.
 
@@ -59,33 +59,21 @@ necessary.
 
 ## Features
 
-- Brush and eraser with drawing-tablet pressure support
-- 17 built-in pen, marker, airbrush, and spray presets
-- Crisp pixel-edged strokes inspired by hand-drawn animation tools
-- Optional per-stroke anti-aliasing for smooth lines
-- A wobble-off mode for using the app as a regular drawing tool
-- Boiling-line wobble with independently redrawn, fully loopable frames
-- Persistent lasso and auto selection with an action bar for previewing
-  move, scale, rotate, and flip combinations before applying or
-  cancelling them, plus duplicate, delete, deselect, and undo support
-- Selection-aware brush, eraser, and paint bucket edits
-- Change the canvas area without scaling the artwork by using absolute
-  or relative dimensions, a 3×3 anchor, and offsets to crop or expand it
-- Resize artwork and brush sizes by exact pixel dimensions or
-  percentage, with an option to preserve the image aspect ratio
-- A logarithmic 1–1600% zoom slider, true 100% actual-pixel view, and
-  fit-to-window view
-- Layers with thumbnails, visibility, opacity, and drag reordering;
-  the last layer can be deleted to leave an empty, zero-layer canvas
-- A timeline with a frame scrubber, a live wobble preview, and
-  adjustable wobble strength, frame count, and FPS
-- Per-stroke roughness control layered on top of the global wobble
-- Looping GIF export and current-frame PNG or JPG export
-- `.wagle` project files with undo and redo
-- Automatic recovery of unsaved work after an interrupted session
-- Last-used tool, color, brush preset, per-preset brush sizes, eraser size,
-  roughness, and anti-aliasing restored after restarting the app
-- Persistent recent colors and a configurable default save folder
+- Pressure-sensitive brush and eraser with 17 pen, marker, airbrush,
+  and spray presets
+- Loopable boiling-line wobble, redrawn every frame — or turn it off and
+  draw like a regular paint app
+- Crisp pixel-edged strokes with per-stroke anti-aliasing and roughness
+- Lasso and auto selection that previews move, scale, rotate, and flip
+  before applying
+- Canvas resizing that crops or expands without scaling the artwork, and
+  image resizing that scales it
+- Layers with thumbnails, visibility, opacity, and drag reordering
+- A timeline with a live preview and adjustable wobble strength, frame
+  count, and FPS
+- 1–1600% zoom, true 100% actual-pixel view, and fit-to-window
+- Looping GIF, PNG, and JPG export plus `.wagle` project files
+- Crash recovery and restored tool, color, and brush settings on restart
 - Customizable shortcuts and an English, Korean, or Japanese interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
 
