@@ -75,6 +75,9 @@ public:
             return;
         }
 
+        // Claim the interval before starting the network request. A temporary
+        // outage must not turn every application launch into another poll;
+        // the explicit Check for Updates action remains available.
         settings.setValue(QString::fromLatin1(lastAutomaticCheckKey), now);
         startCheck(false);
     }

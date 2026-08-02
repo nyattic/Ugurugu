@@ -17,6 +17,8 @@ class DocumentSerializer
     Q_DECLARE_TR_FUNCTIONS(wobble::DocumentSerializer)
 
 public:
+    // Process-local, thread-confined cache for compressed mask payloads.
+    // PreparedDocument instances never pin its bounded LRU entries.
     class SerializationCache final
     {
     public:
@@ -58,6 +60,8 @@ public:
         friend class DocumentSerializer;
     };
 
+    // Immutable normalized document paired with an exact Compact JSON
+    // byte-size plan. Only prepared documents should enter editable state.
     class PreparedDocument final
     {
     public:
@@ -100,6 +104,10 @@ public:
         PreparedDocument prepared;
     };
 
+    // A capability issued only after matching payload backings against an
+    // immutable PreparedDocument. History replay may use the retained
+    // backings without copying them again; arbitrary caller-owned aliases can
+    // never manufacture this capability.
     class ImmutableBackingLease final
     {
     public:

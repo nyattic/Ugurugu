@@ -974,6 +974,8 @@ private slots:
         QSignalSpy modifiedChangedSpy(
             &controller, &DocumentController::modifiedChanged);
 
+        // The aggregate command has one prepared target. Rejecting that
+        // target must leave the entire document/selection transaction still.
         DocumentControllerTestAccess::failHistoryPrepareAfter(controller, 0);
         controller.undoStack()->undo();
 
@@ -1071,6 +1073,8 @@ private slots:
                     reentrantSaveSucceeded =
                         controller.saveDocument(rejectedSavePath);
                     controller.markSaved();
+                    // Active-layer selection is deliberately non-history UI
+                    // state and remains legal after the target is installed.
                     controller.setActiveLayer(secondLayerId);
                 }
                 else if (phase == 2)

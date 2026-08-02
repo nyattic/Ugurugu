@@ -13,6 +13,11 @@ namespace wobble
 class RenderEngine
 {
 public:
+    // DisplayPreview replays ordered framebuffer operations directly at the
+    // requested display scale when the output is no larger on either axis
+    // and smaller on at least one. NativeExact always renders the native
+    // framebuffer first and only then scales it; use it for saved/exported
+    // pixels and comparisons.
     enum class ScaledRenderMode
     {
         DisplayPreview,
@@ -23,6 +28,9 @@ public:
     {
         bool usedDisplayScaleReplay = false;
         bool usedNativeExactFallback = false;
+        // DisplayPreview diagnostics for renderer-owned QImages only.
+        // Existing document masks and private paint-engine scratch storage
+        // are deliberately not counted. These remain zero on exact fallback.
         QSize largestIntermediateImageSize;
         quint64 largestIntermediateImageBytes = 0;
         quint64 maximumEstimatedWorkingSetBytes = 0;
@@ -180,6 +188,11 @@ public:
     static QImage composeLayerSplitRegion(const LayerSplitFrame &split,
         const QImage &layerImage,
         const QRect &outputRegion);
+    // Replays one selection operation against an already rendered layer
+    // framebuffer. DisplayPreview applies the scale-conjugated operation
+    // directly when layerImage is no larger than operation.canvasSize on
+    // either axis and smaller on at least one; otherwise the framebuffer must
+    // be native-sized.
     static bool replayPixelSelectionOnLayer(QImage &layerImage,
         const PixelSelectionOp &operation,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,

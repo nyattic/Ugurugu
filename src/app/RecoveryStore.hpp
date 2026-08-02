@@ -54,6 +54,8 @@ public:
     static bool discard(QString *error = nullptr);
     static QString preserve(QString *error = nullptr);
 
+    // Moves an unreadable recovery aside so it can be inspected or recovered
+    // manually. On failure, the original file is deliberately left intact.
     static QString quarantine(QString *error = nullptr);
 };
 

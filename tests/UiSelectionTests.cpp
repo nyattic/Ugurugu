@@ -2330,6 +2330,8 @@ private slots:
 
         controller.undoStack()->beginMacro(QStringLiteral("Resize canvas"));
         canvas.deselectSelection();
+        // Selection changes are journaled while a macro is open; the UI is
+        // updated only if the whole document transaction commits.
         QVERIFY(canvas.hasSelection());
         QVERIFY(!controller.resizeCanvas(controller.document().size,
             QPoint(static_cast<int>(

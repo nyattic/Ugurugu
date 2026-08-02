@@ -9,6 +9,10 @@
 namespace wobble
 {
 
+// Explicit image surfaces owned by one selection transform. Input masks and
+// QPainter-internal allocations are not included. peakLiveImageBytes is the
+// maximum sum of surfaces that are alive at the same time, including the
+// returned full-size support image when applicable.
 struct SelectionTransformMemoryStats
 {
     QRect sourceBounds;

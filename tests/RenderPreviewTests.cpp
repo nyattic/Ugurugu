@@ -208,6 +208,8 @@ private slots:
 
         const QImage selection =
             rectangularMask(document.size, QRect(16, 16, 32, 32));
+        // x' = 96 - y, y' = x: an integral quarter turn whose display
+        // transform is anisotropic at the requested 1/4 x 1/8 scale.
         const QTransform quarterTurn(
             0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 96.0, 0.0, 1.0);
         const std::optional<PixelSelectionOp> pixelOperation =
@@ -363,6 +365,7 @@ private slots:
         QVERIFY(stats.largestIntermediateImageBytes
                 <= static_cast<quint64>(outputSize.width())
                        * outputSize.height() * sizeof(QRgb));
+        // The left part clipped by the crop must not reappear on expansion.
         QCOMPARE(preview.pixelColor(1, 4), QColor(Qt::transparent));
     }
 

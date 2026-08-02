@@ -771,6 +771,10 @@ struct DocumentController::DocumentDelta
             return {};
         }
 
+        // Appending is the dominant drawing path, while equal-position
+        // replacement covers transforms.  Avoid two large UUID hash tables
+        // when the common prefix already proves that no sequence matching is
+        // needed.
         const int commonPrefixSize = std::min(before.size(), after.size());
         StrokeSequenceDelta aligned;
         bool commonPrefixMatches = true;
@@ -4161,6 +4165,9 @@ void DocumentController::applyPreparedState(const PreparedState &state,
     }
 
     const bool wasModified = isModified();
+    // Install the complete observable controller state before any callback.
+    // Slots may query or modify the controller synchronously from the
+    // command's effect and documentChanged signals.
     m_currentState = std::move(appliedState);
     m_currentHistoryNode = historyNode;
     m_currentContentRevision = contentRevision;

@@ -571,6 +571,8 @@ struct PreviewScaleMapping
 
     QPoint nativeSampleForDisplayPixel(const QPoint &displayPixel) const
     {
+        // Sampling pixel centers keeps masks and framebuffer pixels in the
+        // same display-space coordinate system, including non-integral zoom.
         return QPoint(static_cast<int>(std::floor(
                           (displayPixel.x() + 0.5) / horizontalScale)),
             static_cast<int>(
@@ -579,6 +581,8 @@ struct PreviewScaleMapping
 
     QTransform displayTransform(const QTransform &nativeTransform) const
     {
+        // D * T * D^-1, written explicitly for Qt's affine coefficient
+        // layout. This is also correct for non-uniform preview scaling.
         return QTransform(nativeTransform.m11(),
             nativeTransform.m12() * verticalScale / horizontalScale,
             0.0,
@@ -908,6 +912,8 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
                 return false;
             }
             nativeCanvasSize = operation.reframeOp->targetSize;
+            // Cached masks and paths belong to the previous framebuffer
+            // epoch and therefore to a different display surface.
             clipPaths.clear();
             scaledClipMasks.clear();
         }

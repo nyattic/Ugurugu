@@ -68,6 +68,9 @@ public:
     bool hasSelectionTransformSession() const;
     bool hasPendingSelectionTransform() const;
     QTransform pendingSelectionTransform() const;
+    // Persistence/export snapshot equal to the on-screen preview. Appends
+    // the pending PixelSelectionOp to a document copy without touching the
+    // live document or history; intended for export/autosave, not painting.
     Document documentWithPendingSelectionTransform() const;
     bool scaleSelection(qreal factor);
     bool rotateSelection(qreal degrees);
