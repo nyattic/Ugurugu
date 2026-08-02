@@ -640,8 +640,13 @@ bool MainWindow::recoverAutosave()
             recoveryPath.toUtf8().constData(),
             error.toUtf8().constData());
         QString preservationError;
-        const QString quarantinedPath =
-            RecoveryStore::quarantine(&preservationError);
+        QString quarantinedPath;
+        m_recoveryWriter.runExclusiveFileOperation(
+            [&preservationError, &quarantinedPath]()
+            {
+                quarantinedPath = RecoveryStore::quarantine(&preservationError);
+                return !quarantinedPath.isEmpty();
+            });
         const QString preservedPath =
             quarantinedPath.isEmpty() ? recoveryPath : quarantinedPath;
         if (!preservationError.isEmpty())
@@ -1896,7 +1901,12 @@ void MainWindow::connectDocument()
         [this]()
         {
             m_autosavePending = true;
+            ++m_autosaveEditGeneration;
         });
+    connect(&m_recoveryWriter,
+        &RecoveryWriter::writeFinished,
+        this,
+        &MainWindow::handleAutosaveWritten);
     connect(&m_controller,
         &DocumentController::modifiedChanged,
         this,
@@ -1918,6 +1928,7 @@ void MainWindow::connectDocument()
             if (dirty || m_controller.isModified())
             {
                 m_autosavePending = true;
+                ++m_autosaveEditGeneration;
             }
             else
             {
@@ -2355,40 +2366,68 @@ void MainWindow::writeAutosave()
     {
         return;
     }
-    if (m_recoveryRevision == std::numeric_limits<quint64>::max())
+    const quint64 lastRevision =
+        std::max(m_recoveryRevision, m_submittedRecoveryRevision);
+    if (lastRevision == std::numeric_limits<quint64>::max())
     {
         m_recoverySessionId = QUuid::createUuid();
         m_recoveryRevision = 0;
+        m_submittedRecoveryRevision = 0;
     }
-    const quint64 nextRevision = m_recoveryRevision + 1;
+    const quint64 nextRevision =
+        std::max(m_recoveryRevision, m_submittedRecoveryRevision) + 1;
     const RecoveryStore::Metadata metadata{m_recoverySessionId,
         m_currentFilePath,
         nextRevision,
         QDateTime::currentDateTimeUtc()};
-    QString error;
-    const bool saved =
-        m_canvas->hasPendingSelectionTransform()
-            ? RecoveryStore::save(
-                  m_canvas->documentWithPendingSelectionTransform(),
-                  metadata,
-                  &error)
-            : RecoveryStore::save(m_controller, metadata, &error);
-    if (!saved)
+    if (m_canvas->hasPendingSelectionTransform())
+    {
+        m_recoveryWriter.submitWrite(
+            m_canvas->documentWithPendingSelectionTransform(), metadata);
+    }
+    else
+    {
+        QString error;
+        std::optional<DocumentSerializer::PreparedDocument> snapshot =
+            m_controller.serializationSnapshot(&error);
+        if (!snapshot)
+        {
+            spdlog::warn(
+                "Skipped recovery snapshot: {}", error.toUtf8().constData());
+            return;
+        }
+        m_recoveryWriter.submitWrite(std::move(*snapshot), metadata);
+    }
+    m_submittedRecoveryRevision = nextRevision;
+    m_submittedEditGeneration = m_autosaveEditGeneration;
+}
+
+void MainWindow::handleAutosaveWritten(
+    bool success, quint64 revision, const QString &error)
+{
+    if (!success)
     {
         spdlog::warn("Failed to write recovery file {}: {}",
             RecoveryStore::filePath().toUtf8().constData(),
             error.toUtf8().constData());
         return;
     }
-    m_recoveryRevision = nextRevision;
+    m_recoveryRevision = std::max(m_recoveryRevision, revision);
     clearRecoveryMetadata();
-    m_autosavePending = false;
+    if (m_autosaveEditGeneration == m_submittedEditGeneration)
+    {
+        m_autosavePending = false;
+    }
 }
 
 bool MainWindow::discardAutosave()
 {
     QString error;
-    if (!RecoveryStore::discard(&error))
+    if (!m_recoveryWriter.runExclusiveFileOperation(
+            [&error]()
+            {
+                return RecoveryStore::discard(&error);
+            }))
     {
         spdlog::warn("{}", error.toUtf8().constData());
         QMessageBox::warning(this,
@@ -2401,13 +2440,20 @@ bool MainWindow::discardAutosave()
     m_recoveryOwnedBySession = true;
     m_recoverySessionId = QUuid::createUuid();
     m_recoveryRevision = 0;
+    m_submittedRecoveryRevision = 0;
     return true;
 }
 
 QString MainWindow::preserveAutosave()
 {
     QString error;
-    const QString preservedPath = RecoveryStore::preserve(&error);
+    QString preservedPath;
+    m_recoveryWriter.runExclusiveFileOperation(
+        [&error, &preservedPath]()
+        {
+            preservedPath = RecoveryStore::preserve(&error);
+            return !preservedPath.isEmpty();
+        });
     if (preservedPath.isEmpty())
     {
         spdlog::warn("{}", error.toUtf8().constData());
@@ -2421,6 +2467,7 @@ QString MainWindow::preserveAutosave()
     m_recoveryOwnedBySession = true;
     m_recoverySessionId = QUuid::createUuid();
     m_recoveryRevision = 0;
+    m_submittedRecoveryRevision = 0;
     return preservedPath;
 }
 

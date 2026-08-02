@@ -181,6 +181,25 @@ public:
         window.m_controller.addLayer();
         window.m_autosavePending = true;
         window.writeAutosave();
+        flushAutosave(window);
+    }
+
+    static bool flushAutosave(MainWindow &window)
+    {
+        const bool idle = window.m_recoveryWriter.waitForIdle(15000);
+        QApplication::processEvents();
+        return idle;
+    }
+
+    static void requestAutosave(MainWindow &window)
+    {
+        window.m_autosavePending = true;
+        window.writeAutosave();
+    }
+
+    static void setAutosaveWriterSuspended(MainWindow &window, bool suspended)
+    {
+        window.m_recoveryWriter.setSuspendedForTesting(suspended);
     }
 
     static bool loadDocument(MainWindow &window, Document document)
@@ -2476,6 +2495,7 @@ private slots:
 
         QEvent deactivate(QEvent::ApplicationDeactivate);
         QApplication::sendEvent(qApp, &deactivate);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
         QVERIFY(QFileInfo::exists(recoveryPath));
         QVERIFY(canvas->hasPendingSelectionTransform());
         QCOMPARE(stackUndoAction->text(), stackTextBefore);
@@ -5202,6 +5222,91 @@ private slots:
         QCOMPARE(afterAutosave.readAll(), recoveryBytes);
     }
 
+    void capturesAutosaveSnapshotWhileEditingContinues()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+
+        MainWindow window;
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        controller.addLayer();
+        const qsizetype layersAtSubmit = controller.document().layers.size();
+
+        MainWindowTestAccess::requestAutosave(window);
+        controller.addLayer();
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+
+        QString error;
+        std::optional<RecoveryStore::Snapshot> snapshot =
+            RecoveryStore::load(&error);
+        QVERIFY2(snapshot.has_value(), qPrintable(error));
+        QCOMPARE(snapshot->document.layers.size(), layersAtSubmit);
+
+        MainWindowTestAccess::requestAutosave(window);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+        snapshot = RecoveryStore::load(&error);
+        QVERIFY2(snapshot.has_value(), qPrintable(error));
+        QCOMPARE(snapshot->document.layers.size(), layersAtSubmit + 1);
+        QVERIFY(snapshot->metadata.has_value());
+        QVERIFY(snapshot->metadata->revision >= 2);
+    }
+
+    void dropsQueuedAutosaveAfterDiscard()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        MainWindow window;
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        controller.addLayer();
+
+        MainWindowTestAccess::setAutosaveWriterSuspended(window, true);
+        MainWindowTestAccess::requestAutosave(window);
+        QVERIFY(MainWindowTestAccess::clearAutosave(window));
+        MainWindowTestAccess::setAutosaveWriterSuspended(window, false);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+    }
+
+    void flushesPendingAutosaveOnWindowTeardown()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        {
+            MainWindow window;
+            DocumentController &controller =
+                MainWindowTestAccess::controller(window);
+            controller.addLayer();
+            MainWindowTestAccess::setAutosaveWriterSuspended(window, true);
+            MainWindowTestAccess::requestAutosave(window);
+        }
+
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QString error;
+        const std::optional<RecoveryStore::Snapshot> snapshot =
+            RecoveryStore::load(&error);
+        QVERIFY2(snapshot.has_value(), qPrintable(error));
+        QCOMPARE(snapshot->document.layers.size(), 2);
+    }
+
     void treatsRequestedRecoveryPathAsRecoveryOnly()
     {
         EnvironmentVariableGuard environmentGuard(
@@ -5419,6 +5524,7 @@ private slots:
         QTRY_VERIFY(window.isWindowModified());
         QEvent deactivate(QEvent::ApplicationDeactivate);
         QApplication::sendEvent(qApp, &deactivate);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
 
         QVERIFY(QFileInfo::exists(recoveryPath));
         QVERIFY(QFileInfo::exists(preservedPath));
@@ -5963,6 +6069,7 @@ private slots:
 
         QEvent deactivate(QEvent::ApplicationDeactivate);
         QApplication::sendEvent(qApp, &deactivate);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
         QVERIFY(QFileInfo::exists(recoveryPath));
 
         QString error;

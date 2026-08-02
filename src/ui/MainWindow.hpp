@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/RecoveryWriter.hpp"
 #include "document/DocumentController.hpp"
 
 #include <QList>
@@ -76,6 +77,8 @@ private:
     bool discardAutosave();
     QString preserveAutosave();
     void clearRecoveryMetadata();
+    void handleAutosaveWritten(
+        bool success, quint64 revision, const QString &error);
     void warnLegacyLayerHierarchy();
     void writeAutosave();
     bool clearAutosave();
@@ -131,6 +134,10 @@ private:
     bool m_recoveryOwnedBySession = false;
     QUuid m_recoverySessionId = QUuid::createUuid();
     quint64 m_recoveryRevision = 0;
+    quint64 m_submittedRecoveryRevision = 0;
+    quint64 m_autosaveEditGeneration = 0;
+    quint64 m_submittedEditGeneration = 0;
+    RecoveryWriter m_recoveryWriter;
 
     friend class MainWindowTestAccess;
 };

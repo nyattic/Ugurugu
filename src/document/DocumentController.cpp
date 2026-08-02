@@ -2430,6 +2430,24 @@ QByteArray DocumentController::serializeDocument(
                           : QByteArray();
 }
 
+std::optional<DocumentSerializer::PreparedDocument>
+DocumentController::serializationSnapshot(QString *error) const
+{
+    if (error)
+    {
+        error->clear();
+    }
+    if (m_undoStack.m_moving || hasOpenHistoryMacro() || !m_currentState)
+    {
+        if (error)
+        {
+            *error = tr("Cannot save an unfinished history transaction.");
+        }
+        return std::nullopt;
+    }
+    return *m_currentState;
+}
+
 void DocumentController::markSaved()
 {
     if (m_undoStack.m_moving || hasOpenHistoryMacro())

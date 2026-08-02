@@ -6,6 +6,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/app/MemoryBudget.hpp
     src/app/RecoveryStore.cpp
     src/app/RecoveryStore.hpp
+    src/app/RecoveryWriter.cpp
+    src/app/RecoveryWriter.hpp
     src/app/ReleaseNotes.cpp
     src/app/ReleaseNotes.hpp
     src/app/UpdateCheckPolicy.cpp

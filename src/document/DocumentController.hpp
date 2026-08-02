@@ -131,6 +131,8 @@ public:
     bool saveDocument(const QString &filePath, QString *error = nullptr);
     QByteArray serializeDocument(
         const QJsonObject &additionalRootFields, QString *error = nullptr);
+    std::optional<DocumentSerializer::PreparedDocument> serializationSnapshot(
+        QString *error = nullptr) const;
     void markSaved();
     bool resizeImage(const QSize &size);
     bool resizeCanvas(const QSize &size, const QPoint &contentOffset);

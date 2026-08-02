@@ -173,6 +173,16 @@ std::optional<RecoveryStore::Metadata> metadataFromJson(const QJsonValue &value)
 
 }
 
+bool RecoveryStore::isValidMetadata(const Metadata &metadata)
+{
+    return validMetadata(metadata);
+}
+
+QJsonObject RecoveryStore::metadataRootFields(const Metadata &metadata)
+{
+    return recoveryRootFields(metadata);
+}
+
 QString RecoveryStore::filePath()
 {
     const QString configured =

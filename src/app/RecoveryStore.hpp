@@ -3,6 +3,7 @@
 #include "document/Document.hpp"
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QString>
 #include <QUuid>
 
@@ -41,6 +42,8 @@ public:
     static QString filePath();
     static bool isRecoveryPath(const QString &candidatePath);
     static bool ensureParentDirectory(QString *error = nullptr);
+    static bool isValidMetadata(const Metadata &metadata);
+    static QJsonObject metadataRootFields(const Metadata &metadata);
     static bool save(const Document &document,
         const Metadata &metadata,
         QString *error = nullptr);
