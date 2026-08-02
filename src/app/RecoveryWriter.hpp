@@ -16,6 +16,10 @@
 namespace wobble
 {
 
+// Serializes and writes recovery snapshots on a private thread. Every public
+// method is called from the owning thread; only performWrite runs on the
+// worker. At most one write is pending, so a newer snapshot replaces an
+// unstarted one instead of queueing behind it.
 class RecoveryWriter final : public QObject
 {
     Q_OBJECT

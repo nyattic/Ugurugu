@@ -174,6 +174,10 @@ struct Layer
     QVector<Stroke> strokes;
 };
 
+// Reset a layer identity with `= QUuid()`, never `= {}`. Qt 6.11 adds
+// QUuid::operator=(const GUID &) on Windows, which makes the braced form
+// ambiguous against the copy and move assignment operators and fails the
+// build outright.
 struct Document
 {
     QSize size = QSize(1024, 768);

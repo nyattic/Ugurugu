@@ -2383,6 +2383,10 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
     {
         return;
     }
+    // A TabletRelease reports pressure 0 because the pen has already left the
+    // surface, and the clamp in continueStroke would turn that into the
+    // minimum width. Carrying the last sampled pressure forward keeps the
+    // taper that the preceding TabletMove events already produced.
     const qreal endpointPressure = m_activeStroke.points.constLast().pressure;
     continueStroke(widgetPosition, endpointPressure, timestamp);
     const QPointF finalPosition = m_strokeStabilizer.finish(

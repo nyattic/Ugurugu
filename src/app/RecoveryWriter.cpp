@@ -181,6 +181,10 @@ bool RecoveryWriter::performWrite(const PendingWrite &request, QString *error)
         return false;
     }
 
+    // runExclusiveFileOperation bumps the generation while holding the mutex,
+    // so a write that started before it must discard its QSaveFile here. The
+    // commit is what the generation guards: without this check a write that
+    // began earlier could resurrect the recovery file after a delete.
     QMutexLocker locker(&m_mutex);
     if (request.generation != m_generation)
     {

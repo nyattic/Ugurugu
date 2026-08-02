@@ -10,6 +10,12 @@ namespace wobble
 namespace
 {
 
+// This is the 1 Euro filter (Casiez, Roussel and Vogel, CHI 2012): a low-pass
+// whose cutoff rises with the filtered speed, so slow movement is smoothed
+// heavily and fast movement keeps its lag low. derivativeCutoff is the
+// filter's dcutoff and the paper's default. The minimum cutoff and the speed
+// coefficient are its fcmin and beta; strength interpolates each between the
+// weakest and strongest ends rather than exposing them separately.
 constexpr qreal defaultSampleInterval = 1.0 / 120.0;
 constexpr qreal minimumSampleInterval = 1.0 / 1000.0;
 constexpr qreal maximumSampleInterval = 0.1;
@@ -99,6 +105,8 @@ QPointF StrokeStabilizer::finish(const QPointF &position, quint64 timestamp)
     {
         return begin(position, timestamp);
     }
+    // The stroke must end on the position the user actually lifted at, so the
+    // filter state is snapped to the raw sample instead of being advanced.
     m_filteredPosition = position;
     m_filteredVelocity = {};
     rememberRawSample(position, timestamp);

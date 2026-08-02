@@ -30,11 +30,19 @@ public:
         bool valid = false;
     };
 
+    // Redraws only the tiles the appended points touch. The result must stay
+    // pixel-identical to rendering the whole stroke from scratch, which is
+    // what the coverage regression tests assert; anything that changes how a
+    // primitive rasterizes has to invalidate the affected tiles rather than
+    // blend over them. A different base layer or clip mask discards the cache,
+    // both detected by QImage::cacheKey.
     Update update(const QImage &baseLayer,
         const Document &document,
         const Stroke &stroke,
         int frameIndex,
         const QSize &outputSize);
+    // Requires layerImage to match the cached output size exactly and to be
+    // ARGB32_Premultiplied; tiles are copied over it, not composited.
     bool applyTo(QImage &layerImage) const;
     void clear();
 
