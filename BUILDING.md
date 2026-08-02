@@ -2,8 +2,9 @@
 
 ## Requirements
 
-- CMake 3.25 or later
-- Qt 6.10 or later
+- CMake 3.25 or later, and 4.2 or later on Windows for the
+  Visual Studio 18 2026 generator
+- Qt 6.10 or later; releases are built against Qt 6.11.1
 - An internet connection while configuring so CMake can fetch the
   pinned spdlog, Sparkle, or Velopack dependencies
 
@@ -25,18 +26,25 @@ open out/install/macos-release/WagleWaglePaint.app
 ```
 
 The supported deployment target is macOS 14 or later. Use the official
-Qt 6.10 binaries when creating a distributable build; Homebrew Qt may
+Qt 6.11.1 binaries when creating a distributable build; Homebrew Qt may
 have a newer deployment target.
 
 ## Windows
 
-Install Visual Studio 2022 with the Desktop development with C++
-workload and Qt 6.10 for MSVC 2022 x64.
+Install Visual Studio 2026 with the Desktop development with C++
+workload and its C++ Clang tools for Windows component, plus
+Qt 6.11.1 for MSVC 2022 x64.
+
+The Windows presets use the Visual Studio 18 2026 generator with the
+ClangCL toolset, so the build uses clang-cl against the MSVC ABI. The
+Qt MSVC 2022 kit is the right one to install: MSVC v145 keeps binary
+compatibility with v143, and the Velopack updater ships an MSVC import
+library.
 
 Configure, build, and create a deployable application directory:
 
 ```powershell
-cmake --preset windows-release "-DCMAKE_PREFIX_PATH=C:\Qt\6.x.x\msvc2022_64"
+cmake --preset windows-release "-DCMAKE_PREFIX_PATH=C:\Qt\6.11.1\msvc2022_64"
 cmake --build --preset windows-release
 cmake --install out/build/windows-release --config Release --prefix out/install/windows-release
 .\out\install\windows-release\WagleWaglePaint.exe

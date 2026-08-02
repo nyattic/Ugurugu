@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  QT_VERSION: 6.10.3
+  QT_VERSION: 6.11.1
+  AQT_SOURCE: 'git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e'
   VELOPACK_VERSION: 1.2.0
 
 jobs:
@@ -34,6 +35,7 @@ jobs:
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
         with:
           version: '${{ env.QT_VERSION }}'
+          aqtsource: '${{ env.AQT_SOURCE }}'
           host: mac
           target: desktop
           cache: true
@@ -309,7 +311,7 @@ jobs:
   windows:
     name: Build Windows release
     needs: quality
-    runs-on: windows-2022
+    runs-on: windows-2025
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -322,6 +324,7 @@ jobs:
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
         with:
           version: '${{ env.QT_VERSION }}'
+          aqtsource: '${{ env.AQT_SOURCE }}'
           host: windows
           target: desktop
           arch: win64_msvc2022_64

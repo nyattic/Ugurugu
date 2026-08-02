@@ -62,7 +62,7 @@
       "inherits": "macos-release",
       "displayName": "macOS Distribution",
       "cacheVariables": {
-        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.10.3"
+        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.11.1"
       }
     },
     {
@@ -77,8 +77,9 @@
       "name": "windows-debug",
       "inherits": "base",
       "displayName": "Windows Debug",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "ClangCL",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -92,8 +93,9 @@
       "name": "windows-release",
       "inherits": "base",
       "displayName": "Windows Release",
-      "generator": "Visual Studio 17 2022",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
+      "toolset": "ClangCL",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -108,7 +110,7 @@
       "inherits": "windows-release",
       "displayName": "Windows Distribution",
       "cacheVariables": {
-        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.10.3"
+        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.11.1"
       }
     }
   ],
