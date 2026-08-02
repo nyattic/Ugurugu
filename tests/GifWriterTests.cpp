@@ -298,6 +298,26 @@ private slots:
         QVERIFY(decoded.pixelColor(16, 12).red() > 180);
     }
 
+    void cancelsBeforeCommittingOutput()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QImage frame(256, 256, QImage::Format_ARGB32);
+        frame.fill(QColor(40, 90, 210));
+        const QString path = directory.filePath(QStringLiteral("canceled.gif"));
+        int checks = 0;
+        QString error;
+        QVERIFY(!GifWriter::write(path,
+            QVector<QImage>(12, frame),
+            5,
+            &error,
+            [&checks]()
+            {
+                return ++checks >= 4;
+            }));
+        QVERIFY(!QFileInfo::exists(path));
+    }
+
     void writesRenderedWobbleAnimation()
     {
         Document document = Document::createDefault(QSize(320, 200));

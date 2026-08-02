@@ -5,6 +5,7 @@ find_package(
     REQUIRED
     COMPONENTS
     Core
+    Concurrent
     Gui
     Widgets
     LinguistTools
@@ -78,7 +79,6 @@ if(APPLE)
         "${WAGLEWAGLEPAINT_SPARKLE_FRAMEWORK}"
     )
 elseif(WIN32)
-    find_package(Qt6 6.10 REQUIRED COMPONENTS Concurrent)
     FetchContent_Declare(
         velopack
         URL

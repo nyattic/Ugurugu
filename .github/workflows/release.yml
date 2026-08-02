@@ -412,7 +412,7 @@ jobs:
           $current = Join-Path $installRoot "current"
           $application = Join-Path $current "WagleWaglePaint.exe"
           $update = Join-Path $installRoot "Update.exe"
-          $version = Join-Path $installRoot "sq.version"
+          $version = Join-Path $current "sq.version"
           foreach ($path in @($current, $application, $update, $version)) {
             if (-not (Test-Path $path)) {
               throw "Installed package is missing $path"

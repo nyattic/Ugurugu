@@ -7,7 +7,6 @@
 #include "document/LayerHierarchy.hpp"
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
-#include "io/GifWriter.hpp"
 #include "io/RenderExportPolicy.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
@@ -45,7 +44,6 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
-#include <QImageWriter>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
@@ -55,7 +53,6 @@
 #include <QMetaType>
 #include <QProgressDialog>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QSet>
 #include <QSettings>
 #include <QShortcut>
@@ -327,27 +324,6 @@ QSize requestCanvasSize(QWidget *parent,
     return QSize(widthSpin->value(), heightSpin->value());
 }
 
-QVector<int> gifFrameDelays(int frameCount, qreal framesPerSecond)
-{
-    const qreal fps = std::clamp(framesPerSecond,
-        DocumentLimits::minimumFramesPerSecond,
-        DocumentLimits::maximumFramesPerSecond);
-    QVector<int> delays;
-    delays.reserve(frameCount);
-
-    qint64 emittedCentiseconds = 0;
-    for (int frame = 1; frame <= frameCount; ++frame)
-    {
-        const qint64 targetCentiseconds =
-            qRound64(static_cast<qreal>(frame) * 100.0 / fps);
-        const int delay = static_cast<int>(
-            std::max<qint64>(1, targetCentiseconds - emittedCentiseconds));
-        delays.append(delay);
-        emittedCentiseconds += delay;
-    }
-    return delays;
-}
-
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -387,6 +363,21 @@ MainWindow::MainWindow(QWidget *parent)
         this,
         &MainWindow::saveDrawingToolSettings);
     connectDrawingToolSettings();
+    connect(&m_exportWorker,
+        &ExportWorker::progress,
+        this,
+        [this](ExportWorker::Kind, int value, int maximum)
+        {
+            if (m_exportProgress)
+            {
+                m_exportProgress->setMaximum(maximum);
+                m_exportProgress->setValue(value);
+            }
+        });
+    connect(&m_exportWorker,
+        &ExportWorker::finished,
+        this,
+        &MainWindow::handleExportFinished);
     m_autosaveTimer.setInterval(30000);
     connect(
         &m_autosaveTimer, &QTimer::timeout, this, &MainWindow::writeAutosave);
@@ -2528,6 +2519,10 @@ void MainWindow::chooseOpenFile()
 
 void MainWindow::exportGif()
 {
+    if (m_exportWorker.isBusy())
+    {
+        return;
+    }
     const Document document = m_canvas->documentWithPendingSelectionTransform();
     const long double workingBytes =
         AnimationExportPolicy::estimatedWorkingBytes(document);
@@ -2555,61 +2550,19 @@ void MainWindow::exportGif()
     const QString filePath = normalizedPath(selected, QStringLiteral("gif"));
     m_canvas->releaseTransientRenderCaches();
     m_controller.releaseTransientCaches();
-    QVector<QImage> frames;
-    frames.reserve(document.animationFrames);
-
-    QProgressDialog progress(tr("Rendering animation…"),
-        tr("Cancel"),
-        0,
-        document.animationFrames,
-        this);
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setMinimumDuration(300);
-
-    for (int frame = 0; frame < document.animationFrames; ++frame)
+    if (m_exportWorker.startGif(document, filePath))
     {
-        progress.setValue(frame);
-        QApplication::processEvents();
-        if (progress.wasCanceled())
-        {
-            spdlog::info("GIF export canceled");
-            return;
-        }
-        QImage image = RenderEngine::render(document, frame);
-        if (image.isNull())
-        {
-            spdlog::error("Failed to render frame {} for GIF export", frame);
-            QMessageBox::critical(this,
-                tr("Export failed"),
-                tr("A frame could not be rendered. Free some memory or "
-                   "reduce the canvas size and frame count."));
-            return;
-        }
-        frames.append(std::move(image));
+        beginExportProgress(
+            ExportWorker::Kind::Gif, filePath, document.animationFrames);
     }
-    progress.setValue(document.animationFrames);
-
-    QString error;
-    const QVector<int> delaysCentiseconds =
-        gifFrameDelays(document.animationFrames, document.framesPerSecond);
-    if (!GifWriter::write(filePath, frames, delaysCentiseconds, &error))
-    {
-        spdlog::error("Failed to export GIF {}: {}",
-            filePath.toUtf8().constData(),
-            error.toUtf8().constData());
-        QMessageBox::critical(this,
-            tr("Export failed"),
-            tr("Could not export the GIF.\n\n%1").arg(error));
-        return;
-    }
-    statusBar()->showMessage(tr("Exported %1").arg(filePath), 5000);
-    spdlog::info("Exported GIF {} with {} frames",
-        filePath.toUtf8().constData(),
-        frames.size());
 }
 
 void MainWindow::exportImage()
 {
+    if (m_exportWorker.isBusy())
+    {
+        return;
+    }
     const int frame = m_canvas->currentFrame();
     Document exportDocument = m_canvas->documentWithPendingSelectionTransform();
     if (!m_canvas->isWobbleAnimationEnabled())
@@ -2657,49 +2610,108 @@ void MainWindow::exportImage()
                   jpeg ? QStringLiteral("jpg") : QStringLiteral("png"));
     m_canvas->releaseTransientRenderCaches();
     m_controller.releaseTransientCaches();
-    const QImage image = RenderEngine::render(exportDocument, frame);
-    QSaveFile file(filePath);
-    QString error;
-    bool saved = !image.isNull() && file.open(QIODevice::WriteOnly);
-    if (saved)
+    if (m_exportWorker.startImage(
+            std::move(exportDocument), frame, filePath, jpeg))
     {
-        QImageWriter writer(&file, jpeg ? "JPEG" : "PNG");
-        if (jpeg)
-        {
-            writer.setQuality(92);
-        }
-        saved = writer.write(image);
-        if (!saved)
-        {
-            error = writer.errorString();
-        }
+        beginExportProgress(ExportWorker::Kind::Image, filePath, 0);
     }
-    else if (!image.isNull())
+}
+
+void MainWindow::beginExportProgress(
+    ExportWorker::Kind kind, const QString &filePath, int maximum)
+{
+    if (m_exportProgress)
     {
-        error = file.errorString();
+        m_exportProgress->deleteLater();
     }
-    if (saved)
-    {
-        saved = file.commit();
-        if (!saved)
+    m_exportProgress = new QProgressDialog(kind == ExportWorker::Kind::Gif
+                                               ? tr("Rendering animation…")
+                                               : tr("Rendering image…"),
+        tr("Cancel"),
+        0,
+        maximum,
+        this);
+    m_exportProgress->setObjectName(QStringLiteral("exportProgressDialog"));
+    m_exportProgress->setWindowTitle(tr("Export"));
+    m_exportProgress->setWindowModality(Qt::WindowModal);
+    m_exportProgress->setMinimumDuration(0);
+    m_exportProgress->setAutoClose(false);
+    m_exportProgress->setAutoReset(false);
+    m_exportProgress->setProperty("exportFilePath", filePath);
+    QProgressDialog *progress = m_exportProgress;
+    connect(m_exportProgress,
+        &QProgressDialog::canceled,
+        &m_exportWorker,
+        &ExportWorker::cancel);
+    connect(m_exportProgress,
+        &QObject::destroyed,
+        this,
+        [this, progress]()
         {
-            error = file.errorString();
-        }
-    }
-    if (!saved)
+            if (m_exportProgress == progress)
+            {
+                m_exportProgress = nullptr;
+            }
+        });
+    m_exportProgress->show();
+    updateExportActions();
+}
+
+void MainWindow::handleExportFinished(ExportWorker::Kind kind,
+    bool success,
+    bool canceled,
+    const QString &filePath,
+    const QString &error)
+{
+    if (m_exportProgress)
     {
-        spdlog::error("Failed to export image {}: {}",
+        m_exportProgress->deleteLater();
+        m_exportProgress = nullptr;
+    }
+    updateExportActions();
+    if (canceled)
+    {
+        statusBar()->showMessage(tr("Export canceled"), 3000);
+        spdlog::info("Export canceled for {}", filePath.toUtf8().constData());
+        return;
+    }
+    if (!success)
+    {
+        spdlog::error("Failed to export {}: {}",
             filePath.toUtf8().constData(),
             error.toUtf8().constData());
         QMessageBox::critical(this,
             tr("Export failed"),
             error.isEmpty()
-                ? tr("Could not export the image.")
-                : tr("Could not export the image.\n\n%1").arg(error));
+                ? tr("Could not export the file.")
+                : tr("Could not export the file.\n\n%1").arg(error));
         return;
     }
     statusBar()->showMessage(tr("Exported %1").arg(filePath), 5000);
-    spdlog::info("Exported image {}", filePath.toUtf8().constData());
+    if (kind == ExportWorker::Kind::Gif)
+    {
+        spdlog::info("Exported GIF {}", filePath.toUtf8().constData());
+    }
+    else
+    {
+        spdlog::info("Exported image {}", filePath.toUtf8().constData());
+    }
+}
+
+void MainWindow::updateExportActions()
+{
+    const bool idle = !m_exportWorker.isBusy();
+    if (auto *exportGifAction =
+            findChild<QAction *>(QStringLiteral("exportGifAction")))
+    {
+        exportGifAction->setEnabled(
+            idle && m_canvas->isWobbleAnimationEnabled());
+    }
+    if (auto *exportImageAction =
+            findChild<QAction *>(QStringLiteral("exportPngAction")))
+    {
+        exportImageAction->setEnabled(idle);
+    }
 }
 
 void MainWindow::applyWobbleAnimationEnabled(bool enabled)
@@ -2710,7 +2722,7 @@ void MainWindow::applyWobbleAnimationEnabled(bool enabled)
     if (auto *exportGifAction =
             findChild<QAction *>(QStringLiteral("exportGifAction")))
     {
-        exportGifAction->setEnabled(enabled);
+        exportGifAction->setEnabled(enabled && !m_exportWorker.isBusy());
     }
     if (auto *exportImageAction =
             findChild<QAction *>(QStringLiteral("exportPngAction")))
@@ -2719,6 +2731,7 @@ void MainWindow::applyWobbleAnimationEnabled(bool enabled)
                                       : tr("Export &image…");
         exportImageAction->setText(label);
         exportImageAction->setProperty("shortcutLabel", label);
+        exportImageAction->setEnabled(!m_exportWorker.isBusy());
     }
 }
 

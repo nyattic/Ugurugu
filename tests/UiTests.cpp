@@ -5,6 +5,7 @@
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "io/DocumentSerializer.hpp"
+#include "io/ExportWorker.hpp"
 #include "render/PreviewRenderPolicy.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
@@ -42,6 +43,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QFocusEvent>
@@ -51,6 +53,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPaintEvent>
 #include <QPixmap>
 #include <QPointingDevice>
 #include <QPushButton>
@@ -72,6 +75,71 @@
 
 namespace wobble
 {
+
+class CanvasWidgetTestAccess final
+{
+public:
+    static QSize previewRenderSize(const CanvasWidget &canvas)
+    {
+        return canvas.previewRenderSize();
+    }
+
+    static QSize cachedRenderSize(const CanvasWidget &canvas)
+    {
+        return canvas.m_cachedRenderSize;
+    }
+
+    static bool zoomRenderPending(const CanvasWidget &canvas)
+    {
+        return canvas.m_zoomRenderTimer.isActive();
+    }
+
+    static bool hasCachedFrame(const CanvasWidget &canvas, int frame)
+    {
+        return canvas.m_frameCache.object(frame) != nullptr;
+    }
+};
+
+class PaintRegionTracker final : public QObject
+{
+public:
+    void reset()
+    {
+        m_eventCount = 0;
+        m_largestArea = 0;
+    }
+
+    int eventCount() const
+    {
+        return m_eventCount;
+    }
+
+    qint64 largestArea() const
+    {
+        return m_largestArea;
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::Paint)
+        {
+            const auto *paintEvent = static_cast<QPaintEvent *>(event);
+            qint64 area = 0;
+            for (const QRect &rect : paintEvent->region())
+            {
+                area += static_cast<qint64>(rect.width()) * rect.height();
+            }
+            m_largestArea = std::max(m_largestArea, area);
+            ++m_eventCount;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    int m_eventCount = 0;
+    qint64 m_largestArea = 0;
+};
 
 class SettingValueGuard final
 {
@@ -595,6 +663,49 @@ private slots:
 
         QTest::keyClick(list, Qt::Key_Space);
         QTRY_VERIFY(controller.document().layer(layerId)->visible);
+    }
+
+    void updatesLayerItemsIncrementallyAndRendersThumbnailsOffThread()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(4096, 4096)));
+        const QUuid layerId = controller.document().activeLayerId;
+        LayerDock dock(&controller);
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(list);
+        QCOMPARE(list->count(), 1);
+        QListWidgetItem *originalItem = list->item(0);
+
+        Stroke stroke;
+        stroke.width = 20.0;
+        stroke.points = {
+            {QPointF(100.0, 100.0), 1.0}, {QPointF(1000.0, 1000.0), 1.0}};
+        QCOMPARE(controller.addStroke(layerId, stroke),
+            DocumentController::AddStrokeResult::Added);
+        QCOMPARE(list->item(0), originalItem);
+        QTRY_VERIFY_WITH_TIMEOUT(!list->item(0)
+                                     ->data(LayerItemRoles::Thumbnail)
+                                     .value<QPixmap>()
+                                     .isNull(),
+            5000);
+
+        QCOMPARE(controller.renameLayer(layerId, QStringLiteral("Retained")),
+            DocumentController::RenameLayerResult::Renamed);
+        QCOMPARE(list->item(0), originalItem);
+        QCOMPARE(list->item(0)->text(), QStringLiteral("Retained"));
+
+        controller.addLayer();
+        QListWidgetItem *retainedItem = nullptr;
+        for (int row = 0; row < list->count(); ++row)
+        {
+            if (list->item(row)->data(LayerItemRoles::LayerId).toUuid()
+                == layerId)
+            {
+                retainedItem = list->item(row);
+                break;
+            }
+        }
+        QCOMPARE(retainedItem, originalItem);
     }
 
     void animatesWobblePreviewOnlyAroundChanges()
@@ -1138,6 +1249,48 @@ private slots:
         MainWindowTestAccess::exportImage(window);
 
         QVERIFY(warningAccepted);
+    }
+
+    void exportsSnapshotsOffThreadAndCancelsWithoutPartialFiles()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Document document = Document::createDefault(QSize(512, 512));
+        document.background = Qt::transparent;
+        Stroke stroke;
+        stroke.width = 16.0;
+        stroke.points = {
+            {QPointF(32.0, 32.0), 1.0}, {QPointF(480.0, 480.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        ExportWorker worker;
+        QSignalSpy finished(&worker, &ExportWorker::finished);
+        bool eventLoopAdvanced = false;
+        QTimer::singleShot(0,
+            &worker,
+            [&eventLoopAdvanced]()
+            {
+                eventLoopAdvanced = true;
+            });
+        const QString imagePath =
+            directory.filePath(QStringLiteral("snapshot.png"));
+        QVERIFY(worker.startImage(document, 0, imagePath, false));
+        QVERIFY(worker.isBusy());
+        QTRY_VERIFY(eventLoopAdvanced);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+        QVERIFY(QFileInfo::exists(imagePath));
+        QVERIFY(!QImage(imagePath).isNull());
+
+        document.animationFrames = 60;
+        const QString gifPath =
+            directory.filePath(QStringLiteral("canceled.gif"));
+        QVERIFY(worker.startGif(document, gifPath));
+        worker.cancel();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 5000);
+        const QList<QVariant> canceledResult = finished.at(1);
+        QVERIFY(!canceledResult.at(1).toBool());
+        QVERIFY(canceledResult.at(2).toBool());
+        QVERIFY(!QFileInfo::exists(gifPath));
     }
 
     void editsStrokePropertyDialogValues()
@@ -1735,6 +1888,7 @@ private slots:
         QTest::mouseMove(canvas, bottomRight, 5);
         QTest::mouseMove(canvas, bottomLeft, 5);
         QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+        QTRY_VERIFY(canvas->hasTransformableSelection());
         QTest::keyClick(canvas, Qt::Key_Delete);
 
         undoAction->trigger();
@@ -1959,7 +2113,7 @@ private slots:
         QVERIFY(!applyTransformAction->isEnabled());
         QVERIFY(!cancelTransformAction->isEnabled());
         duplicateAction->trigger();
-        QVERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(canvas->hasTransformableSelection());
 
         QTest::mouseClick(moveButton, Qt::LeftButton);
         QVERIFY(canvas->selectionMoveMode());
@@ -2135,7 +2289,7 @@ private slots:
         rotateAction->trigger();
         QVERIFY(rotationAccepted);
         QVERIFY(!canvas->hasSelectionTransformSession());
-        QVERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(canvas->hasTransformableSelection());
         const QByteArray rotatedDocument = DocumentSerializer::toJson(
             canvas->documentWithPendingSelectionTransform());
         QVERIFY(rotatedDocument != DocumentSerializer::toJson(document));
@@ -2894,6 +3048,56 @@ private slots:
             cancelButton->mapTo(&canvas, cancelButton->rect().center())));
     }
 
+    void restoresSelectionTogetherWithDeletedContent()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.color = QColor(45, 105, 225);
+        stroke.width = 8.0;
+        stroke.points = {
+            {QPointF(10.0, 50.0), 1.0}, {QPointF(90.0, 50.0), 1.0}};
+        stroke.brush.antialiasing = false;
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(50, 45));
+        QTest::mouseMove(&canvas, center + QPoint(50, -45), 1);
+        QTest::mouseMove(&canvas, center + QPoint(50, 45), 1);
+        QTest::mouseMove(&canvas, center + QPoint(-50, 45), 1);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(50, 45));
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+
+        const QImage before = RenderEngine::render(controller.document(), 0);
+        const int selectionHistoryIndex = controller.undoStack()->index();
+        QVERIFY(canvas.deleteSelection());
+        QVERIFY(!canvas.hasSelection());
+        const QImage after = RenderEngine::render(controller.document(), 0);
+        QVERIFY(after != before);
+        QCOMPARE(controller.undoStack()->index(), selectionHistoryIndex + 1);
+
+        controller.undoStack()->undo();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+
+        controller.undoStack()->redo();
+        QVERIFY(!canvas.hasSelection());
+        QCOMPARE(RenderEngine::render(controller.document(), 0), after);
+    }
+
     void floatingSelectionTransformCommitsOnceAndCancelsLosslessly()
     {
         Document document = Document::createDefault(QSize(120, 100));
@@ -2984,6 +3188,7 @@ private slots:
             originalDocument);
         QCOMPARE(RenderEngine::render(controller.document(), 0), originalFrame);
 
+        QTRY_VERIFY(canvas.hasTransformableSelection());
         QVERIFY(canvas.scaleSelection(1.1));
         QVERIFY(canvas.hasPendingSelectionTransform());
         canvas.setTool(CanvasWidget::Tool::Brush);
@@ -3007,10 +3212,11 @@ private slots:
         QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);
 
+        QTRY_VERIFY(canvas.hasTransformableSelection());
         QVERIFY(canvas.scaleSelection(1.1));
         QVERIFY(controller.resizeCanvas(QSize(130, 100), QPoint(5, 0)));
         QVERIFY(!canvas.hasSelectionTransformSession());
-        QVERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(canvas.hasTransformableSelection());
 
         QVERIFY(canvas.rotateSelection(5.0));
         controller.loadDocument(document);
@@ -3107,6 +3313,7 @@ private slots:
             DocumentSerializer::toJson(controller.document()), beforeTransform);
         QCOMPARE(RenderEngine::render(controller.document(), 0), beforeFrame);
 
+        QTRY_VERIFY(canvas.hasTransformableSelection());
         canvas.setSelectionMoveMode(true);
         const QPoint outsideStart = widgetPoint(QPointF(10.0, 50.0));
         const QPoint outsideEnd = widgetPoint(QPointF(-80.0, 50.0));
@@ -3463,7 +3670,7 @@ private slots:
         lasso(QRectF(10.0, 45.0, 20.0, 10.0));
         QTRY_VERIFY(canvas.hasSelection());
         QVERIFY(!canvas.hasTransformableSelection());
-        QVERIFY(!messages.isEmpty());
+        QTRY_VERIFY(!messages.isEmpty());
         QCOMPARE(messages.last().first().toString(),
             QStringLiteral("No content in the selected area."));
 
@@ -3676,6 +3883,8 @@ private slots:
         QVERIFY(result.renderSucceeded);
         QVERIFY(!result.hasVisiblePixels);
         QCOMPARE(result.renderedFrames, 1);
+        QCOMPARE(result.renderedPixels, 1ULL);
+        QCOMPARE(result.maximumExplicitImageBytes, 4ULL);
 
         document.wobbleAmount = 1.0;
         result = SelectionVisibility::evaluate(
@@ -3683,6 +3892,50 @@ private slots:
         QVERIFY(result.renderSucceeded);
         QVERIFY(!result.hasVisiblePixels);
         QCOMPARE(result.renderedFrames, document.animationFrames);
+        QCOMPARE(result.renderedPixels,
+            static_cast<quint64>(document.animationFrames));
+        QCOMPARE(result.maximumExplicitImageBytes, 4ULL);
+    }
+
+    void resolvesAnimatedSelectionVisibilityWithoutBlockingUi()
+    {
+        Document document = Document::createDefault(QSize(2048, 2048));
+        document.background = Qt::transparent;
+        document.animationFrames = 60;
+        document.wobbleAmount = 4.0;
+        Stroke stroke;
+        stroke.width = 20.0;
+        stroke.points = {
+            {QPointF(800.0, 1024.0), 1.0}, {QPointF(1248.0, 1024.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+
+        bool eventLoopAdvanced = false;
+        QTimer::singleShot(0,
+            &canvas,
+            [&eventLoopAdvanced]()
+            {
+                eventLoopAdvanced = true;
+            });
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(100, 50));
+        QTest::mouseMove(&canvas, center + QPoint(100, 50), 1);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(100, 50));
+        QVERIFY(canvas.hasSelection());
+        QTRY_VERIFY(eventLoopAdvanced);
+        QTRY_VERIFY_WITH_TIMEOUT(canvas.hasTransformableSelection(), 5000);
     }
 
     void packedSelectionSnapshotRoundTripsWithin4kUndoBudget()
@@ -3763,7 +4016,7 @@ private slots:
         controller.pushSelectionStateCommand(
             QStringLiteral("Select"), {}, {}, layerId, selection);
         QVERIFY(canvas.hasSelection());
-        QVERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QByteArray beforeDocument =
             DocumentSerializer::toJson(controller.document());
@@ -4256,6 +4509,34 @@ private slots:
         QVERIFY(qAbs(canvas.zoom() - 1.0) < 0.0001);
     }
 
+    void defersPreviewRerenderUntilZoomInputIsIdle()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(4096, 4096)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        canvas.setZoomPercent(25);
+        QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
+        canvas.grab();
+        const QSize initialRenderSize =
+            CanvasWidgetTestAccess::cachedRenderSize(canvas);
+        QVERIFY(initialRenderSize.isValid());
+
+        canvas.setZoomPercent(50);
+        canvas.setZoomPercent(100);
+        QVERIFY(CanvasWidgetTestAccess::zoomRenderPending(canvas));
+        QCOMPARE(CanvasWidgetTestAccess::previewRenderSize(canvas),
+            initialRenderSize);
+
+        QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
+        QTRY_VERIFY(CanvasWidgetTestAccess::previewRenderSize(canvas)
+                    != initialRenderSize);
+    }
+
     void keepsRegionalStrokePreviewFreeOfSeams()
     {
         DocumentController controller;
@@ -4332,6 +4613,40 @@ private slots:
         QTest::mouseRelease(
             &canvas, Qt::LeftButton, Qt::NoModifier, pointerPosition);
         QCOMPARE(seamPixels, 0);
+    }
+
+    void promotesCompletedStrokePreviewIntoFrameCache()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(4096, 4096)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(25);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(80, 0));
+        for (int step = -60; step <= 80; step += 20)
+        {
+            QTest::mouseMove(&canvas, center + QPoint(step, step / 4), 1);
+        }
+
+        QElapsedTimer timer;
+        timer.start();
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(80, 20));
+        QApplication::processEvents();
+        const qreal penUpMilliseconds = timer.nsecsElapsed() / 1000000.0;
+
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
+            canvas, canvas.currentFrame()));
+        qInfo().nospace() << "4K pen-up cache promotion and next paint took "
+                          << penUpMilliseconds << " ms";
     }
 
     void fitsCanvasToViewportOnFirstShow()
@@ -4421,6 +4736,35 @@ private slots:
         QSignalSpy frameChanges(&canvas, &CanvasWidget::currentFrameChanged);
         QTest::mouseRelease(&canvas, Qt::MiddleButton, Qt::NoModifier, center);
         QTRY_VERIFY_WITH_TIMEOUT(!frameChanges.isEmpty(), 1000);
+    }
+
+    void repaintsOnlyExposedStripsWhilePanning()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(4096, 4096)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(100);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
+
+        PaintRegionTracker tracker;
+        canvas.installEventFilter(&tracker);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(&canvas, Qt::MiddleButton, Qt::NoModifier, center);
+        QApplication::processEvents();
+        tracker.reset();
+
+        QTest::mouseMove(&canvas, center + QPoint(12, 7), 5);
+        QTRY_VERIFY(tracker.eventCount() > 0);
+        QVERIFY(tracker.largestArea()
+                < static_cast<qint64>(canvas.width()) * canvas.height() / 3);
+
+        QTest::mouseRelease(
+            &canvas, Qt::MiddleButton, Qt::NoModifier, center + QPoint(12, 7));
+        canvas.removeEventFilter(&tracker);
     }
 
     void zoomsWithPanModifierCtrlDrag()
@@ -6211,7 +6555,7 @@ private slots:
         QTest::mouseMove(&canvas, bottomLeft, 5);
         QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
         QVERIFY(canvas.hasSelection());
-        QVERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QByteArray documentBeforeMove =
             DocumentSerializer::toJson(controller.document());
@@ -6224,7 +6568,7 @@ private slots:
         QCOMPARE(DocumentSerializer::toJson(controller.document()),
             documentBeforeMove);
         QVERIFY(canvas.hasSelection());
-        QVERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(canvas.hasTransformableSelection());
 
         const QPoint outsideSelection = center + QPoint(140, 140);
         QTest::mousePress(
@@ -6240,7 +6584,7 @@ private slots:
         QCOMPARE(DocumentSerializer::toJson(controller.document()),
             documentBeforeMove);
         QVERIFY(canvas.hasSelection());
-        QVERIFY(canvas.hasTransformableSelection());
+        QTRY_VERIFY(canvas.hasTransformableSelection());
     }
 
     void spacePanIsLimitedToCanvas()

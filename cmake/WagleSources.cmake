@@ -37,6 +37,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/AnimationExportPolicy.hpp
     src/io/DocumentSerializer.cpp
     src/io/DocumentSerializer.hpp
+    src/io/ExportWorker.cpp
+    src/io/ExportWorker.hpp
     src/io/GifWriter.cpp
     src/io/GifWriter.hpp
     src/io/RenderExportPolicy.cpp
@@ -45,6 +47,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/ImageAffineTransformer.hpp
     src/render/ImageResampler.cpp
     src/render/ImageResampler.hpp
+    src/render/IncrementalStrokeRenderer.cpp
+    src/render/IncrementalStrokeRenderer.hpp
     src/render/LayerCompositionPlan.cpp
     src/render/LayerCompositionPlan.hpp
     src/render/RenderEngine.cpp
@@ -53,6 +57,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/PreviewRenderPolicy.hpp
     src/render/StrokeCoverageRenderer.cpp
     src/render/StrokeCoverageRenderer.hpp
+    src/render/StrokeRenderer.cpp
+    src/render/StrokeRenderer.hpp
 )
 
 set(WOBBLEPAINT_UI_SOURCES

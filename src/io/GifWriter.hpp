@@ -5,6 +5,8 @@
 #include <QString>
 #include <QVector>
 
+#include <functional>
+
 namespace wobble
 {
 
@@ -16,12 +18,14 @@ public:
     static bool write(const QString &path,
         const QVector<QImage> &frames,
         int delayCentiseconds,
-        QString *error = nullptr);
+        QString *error = nullptr,
+        const std::function<bool()> &isCanceled = {});
 
     static bool write(const QString &path,
         const QVector<QImage> &frames,
         const QVector<int> &delaysCentiseconds,
-        QString *error = nullptr);
+        QString *error = nullptr,
+        const std::function<bool()> &isCanceled = {});
 };
 
 }

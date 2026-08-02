@@ -21,7 +21,13 @@ wobblepaint_target_defaults(wobblepaint_core)
 add_library(wobblepaint_ui STATIC ${WOBBLEPAINT_UI_SOURCES})
 wobblepaint_target_defaults(wobblepaint_ui)
 target_include_directories(wobblepaint_ui PUBLIC src)
-target_link_libraries(wobblepaint_ui PUBLIC wobblepaint_core Qt6::Widgets)
+target_link_libraries(
+    wobblepaint_ui
+    PUBLIC
+    wobblepaint_core
+    Qt6::Concurrent
+    Qt6::Widgets
+)
 
 if(APPLE)
     target_sources(

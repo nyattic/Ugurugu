@@ -2,6 +2,7 @@
 
 #include "app/RecoveryWriter.hpp"
 #include "document/DocumentController.hpp"
+#include "io/ExportWorker.hpp"
 
 #include <QList>
 #include <QMainWindow>
@@ -15,6 +16,7 @@ class QCloseEvent;
 class QEvent;
 class QLabel;
 class QPushButton;
+class QProgressDialog;
 class QSlider;
 class QSpinBox;
 
@@ -91,6 +93,14 @@ private:
     void chooseOpenFile();
     void exportGif();
     void exportImage();
+    void beginExportProgress(
+        ExportWorker::Kind kind, const QString &filePath, int maximum);
+    void handleExportFinished(ExportWorker::Kind kind,
+        bool success,
+        bool canceled,
+        const QString &filePath,
+        const QString &error);
+    void updateExportActions();
     void applyWobbleAnimationEnabled(bool enabled);
     QString normalizedPath(
         const QString &filePath, const QString &extension) const;
@@ -138,6 +148,8 @@ private:
     quint64 m_autosaveEditGeneration = 0;
     quint64 m_submittedEditGeneration = 0;
     RecoveryWriter m_recoveryWriter;
+    ExportWorker m_exportWorker;
+    QProgressDialog *m_exportProgress = nullptr;
 
     friend class MainWindowTestAccess;
 };

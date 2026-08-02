@@ -59,25 +59,6 @@ bool layerVariesByFrame(const Document &document, const Layer &layer)
         });
 }
 
-bool intersectsVisiblePixels(
-    const QImage &layerImage, const QImage &selectionMask, const QRect &bounds)
-{
-    for (int y = bounds.top(); y <= bounds.bottom(); ++y)
-    {
-        const auto *pixels =
-            reinterpret_cast<const QRgb *>(layerImage.constScanLine(y));
-        const uchar *selection = selectionMask.constScanLine(y);
-        for (int x = bounds.left(); x <= bounds.right(); ++x)
-        {
-            if (selection[x] >= 128 && qAlpha(pixels[x]) != 0)
-            {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 bool intersectsVisiblePixelsInRegion(const QImage &layerImage,
     const QImage &selectionMask,
     const QRect &imageBounds)
@@ -214,18 +195,49 @@ SelectionVisibility::Result SelectionVisibility::evaluate(
         ((preferredFrame % frameCount) + frameCount) % frameCount;
     const bool animated = layerVariesByFrame(document, layer);
     const int framesToInspect = animated ? frameCount : 1;
+    const bool regional = std::none_of(layer.strokes.cbegin(),
+        layer.strokes.cend(),
+        [](const Stroke &stroke)
+        {
+            return stroke.mode == StrokeMode::Fill || stroke.pixelSelectionOp
+                   || stroke.reframeOp;
+        });
     for (int offset = 0; offset < framesToInspect; ++offset)
     {
         const int frame = (normalizedPreferred + offset) % frameCount;
-        QImage layerImage;
-        ++result.renderedFrames;
-        if (!RenderEngine::renderStrokesOnLayer(
-                layerImage, document, layer.strokes, frame, document.size)
-            || layerImage.size() != selectionMask.size())
+        const QSize renderSize = regional ? bounds.size() : document.size;
+        QImage layerImage(renderSize, QImage::Format_ARGB32_Premultiplied);
+        if (layerImage.isNull())
         {
             return result;
         }
-        if (intersectsVisiblePixels(layerImage, selectionMask, bounds))
+        layerImage.fill(Qt::transparent);
+        ++result.renderedFrames;
+        result.renderedPixels += static_cast<quint64>(renderSize.width())
+                                 * static_cast<quint64>(renderSize.height());
+        result.maximumExplicitImageBytes =
+            std::max(result.maximumExplicitImageBytes,
+                static_cast<quint64>(layerImage.sizeInBytes()));
+        const bool rendered =
+            regional ? RenderEngine::renderStrokesOnLayerRegion(layerImage,
+                           document,
+                           layer.strokes,
+                           frame,
+                           document.size,
+                           bounds)
+                     : RenderEngine::renderStrokesOnLayer(layerImage,
+                           document,
+                           layer.strokes,
+                           frame,
+                           document.size);
+        if (!rendered)
+        {
+            return result;
+        }
+        const QRect imageBounds =
+            regional ? bounds : QRect(QPoint(), document.size);
+        if (intersectsVisiblePixelsInRegion(
+                layerImage, selectionMask, imageBounds))
         {
             result.hasVisiblePixels = true;
             result.renderSucceeded = true;

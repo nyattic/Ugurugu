@@ -12,6 +12,7 @@
 #include "ui/Theme.hpp"
 
 #include <QEnterEvent>
+#include <QFutureWatcher>
 #include <QHash>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@
 #include <QResizeEvent>
 #include <QTabletEvent>
 #include <QWheelEvent>
+#include <QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +40,7 @@ constexpr qreal minimumZoom = 0.01;
 constexpr qreal maximumZoom = 16.0;
 constexpr qreal keyboardZoomStep = 1.25;
 constexpr qreal dragZoomDoublingDistance = 120.0;
+constexpr int zoomRenderDelayMilliseconds = 80;
 constexpr int checkerSize = 12;
 
 const QBrush &checkerBrush()
@@ -273,6 +276,15 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
         [this]()
         {
             m_selectionDashOffset -= 1.0;
+            update();
+        });
+    m_zoomRenderTimer.setSingleShot(true);
+    m_zoomRenderTimer.setInterval(zoomRenderDelayMilliseconds);
+    connect(&m_zoomRenderTimer,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
             update();
         });
 
@@ -656,11 +668,7 @@ bool CanvasWidget::deleteSelection()
     const bool removed = m_controller->removeSelectedContent(m_selectionLayer,
         QVector<QUuid>(m_selectedStrokes.cbegin(), m_selectedStrokes.cend()),
         m_selectionMask);
-    if (removed)
-    {
-        clearSelection();
-    }
-    else
+    if (!removed)
     {
         emit interactionMessage(
             tr("The selected content could not be deleted."));
@@ -1281,6 +1289,7 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
         visibleCanvasRect.intersected(QRectF(event->rect()));
     if (!checkerRect.isEmpty())
     {
+        painter.setBrushOrigin(canvasRect.topLeft());
         painter.fillRect(checkerRect, checkerBrush());
     }
 
@@ -1288,33 +1297,71 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
     painter.setTransform(transform);
     const QSize renderSize = previewRenderSize();
     QImage displayedFrame;
-    QImage regionalFrame;
-    QRect regionalBounds;
     bool activeStrokePreviewResolved = false;
     if (m_drawing && !m_activeStroke.points.isEmpty())
     {
-        regionalFrame = activeStrokePreview(
-            document, renderSize, regionalBounds, activeStrokePreviewResolved);
-        if (!regionalFrame.isNull()
-            && regionalBounds == QRect(QPoint(), renderSize))
-        {
-            displayedFrame = regionalFrame;
-            regionalFrame = {};
-            regionalBounds = {};
-        }
+        displayedFrame = activeStrokePreview(
+            document, renderSize, activeStrokePreviewResolved);
     }
     else if (hasPendingSelectionTransform())
     {
+        const auto useRegionalPreview =
+            [this, &displayedFrame](
+                const RenderEngine::PixelSelectionPreviewRegion &region,
+                const QImage &composed)
+        {
+            const QImage baseFrame = frameImage(m_currentFrame);
+            if (!region.valid || baseFrame.isNull()
+                || (!region.bounds.isEmpty() && composed.isNull()))
+            {
+                return false;
+            }
+            if (m_composedPreviewFrame.size() != baseFrame.size()
+                || m_composedPreviewBaseKey != baseFrame.cacheKey())
+            {
+                m_composedPreviewFrame = baseFrame.copy();
+                m_composedPreviewBaseKey = baseFrame.cacheKey();
+                m_composedSelectionPreviewRegion = {};
+            }
+            QPainter compositor(&m_composedPreviewFrame);
+            compositor.setCompositionMode(QPainter::CompositionMode_Source);
+            const QRect resetRegion =
+                m_composedSelectionPreviewRegion.united(region.bounds);
+            if (!resetRegion.isEmpty())
+            {
+                compositor.drawImage(
+                    resetRegion.topLeft(), baseFrame, resetRegion);
+            }
+            if (!region.bounds.isEmpty())
+            {
+                compositor.drawImage(region.bounds.topLeft(), composed);
+            }
+            compositor.end();
+            m_composedSelectionPreviewRegion = region.bounds;
+            displayedFrame = m_composedPreviewFrame;
+            return true;
+        };
         const RenderEngine::LayerSplitFrame &split =
             previewSplit(m_selectionTransformSession.layer, renderSize);
         if (split.valid)
         {
-            QImage layerImage = split.layerBase;
-            if (RenderEngine::replayPixelSelectionOnLayer(
-                    layerImage, m_selectionTransformSession.previewOperation))
+            const RenderEngine::PixelSelectionPreviewRegion region =
+                RenderEngine::replayPixelSelectionOnLayerRegion(split.layerBase,
+                    m_selectionTransformSession.previewOperation);
+            const QImage composed =
+                region.bounds.isEmpty()
+                    ? QImage()
+                    : RenderEngine::composeLayerSplitRegion(
+                          split, region.image, region.bounds);
+            if (!useRegionalPreview(region, composed))
             {
-                displayedFrame =
-                    RenderEngine::composeLayerSplit(split, layerImage);
+                QImage layerImage = split.layerBase;
+                if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
+                        m_selectionTransformSession.previewOperation))
+                {
+                    displayedFrame =
+                        RenderEngine::composeLayerSplit(split, layerImage);
+                }
             }
         }
         if (displayedFrame.isNull())
@@ -1325,21 +1372,35 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
                 m_selectionTransformSession.layer);
             if (rasters.valid && cached != rasters.paintLayers.cend())
             {
-                QImage layerImage = cached.value();
-                if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
-                        m_selectionTransformSession.previewOperation))
+                const RenderEngine::PixelSelectionPreviewRegion region =
+                    RenderEngine::replayPixelSelectionOnLayerRegion(
+                        cached.value(),
+                        m_selectionTransformSession.previewOperation);
+                const QImage composed =
+                    region.bounds.isEmpty()
+                        ? QImage()
+                        : RenderEngine::composeLayerRasterFrameRegion(document,
+                              rasters,
+                              m_selectionTransformSession.layer,
+                              region.image,
+                              region.bounds);
+                if (!useRegionalPreview(region, composed))
                 {
-                    displayedFrame =
-                        RenderEngine::composeLayerRasterFrame(document,
-                            rasters,
-                            m_selectionTransformSession.layer,
-                            layerImage);
+                    QImage layerImage = cached.value();
+                    if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
+                            m_selectionTransformSession.previewOperation))
+                    {
+                        displayedFrame =
+                            RenderEngine::composeLayerRasterFrame(document,
+                                rasters,
+                                m_selectionTransformSession.layer,
+                                layerImage);
+                    }
                 }
             }
         }
     }
-    if (displayedFrame.isNull() && regionalFrame.isNull()
-        && !activeStrokePreviewResolved
+    if (displayedFrame.isNull() && !activeStrokePreviewResolved
         && ((m_drawing && !m_activeStroke.points.isEmpty())
             || hasPendingSelectionTransform()))
     {
@@ -1349,29 +1410,8 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
     {
         displayedFrame = frameImage(m_currentFrame);
     }
-    if (!regionalFrame.isNull() && !regionalBounds.isEmpty()
-        && displayedFrame.size() == renderSize)
-    {
-        if (m_composedPreviewFrame.size() != displayedFrame.size()
-            || m_composedPreviewBaseKey != displayedFrame.cacheKey()
-            || !regionalBounds.contains(m_composedPreviewRegion))
-        {
-            m_composedPreviewFrame = displayedFrame.copy();
-            m_composedPreviewBaseKey = displayedFrame.cacheKey();
-        }
-        QPainter composePainter(&m_composedPreviewFrame);
-        composePainter.setCompositionMode(QPainter::CompositionMode_Source);
-        composePainter.drawImage(regionalBounds.topLeft(), regionalFrame);
-        composePainter.end();
-        m_composedPreviewRegion = regionalBounds;
-        painter.drawImage(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)),
-            m_composedPreviewFrame);
-    }
-    else
-    {
-        painter.drawImage(
-            QRectF(QPointF(0.0, 0.0), QSizeF(document.size)), displayedFrame);
-    }
+    painter.drawImage(
+        QRectF(QPointF(0.0, 0.0), QSizeF(document.size)), displayedFrame);
     painter.restore();
 
     painter.setPen(QPen(Theme::canvasBorder(), 1.0));
@@ -1950,66 +1990,17 @@ QImage CanvasWidget::frameImage(int frame)
     return image;
 }
 
-QRect CanvasWidget::visiblePreviewRect(const QSize &renderSize) const
+QImage CanvasWidget::activeStrokePreview(
+    const Document &document, const QSize &renderSize, bool &resolved)
 {
-    const QSize documentSize = m_controller->document().size;
-    if (documentSize.isEmpty() || renderSize.isEmpty())
-    {
-        return {};
-    }
-    bool invertible = false;
-    const QTransform inverse = documentTransform().inverted(&invertible);
-    if (!invertible)
-    {
-        return QRect(QPoint(), renderSize);
-    }
-    const QRectF documentBounds{QPointF(), QSizeF(documentSize)};
-    const QRectF visibleDocument =
-        inverse.mapRect(QRectF(rect())).intersected(documentBounds);
-    const qreal horizontalScale =
-        static_cast<qreal>(renderSize.width()) / documentSize.width();
-    const qreal verticalScale =
-        static_cast<qreal>(renderSize.height()) / documentSize.height();
-    const QRectF mapped(visibleDocument.x() * horizontalScale,
-        visibleDocument.y() * verticalScale,
-        visibleDocument.width() * horizontalScale,
-        visibleDocument.height() * verticalScale);
-    return mapped.toAlignedRect()
-        .adjusted(-2, -2, 2, 2)
-        .intersected(QRect(QPoint(), renderSize));
-}
-
-QImage CanvasWidget::activeStrokePreview(const Document &document,
-    const QSize &renderSize,
-    QRect &outputBounds,
-    bool &resolved)
-{
-    const QRect visibleRect = visiblePreviewRect(renderSize);
     if (m_activeStrokePreviewResolved
         && m_activeStrokePreviewRenderSize == renderSize
-        && m_activeStrokePreviewVisibleRect == visibleRect
         && m_activeStrokePreviewFrame == m_currentFrame)
     {
-        outputBounds = m_activeStrokePreviewBounds;
         resolved = true;
         return m_activeStrokePreview;
     }
 
-    QRect bounds =
-        RenderEngine::strokePreviewBounds(document, m_activeStroke, renderSize);
-    bounds = bounds.intersected(visibleRect);
-    if (bounds.isEmpty())
-    {
-        m_activeStrokePreview = {};
-        m_activeStrokePreviewBounds = {};
-        m_activeStrokePreviewVisibleRect = visibleRect;
-        m_activeStrokePreviewRenderSize = renderSize;
-        m_activeStrokePreviewFrame = m_currentFrame;
-        m_activeStrokePreviewResolved = true;
-        outputBounds = {};
-        resolved = true;
-        return {};
-    }
     QImage preview;
     if (document.layer(m_activeStrokeLayer))
     {
@@ -2017,17 +2008,47 @@ QImage CanvasWidget::activeStrokePreview(const Document &document,
             previewSplit(m_activeStrokeLayer, renderSize);
         if (split.valid)
         {
-            QImage layerImage = split.layerBase.copy(bounds);
-            if (RenderEngine::renderStrokesOnLayerRegion(layerImage,
+            const IncrementalStrokeRenderer::Update update =
+                m_incrementalStrokeRenderer.update(split.layerBase,
                     document,
-                    {m_activeStroke},
+                    m_activeStroke,
                     m_currentFrame,
-                    renderSize,
-                    bounds,
-                    &m_activeStrokeRenderCache))
+                    renderSize);
+            const QImage baseFrame = frameImage(m_currentFrame);
+            if (update.valid && !baseFrame.isNull())
             {
-                preview = RenderEngine::composeLayerSplitRegion(
-                    split, layerImage, bounds);
+                if (m_composedPreviewFrame.size() != baseFrame.size()
+                    || m_composedPreviewBaseKey != baseFrame.cacheKey())
+                {
+                    m_composedPreviewFrame = baseFrame.copy();
+                    m_composedPreviewBaseKey = baseFrame.cacheKey();
+                }
+                QPainter painter(&m_composedPreviewFrame);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                bool composedAllPatches = true;
+                for (const IncrementalStrokeRenderer::Patch &patch :
+                    update.patches)
+                {
+                    const QImage composed =
+                        RenderEngine::composeLayerSplitRegion(
+                            split, patch.layerImage, patch.bounds);
+                    if (composed.isNull())
+                    {
+                        composedAllPatches = false;
+                        break;
+                    }
+                    painter.drawImage(patch.bounds.topLeft(), composed);
+                }
+                painter.end();
+                if (composedAllPatches)
+                {
+                    preview = m_composedPreviewFrame;
+                }
+                else
+                {
+                    m_composedPreviewFrame = baseFrame.copy();
+                    m_composedPreviewBaseKey = baseFrame.cacheKey();
+                }
             }
         }
         if (preview.isNull())
@@ -2038,21 +2059,52 @@ QImage CanvasWidget::activeStrokePreview(const Document &document,
                 rasters.paintLayers.constFind(m_activeStrokeLayer);
             if (rasters.valid && cached != rasters.paintLayers.cend())
             {
-                QImage layerImage = cached.value().copy(bounds);
-                if (RenderEngine::renderStrokesOnLayerRegion(layerImage,
+                const IncrementalStrokeRenderer::Update update =
+                    m_incrementalStrokeRenderer.update(cached.value(),
                         document,
-                        {m_activeStroke},
+                        m_activeStroke,
                         m_currentFrame,
-                        renderSize,
-                        bounds,
-                        &m_activeStrokeRenderCache))
+                        renderSize);
+                const QImage baseFrame = frameImage(m_currentFrame);
+                if (update.valid && !baseFrame.isNull())
                 {
-                    preview =
-                        RenderEngine::composeLayerRasterFrameRegion(document,
-                            rasters,
-                            m_activeStrokeLayer,
-                            layerImage,
-                            bounds);
+                    if (m_composedPreviewFrame.size() != baseFrame.size()
+                        || m_composedPreviewBaseKey != baseFrame.cacheKey())
+                    {
+                        m_composedPreviewFrame = baseFrame.copy();
+                        m_composedPreviewBaseKey = baseFrame.cacheKey();
+                    }
+                    QPainter painter(&m_composedPreviewFrame);
+                    painter.setCompositionMode(
+                        QPainter::CompositionMode_Source);
+                    bool composedAllPatches = true;
+                    for (const IncrementalStrokeRenderer::Patch &patch :
+                        update.patches)
+                    {
+                        const QImage composed =
+                            RenderEngine::composeLayerRasterFrameRegion(
+                                document,
+                                rasters,
+                                m_activeStrokeLayer,
+                                patch.layerImage,
+                                patch.bounds);
+                        if (composed.isNull())
+                        {
+                            composedAllPatches = false;
+                            break;
+                        }
+                        painter.drawImage(patch.bounds.topLeft(), composed);
+                    }
+                    painter.end();
+                    if (composedAllPatches)
+                    {
+                        preview = m_composedPreviewFrame;
+                    }
+                    else
+                    {
+                        m_composedPreviewFrame = baseFrame.copy();
+                        m_composedPreviewBaseKey = baseFrame.cacheKey();
+                    }
                 }
             }
         }
@@ -2060,15 +2112,11 @@ QImage CanvasWidget::activeStrokePreview(const Document &document,
     if (preview.isNull())
     {
         preview = interactionPreview(document, renderSize);
-        bounds = preview.isNull() ? QRect() : QRect(QPoint(), renderSize);
     }
     m_activeStrokePreview = preview;
-    m_activeStrokePreviewBounds = bounds;
-    m_activeStrokePreviewVisibleRect = visibleRect;
     m_activeStrokePreviewRenderSize = renderSize;
     m_activeStrokePreviewFrame = m_currentFrame;
     m_activeStrokePreviewResolved = !preview.isNull();
-    outputBounds = bounds;
     resolved = m_activeStrokePreviewResolved;
     return preview;
 }
@@ -2076,8 +2124,6 @@ QImage CanvasWidget::activeStrokePreview(const Document &document,
 void CanvasWidget::invalidateActiveStrokePreview()
 {
     m_activeStrokePreview = {};
-    m_activeStrokePreviewBounds = {};
-    m_activeStrokePreviewVisibleRect = {};
     m_activeStrokePreviewRenderSize = {};
     m_activeStrokePreviewFrame = -1;
     m_activeStrokePreviewResolved = false;
@@ -2148,6 +2194,10 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
 
 QSize CanvasWidget::previewRenderSize() const
 {
+    if (m_zoomRenderTimer.isActive() && m_cachedRenderSize.isValid())
+    {
+        return m_cachedRenderSize;
+    }
     const Document &document = m_controller->document();
     const QSize documentSize = document.size;
     const qreal displayScale =
@@ -2200,10 +2250,10 @@ void CanvasWidget::invalidateFrames()
     m_previewLayerRasters = {};
     m_previewLayerRasterFrame = -1;
     m_composedPreviewFrame = {};
-    m_composedPreviewRegion = {};
+    m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
     invalidateActiveStrokePreview();
-    m_activeStrokeRenderCache.clipPaths.clear();
+    m_incrementalStrokeRenderer.clear();
     m_editableStrokeIds.clear();
     m_editableStrokeMaskKey = 0;
     m_editableStrokeLayer = {};
@@ -2297,7 +2347,10 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     m_activeStrokeLayer = document.activeLayerId;
     m_drawing = true;
     invalidateActiveStrokePreview();
-    m_activeStrokeRenderCache.clipPaths.clear();
+    m_incrementalStrokeRenderer.clear();
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
     update();
 }
 
@@ -2347,48 +2400,93 @@ void CanvasWidget::endStroke(
     {
         m_activeStroke.points.append(finalPoint);
     }
+    invalidateActiveStrokePreview();
+    const QSize promotedRenderSize = previewRenderSize();
+    bool promotedPreviewResolved = false;
+    const QImage promotedFrame = activeStrokePreview(
+        m_controller->document(), promotedRenderSize, promotedPreviewResolved);
+    RenderEngine::LayerSplitFrame promotedSplit = m_previewSplit;
+    if (!promotedSplit.valid || m_previewSplitLayer != m_activeStrokeLayer
+        || m_previewSplitFrame != m_currentFrame
+        || promotedSplit.below.size() != promotedRenderSize
+        || !m_incrementalStrokeRenderer.applyTo(promotedSplit.layerBase))
+    {
+        promotedSplit = {};
+    }
+    RenderEngine::LayerRasterFrame promotedRasters = m_previewLayerRasters;
+    auto promotedLayer = promotedRasters.paintLayers.find(m_activeStrokeLayer);
+    if (!promotedRasters.valid || m_previewLayerRasterFrame != m_currentFrame
+        || promotedRasters.outputSize != promotedRenderSize
+        || promotedLayer == promotedRasters.paintLayers.end()
+        || !m_incrementalStrokeRenderer.applyTo(promotedLayer.value()))
+    {
+        promotedRasters = {};
+    }
     Stroke completed = m_activeStroke;
     const QUuid layerId = m_activeStrokeLayer;
+    const int promotedFrameIndex = m_currentFrame;
     m_drawing = false;
     m_activeStroke = Stroke();
     m_activeStrokeLayer = {};
     invalidateActiveStrokePreview();
-    m_activeStrokeRenderCache.clipPaths.clear();
     m_strokeStabilizer.reset();
-    commitStroke(layerId, std::move(completed));
+    const DocumentController::AddStrokeResult result =
+        commitStroke(layerId, std::move(completed));
+    if (result == DocumentController::AddStrokeResult::Added
+        && promotedPreviewResolved && !promotedFrame.isNull())
+    {
+        m_cachedRenderSize = promotedRenderSize;
+        const int cost =
+            PreviewRenderPolicy::cacheCostKiB(promotedFrame.sizeInBytes());
+        m_frameCache.insert(
+            promotedFrameIndex, new QImage(promotedFrame), cost);
+        if (promotedSplit.valid)
+        {
+            m_previewSplit = std::move(promotedSplit);
+            m_previewSplitLayer = layerId;
+            m_previewSplitFrame = promotedFrameIndex;
+        }
+        if (promotedRasters.valid)
+        {
+            m_previewLayerRasters = std::move(promotedRasters);
+            m_previewLayerRasterFrame = promotedFrameIndex;
+        }
+    }
     update();
 }
 
-void CanvasWidget::commitStroke(const QUuid &layerId, Stroke stroke)
+DocumentController::AddStrokeResult CanvasWidget::commitStroke(
+    const QUuid &layerId, Stroke stroke)
 {
     const DocumentController::AddStrokeResult result =
         m_controller->addStroke(layerId, std::move(stroke));
     switch (result)
     {
     case DocumentController::AddStrokeResult::Added:
-        return;
+        return result;
     case DocumentController::AddStrokeResult::AddedWithResampledPoints:
         emit interactionMessage(tr("The stroke was simplified because the "
                                    "project point limit was reached."));
-        return;
+        return result;
     case DocumentController::AddStrokeResult::RejectedInvalidLayer:
         emit interactionMessage(tr("The stroke could not be added because its "
                                    "layer is no longer available."));
-        return;
+        return result;
     case DocumentController::AddStrokeResult::RejectedStrokeLimit:
         emit interactionMessage(tr("The stroke could not be added because the "
                                    "project stroke limit was reached."));
-        return;
+        return result;
     case DocumentController::AddStrokeResult::RejectedPointLimit:
         emit interactionMessage(tr("The stroke could not be added because the "
                                    "project point limit was reached."));
-        return;
+        return result;
     case DocumentController::AddStrokeResult::RejectedInvalidStroke:
     case DocumentController::AddStrokeResult::RejectedMaskLimit:
     case DocumentController::AddStrokeResult::RejectedCommit:
         emit interactionMessage(tr("The stroke could not be added."));
-        return;
+        return result;
     }
+    return result;
 }
 
 void CanvasWidget::cancelStroke()
@@ -2401,7 +2499,10 @@ void CanvasWidget::cancelStroke()
     m_activeStroke = Stroke();
     m_activeStrokeLayer = {};
     invalidateActiveStrokePreview();
-    m_activeStrokeRenderCache.clipPaths.clear();
+    m_incrementalStrokeRenderer.clear();
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
     m_strokeStabilizer.reset();
     update();
 }
@@ -2416,9 +2517,22 @@ void CanvasWidget::beginPan(const QPointF &widgetPosition)
 
 void CanvasWidget::continuePan(const QPointF &widgetPosition)
 {
-    m_pan += widgetPosition - m_lastPanPosition;
+    const QPointF delta = widgetPosition - m_lastPanPosition;
+    m_pan += delta;
     m_lastPanPosition = widgetPosition;
-    update();
+    const QPoint pixelDelta(qRound(delta.x()), qRound(delta.y()));
+    const bool integralDelta = qFuzzyIsNull(delta.x() - pixelDelta.x())
+                               && qFuzzyIsNull(delta.y() - pixelDelta.y());
+    if (integralDelta && !pixelDelta.isNull()
+        && std::abs(pixelDelta.x()) < width()
+        && std::abs(pixelDelta.y()) < height())
+    {
+        scroll(pixelDelta.x(), pixelDelta.y(), rect());
+    }
+    else
+    {
+        update();
+    }
 }
 
 void CanvasWidget::endPan()
@@ -2456,6 +2570,7 @@ void CanvasWidget::zoomToward(qreal targetZoom, const QPointF &widgetPosition)
     {
         m_pan += widgetPosition - documentTransform().map(anchor);
     }
+    m_zoomRenderTimer.start();
     notifyZoomChanged();
     update();
 }
@@ -2492,6 +2607,7 @@ void CanvasWidget::continueZoomDrag(const QPointF &widgetPosition)
     {
         m_pan += m_zoomDragStart - documentTransform().map(m_zoomDragAnchor);
     }
+    m_zoomRenderTimer.start();
     notifyZoomChanged();
     update();
 }
@@ -2503,12 +2619,14 @@ void CanvasWidget::endZoomDrag()
         return;
     }
     m_zoomDragging = false;
+    m_zoomRenderTimer.stop();
     updateCursor();
     const QRect pointerRect = pointerUpdateRect();
     if (!pointerRect.isEmpty())
     {
         update(pointerRect);
     }
+    update();
 }
 
 bool CanvasWidget::isColorPickableTool() const
@@ -2843,18 +2961,6 @@ CanvasWidget::SelectionState CanvasWidget::selectionStateForMask(
     SelectionState state;
     state.mask = std::move(mask);
     state.layer = document.activeLayerId;
-    if (!layer->visible || layer->opacity <= 0.0)
-    {
-        return state;
-    }
-    if (m_controller->selectionHasVisibleLayerPixels(
-            document.activeLayerId, state.mask, m_currentFrame))
-    {
-        for (const Stroke &stroke : layer->strokes)
-        {
-            state.strokes.insert(stroke.id);
-        }
-    }
     return state;
 }
 
@@ -2876,15 +2982,6 @@ void CanvasWidget::restoreSelectionState(const SelectionState &state)
     }
 
     m_selectedStrokes.clear();
-    if (layer->visible && layer->opacity > 0.0
-        && m_controller->selectionHasVisibleLayerPixels(
-            state.layer, state.mask, m_currentFrame))
-    {
-        for (const Stroke &stroke : layer->strokes)
-        {
-            m_selectedStrokes.insert(stroke.id);
-        }
-    }
     m_selectionLayer = state.layer;
     m_selectionMask = state.mask;
     m_movingSelection = false;
@@ -2892,12 +2989,80 @@ void CanvasWidget::restoreSelectionState(const SelectionState &state)
     rebuildSelectionOutline();
     updateSelectionAnimation();
     notifySelectionTransformAvailability();
-    emit interactionMessage(
-        m_selectedStrokes.isEmpty()
-            ? tr("No content in the selected area.")
-            : tr("Selected content. Use the action bar to transform "
-                 "or remove it."));
     update();
+    evaluateSelectionVisibility();
+}
+
+void CanvasWidget::evaluateSelectionVisibility()
+{
+    const quint64 generation = ++m_selectionVisibilityGeneration;
+    const Document document = m_controller->document();
+    const QUuid layerId = m_selectionLayer;
+    const QImage mask = m_selectionMask;
+    const qint64 maskKey = mask.cacheKey();
+    const int frame = m_currentFrame;
+    const Layer *layer = document.layer(layerId);
+    if (!layer || !layer->visible || layer->opacity <= 0.0 || mask.isNull())
+    {
+        m_selectedStrokes.clear();
+        if (layer && !mask.isNull())
+        {
+            m_controller->cacheSelectionVisibility(layerId, mask, false);
+        }
+        notifySelectionTransformAvailability();
+        emit interactionMessage(tr("No content in the selected area."));
+        update();
+        return;
+    }
+
+    auto *watcher = new QFutureWatcher<SelectionVisibility::Result>(this);
+    connect(watcher,
+        &QFutureWatcher<SelectionVisibility::Result>::finished,
+        this,
+        [this, watcher, generation, layerId, maskKey]()
+        {
+            const SelectionVisibility::Result result = watcher->result();
+            watcher->deleteLater();
+            if (generation != m_selectionVisibilityGeneration
+                || layerId != m_selectionLayer
+                || maskKey != m_selectionMask.cacheKey())
+            {
+                return;
+            }
+
+            QSet<QUuid> selected;
+            const Layer *currentLayer =
+                m_controller->document().layer(m_selectionLayer);
+            if (result.renderSucceeded && result.hasVisiblePixels
+                && currentLayer)
+            {
+                for (const Stroke &stroke : currentLayer->strokes)
+                {
+                    selected.insert(stroke.id);
+                }
+            }
+            if (result.renderSucceeded)
+            {
+                m_controller->cacheSelectionVisibility(
+                    m_selectionLayer, m_selectionMask, result.hasVisiblePixels);
+            }
+            m_selectedStrokes = std::move(selected);
+            notifySelectionTransformAvailability();
+            emit interactionMessage(
+                m_selectedStrokes.isEmpty()
+                    ? tr("No content in the selected area.")
+                    : tr("Selected content. Use the action bar to transform "
+                         "or remove it."));
+            update();
+        });
+    watcher->setFuture(QtConcurrent::run(
+        [document, layerId, mask, frame]()
+        {
+            const Layer *snapshotLayer = document.layer(layerId);
+            return snapshotLayer ? SelectionVisibility::evaluate(
+                                       document, *snapshotLayer, mask, frame)
+                                 : SelectionVisibility::Result();
+        }));
 }
 
 void CanvasWidget::pushSelectionChange(const SelectionState &previousSelection,
@@ -3237,6 +3402,7 @@ QPointF CanvasWidget::safeSelectionDeltaForBounds(
 
 void CanvasWidget::clearSelection()
 {
+    ++m_selectionVisibilityGeneration;
     setSelectionMoveMode(false);
     resetSelectionTransformSession();
     if (m_selectedStrokes.isEmpty() && m_selectionMask.isNull()
@@ -3271,23 +3437,10 @@ void CanvasWidget::pruneSelection()
         return;
     }
 
-    QSet<QUuid> current;
-    if (layer->visible && layer->opacity > 0.0
-        && m_controller->selectionHasVisibleLayerPixels(
-            m_selectionLayer, m_selectionMask, m_currentFrame))
-    {
-        for (const Stroke &stroke : layer->strokes)
-        {
-            current.insert(stroke.id);
-        }
-    }
-
-    if (current != m_selectedStrokes)
-    {
-        m_selectedStrokes = std::move(current);
-        notifySelectionTransformAvailability();
-        update();
-    }
+    m_selectedStrokes.clear();
+    notifySelectionTransformAvailability();
+    update();
+    evaluateSelectionVisibility();
 }
 
 void CanvasWidget::transformSelectionOverlay(const QUuid &layerId,

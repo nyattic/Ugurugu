@@ -13,6 +13,8 @@ public:
         bool hasVisiblePixels = false;
         bool renderSucceeded = false;
         int renderedFrames = 0;
+        quint64 renderedPixels = 0;
+        quint64 maximumExplicitImageBytes = 0;
     };
 
     struct EditableStrokeStats

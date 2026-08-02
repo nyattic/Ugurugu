@@ -2,6 +2,7 @@
 
 #include "document/DocumentController.hpp"
 #include "input/StrokeStabilizer.hpp"
+#include "render/IncrementalStrokeRenderer.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QCache>
@@ -22,6 +23,7 @@ namespace wobble
 {
 
 class SelectionActionBar;
+class CanvasWidgetTestAccess;
 
 class CanvasWidget final : public QWidget
 {
@@ -175,6 +177,8 @@ protected:
     void leaveEvent(QEvent *event) override;
 
 private:
+    friend class CanvasWidgetTestAccess;
+
     struct SelectionState
     {
         QSet<QUuid> strokes;
@@ -201,12 +205,9 @@ private:
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
-    QRect visiblePreviewRect(const QSize &renderSize) const;
     QImage frameImage(int frame);
-    QImage activeStrokePreview(const Document &document,
-        const QSize &renderSize,
-        QRect &outputBounds,
-        bool &resolved);
+    QImage activeStrokePreview(
+        const Document &document, const QSize &renderSize, bool &resolved);
     void invalidateActiveStrokePreview();
     QImage interactionPreview(Document document, const QSize &renderSize) const;
     const RenderEngine::LayerSplitFrame &previewSplit(
@@ -224,7 +225,8 @@ private:
         const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
     void endStroke(
         const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
-    void commitStroke(const QUuid &layerId, Stroke stroke);
+    DocumentController::AddStrokeResult commitStroke(
+        const QUuid &layerId, Stroke stroke);
     void cancelStroke();
     void beginPan(const QPointF &widgetPosition);
     void continuePan(const QPointF &widgetPosition);
@@ -254,6 +256,7 @@ private:
     SelectionState selectionStateForMask(QImage mask) const;
     SelectionState currentSelectionState() const;
     void restoreSelectionState(const SelectionState &state);
+    void evaluateSelectionVisibility();
     void pushSelectionChange(const SelectionState &previousSelection,
         const SelectionState &nextSelection,
         const QString &text);
@@ -337,17 +340,16 @@ private:
     RenderEngine::LayerRasterFrame m_previewLayerRasters;
     int m_previewLayerRasterFrame = -1;
     QImage m_activeStrokePreview;
-    QRect m_activeStrokePreviewBounds;
-    QRect m_activeStrokePreviewVisibleRect;
     QSize m_activeStrokePreviewRenderSize;
     int m_activeStrokePreviewFrame = -1;
     bool m_activeStrokePreviewResolved = false;
-    RenderEngine::StrokeRenderCache m_activeStrokeRenderCache;
+    IncrementalStrokeRenderer m_incrementalStrokeRenderer;
     QImage m_composedPreviewFrame;
-    QRect m_composedPreviewRegion;
+    QRect m_composedSelectionPreviewRegion;
     qint64 m_composedPreviewBaseKey = 0;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
+    QTimer m_zoomRenderTimer;
     Stroke m_activeStroke;
     QUuid m_activeStrokeLayer;
     bool m_drawing = false;
@@ -372,6 +374,7 @@ private:
     SelectionState m_selectionBeforeArea;
     bool m_hasSelectionBeforeArea = false;
     QSet<QUuid> m_selectedStrokes;
+    quint64 m_selectionVisibilityGeneration = 0;
     QUuid m_selectionLayer;
     QImage m_selectionMask;
     mutable QVector<QUuid> m_editableStrokeIds;

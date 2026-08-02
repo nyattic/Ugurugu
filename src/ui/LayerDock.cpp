@@ -11,6 +11,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -21,9 +22,11 @@
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QWidget>
+#include <QtConcurrentRun>
 
 #include <cmath>
 #include <functional>
+#include <utility>
 
 namespace wobble
 {
@@ -513,8 +516,12 @@ void LayerDock::rebuild()
 {
     QScopedValueRollback syncing(m_syncing, true);
     QSignalBlocker blocker(m_layerList);
-    m_layerList->clear();
-
+    struct DisplayLayer
+    {
+        const Layer *layer = nullptr;
+        int depth = 0;
+    };
+    QVector<DisplayLayer> displayLayers;
     if (m_controller)
     {
         const Document &document = m_controller->document();
@@ -522,8 +529,8 @@ void LayerDock::rebuild()
         {
             m_selectedLayerId = document.activeLayerId;
         }
-        std::function<void(const QUuid &, int)> appendChildren;
-        appendChildren = [&](const QUuid &parentId, int depth)
+        std::function<void(const QUuid &, int)> collectChildren;
+        collectChildren = [&](const QUuid &parentId, int depth)
         {
             for (int index = document.layers.size() - 1; index >= 0; --index)
             {
@@ -532,35 +539,81 @@ void LayerDock::rebuild()
                 {
                     continue;
                 }
-                auto *item = new QListWidgetItem(layer.name, m_layerList);
-                item->setData(
-                    LayerItemRoles::LayerId, QVariant::fromValue(layer.id));
-                item->setData(LayerItemRoles::Visible, layer.visible);
-                item->setData(Qt::AccessibleDescriptionRole,
-                    layer.visible ? tr("Layer is visible")
-                                  : tr("Layer is hidden"));
-                item->setData(LayerItemRoles::Thumbnail,
-                    QVariant::fromValue(m_thumbnails.value(layer.id)));
-                item->setData(
-                    LayerItemRoles::Kind, static_cast<int>(layer.kind));
-                item->setData(LayerItemRoles::Depth, depth);
-                item->setData(LayerItemRoles::Clipped, layer.clipToLayerBelow);
-                item->setData(LayerItemRoles::Reference, layer.reference);
-                item->setFlags(
-                    item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
-                if (layer.id == m_selectedLayerId)
-                {
-                    m_layerList->setCurrentItem(item);
-                }
+                displayLayers.append({&layer, depth});
                 if (layer.kind == LayerKind::Group)
                 {
-                    appendChildren(layer.id, depth + 1);
+                    collectChildren(layer.id, depth + 1);
                 }
             }
         };
-        appendChildren({}, 0);
+        collectChildren({}, 0);
     }
 
+    QSet<QUuid> displayedIds;
+    for (const DisplayLayer &display : std::as_const(displayLayers))
+    {
+        displayedIds.insert(display.layer->id);
+    }
+    for (int row = m_layerList->count() - 1; row >= 0; --row)
+    {
+        const QUuid id =
+            m_layerList->item(row)->data(LayerItemRoles::LayerId).toUuid();
+        if (!displayedIds.contains(id))
+        {
+            delete m_layerList->takeItem(row);
+        }
+    }
+
+    QListWidgetItem *selectedItem = nullptr;
+    for (int targetRow = 0; targetRow < displayLayers.size(); ++targetRow)
+    {
+        const DisplayLayer &display = displayLayers[targetRow];
+        const Layer &layer = *display.layer;
+        int existingRow = -1;
+        for (int row = 0; row < m_layerList->count(); ++row)
+        {
+            if (m_layerList->item(row)->data(LayerItemRoles::LayerId).toUuid()
+                == layer.id)
+            {
+                existingRow = row;
+                break;
+            }
+        }
+        QListWidgetItem *item = nullptr;
+        if (existingRow < 0)
+        {
+            item = new QListWidgetItem;
+            m_layerList->insertItem(targetRow, item);
+        }
+        else if (existingRow != targetRow)
+        {
+            item = m_layerList->takeItem(existingRow);
+            m_layerList->insertItem(targetRow, item);
+        }
+        else
+        {
+            item = m_layerList->item(existingRow);
+        }
+        item->setText(layer.name);
+        item->setData(LayerItemRoles::LayerId, QVariant::fromValue(layer.id));
+        item->setData(LayerItemRoles::Visible, layer.visible);
+        item->setData(Qt::AccessibleDescriptionRole,
+            layer.visible ? tr("Layer is visible") : tr("Layer is hidden"));
+        item->setData(LayerItemRoles::Thumbnail,
+            QVariant::fromValue(m_thumbnails.value(layer.id)));
+        item->setData(LayerItemRoles::Kind, static_cast<int>(layer.kind));
+        item->setData(LayerItemRoles::Depth, display.depth);
+        item->setData(LayerItemRoles::Clipped, layer.clipToLayerBelow);
+        item->setData(LayerItemRoles::Reference, layer.reference);
+        item->setFlags(
+            item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
+        if (layer.id == m_selectedLayerId)
+        {
+            selectedItem = item;
+        }
+    }
+
+    m_layerList->setCurrentItem(selectedItem);
     m_layerList->setEnabled(m_layerList->count() > 0);
     updateControls();
 }
@@ -719,6 +772,7 @@ void LayerDock::regenerateThumbnails()
     {
         m_thumbnails.clear();
         m_pendingThumbnails.clear();
+        m_thumbnailRevisions.clear();
         m_regenerateAllThumbnails = false;
         return;
     }
@@ -730,14 +784,27 @@ void LayerDock::regenerateThumbnails()
         existing.insert(layer.id);
         if (m_regenerateAllThumbnails)
         {
-            m_pendingThumbnails.insert(layer.id);
+            queueThumbnail(layer.id);
         }
     }
     for (auto iterator = m_thumbnails.begin(); iterator != m_thumbnails.end();)
     {
         if (!existing.contains(iterator.key()))
         {
+            m_thumbnailRevisions.remove(iterator.key());
             iterator = m_thumbnails.erase(iterator);
+        }
+        else
+        {
+            ++iterator;
+        }
+    }
+    for (auto iterator = m_thumbnailRevisions.begin();
+        iterator != m_thumbnailRevisions.end();)
+    {
+        if (!existing.contains(iterator.key()))
+        {
+            iterator = m_thumbnailRevisions.erase(iterator);
         }
         else
         {
@@ -746,46 +813,80 @@ void LayerDock::regenerateThumbnails()
     }
     m_regenerateAllThumbnails = false;
 
-    if (m_pendingThumbnails.isEmpty())
+    if (m_pendingThumbnails.isEmpty() || m_thumbnailRendering)
     {
         return;
     }
 
     const QUuid nextId = *m_pendingThumbnails.constBegin();
     m_pendingThumbnails.remove(nextId);
-    if (const Layer *layer = document.layer(nextId))
+    const Layer *layer = document.layer(nextId);
+    if (!layer)
     {
-        m_thumbnails.insert(
-            nextId, LayerThumbnailRenderer::render(document, *layer));
-    }
-
-    QScopedValueRollback syncing(m_syncing, true);
-    QSignalBlocker blocker(m_layerList);
-    for (int row = 0; row < m_layerList->count(); ++row)
-    {
-        QListWidgetItem *item = m_layerList->item(row);
-        const QUuid id = item->data(LayerItemRoles::LayerId).toUuid();
-        if (id != nextId)
-        {
-            continue;
-        }
-        item->setData(LayerItemRoles::Thumbnail,
-            QVariant::fromValue(m_thumbnails.value(id)));
-        break;
-    }
-    m_layerList->viewport()->update();
-
-    if (!m_pendingThumbnails.isEmpty())
-    {
-        // Yield to input and paint events between expensive layer renders.
+        m_thumbnailRevisions.remove(nextId);
         m_thumbnailTimer.start(0);
+        return;
     }
+    const quint64 revision = m_thumbnailRevisions.value(nextId);
+    const Document snapshot = document;
+    m_thumbnailRendering = true;
+    auto *watcher = new QFutureWatcher<QImage>(this);
+    connect(watcher,
+        &QFutureWatcher<QImage>::finished,
+        this,
+        [this, watcher, nextId, revision]()
+        {
+            const QImage image = watcher->result();
+            watcher->deleteLater();
+            m_thumbnailRendering = false;
+            if (m_controller && m_thumbnailRevisions.value(nextId) == revision
+                && m_controller->document().layer(nextId) && !image.isNull())
+            {
+                QPixmap pixmap = QPixmap::fromImage(image);
+                pixmap.setDevicePixelRatio(2.0);
+                m_thumbnails.insert(nextId, std::move(pixmap));
+                QScopedValueRollback syncing(m_syncing, true);
+                QSignalBlocker blocker(m_layerList);
+                for (int row = 0; row < m_layerList->count(); ++row)
+                {
+                    QListWidgetItem *item = m_layerList->item(row);
+                    if (item->data(LayerItemRoles::LayerId).toUuid() != nextId)
+                    {
+                        continue;
+                    }
+                    item->setData(LayerItemRoles::Thumbnail,
+                        QVariant::fromValue(m_thumbnails.value(nextId)));
+                    break;
+                }
+                m_layerList->viewport()->update();
+            }
+            if (!m_pendingThumbnails.isEmpty() || m_regenerateAllThumbnails)
+            {
+                m_thumbnailTimer.start(0);
+            }
+        });
+    watcher->setFuture(QtConcurrent::run(
+        [snapshot, nextId]()
+        {
+            const Layer *snapshotLayer = snapshot.layer(nextId);
+            return snapshotLayer ? LayerThumbnailRenderer::renderImage(
+                                       snapshot, *snapshotLayer)
+                                 : QImage();
+        }));
 }
 
 void LayerDock::scheduleAllThumbnails()
 {
     m_regenerateAllThumbnails = true;
     m_pendingThumbnails.clear();
+    const quint64 revision = ++m_nextThumbnailRevision;
+    if (m_controller)
+    {
+        for (const Layer &layer : m_controller->document().layers)
+        {
+            m_thumbnailRevisions.insert(layer.id, revision);
+        }
+    }
     m_thumbnailTimer.start(180);
 }
 
@@ -793,19 +894,29 @@ void LayerDock::scheduleLayerThumbnail(const QUuid &id)
 {
     if (!id.isNull() && !m_regenerateAllThumbnails)
     {
-        m_pendingThumbnails.insert(id);
+        queueThumbnail(id);
         if (m_controller)
         {
             const Document &document = m_controller->document();
             const Layer *layer = document.layer(id);
             while (layer && !layer->parentGroupId.isNull())
             {
-                m_pendingThumbnails.insert(layer->parentGroupId);
+                queueThumbnail(layer->parentGroupId);
                 layer = document.layer(layer->parentGroupId);
             }
         }
     }
     m_thumbnailTimer.start(180);
+}
+
+void LayerDock::queueThumbnail(const QUuid &id)
+{
+    if (id.isNull())
+    {
+        return;
+    }
+    m_pendingThumbnails.insert(id);
+    m_thumbnailRevisions.insert(id, ++m_nextThumbnailRevision);
 }
 
 void LayerDock::commitOpacity(const QUuid &id, int value)

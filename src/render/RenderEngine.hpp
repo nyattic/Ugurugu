@@ -102,6 +102,13 @@ public:
         bool valid = false;
     };
 
+    struct PixelSelectionPreviewRegion
+    {
+        QRect bounds;
+        QImage image;
+        bool valid = false;
+    };
+
     static QImage render(const Document &document, int frameIndex);
     static QImage renderScaled(const Document &document,
         int frameIndex,
@@ -190,6 +197,8 @@ public:
         const PixelSelectionOp &operation,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
+    static PixelSelectionPreviewRegion replayPixelSelectionOnLayerRegion(
+        const QImage &layerImage, const PixelSelectionOp &operation);
     static QPainterPath strokePath(const Stroke &stroke,
         int frameIndex,
         int frameCount,

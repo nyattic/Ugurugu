@@ -119,6 +119,8 @@ public:
     bool selectionHasVisibleLayerPixels(const QUuid &layerId,
         const QImage &selectionMask,
         int preferredFrame = 0) const;
+    void cacheSelectionVisibility(
+        const QUuid &layerId, const QImage &selectionMask, bool visible);
     void pushSelectionStateCommand(const QString &text,
         const QUuid &beforeLayerId,
         const QImage &beforeMask,

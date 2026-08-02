@@ -459,16 +459,21 @@ void appendSubBlocks(QByteArray &output, const QByteArray &data)
 bool GifWriter::write(const QString &path,
     const QVector<QImage> &frames,
     int delayCentiseconds,
-    QString *error)
+    QString *error,
+    const std::function<bool()> &isCanceled)
 {
-    return write(
-        path, frames, QVector<int>(frames.size(), delayCentiseconds), error);
+    return write(path,
+        frames,
+        QVector<int>(frames.size(), delayCentiseconds),
+        error,
+        isCanceled);
 }
 
 bool GifWriter::write(const QString &path,
     const QVector<QImage> &frames,
     const QVector<int> &delaysCentiseconds,
-    QString *error)
+    QString *error,
+    const std::function<bool()> &isCanceled)
 {
     if (error != nullptr)
     {
@@ -530,6 +535,10 @@ bool GifWriter::write(const QString &path,
 
     for (const QImage &frame : frames)
     {
+        if (isCanceled && isCanceled())
+        {
+            return false;
+        }
         if (frame.isNull())
         {
             return fail(
@@ -555,6 +564,10 @@ bool GifWriter::write(const QString &path,
 
     for (const QImage &frame : std::as_const(normalizedFrames))
     {
+        if (isCanceled && isCanceled())
+        {
+            return false;
+        }
         for (int y = 0; y < height; ++y)
         {
             const auto *row =
@@ -635,6 +648,10 @@ bool GifWriter::write(const QString &path,
 
     for (int frameIndex = 0; frameIndex < normalizedFrames.size(); ++frameIndex)
     {
+        if (isCanceled && isCanceled())
+        {
+            return false;
+        }
         const QImage &frame = normalizedFrames.at(frameIndex);
         appendByte(output, 0x21);
         appendByte(output, 0xf9);
@@ -659,6 +676,11 @@ bool GifWriter::write(const QString &path,
 
     appendByte(output, 0x3b);
 
+    if (isCanceled && isCanceled())
+    {
+        return false;
+    }
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly))
     {
@@ -670,6 +692,12 @@ bool GifWriter::write(const QString &path,
         const QString message = file.errorString();
         file.cancelWriting();
         return fail(error, message);
+    }
+
+    if (isCanceled && isCanceled())
+    {
+        file.cancelWriting();
+        return false;
     }
 
     if (!file.commit())

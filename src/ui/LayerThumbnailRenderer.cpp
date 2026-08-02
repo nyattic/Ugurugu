@@ -18,7 +18,7 @@ QSize LayerThumbnailRenderer::renderSize(const QSize &documentSize)
     return QSize(std::max(1, scaled.width()), std::max(1, scaled.height()));
 }
 
-QPixmap LayerThumbnailRenderer::render(
+QImage LayerThumbnailRenderer::renderImage(
     const Document &document, const Layer &layer)
 {
     const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(document);
@@ -43,8 +43,13 @@ QPixmap LayerThumbnailRenderer::render(
         root->clipToLayerBelow = false;
     }
 
-    const QImage image =
-        RenderEngine::renderScaled(single, 0, renderSize(single.size));
+    return RenderEngine::renderScaled(single, 0, renderSize(single.size));
+}
+
+QPixmap LayerThumbnailRenderer::render(
+    const Document &document, const Layer &layer)
+{
+    const QImage image = renderImage(document, layer);
     if (image.isNull())
     {
         return {};

@@ -2225,6 +2225,22 @@ bool DocumentController::selectionHasVisibleLayerPixels(
     return visibility.hasVisiblePixels;
 }
 
+void DocumentController::cacheSelectionVisibility(
+    const QUuid &layerId, const QImage &selectionMask, bool visible)
+{
+    const Document &current = document();
+    if (!current.layer(layerId) || selectionMask.isNull()
+        || selectionMask.size() != current.size
+        || selectionMask.format() != QImage::Format_Grayscale8)
+    {
+        return;
+    }
+    m_selectionVisibilityCacheValid = true;
+    m_selectionVisibilityLayerId = layerId;
+    m_selectionVisibilityMaskKey = selectionMask.cacheKey();
+    m_selectionVisibilityCacheResult = visible;
+}
+
 void DocumentController::pushSelectionStateCommand(const QString &text,
     const QUuid &beforeLayerId,
     const QImage &beforeMask,
@@ -3145,7 +3161,9 @@ bool DocumentController::removeSelectedContent(const QUuid &layerId,
     }
     const std::optional<Stroke> operation =
         selectionOperationStroke(selectionMask, QTransform(), true, false);
-    if (!operation)
+    const std::optional<PackedMaskRegion> packedSelection =
+        packBinaryMask(selectionMask);
+    if (!operation || !packedSelection)
     {
         return rejectHistoryMutation();
     }
@@ -3160,6 +3178,8 @@ bool DocumentController::removeSelectedContent(const QUuid &layerId,
     auto effects = std::make_shared<HistoryEffects>();
     effects->afterDocumentChanged.append(
         HistoryEffects::LayerThumbnail{layerId});
+    effects->selectionState = HistoryEffects::SelectionStateTransition{
+        {layerId, packedSelection}, {{}, std::nullopt}};
     return tryCommitCandidate(tr("Delete selected content"),
         std::move(withoutSelection),
         std::move(effects));

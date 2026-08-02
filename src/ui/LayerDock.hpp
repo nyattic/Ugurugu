@@ -41,6 +41,7 @@ private:
     void updateControls();
     void scheduleAllThumbnails();
     void scheduleLayerThumbnail(const QUuid &id);
+    void queueThumbnail(const QUuid &id);
     void regenerateThumbnails();
     void commitOpacity(const QUuid &id, int value);
     void handleLayerDrop(
@@ -64,6 +65,9 @@ private:
     QTimer m_thumbnailTimer;
     QHash<QUuid, QPixmap> m_thumbnails;
     QSet<QUuid> m_pendingThumbnails;
+    QHash<QUuid, quint64> m_thumbnailRevisions;
+    quint64 m_nextThumbnailRevision = 0;
+    bool m_thumbnailRendering = false;
     bool m_regenerateAllThumbnails = false;
     bool m_groupSelectionActive = false;
     bool m_syncing = false;
