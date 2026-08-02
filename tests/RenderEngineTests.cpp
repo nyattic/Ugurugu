@@ -507,6 +507,33 @@ private slots:
             std::numeric_limits<int>::max());
     }
 
+    void boundsAnimatedPreviewByFrameCacheBudget()
+    {
+        const QSize documentSize(4096, 4096);
+        const QSize staticPreview =
+            PreviewRenderPolicy::renderSize(documentSize, 16.0);
+        const QSize animatedPreview =
+            PreviewRenderPolicy::renderSize(documentSize, 16.0, 30);
+
+        QCOMPARE(staticPreview, documentSize);
+        QVERIFY(animatedPreview.width() < documentSize.width());
+        QCOMPARE(animatedPreview.width(), animatedPreview.height());
+        const quint64 retainedBytes =
+            static_cast<quint64>(animatedPreview.width())
+            * animatedPreview.height() * sizeof(quint32) * 30;
+        const quint64 cacheBytes =
+            static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024;
+        QVERIFY(retainedBytes <= cacheBytes);
+        const int retainedCost =
+            PreviewRenderPolicy::cacheCostKiB(
+                static_cast<qsizetype>(animatedPreview.width())
+                * animatedPreview.height() * sizeof(quint32))
+            * 30;
+        QVERIFY(retainedCost <= PreviewRenderPolicy::maximumCacheKiB);
+        QCOMPARE(PreviewRenderPolicy::renderSize(documentSize, 16.0, 0),
+            staticPreview);
+    }
+
     void replaysIntegralNearestSelectionAtDisplayScale()
     {
         Document document = Document::createDefault(QSize(128, 96));
@@ -1458,6 +1485,8 @@ private slots:
         clipped.name = QStringLiteral("Clipped");
         clipped.initialCanvasSize = document.size;
         clipped.clipToLayerBelow = true;
+        clipped.opacity = 0.75;
+        clipped.blendMode = LayerBlendMode::Overlay;
         clipped.strokes.append(makeStroke(StrokeMode::Paint,
             QColor(40, 90, 220),
             8.0,
@@ -1468,6 +1497,7 @@ private slots:
         group.name = QStringLiteral("Group");
         group.kind = LayerKind::Group;
         group.initialCanvasSize = document.size;
+        group.opacity = 0.65;
         base.parentGroupId = group.id;
         clipped.parentGroupId = group.id;
         const QUuid clippedId = clipped.id;
@@ -1487,7 +1517,7 @@ private slots:
 
         Stroke active = makeStroke(StrokeMode::Paint,
             QColor(40, 180, 90),
-            32.0,
+            6.0,
             3,
             {QPointF(24.0, 24.0)});
         Document expected = document;
@@ -1498,6 +1528,43 @@ private slots:
         QCOMPARE(RenderEngine::composeLayerRasterFrame(
                      document, frame, clippedId, activeLayer),
             RenderEngine::render(expected, 0));
+
+        const QSize previewSize(31, 29);
+        const RenderEngine::LayerRasterFrame previewFrame =
+            RenderEngine::renderLayerRasterFrame(document,
+                0,
+                previewSize,
+                4 * 1024 * 1024,
+                RenderEngine::ScaledRenderMode::DisplayPreview);
+        QVERIFY(previewFrame.valid);
+        QImage fullPreviewLayer = previewFrame.paintLayers.value(clippedId);
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            fullPreviewLayer, document, {active}, 0, previewSize));
+        const QImage fullPreview = RenderEngine::composeLayerRasterFrame(
+            document, previewFrame, clippedId, fullPreviewLayer);
+        QCOMPARE(
+            fullPreview, RenderEngine::renderScaled(expected, 0, previewSize));
+
+        const QRect previewBounds =
+            RenderEngine::strokePreviewBounds(document, active, previewSize);
+        QVERIFY(!previewBounds.isEmpty());
+        QVERIFY(previewBounds != QRect(QPoint(), previewSize));
+        QImage regionalLayer =
+            previewFrame.paintLayers.value(clippedId).copy(previewBounds);
+        QVERIFY(RenderEngine::renderStrokesOnLayerRegion(
+            regionalLayer, document, {active}, 0, previewSize, previewBounds));
+        QCOMPARE(RenderEngine::composeLayerRasterFrameRegion(document,
+                     previewFrame,
+                     clippedId,
+                     regionalLayer,
+                     previewBounds),
+            fullPreview.copy(previewBounds));
+        QCOMPARE(RenderEngine::composeLayerRasterFrameRegion(document,
+                     previewFrame,
+                     clippedId,
+                     fullPreviewLayer,
+                     QRect(QPoint(), previewSize)),
+            fullPreview);
 
         const RenderEngine::LayerRasterFrame constrained =
             RenderEngine::renderLayerRasterFrame(document, 0, document.size, 1);
@@ -2546,6 +2613,149 @@ private slots:
                 }
             }
         }
+    }
+
+    void composesActiveStrokeRegionsLikeFullPreviews()
+    {
+        Document document = Document::createDefault(QSize(256, 192));
+        document.background = Qt::transparent;
+        document.animationFrames = 8;
+        document.wobbleAmount = 2.0;
+        Layer &target = document.layers.first();
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(210, 55, 75),
+            42.0,
+            71,
+            {QPointF(42.0, 96.0), QPointF(214.0, 96.0)}));
+        const QUuid targetId = target.id;
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.opacity = 0.7;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(45, 95, 220),
+            18.0,
+            72,
+            {QPointF(128.0, 28.0), QPointF(128.0, 164.0)}));
+        document.layers.append(top);
+
+        QVector<Stroke> activeStrokes{makeStroke(StrokeMode::Paint,
+                                          QColor(235, 195, 45, 180),
+                                          14.0,
+                                          73,
+                                          {QPointF(78.0, 58.0),
+                                              QPointF(116.0, 76.0),
+                                              QPointF(156.0, 54.0)}),
+            makeStroke(StrokeMode::Erase,
+                Qt::black,
+                24.0,
+                74,
+                {QPointF(82.0, 112.0), QPointF(172.0, 128.0)})};
+        for (Stroke &stroke : activeStrokes)
+        {
+            stroke.clipMask =
+                rectangularMask(document.size, QRect(56, 36, 144, 120));
+        }
+
+        for (const QSize outputSize : {document.size, QSize(128, 96)})
+        {
+            const RenderEngine::LayerSplitFrame split =
+                RenderEngine::renderLayerSplit(
+                    document, 3, outputSize, targetId);
+            QVERIFY(split.valid);
+            for (const Stroke &active : activeStrokes)
+            {
+                QImage fullLayer = split.layerBase;
+                QVERIFY(RenderEngine::renderStrokesOnLayer(
+                    fullLayer, document, {active}, 3, outputSize));
+                const QImage full =
+                    RenderEngine::composeLayerSplit(split, fullLayer);
+
+                const QRect bounds = RenderEngine::strokePreviewBounds(
+                    document, active, outputSize);
+                QVERIFY(!bounds.isEmpty());
+                QVERIFY(bounds.size() != outputSize);
+                QImage regionalLayer = split.layerBase.copy(bounds);
+                RenderEngine::StrokeRenderCache cache;
+                QVERIFY(RenderEngine::renderStrokesOnLayerRegion(regionalLayer,
+                    document,
+                    {active},
+                    3,
+                    outputSize,
+                    bounds,
+                    &cache));
+                const QImage regional = RenderEngine::composeLayerSplitRegion(
+                    split, regionalLayer, bounds);
+
+                QCOMPARE(regional, full.copy(bounds));
+                QCOMPARE(cache.clipPaths.size(), 1);
+                QImage reusedLayer = split.layerBase.copy(bounds);
+                QVERIFY(RenderEngine::renderStrokesOnLayerRegion(reusedLayer,
+                    document,
+                    {active},
+                    3,
+                    outputSize,
+                    bounds,
+                    &cache));
+                QCOMPARE(cache.clipPaths.size(), 1);
+                QCOMPARE(RenderEngine::composeLayerSplitRegion(
+                             split, reusedLayer, bounds),
+                    regional);
+            }
+        }
+    }
+
+    void benchmarksFourKActiveStrokeRegions()
+    {
+        const QSize canvasSize(4096, 4096);
+        Document document = Document::createDefault(canvasSize);
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+
+        QVector<QPointF> positions;
+        constexpr int pointCount = 3000;
+        positions.reserve(pointCount);
+        for (int index = 0; index < pointCount; ++index)
+        {
+            const qreal progress = static_cast<qreal>(index) / (pointCount - 1);
+            positions.append(QPointF(256.0 + progress * 3584.0,
+                2048.0 + std::sin(progress * 80.0) * 5.0));
+        }
+        const Stroke active = makeStroke(
+            StrokeMode::Paint, QColor(45, 180, 105), 12.0, 82, positions);
+        QImage layerBase(canvasSize, QImage::Format_ARGB32_Premultiplied);
+        QVERIFY(!layerBase.isNull());
+        layerBase.fill(Qt::transparent);
+        const QRect bounds =
+            RenderEngine::strokePreviewBounds(document, active, canvasSize);
+        QVERIFY(!bounds.isEmpty());
+
+        QElapsedTimer timer;
+        timer.start();
+        QImage fullLayer = layerBase;
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            fullLayer, document, {active}, 0, canvasSize));
+        const qint64 fullNanoseconds = timer.nsecsElapsed();
+        const quint64 fullBytes = static_cast<quint64>(fullLayer.sizeInBytes());
+        const QImage expectedRegion = fullLayer.copy(bounds);
+        fullLayer = {};
+
+        timer.restart();
+        QImage regionalLayer = layerBase.copy(bounds);
+        QVERIFY(RenderEngine::renderStrokesOnLayerRegion(
+            regionalLayer, document, {active}, 0, canvasSize, bounds));
+        const qint64 regionalNanoseconds = timer.nsecsElapsed();
+
+        QCOMPARE(regionalLayer, expectedRegion);
+        const quint64 regionalBytes =
+            static_cast<quint64>(regionalLayer.sizeInBytes());
+        QVERIFY(regionalBytes * 10 < fullBytes);
+        qInfo().nospace() << "4K active-stroke layer replay: full "
+                          << fullNanoseconds / 1000000.0 << " ms / "
+                          << fullBytes << " bytes, region "
+                          << regionalNanoseconds / 1000000.0 << " ms / "
+                          << regionalBytes << " bytes";
     }
 
     void displacesWobbleLinearlyWithAmount()

@@ -56,6 +56,11 @@ public:
         bool valid = false;
     };
 
+    struct StrokeRenderCache
+    {
+        QHash<qint64, QPainterPath> clipPaths;
+    };
+
     struct StrokeCoveragePlan
     {
         struct Epoch
@@ -97,6 +102,8 @@ public:
         const QSize &outputSize,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
+    static bool supportsLayerSplit(
+        const Document &document, const QUuid &layerId);
     static LayerSplitFrame renderLayerSplit(const Document &document,
         int frameIndex,
         const QSize &outputSize,
@@ -113,6 +120,11 @@ public:
         const LayerRasterFrame &frame,
         const QUuid &replacementLayerId,
         const QImage &replacementLayer);
+    static QImage composeLayerRasterFrameRegion(const Document &document,
+        const LayerRasterFrame &frame,
+        const QUuid &replacementLayerId,
+        const QImage &replacementLayer,
+        const QRect &outputRegion);
     static bool renderStrokesOnLayer(QImage &layerImage,
         const Document &document,
         const QVector<Stroke> &strokes,
@@ -123,6 +135,16 @@ public:
         const QVector<Stroke> &strokes,
         int frameIndex,
         const QRect &outputRegion);
+    static bool renderStrokesOnLayerRegion(QImage &layerImage,
+        const Document &document,
+        const QVector<Stroke> &strokes,
+        int frameIndex,
+        const QSize &outputSize,
+        const QRect &outputRegion,
+        StrokeRenderCache *cache = nullptr);
+    static QRect strokePreviewBounds(const Document &document,
+        const Stroke &stroke,
+        const QSize &outputSize);
     static QImage renderStrokeCoverage(const Document &document,
         const Layer &layer,
         int strokeIndex,
@@ -148,6 +170,9 @@ public:
         const QRect &outputBounds);
     static QImage composeLayerSplit(
         const LayerSplitFrame &split, const QImage &layerImage);
+    static QImage composeLayerSplitRegion(const LayerSplitFrame &split,
+        const QImage &layerImage,
+        const QRect &outputRegion);
     // Replays one selection operation against an already rendered layer
     // framebuffer. DisplayPreview applies the scale-conjugated operation
     // directly when layerImage is no larger than operation.canvasSize on

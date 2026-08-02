@@ -9,17 +9,29 @@
 namespace wobble
 {
 
-QSize PreviewRenderPolicy::renderSize(
-    const QSize &documentSize, qreal physicalDisplayScale)
+QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
+    qreal physicalDisplayScale,
+    int retainedSurfaceCount)
 {
-    if (!documentSize.isValid() || !std::isfinite(physicalDisplayScale)
+    if (documentSize.isEmpty() || !std::isfinite(physicalDisplayScale)
         || physicalDisplayScale <= 0.0)
     {
         return {};
     }
     const qreal edgeScale = std::min(maximumPreviewEdge / documentSize.width(),
         maximumPreviewEdge / documentSize.height());
-    const qreal scale = std::clamp(std::min(physicalDisplayScale, edgeScale),
+    qreal scaleLimit = std::min(physicalDisplayScale, edgeScale);
+    const int surfaceCount = std::max(1, retainedSurfaceCount);
+    if (surfaceCount > 1)
+    {
+        const qreal retainedBytes = static_cast<qreal>(surfaceCount)
+                                    * sizeof(quint32) * documentSize.width()
+                                    * documentSize.height();
+        const qreal budgetBytes = maximumCacheKiB * 1024.0 * 0.9;
+        scaleLimit =
+            std::min(scaleLimit, std::sqrt(budgetBytes / retainedBytes));
+    }
+    const qreal scale = std::clamp(scaleLimit,
         1.0 / std::max(documentSize.width(), documentSize.height()),
         1.0);
     return QSize(std::max(1, qCeil(documentSize.width() * scale)),

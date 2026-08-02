@@ -1631,7 +1631,7 @@ QImage renderAtDisplayScale(const Document &document,
     const QSize &outputSize,
     RenderEngine::ScaledRenderStats *stats)
 {
-    if (!document.size.isValid() || !outputSize.isValid())
+    if (document.size.isEmpty() || outputSize.isEmpty())
     {
         return {};
     }
@@ -1679,7 +1679,7 @@ QImage renderAtDisplayScale(const Document &document,
 QImage renderAtSize(
     const Document &document, int frameIndex, const QSize &outputSize)
 {
-    if (!document.size.isValid() || !outputSize.isValid())
+    if (document.size.isEmpty() || outputSize.isEmpty())
     {
         return {};
     }
@@ -1762,6 +1762,36 @@ QImage RenderEngine::renderScaled(const Document &document,
     return renderAtSize(document, frameIndex, outputSize);
 }
 
+bool RenderEngine::supportsLayerSplit(
+    const Document &document, const QUuid &layerId)
+{
+    const int targetIndex = document.layerIndex(layerId);
+    const Layer *target = document.layer(layerId);
+    if (targetIndex < 0 || !target || target->kind != LayerKind::Paint
+        || std::any_of(
+            document.layers.cbegin(),
+            document.layers.cend(),
+            [](const Layer &layer)
+            {
+                return layer.kind == LayerKind::Group
+                       || !layer.parentGroupId.isNull()
+                       || layer.clipToLayerBelow;
+            }))
+    {
+        return false;
+    }
+    for (int index = targetIndex + 1; index < document.layers.size(); ++index)
+    {
+        const Layer &layer = document.layers[index];
+        if (layer.visible && layer.opacity > 0.0 && !layer.strokes.isEmpty()
+            && layer.blendMode != LayerBlendMode::Normal)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     const Document &document,
     int frameIndex,
@@ -1775,35 +1805,10 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
         *stats = {};
     }
     LayerSplitFrame split;
-    if (!document.size.isValid() || !outputSize.isValid()
-        || document.layerIndex(layerId) < 0
-        || document.layer(layerId)->kind != LayerKind::Paint
-        || std::any_of(document.layers.cbegin(),
-            document.layers.cend(),
-            [](const Layer &layer)
-            {
-                return layer.kind == LayerKind::Group
-                       || !layer.parentGroupId.isNull()
-                       || layer.clipToLayerBelow;
-            }))
+    if (document.size.isEmpty() || outputSize.isEmpty()
+        || !supportsLayerSplit(document, layerId))
     {
         return split;
-    }
-
-    bool afterTarget = false;
-    for (const Layer &layer : document.layers)
-    {
-        if (layer.id == layerId)
-        {
-            afterTarget = true;
-            continue;
-        }
-        if (afterTarget && layer.visible && layer.opacity > 0.0
-            && !layer.strokes.isEmpty()
-            && layer.blendMode != LayerBlendMode::Normal)
-        {
-            return split;
-        }
     }
 
     QImage below(outputSize, QImage::Format_ARGB32_Premultiplied);
@@ -1882,7 +1887,7 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                                                  Qt::FastTransformation);
     };
 
-    afterTarget = false;
+    bool afterTarget = false;
     for (const Layer &layer : document.layers)
     {
         if (layer.id == layerId)
@@ -1949,7 +1954,7 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
         *stats = {};
     }
     LayerRasterFrame frame;
-    if (!document.size.isValid() || !outputSize.isValid() || maximumBytes <= 0)
+    if (document.size.isEmpty() || outputSize.isEmpty() || maximumBytes <= 0)
     {
         return frame;
     }
@@ -2098,13 +2103,79 @@ QImage RenderEngine::composeLayerRasterFrame(const Document &document,
         nullptr);
 }
 
+QImage RenderEngine::composeLayerRasterFrameRegion(const Document &document,
+    const LayerRasterFrame &frame,
+    const QUuid &replacementLayerId,
+    const QImage &replacementLayer,
+    const QRect &outputRegion)
+{
+    if (!frame.valid || frame.outputSize.isEmpty() || outputRegion.isEmpty()
+        || !QRect(QPoint(), frame.outputSize).contains(outputRegion)
+        || (!replacementLayerId.isNull()
+            && (replacementLayer.isNull()
+                || replacementLayer.size() != outputRegion.size()
+                || replacementLayer.format()
+                       != QImage::Format_ARGB32_Premultiplied)))
+    {
+        return {};
+    }
+    for (auto layer = frame.paintLayers.cbegin();
+        layer != frame.paintLayers.cend();
+        ++layer)
+    {
+        if (layer.key() == replacementLayerId)
+        {
+            continue;
+        }
+        const QImage &source = layer.value();
+        if (source.isNull() || source.size() != frame.outputSize
+            || source.format() != QImage::Format_ARGB32_Premultiplied)
+        {
+            return {};
+        }
+    }
+    if (outputRegion == QRect(QPoint(), frame.outputSize))
+    {
+        return composeLayerRasterFrame(
+            document, frame, replacementLayerId, replacementLayer);
+    }
+    LayerRasterFrame regionalFrame;
+    regionalFrame.outputSize = outputRegion.size();
+    QHash<qint64, QImage> regionalCopies;
+    for (auto layer = frame.paintLayers.cbegin();
+        layer != frame.paintLayers.cend();
+        ++layer)
+    {
+        if (layer.key() == replacementLayerId)
+        {
+            continue;
+        }
+        const QImage &source = layer.value();
+        const qint64 cacheKey = source.cacheKey();
+        auto region = regionalCopies.constFind(cacheKey);
+        if (region == regionalCopies.cend())
+        {
+            QImage copy = source.copy(outputRegion);
+            if (copy.isNull())
+            {
+                return {};
+            }
+            region = regionalCopies.insert(cacheKey, std::move(copy));
+        }
+        regionalFrame.paintLayers.insert(layer.key(), region.value());
+    }
+    regionalFrame.valid = true;
+    return composeLayerRasterFrame(
+        document, regionalFrame, replacementLayerId, replacementLayer);
+}
+
 bool RenderEngine::renderStrokesOnLayer(QImage &layerImage,
     const Document &document,
     const QVector<Stroke> &strokes,
     int frameIndex,
     const QSize &outputSize)
 {
-    if (!document.size.isValid() || !outputSize.isValid())
+    if (document.size.isEmpty() || outputSize.isEmpty())
     {
         return false;
     }
@@ -2178,8 +2249,21 @@ bool RenderEngine::renderStrokesOnLayerRegion(QImage &layerImage,
     int frameIndex,
     const QRect &outputRegion)
 {
-    if (!document.size.isValid() || outputRegion.isEmpty()
-        || !QRect(QPoint(), document.size).contains(outputRegion)
+    return renderStrokesOnLayerRegion(
+        layerImage, document, strokes, frameIndex, document.size, outputRegion);
+}
+
+bool RenderEngine::renderStrokesOnLayerRegion(QImage &layerImage,
+    const Document &document,
+    const QVector<Stroke> &strokes,
+    int frameIndex,
+    const QSize &outputSize,
+    const QRect &outputRegion,
+    StrokeRenderCache *cache)
+{
+    if (document.size.isEmpty() || outputSize.isEmpty()
+        || outputRegion.isEmpty()
+        || !QRect(QPoint(), outputSize).contains(outputRegion)
         || layerImage.isNull() || layerImage.size() != outputRegion.size()
         || layerImage.format() != QImage::Format_ARGB32_Premultiplied
         || std::any_of(strokes.cbegin(),
@@ -2196,19 +2280,59 @@ bool RenderEngine::renderStrokesOnLayerRegion(QImage &layerImage,
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame =
         ((frameIndex % frameCount) + frameCount) % frameCount;
-    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QPainterPath> localClipPaths;
+    QHash<qint64, QPainterPath> &clipPaths =
+        cache ? cache->clipPaths : localClipPaths;
     QHash<qint64, QImage> scaledClipMasks;
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
+    const QPointF logicalOrigin(
+        outputRegion.x() / horizontalScale, outputRegion.y() / verticalScale);
     renderLayerStrokes(layerImage,
         document,
         strokes,
         normalizedFrame,
         frameCount,
-        1.0,
-        1.0,
+        horizontalScale,
+        verticalScale,
         clipPaths,
         scaledClipMasks,
-        outputRegion.topLeft());
+        logicalOrigin);
     return true;
+}
+
+QRect RenderEngine::strokePreviewBounds(
+    const Document &document, const Stroke &stroke, const QSize &outputSize)
+{
+    if (document.size.isEmpty() || outputSize.isEmpty()
+        || (stroke.mode != StrokeMode::Paint
+            && stroke.mode != StrokeMode::Erase))
+    {
+        return {};
+    }
+    Layer layer;
+    layer.initialCanvasSize = document.size;
+    layer.strokes.append(stroke);
+    const StrokeCoveragePlan plan = prepareStrokeCoverage(document, layer);
+    const QRect nativeBounds =
+        conservativeStrokeCoverageBounds(document, layer, 0, plan);
+    if (nativeBounds.isEmpty())
+    {
+        return {};
+    }
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
+    const QRectF mapped(nativeBounds.x() * horizontalScale,
+        nativeBounds.y() * verticalScale,
+        nativeBounds.width() * horizontalScale,
+        nativeBounds.height() * verticalScale);
+    return mapped.toAlignedRect()
+        .adjusted(-1, -1, 1, 1)
+        .intersected(QRect(QPoint(), outputSize));
 }
 
 QImage RenderEngine::renderStrokeCoverage(const Document &document,
@@ -2401,6 +2525,45 @@ QImage RenderEngine::composeLayerSplit(
     {
         prepareLayerComposition(compositor, LayerBlendMode::Normal, 1.0);
         compositor.drawImage(QPoint(0, 0), split.above);
+    }
+    return result;
+}
+
+QImage RenderEngine::composeLayerSplitRegion(const LayerSplitFrame &split,
+    const QImage &layerImage,
+    const QRect &outputRegion)
+{
+    if (!split.valid || split.below.isNull()
+        || split.below.format() != QImage::Format_ARGB32_Premultiplied
+        || outputRegion.isEmpty()
+        || !QRect(QPoint(), split.below.size()).contains(outputRegion)
+        || (split.layerVisible
+            && (layerImage.isNull() || layerImage.size() != outputRegion.size()
+                || layerImage.format() != QImage::Format_ARGB32_Premultiplied))
+        || (!split.above.isNull()
+            && (split.above.size() != split.below.size()
+                || split.above.format()
+                       != QImage::Format_ARGB32_Premultiplied)))
+    {
+        return {};
+    }
+    QImage result = split.below.copy(outputRegion);
+    if (result.isNull())
+    {
+        return {};
+    }
+    QPainter compositor(&result);
+    compositor.setRenderHint(QPainter::Antialiasing, false);
+    if (split.layerVisible)
+    {
+        prepareLayerComposition(
+            compositor, split.layerBlendMode, split.layerOpacity);
+        compositor.drawImage(QPoint(), layerImage);
+    }
+    if (!split.above.isNull())
+    {
+        prepareLayerComposition(compositor, LayerBlendMode::Normal, 1.0);
+        compositor.drawImage(QPoint(), split.above, outputRegion);
     }
     return result;
 }

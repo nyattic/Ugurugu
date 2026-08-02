@@ -3739,6 +3739,29 @@ private slots:
         QVERIFY(!window.isWindowModified());
     }
 
+    void pausesAnimationWhilePanning()
+    {
+        Document document = Document::createDefault(QSize(128, 128));
+        document.framesPerSecond = 50.0;
+        document.animationFrames = 30;
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(&canvas, Qt::MiddleButton, Qt::NoModifier, center);
+        const int heldFrame = canvas.currentFrame();
+        QTest::qWait(100);
+        QCOMPARE(canvas.currentFrame(), heldFrame);
+
+        QSignalSpy frameChanges(&canvas, &CanvasWidget::currentFrameChanged);
+        QTest::mouseRelease(&canvas, Qt::MiddleButton, Qt::NoModifier, center);
+        QTRY_VERIFY_WITH_TIMEOUT(!frameChanges.isEmpty(), 1000);
+    }
+
     void zoomsWithPanModifierCtrlDrag()
     {
         DocumentController controller;

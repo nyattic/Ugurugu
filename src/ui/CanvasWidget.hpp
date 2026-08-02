@@ -200,7 +200,13 @@ private:
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
+    QRect visiblePreviewRect(const QSize &renderSize) const;
     QImage frameImage(int frame);
+    QImage activeStrokePreview(const Document &document,
+        const QSize &renderSize,
+        QRect &outputBounds,
+        bool &resolved);
+    void invalidateActiveStrokePreview();
     QImage interactionPreview(Document document, const QSize &renderSize) const;
     const RenderEngine::LayerSplitFrame &previewSplit(
         const QUuid &layerId, const QSize &renderSize);
@@ -234,6 +240,7 @@ private:
     void updatePointerPosition(const QPointF &widgetPosition);
     void updateCursor();
     void notifyZoomChanged();
+    QRect pointerUpdateRect() const;
     bool selectionContains(const QPointF &documentPosition) const;
     void beginAreaSelection(const QPointF &documentPosition);
     void continueAreaSelection(const QPointF &documentPosition);
@@ -327,6 +334,13 @@ private:
     int m_previewSplitFrame = -1;
     RenderEngine::LayerRasterFrame m_previewLayerRasters;
     int m_previewLayerRasterFrame = -1;
+    QImage m_activeStrokePreview;
+    QRect m_activeStrokePreviewBounds;
+    QRect m_activeStrokePreviewVisibleRect;
+    QSize m_activeStrokePreviewRenderSize;
+    int m_activeStrokePreviewFrame = -1;
+    bool m_activeStrokePreviewResolved = false;
+    RenderEngine::StrokeRenderCache m_activeStrokeRenderCache;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;
