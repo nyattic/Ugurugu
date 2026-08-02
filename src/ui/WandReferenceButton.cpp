@@ -10,7 +10,7 @@
 namespace wobble
 {
 
-WandReferenceButton::WandReferenceButton(CanvasWidget::WandReference reference,
+WandReferenceButton::WandReferenceButton(CanvasWandReference reference,
     QString title,
     QString description,
     QWidget *parent)
@@ -19,7 +19,7 @@ WandReferenceButton::WandReferenceButton(CanvasWidget::WandReference reference,
 {
 }
 
-CanvasWidget::WandReference WandReferenceButton::reference() const
+CanvasWandReference WandReferenceButton::reference() const
 {
     return m_reference;
 }
@@ -35,10 +35,10 @@ void WandReferenceButton::paintPreview(
     for (int index = 2; index >= 0; --index)
     {
         const bool active =
-            m_reference == CanvasWidget::WandReference::AllVisibleLayers
-            || (m_reference == CanvasWidget::WandReference::ActiveLayer
+            m_reference == CanvasWandReference::AllVisibleLayers
+            || (m_reference == CanvasWandReference::ActiveLayer
                 && index == 1)
-            || (m_reference == CanvasWidget::WandReference::ReferenceLayers
+            || (m_reference == CanvasWandReference::ReferenceLayers
                 && index != 1);
         QColor fill = Theme::controlBackground();
         QColor border = Theme::border();
@@ -52,7 +52,7 @@ void WandReferenceButton::paintPreview(
         painter.setPen(QPen(border, active ? 1.4 : 1.0));
         painter.drawRoundedRect(layers.at(index), 3.0, 3.0);
 
-        if (m_reference == CanvasWidget::WandReference::ReferenceLayers
+        if (m_reference == CanvasWandReference::ReferenceLayers
             && active)
         {
             painter.setPen(Qt::NoPen);

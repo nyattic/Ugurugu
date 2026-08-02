@@ -4,6 +4,7 @@
 #include "input/StrokeStabilizer.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
 #include "render/RenderEngine.hpp"
+#include "ui/CanvasTypes.hpp"
 
 #include <QCache>
 #include <QColor>
@@ -30,28 +31,9 @@ class CanvasWidget final : public QWidget
     Q_OBJECT
 
 public:
-    enum class Tool
-    {
-        Brush,
-        Eraser,
-        Lasso,
-        Wand,
-        Bucket
-    };
-
-    enum class WandReference
-    {
-        ActiveLayer,
-        ReferenceLayers,
-        AllVisibleLayers
-    };
-
-    enum class SelectionShape
-    {
-        Freehand,
-        Rectangle,
-        Ellipse
-    };
+    using Tool = CanvasTool;
+    using WandReference = CanvasWandReference;
+    using SelectionShape = CanvasSelectionShape;
 
     explicit CanvasWidget(
         DocumentController *controller, QWidget *parent = nullptr);

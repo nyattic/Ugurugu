@@ -10,7 +10,7 @@
 namespace wobble
 {
 
-SelectionShapeButton::SelectionShapeButton(CanvasWidget::SelectionShape shape,
+SelectionShapeButton::SelectionShapeButton(CanvasSelectionShape shape,
     QString title,
     QString description,
     QWidget *parent)
@@ -19,7 +19,7 @@ SelectionShapeButton::SelectionShapeButton(CanvasWidget::SelectionShape shape,
 {
 }
 
-CanvasWidget::SelectionShape SelectionShapeButton::shape() const
+CanvasSelectionShape SelectionShapeButton::shape() const
 {
     return m_shape;
 }
@@ -31,7 +31,7 @@ void SelectionShapeButton::paintPreview(
     const QRectF shapeBounds = bounds.adjusted(4.0, 5.0, -4.0, -5.0);
     switch (m_shape)
     {
-    case CanvasWidget::SelectionShape::Freehand:
+    case CanvasSelectionShape::Freehand:
         path.moveTo(shapeBounds.left() + 2.0, shapeBounds.center().y() + 2.0);
         path.cubicTo(shapeBounds.left() - 1.0,
             shapeBounds.top() + 3.0,
@@ -52,10 +52,10 @@ void SelectionShapeButton::paintPreview(
             shapeBounds.left() + 2.0,
             shapeBounds.center().y() + 2.0);
         break;
-    case CanvasWidget::SelectionShape::Rectangle:
+    case CanvasSelectionShape::Rectangle:
         path.addRoundedRect(shapeBounds, 2.0, 2.0);
         break;
-    case CanvasWidget::SelectionShape::Ellipse:
+    case CanvasSelectionShape::Ellipse:
         path.addEllipse(shapeBounds);
         break;
     }

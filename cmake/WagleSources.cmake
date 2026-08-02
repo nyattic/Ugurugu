@@ -70,6 +70,7 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/BrushSizeRow.hpp
     src/ui/CanvasSizeDialog.cpp
     src/ui/CanvasSizeDialog.hpp
+    src/ui/CanvasTypes.hpp
     src/ui/CanvasWidget.cpp
     src/ui/CanvasWidget.hpp
     src/ui/ColorSwatchRow.cpp
