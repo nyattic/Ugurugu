@@ -18,6 +18,7 @@
 #include <QSet>
 #include <QTransform>
 #include <QtTest>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -436,7 +437,8 @@ inline QImage reframedRasterResult(
     return target;
 }
 
-inline QImage clearedSelectionResult(const QImage &before, const QImage &selection)
+inline QImage clearedSelectionResult(
+    const QImage &before, const QImage &selection)
 {
     if (before.isNull() || selection.size() != before.size()
         || selection.format() != QImage::Format_Grayscale8)

@@ -72,6 +72,7 @@
 #include <QToolButton>
 #include <QVariant>
 #include <QtTest>
+
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -279,7 +280,8 @@ inline void scheduleDialogButtonClickAndAcceptNext(QObject *context,
         });
 }
 
-inline Document nestedLayerDocument(int depth, const QSize &size = QSize(100, 100))
+inline Document nestedLayerDocument(
+    int depth, const QSize &size = QSize(100, 100))
 {
     Document document = Document::createDefault(size);
     Layer paint = document.layers.takeFirst();

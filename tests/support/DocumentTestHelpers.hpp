@@ -22,6 +22,7 @@
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -134,7 +135,8 @@ inline void compareDocumentTransitionSnapshot(
         expected.nextContentRevision);
 }
 
-inline void prepareDocumentTransitionFailureState(DocumentController &controller)
+inline void prepareDocumentTransitionFailureState(
+    DocumentController &controller)
 {
     controller.newDocument(QSize(96, 96));
     const QUuid layerId = controller.document().activeLayerId;

@@ -36,8 +36,7 @@ void WandReferenceButton::paintPreview(
     {
         const bool active =
             m_reference == CanvasWandReference::AllVisibleLayers
-            || (m_reference == CanvasWandReference::ActiveLayer
-                && index == 1)
+            || (m_reference == CanvasWandReference::ActiveLayer && index == 1)
             || (m_reference == CanvasWandReference::ReferenceLayers
                 && index != 1);
         QColor fill = Theme::controlBackground();
@@ -52,8 +51,7 @@ void WandReferenceButton::paintPreview(
         painter.setPen(QPen(border, active ? 1.4 : 1.0));
         painter.drawRoundedRect(layers.at(index), 3.0, 3.0);
 
-        if (m_reference == CanvasWandReference::ReferenceLayers
-            && active)
+        if (m_reference == CanvasWandReference::ReferenceLayers && active)
         {
             painter.setPen(Qt::NoPen);
             painter.setBrush(Theme::accent());
