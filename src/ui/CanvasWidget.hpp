@@ -223,8 +223,7 @@ private:
         quint64 timestamp);
     void continueStroke(
         const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
-    void endStroke(
-        const QPointF &widgetPosition, qreal pressure, quint64 timestamp);
+    void endStroke(const QPointF &widgetPosition, quint64 timestamp);
     DocumentController::AddStrokeResult commitStroke(
         const QUuid &layerId, Stroke stroke);
     void cancelStroke();

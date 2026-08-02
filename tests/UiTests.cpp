@@ -2016,6 +2016,84 @@ private slots:
         QVERIFY(controller.document().layers.first().strokes.isEmpty());
     }
 
+    void preservesTabletPressureAtStrokeEndpoint()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(100);
+        canvas.setBrushWidth(20.0);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        QPointingDevice stylus(QStringLiteral("Pressure stylus"),
+            3,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const QPointF start = canvas.rect().center() - QPoint(20, 0);
+        const QPointF end = canvas.rect().center() + QPoint(20, 0);
+        const QPointF globalStart = canvas.mapToGlobal(start.toPoint());
+        const QPointF globalEnd = canvas.mapToGlobal(end.toPoint());
+        QTabletEvent tabletPress(QEvent::TabletPress,
+            &stylus,
+            start,
+            globalStart,
+            0.8,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        QApplication::sendEvent(&canvas, &tabletPress);
+        QTabletEvent tabletMove(QEvent::TabletMove,
+            &stylus,
+            end,
+            globalEnd,
+            0.8,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::NoButton,
+            Qt::LeftButton);
+        QApplication::sendEvent(&canvas, &tabletMove);
+        QTabletEvent tabletRelease(QEvent::TabletRelease,
+            &stylus,
+            end,
+            globalEnd,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::NoButton);
+        QApplication::sendEvent(&canvas, &tabletRelease);
+
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        QCOMPARE(strokes.first().points.last().pressure, 0.8);
+        const QImage rendered = RenderEngine::render(controller.document(), 0);
+        QVERIFY(rendered.pixelColor(70, 56).alpha() > 0);
+    }
+
     void keepsSelectionAcrossToolsAndTransformsIt()
     {
         MainWindow window;

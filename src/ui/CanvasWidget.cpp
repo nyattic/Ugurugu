@@ -1647,7 +1647,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
     }
     if (event->button() == Qt::LeftButton && m_drawing && !m_tabletSequence)
     {
-        endStroke(event->position(), 1.0, event->timestamp());
+        endStroke(event->position(), event->timestamp());
         event->accept();
         return;
     }
@@ -1836,7 +1836,7 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         }
         else if (m_drawing)
         {
-            endStroke(event->position(), event->pressure(), event->timestamp());
+            endStroke(event->position(), event->timestamp());
         }
         m_tabletSequence = false;
         event->accept();
@@ -2377,18 +2377,17 @@ void CanvasWidget::continueStroke(
     update();
 }
 
-void CanvasWidget::endStroke(
-    const QPointF &widgetPosition, qreal pressure, quint64 timestamp)
+void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
 {
     if (!m_drawing)
     {
         return;
     }
-    continueStroke(widgetPosition, pressure, timestamp);
+    const qreal endpointPressure = m_activeStroke.points.constLast().pressure;
+    continueStroke(widgetPosition, endpointPressure, timestamp);
     const QPointF finalPosition = m_strokeStabilizer.finish(
         clampedDocumentPosition(mapToDocument(widgetPosition)), timestamp);
-    const StrokePoint finalPoint{
-        finalPosition, std::clamp(pressure, 0.05, 1.0)};
+    const StrokePoint finalPoint{finalPosition, endpointPressure};
     if (m_activeStroke.points.size() >= DocumentLimits::maximumPointsPerStroke
         || pointDistance(
                finalPosition, m_activeStroke.points.constLast().position)
