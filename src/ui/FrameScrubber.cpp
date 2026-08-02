@@ -156,7 +156,7 @@ void FrameScrubber::paintEvent(QPaintEvent *)
             std::max(slotWidth, 6.0),
             markerHeight);
         QColor markerColor = Theme::accent();
-        markerColor.setAlphaF(0.55);
+        markerColor.setAlphaF(0.55f);
         painter.setBrush(markerColor);
         painter.drawRoundedRect(marker.adjusted(0.5, 0.0, -0.5, 0.0), 1.5, 1.5);
     }
