@@ -5,6 +5,11 @@ endif()
 find_package(Qt6 6.10 REQUIRED COMPONENTS Test)
 
 qt_add_executable(wobblepaint_tests ${WOBBLEPAINT_TEST_SOURCES})
+target_include_directories(
+    wobblepaint_tests
+    PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+)
 target_link_libraries(wobblepaint_tests PRIVATE wobblepaint_ui Qt6::Test)
 target_compile_definitions(
     wobblepaint_tests

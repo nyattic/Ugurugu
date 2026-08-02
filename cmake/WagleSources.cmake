@@ -141,8 +141,15 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/StrokeStabilizerTests.cpp
     tests/TestMain.cpp
     tests/TestSuites.hpp
+    tests/UiDrawingToolTests.cpp
+    tests/UiSelectionTests.cpp
+    tests/UiSessionTests.cpp
+    tests/UiShellTests.cpp
     tests/UiTests.cpp
+    tests/UiViewportTests.cpp
     tests/support/CanvasWidgetTestAccess.hpp
     tests/support/DocumentControllerTestAccess.hpp
     tests/support/MainWindowTestAccess.hpp
+    tests/support/UiTestHelpers.hpp
+    tests/support/UiTestSuites.hpp
 )
