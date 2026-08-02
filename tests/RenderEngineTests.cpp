@@ -18,6 +18,7 @@
 #include <QtTest>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <functional>
@@ -3403,8 +3404,15 @@ private slots:
                 << p50Milliseconds << " ms, p95 " << p95Milliseconds << " ms";
         };
 
-        benchmarkRasterPrefix(10000);
-        benchmarkRasterPrefix(50000);
+#ifdef NDEBUG
+        constexpr std::array rasterPointCounts{10000, 50000};
+#else
+        constexpr std::array rasterPointCounts{1000, 5000};
+#endif
+        for (const int pointCount : rasterPointCounts)
+        {
+            benchmarkRasterPrefix(pointCount);
+        }
     }
 
     void displacesWobbleLinearlyWithAmount()
