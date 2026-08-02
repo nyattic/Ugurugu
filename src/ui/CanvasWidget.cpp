@@ -1349,25 +1349,28 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
     {
         displayedFrame = frameImage(m_currentFrame);
     }
-    painter.drawImage(
-        QRectF(QPointF(0.0, 0.0), QSizeF(document.size)), displayedFrame);
-    if (!regionalFrame.isNull() && !regionalBounds.isEmpty())
+    if (!regionalFrame.isNull() && !regionalBounds.isEmpty()
+        && displayedFrame.size() == renderSize)
     {
-        const qreal horizontalScale =
-            static_cast<qreal>(document.size.width()) / renderSize.width();
-        const qreal verticalScale =
-            static_cast<qreal>(document.size.height()) / renderSize.height();
-        const QRectF documentPreviewRect(regionalBounds.x() * horizontalScale,
-            regionalBounds.y() * verticalScale,
-            regionalBounds.width() * horizontalScale,
-            regionalBounds.height() * verticalScale);
-        const QRectF widgetPreviewRect =
-            transform.mapRect(documentPreviewRect).intersected(canvasRect);
-        painter.save();
-        painter.resetTransform();
-        painter.fillRect(widgetPreviewRect, checkerBrush());
-        painter.restore();
-        painter.drawImage(documentPreviewRect, regionalFrame);
+        if (m_composedPreviewFrame.size() != displayedFrame.size()
+            || m_composedPreviewBaseKey != displayedFrame.cacheKey()
+            || !regionalBounds.contains(m_composedPreviewRegion))
+        {
+            m_composedPreviewFrame = displayedFrame.copy();
+            m_composedPreviewBaseKey = displayedFrame.cacheKey();
+        }
+        QPainter composePainter(&m_composedPreviewFrame);
+        composePainter.setCompositionMode(QPainter::CompositionMode_Source);
+        composePainter.drawImage(regionalBounds.topLeft(), regionalFrame);
+        composePainter.end();
+        m_composedPreviewRegion = regionalBounds;
+        painter.drawImage(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)),
+            m_composedPreviewFrame);
+    }
+    else
+    {
+        painter.drawImage(
+            QRectF(QPointF(0.0, 0.0), QSizeF(document.size)), displayedFrame);
     }
     painter.restore();
 
@@ -2196,6 +2199,9 @@ void CanvasWidget::invalidateFrames()
     m_previewSplitFrame = -1;
     m_previewLayerRasters = {};
     m_previewLayerRasterFrame = -1;
+    m_composedPreviewFrame = {};
+    m_composedPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
     invalidateActiveStrokePreview();
     m_activeStrokeRenderCache.clipPaths.clear();
     m_editableStrokeIds.clear();

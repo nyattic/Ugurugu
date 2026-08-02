@@ -4236,6 +4236,84 @@ private slots:
         QVERIFY(qAbs(canvas.zoom() - 1.0) < 0.0001);
     }
 
+    void keepsRegionalStrokePreviewFreeOfSeams()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(256, 256)));
+        const QUuid layerId = controller.document().activeLayerId;
+
+        Stroke background;
+        background.color = QColor(255, 0, 0);
+        background.width = 512.0;
+        background.points = {{QPointF(0.0, 0.0), 1.0},
+            {QPointF(128.0, 128.0), 1.0},
+            {QPointF(256.0, 256.0), 1.0}};
+        QCOMPARE(controller.addStroke(layerId, background),
+            DocumentController::AddStrokeResult::Added);
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(300, 300);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.setAnimating(false);
+        canvas.fitToWindow();
+        canvas.setBrushColor(QColor(0, 0, 255));
+        canvas.setBrushWidth(8.0);
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(30, 0));
+        for (int step = -20; step <= 30; step += 10)
+        {
+            QTest::mouseMove(&canvas, center + QPoint(step, step / 3), 5);
+        }
+        const QPoint pointerPosition = center + QPoint(30, 10);
+
+        int seamPixels = 0;
+        for (const int zoomPercent : {87, 93, 101, 113})
+        {
+            canvas.setZoomPercent(zoomPercent);
+            const QImage frame = canvas.grab().toImage();
+
+            QRect paintedBounds;
+            for (int y = 0; y < frame.height(); ++y)
+            {
+                for (int x = 0; x < frame.width(); ++x)
+                {
+                    const QColor color = frame.pixelColor(x, y);
+                    if (color.red() > 150 && color.green() < 80
+                        && color.blue() < 80)
+                    {
+                        paintedBounds |= QRect(x, y, 1, 1);
+                    }
+                }
+            }
+            QVERIFY(paintedBounds.width() > 100);
+            QVERIFY(paintedBounds.height() > 100);
+
+            const QRect interior = paintedBounds.adjusted(4, 4, -4, -4);
+            for (int y = interior.top(); y <= interior.bottom(); ++y)
+            {
+                for (int x = interior.left(); x <= interior.right(); ++x)
+                {
+                    if ((QPoint(x, y) - pointerPosition).manhattanLength() < 40)
+                    {
+                        continue;
+                    }
+                    const QColor color = frame.pixelColor(x, y);
+                    if (color.red() > 90 && color.green() > 90
+                        && color.blue() > 90)
+                    {
+                        ++seamPixels;
+                    }
+                }
+            }
+        }
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, pointerPosition);
+        QCOMPARE(seamPixels, 0);
+    }
+
     void fitsCanvasToViewportOnFirstShow()
     {
         MainWindow window;

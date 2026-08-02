@@ -343,6 +343,9 @@ private:
     int m_activeStrokePreviewFrame = -1;
     bool m_activeStrokePreviewResolved = false;
     RenderEngine::StrokeRenderCache m_activeStrokeRenderCache;
+    QImage m_composedPreviewFrame;
+    QRect m_composedPreviewRegion;
+    qint64 m_composedPreviewBaseKey = 0;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     Stroke m_activeStroke;
