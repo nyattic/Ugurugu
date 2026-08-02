@@ -3657,7 +3657,7 @@ void DocumentController::removeLayer(const QUuid &id)
     }
     if (removedIds.contains(candidate.activeLayerId))
     {
-        candidate.activeLayerId = {};
+        candidate.activeLayerId = QUuid();
         const auto choosePaint = [&](int begin, int end, int step)
         {
             for (int candidateIndex = begin; candidateIndex != end;
@@ -4479,7 +4479,7 @@ void DocumentController::ensureActiveLayer(Document &document)
     }
     if (document.layers.isEmpty())
     {
-        document.activeLayerId = {};
+        document.activeLayerId = QUuid();
         return;
     }
     for (auto layer = document.layers.crbegin();
@@ -4492,7 +4492,7 @@ void DocumentController::ensureActiveLayer(Document &document)
             return;
         }
     }
-    document.activeLayerId = {};
+    document.activeLayerId = QUuid();
 }
 
 QString DocumentController::nextLayerName() const

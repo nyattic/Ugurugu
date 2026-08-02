@@ -2245,7 +2245,7 @@ void CanvasWidget::invalidateFrames()
     m_colorPickFrame = {};
     m_colorPickFrameIndex = -1;
     m_previewSplit = {};
-    m_previewSplitLayer = {};
+    m_previewSplitLayer = QUuid();
     m_previewSplitFrame = -1;
     m_previewLayerRasters = {};
     m_previewLayerRasterFrame = -1;
@@ -2256,7 +2256,7 @@ void CanvasWidget::invalidateFrames()
     m_incrementalStrokeRenderer.clear();
     m_editableStrokeIds.clear();
     m_editableStrokeMaskKey = 0;
-    m_editableStrokeLayer = {};
+    m_editableStrokeLayer = QUuid();
     m_editableStrokeFrame = -1;
     const int frames = std::max(1, m_controller->document().animationFrames);
     m_currentFrame %= frames;
@@ -2426,7 +2426,7 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
     const int promotedFrameIndex = m_currentFrame;
     m_drawing = false;
     m_activeStroke = Stroke();
-    m_activeStrokeLayer = {};
+    m_activeStrokeLayer = QUuid();
     invalidateActiveStrokePreview();
     m_strokeStabilizer.reset();
     const DocumentController::AddStrokeResult result =
@@ -2496,7 +2496,7 @@ void CanvasWidget::cancelStroke()
     }
     m_drawing = false;
     m_activeStroke = Stroke();
-    m_activeStrokeLayer = {};
+    m_activeStrokeLayer = QUuid();
     invalidateActiveStrokePreview();
     m_incrementalStrokeRenderer.clear();
     m_composedPreviewFrame = {};
@@ -3414,7 +3414,7 @@ void CanvasWidget::clearSelection()
     m_selectedStrokes.clear();
     m_selectionMask = QImage();
     m_selectionOutline = QPainterPath();
-    m_selectionLayer = {};
+    m_selectionLayer = QUuid();
     m_movingSelection = false;
     updateSelectionAnimation();
     notifySelectionTransformAvailability();

@@ -398,7 +398,7 @@ void LayerDock::connectControls()
             }
             const QUuid id = m_opacityLayerId;
             m_opacityDragging = false;
-            m_opacityLayerId = {};
+            m_opacityLayerId = QUuid();
             commitOpacity(id, m_opacitySlider->value());
         });
     connect(m_opacitySlider,

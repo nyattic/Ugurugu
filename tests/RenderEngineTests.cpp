@@ -194,7 +194,7 @@ Document adversarialClippedHierarchy(const QSize &size, int groupCount)
     Document document = Document::createDefault(size);
     document.background = QColor(24, 32, 48);
     document.layers.clear();
-    document.activeLayerId = {};
+    document.activeLayerId = QUuid();
 
     QUuid parentGroupId;
     for (int depth = 0; depth <= groupCount; ++depth)
@@ -588,7 +588,7 @@ private slots:
         Document document = Document::createDefault(QSize(32, 24));
         document.background = QColor(12, 34, 56);
         document.layers.clear();
-        document.activeLayerId = {};
+        document.activeLayerId = QUuid();
 
         const QImage rendered = RenderEngine::render(document, 0);
         QVERIFY(!rendered.isNull());
@@ -1579,7 +1579,7 @@ private slots:
         Document document = Document::createDefault(size);
         document.background = QColor(35, 55, 80, 230);
         document.layers.clear();
-        document.activeLayerId = {};
+        document.activeLayerId = QUuid();
 
         Layer rootBase;
         rootBase.name = QStringLiteral("Root base");
@@ -1747,7 +1747,7 @@ private slots:
     {
         Document document = Document::createDefault(QSize(2, 2));
         document.layers.clear();
-        document.activeLayerId = {};
+        document.activeLayerId = QUuid();
         for (int index = 0; index < 2; ++index)
         {
             Layer group;

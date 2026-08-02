@@ -39,7 +39,7 @@ QImage LayerThumbnailRenderer::renderImage(
         root->visible = true;
         root->opacity = 1.0;
         root->blendMode = LayerBlendMode::Normal;
-        root->parentGroupId = {};
+        root->parentGroupId = QUuid();
         root->clipToLayerBelow = false;
     }
 

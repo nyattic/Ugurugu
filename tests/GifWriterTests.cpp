@@ -25,7 +25,7 @@ Document deepClippedExportDocument(const QSize &size)
 {
     Document document = Document::createDefault(size);
     document.layers.clear();
-    document.activeLayerId = {};
+    document.activeLayerId = QUuid();
     document.animationFrames = 2;
 
     QUuid parentGroupId;

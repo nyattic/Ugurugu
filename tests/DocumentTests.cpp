@@ -3537,7 +3537,7 @@ private slots:
     {
         Document document = Document::createDefault(QSize(90, 70));
         document.layers.clear();
-        document.activeLayerId = {};
+        document.activeLayerId = QUuid();
 
         DocumentController controller;
         controller.loadDocument(document);
@@ -4479,7 +4479,7 @@ private slots:
         Document source;
         source.size = QSize(64, 48);
         source.layers.clear();
-        source.activeLayerId = {};
+        source.activeLayerId = QUuid();
 
         DocumentSerializer::SerializationCache cache;
         const auto base = DocumentSerializer::prepare(source, cache);
