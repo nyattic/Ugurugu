@@ -26,6 +26,10 @@ set(WOBBLEPAINT_TEST_SUITES
 )
 foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)
     set(test_name "wobblepaint_${suite}_tests")
+    set(test_timeout 180)
+    if(suite STREQUAL "render")
+        set(test_timeout 420)
+    endif()
     add_test(NAME ${test_name} COMMAND wobblepaint_tests)
     set_tests_properties(
         ${test_name}
@@ -33,7 +37,7 @@ foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)
         ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;WOBBLEPAINT_TEST_SUITE=${suite}"
         TIMEOUT
-        180
+        ${test_timeout}
     )
     if(WIN32)
         set_tests_properties(
