@@ -5,9 +5,6 @@
 namespace wobble
 {
 
-// The large in-memory subsystems share one documented process budget. Export
-// clears the preview and serialization caches first, keeping the remaining
-// history plus GIF working set below the 768 MiB resident target.
 struct MemoryBudget final
 {
     static constexpr qint64 residentTargetBytes = 768LL * 1024LL * 1024LL;

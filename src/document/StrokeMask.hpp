@@ -32,14 +32,9 @@ bool masksIntersect(const QImage &first,
     const QImage &second,
     const std::optional<QRect> &visibilityClip = std::nullopt);
 
-// Returns a bitmap representation of clipMask intersected with
-// visibilityClip. A present null QImage means unrestricted/full visibility;
-// std::nullopt means allocation or validation failed.
 std::optional<QImage> materializedVisibilityMask(
     const Stroke &stroke, const QSize &canvasSize);
 
-// Removes redundant full-canvas restrictions and reports whether the stroke
-// can affect at least one canvas pixel.
 bool canonicalizeStrokeVisibility(Stroke &stroke, const QSize &canvasSize);
 
 }

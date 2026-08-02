@@ -30,7 +30,6 @@
 namespace wobble
 {
 
-
 inline QByteArray pointArray(int count)
 {
     QByteArray points = QByteArrayLiteral("[0,0],").repeated(count);

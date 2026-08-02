@@ -35,7 +35,6 @@ struct PackedMaskRegion
 {
     QSize canvasSize;
     QRect bounds;
-    // One bit per pixel, padded to a whole byte per row.
     QByteArray packedMask;
 
     bool operator==(const PackedMaskRegion &) const = default;
@@ -45,8 +44,6 @@ struct PixelSelectionOp
 {
     QSize canvasSize;
     QRect sourceBounds;
-    // One bit per pixel in sourceBounds, padded to a whole byte per row.
-    // Bit 7 is the leftmost pixel. Unused low bits in each row are zero.
     QByteArray packedMask;
     QTransform transform;
     SamplingMode sampling = SamplingMode::Smooth;
@@ -126,16 +123,9 @@ struct Stroke
     qreal width = 6.0;
     BrushSettings brush;
     QVector<StrokePoint> points;
-    // A rectangular visibility restriction in document pixel coordinates.
-    // A missing value means that no additional rectangular clip is applied.
     std::optional<QRect> visibilityClip;
     QImage clipMask;
-    // Frozen flood-fill coverage for Fill strokes. A null image is accepted
-    // for normal procedural fills. A non-null image is retained only to
-    // preserve explicitly frozen schema-5 projects.
     QImage fillMask;
-    // Ordered framebuffer operations are deliberately distinct from
-    // primitive brush strokes and have strict validation invariants.
     std::optional<PixelSelectionOp> pixelSelectionOp;
     std::optional<ReframeOp> reframeOp;
 };
@@ -169,7 +159,6 @@ struct Layer
     bool reference = false;
     qreal opacity = 1.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
-    // The framebuffer epoch before the first ordered operation.
     QSize initialCanvasSize;
     QVector<Stroke> strokes;
 };

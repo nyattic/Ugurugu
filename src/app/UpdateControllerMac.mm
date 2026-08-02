@@ -37,9 +37,6 @@ UpdateController::UpdateController(QWidget *, QObject *parent)
         this,
         [this]()
         {
-            // Sparkle applies SUEnableAutomaticChecks and
-            // SUScheduledCheckInterval. Do not force another request on every
-            // application launch.
             m_impl->start();
         });
 }

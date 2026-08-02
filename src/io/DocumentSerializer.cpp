@@ -56,8 +56,6 @@ struct StrokeMeta
 
 struct PreparedPlan
 {
-    // Identity aliases are meaningful only while the immutable base
-    // PreparedDocument keeps the corresponding Qt COW backing alive.
     QMap<QString, ClipAssetMeta> clipAssets;
     QMap<QString, BinaryAssetMeta> binaryAssets;
     QHash<qint64, QString> clipIdsByIdentity;
@@ -2326,11 +2324,6 @@ struct MetadataReuseResult
 bool sameStrokeVectorBacking(
     const QVector<Stroke> &left, const QVector<Stroke> &right)
 {
-    // A non-const QVector access detaches before exposing writable storage.
-    // Equality here therefore proves that the candidate still references the
-    // immutable backing owned by baseDocument. Never broaden this to an
-    // element-wise comparison: retained writable aliases must take the full
-    // freezer/validator path.
     return left.size() == right.size()
            && (left.isEmpty() || left.constData() == right.constData());
 }
@@ -2486,9 +2479,6 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
         }
     }
     qint64 compactSize = basePlan.compactSize;
-    // Layer and asset topology is byte-for-byte unchanged. Replacing only
-    // the root/layer skeleton contribution keeps the prepared size exact
-    // without rebuilding the per-stroke plan.
     if (nextMetadataBytes >= previousMetadataBytes)
     {
         const qint64 increase = nextMetadataBytes - previousMetadataBytes;

@@ -385,8 +385,6 @@ private slots:
         sizeChange.scale(0.8, 1.3);
         cases.append({QSize(113, 89), sizeChange, SamplingMode::Smooth});
 
-        // This combination is not emitted by makePixelSelectionOp(), but
-        // remains supported for serialized compatibility.
         cases.append({QSize(79, 61), rotation, SamplingMode::Nearest});
 
         int falsePositives = 0;

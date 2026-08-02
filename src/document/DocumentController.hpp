@@ -19,10 +19,6 @@ class DocumentController;
 class DocumentControllerTestAccess;
 class MainWindowTestAccess;
 
-// Logical history prepares a complete target state before moving its cursor,
-// so a failed restore cannot partially apply a document transaction or its
-// UI side effects. Entries are bounded independently by count and resident
-// payload bytes.
 class DocumentUndoStack final : public QObject
 {
     Q_OBJECT
@@ -160,8 +156,6 @@ public:
         const QPointF &center,
         bool horizontal,
         const QImage &selectionMask = {});
-    // Commits an already accumulated affine floating-selection transform as
-    // one undoable document operation.
     bool transformSelection(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QTransform &transform,
@@ -214,8 +208,6 @@ signals:
         const QVector<QUuid> &duplicateIds,
         const QPointF &delta,
         bool duplicated);
-    // Exact UI selection transition emitted by selection-aware document
-    // commands. Undo emits the same transition with both sides swapped.
     void selectionOverlayTransition(const QUuid &layerId,
         const QVector<QUuid> &fromStrokeIds,
         const QVector<QUuid> &toStrokeIds,
