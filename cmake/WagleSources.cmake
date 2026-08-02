@@ -141,4 +141,7 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/TestMain.cpp
     tests/TestSuites.hpp
     tests/UiTests.cpp
+    tests/support/CanvasWidgetTestAccess.hpp
+    tests/support/DocumentControllerTestAccess.hpp
+    tests/support/MainWindowTestAccess.hpp
 )
