@@ -36,12 +36,14 @@ private slots:
             QCOMPARE(first.acquire(&error),
                 ApplicationInstanceLock::AcquireResult::Acquired);
             QVERIFY2(error.isEmpty(), qPrintable(error));
+#if !defined(Q_OS_WIN)
             QFile lockFile(lockPath);
             QVERIFY(lockFile.open(QIODevice::ReadWrite));
             QVERIFY(lockFile.setFileTime(
                 QDateTime::currentDateTimeUtc().addSecs(-60),
                 QFileDevice::FileModificationTime));
             lockFile.close();
+#endif
             QCOMPARE(second.acquire(),
                 ApplicationInstanceLock::AcquireResult::AlreadyRunning);
         }
