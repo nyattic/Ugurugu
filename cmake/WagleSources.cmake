@@ -133,14 +133,29 @@ set(WOBBLEPAINT_UI_SOURCES
 
 set(WOBBLEPAINT_TEST_SOURCES
     tests/AppPolicyTests.cpp
+    tests/BrushRenderingTests.cpp
+    tests/DocumentHistoryTests.cpp
+    tests/DocumentLifecycleTests.cpp
+    tests/DocumentResizeTests.cpp
+    tests/DocumentSchemaTests.cpp
     tests/DocumentTests.cpp
     tests/GifWriterTests.cpp
+    tests/LayerCommandTests.cpp
+    tests/LayerCompositionTests.cpp
+    tests/LayerSplitPreviewTests.cpp
     tests/MaskRegressionTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp
+    tests/RenderPreviewTests.cpp
+    tests/SelectionPreviewTests.cpp
+    tests/SerializationBudgetTests.cpp
+    tests/StrokeCommandTests.cpp
+    tests/StrokeCoverageTests.cpp
+    tests/StrokeRenderingTests.cpp
     tests/StrokeStabilizerTests.cpp
     tests/TestMain.cpp
     tests/TestSuites.hpp
+    tests/WobbleAnimationTests.cpp
     tests/UiDrawingToolTests.cpp
     tests/UiSelectionTests.cpp
     tests/UiSessionTests.cpp
@@ -149,7 +164,11 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/UiViewportTests.cpp
     tests/support/CanvasWidgetTestAccess.hpp
     tests/support/DocumentControllerTestAccess.hpp
+    tests/support/DocumentTestHelpers.hpp
+    tests/support/DocumentTestSuites.hpp
     tests/support/MainWindowTestAccess.hpp
+    tests/support/RenderTestHelpers.hpp
+    tests/support/RenderTestSuites.hpp
     tests/support/UiTestHelpers.hpp
     tests/support/UiTestSuites.hpp
 )

@@ -1,0 +1,483 @@
+#include "support/RenderTestHelpers.hpp"
+#include "support/RenderTestSuites.hpp"
+
+namespace wobble
+{
+
+class LayerSplitPreviewTests final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void handlesBlendModesInLayerSplitPreviews()
+    {
+        Document document = Document::createDefault(QSize(48, 36));
+        document.wobbleAmount = 0.0;
+        Layer &target = document.layers.first();
+        target.blendMode = LayerBlendMode::Overlay;
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(220, 70, 90),
+            14.0,
+            1,
+            {QPointF(24.0, 18.0)}));
+        const QUuid targetId = target.id;
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 180, 100),
+            8.0,
+            2,
+            {QPointF(10.0, 10.0)}));
+        document.layers.append(top);
+
+        RenderEngine::LayerSplitFrame split = RenderEngine::renderLayerSplit(
+            document, 0, document.size, targetId);
+        QVERIFY(split.valid);
+        QCOMPARE(RenderEngine::composeLayerSplit(split, split.layerBase),
+            RenderEngine::render(document, 0));
+
+        document.layers.last().blendMode = LayerBlendMode::Screen;
+        split = RenderEngine::renderLayerSplit(
+            document, 0, document.size, targetId);
+        QVERIFY(!split.valid);
+    }
+
+    void composesLayerSplitLikeFullRender()
+    {
+        Document document = Document::createDefault(QSize(96, 72));
+        document.animationFrames = 6;
+        document.wobbleAmount = 3.0;
+        document.layers.first().strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(200, 40, 40),
+            8.0,
+            11,
+            {QPointF(10.0, 10.0), QPointF(80.0, 60.0)}));
+        Layer middle;
+        middle.name = QStringLiteral("Middle");
+        middle.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 200, 40),
+            7.0,
+            22,
+            {QPointF(10.0, 60.0), QPointF(80.0, 10.0)}));
+        document.layers.append(middle);
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.opacity = 0.65;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 40, 200),
+            9.0,
+            33,
+            {QPointF(48.0, 6.0), QPointF(48.0, 66.0)}));
+        document.layers.append(top);
+        const QUuid middleId = document.layers[1].id;
+
+        const QVector<Stroke> activeStrokes = {
+            makeStroke(StrokeMode::Paint,
+                QColor(250, 210, 60),
+                5.0,
+                44,
+                {QPointF(20.0, 20.0), QPointF(70.0, 50.0)}),
+            makeStroke(StrokeMode::Erase,
+                QColor(Qt::black),
+                12.0,
+                55,
+                {QPointF(30.0, 50.0), QPointF(60.0, 20.0)})};
+        for (const Stroke &active : activeStrokes)
+        {
+            Document full = document;
+            full.layer(middleId)->strokes.append(active);
+            const QImage expected = RenderEngine::render(full, 2);
+
+            const RenderEngine::LayerSplitFrame split =
+                RenderEngine::renderLayerSplit(
+                    document, 2, document.size, middleId);
+            QVERIFY(split.valid);
+            QImage layerImage = split.layerBase;
+            QVERIFY(RenderEngine::renderStrokesOnLayer(
+                layerImage, document, {active}, 2, document.size));
+            const QImage actual =
+                RenderEngine::composeLayerSplit(split, layerImage);
+
+            QCOMPARE(actual.size(), expected.size());
+            for (int y = 0; y < expected.height(); ++y)
+            {
+                for (int x = 0; x < expected.width(); ++x)
+                {
+                    const QColor a = actual.pixelColor(x, y);
+                    const QColor b = expected.pixelColor(x, y);
+                    QVERIFY(std::abs(a.red() - b.red()) <= 2);
+                    QVERIFY(std::abs(a.green() - b.green()) <= 2);
+                    QVERIFY(std::abs(a.blue() - b.blue()) <= 2);
+                    QVERIFY(std::abs(a.alpha() - b.alpha()) <= 2);
+                }
+            }
+        }
+    }
+
+    void composesActiveStrokeRegionsLikeFullPreviews()
+    {
+        Document document = Document::createDefault(QSize(256, 192));
+        document.background = Qt::transparent;
+        document.animationFrames = 8;
+        document.wobbleAmount = 2.0;
+        Layer &target = document.layers.first();
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(210, 55, 75),
+            42.0,
+            71,
+            {QPointF(42.0, 96.0), QPointF(214.0, 96.0)}));
+        const QUuid targetId = target.id;
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.opacity = 0.7;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(45, 95, 220),
+            18.0,
+            72,
+            {QPointF(128.0, 28.0), QPointF(128.0, 164.0)}));
+        document.layers.append(top);
+
+        QVector<Stroke> activeStrokes{makeStroke(StrokeMode::Paint,
+                                          QColor(235, 195, 45, 180),
+                                          14.0,
+                                          73,
+                                          {QPointF(78.0, 58.0),
+                                              QPointF(116.0, 76.0),
+                                              QPointF(156.0, 54.0)}),
+            makeStroke(StrokeMode::Erase,
+                Qt::black,
+                24.0,
+                74,
+                {QPointF(82.0, 112.0), QPointF(172.0, 128.0)})};
+        for (Stroke &stroke : activeStrokes)
+        {
+            stroke.clipMask =
+                rectangularMask(document.size, QRect(56, 36, 144, 120));
+        }
+
+        for (const QSize outputSize : {document.size, QSize(128, 96)})
+        {
+            const RenderEngine::LayerSplitFrame split =
+                RenderEngine::renderLayerSplit(
+                    document, 3, outputSize, targetId);
+            QVERIFY(split.valid);
+            for (const Stroke &active : activeStrokes)
+            {
+                QImage fullLayer = split.layerBase;
+                QVERIFY(RenderEngine::renderStrokesOnLayer(
+                    fullLayer, document, {active}, 3, outputSize));
+                const QImage full =
+                    RenderEngine::composeLayerSplit(split, fullLayer);
+
+                const QRect bounds = RenderEngine::strokePreviewBounds(
+                    document, active, outputSize);
+                QVERIFY(!bounds.isEmpty());
+                QVERIFY(bounds.size() != outputSize);
+                QImage regionalLayer = split.layerBase.copy(bounds);
+                RenderEngine::StrokeRenderCache cache;
+                QVERIFY(RenderEngine::renderStrokesOnLayerRegion(regionalLayer,
+                    document,
+                    {active},
+                    3,
+                    outputSize,
+                    bounds,
+                    &cache));
+                const QImage regional = RenderEngine::composeLayerSplitRegion(
+                    split, regionalLayer, bounds);
+
+                QCOMPARE(regional, full.copy(bounds));
+                QCOMPARE(cache.clipPaths.size(), 1);
+                QImage reusedLayer = split.layerBase.copy(bounds);
+                QVERIFY(RenderEngine::renderStrokesOnLayerRegion(reusedLayer,
+                    document,
+                    {active},
+                    3,
+                    outputSize,
+                    bounds,
+                    &cache));
+                QCOMPARE(cache.clipPaths.size(), 1);
+                QCOMPARE(RenderEngine::composeLayerSplitRegion(
+                             split, reusedLayer, bounds),
+                    regional);
+            }
+        }
+    }
+
+    void benchmarksFourKActiveStrokeRegions()
+    {
+        const QSize canvasSize(4096, 4096);
+        Document document = Document::createDefault(canvasSize);
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+
+        QVector<QPointF> positions;
+        constexpr int pointCount = 3000;
+        positions.reserve(pointCount);
+        for (int index = 0; index < pointCount; ++index)
+        {
+            const qreal progress = static_cast<qreal>(index) / (pointCount - 1);
+            positions.append(QPointF(256.0 + progress * 3584.0,
+                2048.0 + std::sin(progress * 80.0) * 5.0));
+        }
+        const Stroke active = makeStroke(
+            StrokeMode::Paint, QColor(45, 180, 105), 12.0, 82, positions);
+        QImage layerBase(canvasSize, QImage::Format_ARGB32_Premultiplied);
+        QVERIFY(!layerBase.isNull());
+        layerBase.fill(Qt::transparent);
+        const QRect bounds =
+            RenderEngine::strokePreviewBounds(document, active, canvasSize);
+        QVERIFY(!bounds.isEmpty());
+
+        QElapsedTimer timer;
+        timer.start();
+        QImage fullLayer = layerBase;
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            fullLayer, document, {active}, 0, canvasSize));
+        const qint64 fullNanoseconds = timer.nsecsElapsed();
+        const quint64 fullBytes = static_cast<quint64>(fullLayer.sizeInBytes());
+        const QImage expectedRegion = fullLayer.copy(bounds);
+        fullLayer = {};
+
+        timer.restart();
+        QImage regionalLayer = layerBase.copy(bounds);
+        QVERIFY(RenderEngine::renderStrokesOnLayerRegion(
+            regionalLayer, document, {active}, 0, canvasSize, bounds));
+        const qint64 regionalNanoseconds = timer.nsecsElapsed();
+
+        QCOMPARE(regionalLayer, expectedRegion);
+        const quint64 regionalBytes =
+            static_cast<quint64>(regionalLayer.sizeInBytes());
+        QVERIFY(regionalBytes * 10 < fullBytes);
+        qInfo().nospace() << "4K active-stroke layer replay: full "
+                          << fullNanoseconds / 1000000.0 << " ms / "
+                          << fullBytes << " bytes, region "
+                          << regionalNanoseconds / 1000000.0 << " ms / "
+                          << regionalBytes << " bytes";
+    }
+
+    void incrementallyRendersActiveStrokeTilesLikeFullReplay()
+    {
+        Document document = Document::createDefault(QSize(640, 480));
+        document.background = Qt::transparent;
+        document.animationFrames = 12;
+        document.wobbleAmount = 2.5;
+        QImage base(document.size, QImage::Format_ARGB32_Premultiplied);
+        base.fill(QColor(180, 70, 55, 210));
+        QPainter basePainter(&base);
+        basePainter.setCompositionMode(QPainter::CompositionMode_Source);
+        basePainter.fillRect(
+            QRect(220, 120, 190, 230), QColor(40, 130, 210, 170));
+        basePainter.end();
+
+        QVector<Stroke> strokes;
+        Stroke line;
+        line.mode = StrokeMode::Paint;
+        line.color = QColor(245, 215, 35, 190);
+        line.width = 13.0;
+        line.seed = 0x12345678ULL;
+        line.brush.antialiasing = true;
+        line.brush.opacity = 0.72;
+        strokes.append(line);
+
+        Stroke pressureLine = line;
+        pressureLine.id = QUuid::createUuid();
+        pressureLine.seed = 0x23456789ULL;
+        pressureLine.brush.opacity = 1.0;
+        strokes.append(pressureLine);
+
+        Stroke airbrush = line;
+        airbrush.id = QUuid::createUuid();
+        airbrush.seed = 0x3456789aULL;
+        airbrush.brush.engine = BrushEngine::Airbrush;
+        airbrush.brush.spacing = 0.22;
+        airbrush.brush.hardness = 0.35;
+        airbrush.brush.flow = 0.25;
+        strokes.append(airbrush);
+
+        Stroke spray = line;
+        spray.id = QUuid::createUuid();
+        spray.seed = 0x456789abULL;
+        spray.brush.engine = BrushEngine::Spray;
+        spray.brush.spacing = 0.35;
+        spray.brush.scatter = 1.4;
+        spray.brush.particleSize = 0.16;
+        spray.brush.sizeJitter = 0.6;
+        spray.brush.density = 1.5;
+        strokes.append(spray);
+
+        Stroke eraser = airbrush;
+        eraser.id = QUuid::createUuid();
+        eraser.seed = 0x56789abcULL;
+        eraser.mode = StrokeMode::Erase;
+        eraser.width = 24.0;
+        strokes.append(eraser);
+
+        QVector<QPointF> positions;
+        for (int index = 0; index < 180; ++index)
+        {
+            const qreal progress = static_cast<qreal>(index) / 179.0;
+            positions.append(QPointF(18.0 + progress * 604.0,
+                240.0 + std::sin(progress * 7.0 * std::numbers::pi) * 150.0));
+        }
+
+        for (int strokeIndex = 0; strokeIndex < strokes.size(); ++strokeIndex)
+        {
+            Stroke stroke = strokes[strokeIndex];
+            IncrementalStrokeRenderer renderer;
+            for (int index = 0; index < positions.size(); ++index)
+            {
+                const qreal pressure =
+                    strokeIndex == 1 ? 0.2 + 0.8 * ((index % 17) / 16.0) : 0.75;
+                stroke.points.append({positions[index], pressure});
+                const IncrementalStrokeRenderer::Update update =
+                    renderer.update(base, document, stroke, 5, document.size);
+                QVERIFY(update.valid);
+                QVERIFY(update.sourcePointsProcessed <= 2);
+
+                QImage actual = base;
+                QVERIFY(renderer.applyTo(actual));
+                QImage expected = base;
+                QVERIFY(RenderEngine::renderStrokesOnLayer(
+                    expected, document, {stroke}, 5, document.size));
+                QCOMPARE(actual, expected);
+            }
+        }
+    }
+
+    void boundsLongPrefixReplayWorkAtFourK()
+    {
+        const QSize canvasSize(4096, 4096);
+        Document document = Document::createDefault(canvasSize);
+        document.background = Qt::transparent;
+        document.animationFrames = 12;
+        document.wobbleAmount = 3.0;
+
+        for (const int pointCount : {10000, 50000})
+        {
+            Stroke stroke;
+            stroke.seed = 0x6f5e4d3cULL;
+            stroke.width = 9.0;
+            stroke.brush.antialiasing = false;
+            stroke.points.reserve(pointCount);
+            StrokeRenderer::IncrementalGeometry geometry;
+            quint64 processedPoints = 0;
+            quint64 rebuilds = 0;
+            QElapsedTimer timer;
+            timer.start();
+            for (int index = 0; index < pointCount; ++index)
+            {
+                const int row = index / 256;
+                const int column = index % 256;
+                const qreal x =
+                    row % 2 == 0 ? column * 16.0 : 4080.0 - column * 16.0;
+                const qreal y = 8.0 + row * 20.0;
+                stroke.points.append({QPointF(x, std::min(y, 4088.0)),
+                    0.35 + (index % 13) * 0.05});
+                const StrokeRenderer::GeometryUpdate update = geometry.update(
+                    stroke, 4, document.animationFrames, document.wobbleAmount);
+                QVERIFY(update.valid);
+                processedPoints += update.sourcePointsProcessed;
+                rebuilds += update.rebuilt ? 1 : 0;
+            }
+            const qint64 elapsed = timer.elapsed();
+            const StrokeRenderer::PreparedStroke expected =
+                StrokeRenderer::prepare(
+                    stroke, 4, document.animationFrames, document.wobbleAmount);
+            QCOMPARE(geometry.prepared().points, expected.points);
+            QCOMPARE(geometry.prepared().width, expected.width);
+            QCOMPARE(processedPoints, static_cast<quint64>(pointCount));
+            QCOMPARE(rebuilds, 1ULL);
+            qInfo().nospace()
+                << "4K " << pointCount
+                << "-point incremental geometry replay took " << elapsed
+                << " ms and processed " << processedPoints << " source points";
+        }
+
+        QImage base(canvasSize, QImage::Format_ARGB32_Premultiplied);
+        QVERIFY(!base.isNull());
+        base.fill(Qt::transparent);
+        const auto benchmarkRasterPrefix = [&](int pointCount)
+        {
+            Stroke stroke;
+            stroke.seed = 0x7a6b5c4dULL;
+            stroke.width = 9.0;
+            stroke.brush.antialiasing = false;
+            stroke.points.reserve(pointCount);
+            IncrementalStrokeRenderer renderer;
+            quint64 processedPoints = 0;
+            quint64 renderedPixels = 0;
+            quint64 cachedTileBytes = 0;
+            QVector<qint64> updateNanoseconds;
+            updateNanoseconds.reserve(pointCount);
+            QElapsedTimer timer;
+            timer.start();
+            for (int index = 0; index < pointCount; ++index)
+            {
+                const int row = index / 256;
+                const int column = index % 256;
+                const qreal x =
+                    row % 2 == 0 ? column * 16.0 : 4080.0 - column * 16.0;
+                stroke.points.append(
+                    {QPointF(x, 8.0 + row * 20.0), 0.4 + (index % 11) * 0.05});
+                QElapsedTimer updateTimer;
+                updateTimer.start();
+                const IncrementalStrokeRenderer::Update update =
+                    renderer.update(base, document, stroke, 4, canvasSize);
+                updateNanoseconds.append(updateTimer.nsecsElapsed());
+                QVERIFY(update.valid);
+                processedPoints += update.sourcePointsProcessed;
+                renderedPixels += update.pixelsRendered;
+                cachedTileBytes = update.cachedTileBytes;
+            }
+            const qint64 elapsed = timer.elapsed();
+            QImage actual = base;
+            QVERIFY(renderer.applyTo(actual));
+            QImage expected = base;
+            QVERIFY(RenderEngine::renderStrokesOnLayer(
+                expected, document, {stroke}, 4, canvasSize));
+            QCOMPARE(actual, expected);
+            QCOMPARE(processedPoints, static_cast<quint64>(pointCount));
+            QVERIFY(renderedPixels <= static_cast<quint64>(pointCount) * 4ULL
+                                          * 256ULL * 256ULL);
+            QVERIFY(cachedTileBytes <= static_cast<quint64>(canvasSize.width())
+                                           * canvasSize.height()
+                                           * sizeof(QRgb));
+            std::sort(updateNanoseconds.begin(), updateNanoseconds.end());
+            const qreal p50Milliseconds =
+                updateNanoseconds[updateNanoseconds.size() * 50 / 100]
+                / 1000000.0;
+            const qreal p95Milliseconds =
+                updateNanoseconds[updateNanoseconds.size() * 95 / 100]
+                / 1000000.0;
+            qInfo().nospace()
+                << "4K " << pointCount << "-point incremental tile replay took "
+                << elapsed << " ms, processed " << renderedPixels
+                << " pixels, and retained " << cachedTileBytes << " bytes; p50 "
+                << p50Milliseconds << " ms, p95 " << p95Milliseconds << " ms";
+        };
+
+#ifdef NDEBUG
+        constexpr std::array rasterPointCounts{10000, 50000};
+#else
+        constexpr std::array rasterPointCounts{1000, 5000};
+#endif
+        for (const int pointCount : rasterPointCounts)
+        {
+            benchmarkRasterPrefix(pointCount);
+        }
+    }
+};
+
+int runLayerSplitPreviewTests(int argc, char **argv)
+{
+    LayerSplitPreviewTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
+
+}
+
+#include "LayerSplitPreviewTests.moc"
