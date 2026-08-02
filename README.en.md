@@ -66,15 +66,18 @@ necessary.
 - Loopable boiling-line wobble, redrawn every frame — or turn it off and
   draw like a regular paint app
 - Crisp pixel-edged strokes with per-stroke anti-aliasing and roughness
+- Responsive drawing, panning, and zooming on high-resolution canvases,
+  including very long strokes
 - Lasso and auto selection that previews move, scale, rotate, and flip
-  before applying
+  before applying, with selection deletion included in undo and redo
 - Canvas resizing that crops or expands without scaling the artwork, and
   image resizing that scales it
 - Layers with thumbnails, visibility, opacity, and drag reordering
 - A timeline with a live preview and adjustable wobble strength, frame
   count, and FPS
 - 1–1600% zoom, true 100% actual-pixel view, and fit-to-window
-- Looping GIF, PNG, and JPG export plus `.wagle` project files
+- Looping GIF, PNG, and JPG export with progress and cancellation, plus
+  `.wagle` project files
 - Crash recovery and restored tool, color, and brush settings on restart
 - Customizable shortcuts and an English, Korean, or Japanese interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
