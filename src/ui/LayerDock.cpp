@@ -2,6 +2,7 @@
 
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/LayerHierarchy.hpp"
 #include "ui/Icons.hpp"
 #include "ui/LayerItemDelegate.hpp"
 #include "ui/LayerListWidget.hpp"
@@ -297,9 +298,9 @@ void LayerDock::connectControls()
         toggleVisibility);
 
     connect(m_layerList,
-        &LayerListWidget::reorderRequested,
+        &LayerListWidget::dropRequested,
         this,
-        &LayerDock::handleReorder);
+        &LayerDock::handleLayerDrop);
 
     connect(m_addButton,
         &QToolButton::clicked,
@@ -593,8 +594,31 @@ void LayerDock::updateControls()
     const Layer *layer = document ? document->layer(id) : nullptr;
     const bool hasLayer = layer != nullptr;
     const bool paintLayer = layer && layer->kind == LayerKind::Paint;
+    const bool groupSelected = layer && layer->kind == LayerKind::Group;
+    if (groupSelected != m_groupSelectionActive)
+    {
+        m_groupSelectionActive = groupSelected;
+        emit groupSelectionChanged(groupSelected);
+    }
     const bool hasCapacity =
         document && document->layers.size() < DocumentLimits::maximumLayers;
+    const LayerHierarchyAnalysis hierarchy =
+        document ? analyzeLayerHierarchy(*document) : LayerHierarchyAnalysis();
+    const int maximumEditableDepth =
+        hierarchy.isValid() ? std::max(hierarchy.maximumDepth(),
+                                  DocumentLimits::maximumLayerDepth)
+                            : -1;
+    const bool canAddInsideSelectedGroup =
+        !layer || layer->kind != LayerKind::Group
+        || (hierarchy.isValid() && hierarchy.depth(layer->id) >= 0
+            && hierarchy.depth(layer->id) + 1 <= maximumEditableDepth);
+    const bool canWrapSelectedLayer =
+        !layer
+        || (hierarchy.isValid() && hierarchy.depth(layer->id) >= 0
+            && hierarchy.subtreeHeight(layer->id) >= 0
+            && hierarchy.depth(layer->id) + hierarchy.subtreeHeight(layer->id)
+                       + 1
+                   <= maximumEditableDepth);
 
     QVector<const Layer *> siblings;
     if (document && layer)
@@ -617,8 +641,10 @@ void LayerDock::updateControls()
                                           - siblings.cbegin()
                                     : -1;
 
-    m_addButton->setEnabled(m_controller && hasCapacity);
-    m_addGroupButton->setEnabled(m_controller && hasCapacity);
+    m_addButton->setEnabled(
+        m_controller && hasCapacity && canAddInsideSelectedGroup);
+    m_addGroupButton->setEnabled(
+        m_controller && hasCapacity && canWrapSelectedLayer);
     m_duplicateButton->setEnabled(paintLayer && hasCapacity);
     m_deleteButton->setEnabled(hasLayer);
     m_moveUpButton->setEnabled(hasLayer && siblingPosition >= 0
@@ -640,7 +666,12 @@ void LayerDock::updateControls()
             {
                 if (candidate.kind != LayerKind::Group
                     || candidate.id == layer->id
-                    || document->isLayerDescendantOf(candidate.id, layer->id))
+                    || hierarchy.isDescendantOf(candidate.id, layer->id)
+                    || hierarchy.depth(candidate.id) < 0
+                    || hierarchy.subtreeHeight(layer->id) < 0
+                    || hierarchy.depth(candidate.id) + 1
+                               + hierarchy.subtreeHeight(layer->id)
+                           > maximumEditableDepth)
                 {
                     continue;
                 }
@@ -786,7 +817,8 @@ void LayerDock::commitOpacity(const QUuid &id, int value)
     m_controller->setLayerOpacity(id, static_cast<qreal>(value) / 100.0);
 }
 
-void LayerDock::handleReorder(int sourceRow, int insertRow)
+void LayerDock::handleLayerDrop(
+    int sourceRow, int targetRow, LayerListWidget::DropPlacement placement)
 {
     if (!m_controller || sourceRow < 0 || sourceRow >= m_layerList->count())
     {
@@ -794,36 +826,144 @@ void LayerDock::handleReorder(int sourceRow, int insertRow)
     }
     const QUuid id =
         m_layerList->item(sourceRow)->data(LayerItemRoles::LayerId).toUuid();
-    const int finalRow = insertRow > sourceRow ? insertRow - 1 : insertRow;
-    if (finalRow < 0 || finalRow >= m_layerList->count())
-    {
-        return;
-    }
     const Document &document = m_controller->document();
     const Layer *source = document.layer(id);
-    const QUuid targetId =
-        m_layerList->item(finalRow)->data(LayerItemRoles::LayerId).toUuid();
-    const Layer *target = document.layer(targetId);
-    if (!source || !target || source->parentGroupId != target->parentGroupId)
+    if (id.isNull() || !source)
     {
         return;
     }
-    QVector<QUuid> siblings;
-    for (int row = 0; row < m_layerList->count(); ++row)
+
+    QUuid targetParentId;
+    QUuid anchorId;
+    bool insertBelowAnchor = false;
+    bool intoGroup = false;
+    if (targetRow >= 0 && targetRow < m_layerList->count())
     {
-        const QUuid siblingId =
-            m_layerList->item(row)->data(LayerItemRoles::LayerId).toUuid();
-        const Layer *sibling = document.layer(siblingId);
-        if (sibling && sibling->parentGroupId == source->parentGroupId)
+        const QUuid rowId = m_layerList->item(targetRow)
+                                ->data(LayerItemRoles::LayerId)
+                                .toUuid();
+        const Layer *anchor = document.layer(rowId);
+        if (!anchor || anchor->id == id)
         {
-            siblings.append(siblingId);
+            return;
+        }
+        intoGroup = anchor->kind == LayerKind::Group
+                    && placement != LayerListWidget::DropPlacement::AboveTarget;
+        if (intoGroup)
+        {
+            targetParentId = anchor->id;
+        }
+        else
+        {
+            targetParentId = anchor->parentGroupId;
+            anchorId = anchor->id;
+            insertBelowAnchor =
+                placement == LayerListWidget::DropPlacement::BelowTarget;
         }
     }
-    const int offset = siblings.indexOf(id) - siblings.indexOf(targetId);
-    if (offset != 0 && !id.isNull())
+    else if (targetRow >= 0)
     {
-        m_controller->moveLayer(id, offset);
+        return;
     }
+
+    const bool reparent = targetParentId != source->parentGroupId;
+    if (reparent)
+    {
+        const LayerHierarchyAnalysis hierarchy =
+            analyzeLayerHierarchy(document);
+        if (!hierarchy.isValid())
+        {
+            return;
+        }
+        if (!targetParentId.isNull()
+            && (targetParentId == id
+                || hierarchy.isDescendantOf(targetParentId, id)))
+        {
+            return;
+        }
+        const int maximumEditableDepth = std::max(
+            hierarchy.maximumDepth(), DocumentLimits::maximumLayerDepth);
+        const int parentDepth =
+            targetParentId.isNull() ? -1 : hierarchy.depth(targetParentId);
+        if ((!targetParentId.isNull() && parentDepth < 0)
+            || hierarchy.subtreeHeight(id) < 0
+            || parentDepth + 1 + hierarchy.subtreeHeight(id)
+                   > maximumEditableDepth)
+        {
+            return;
+        }
+    }
+
+    QVector<QUuid> orderedSiblings;
+    for (int row = 0; row < m_layerList->count(); ++row)
+    {
+        const QUuid rowId =
+            m_layerList->item(row)->data(LayerItemRoles::LayerId).toUuid();
+        const Layer *layer = document.layer(rowId);
+        if (layer && layer->parentGroupId == targetParentId && rowId != id)
+        {
+            orderedSiblings.append(rowId);
+        }
+    }
+    int insertPosition = intoGroup ? 0 : orderedSiblings.size();
+    if (!anchorId.isNull())
+    {
+        const int anchorPosition = orderedSiblings.indexOf(anchorId);
+        if (anchorPosition < 0)
+        {
+            return;
+        }
+        insertPosition =
+            insertBelowAnchor ? anchorPosition + 1 : anchorPosition;
+    }
+
+    const auto siblingVectorPosition =
+        [](const Document &state, const QUuid &parentId, const QUuid &layerId)
+    {
+        int currentPosition = 0;
+        for (const Layer &candidate : state.layers)
+        {
+            if (candidate.parentGroupId != parentId)
+            {
+                continue;
+            }
+            if (candidate.id == layerId)
+            {
+                return currentPosition;
+            }
+            ++currentPosition;
+        }
+        return -1;
+    };
+    const int desiredVectorPosition = orderedSiblings.size() - insertPosition;
+
+    if (!reparent)
+    {
+        const int currentVectorPosition =
+            siblingVectorPosition(document, targetParentId, id);
+        const int offset = desiredVectorPosition - currentVectorPosition;
+        if (currentVectorPosition >= 0 && offset != 0)
+        {
+            m_controller->moveLayer(id, offset);
+        }
+        return;
+    }
+
+    m_controller->undoStack()->beginMacro(tr("Move layer"));
+    m_controller->setLayerParentGroup(id, targetParentId);
+    const Document &updated = m_controller->document();
+    const Layer *moved = updated.layer(id);
+    if (moved && moved->parentGroupId == targetParentId)
+    {
+        const int currentVectorPosition =
+            siblingVectorPosition(updated, targetParentId, id);
+        const int offset = desiredVectorPosition - currentVectorPosition;
+        if (currentVectorPosition >= 0 && offset != 0)
+        {
+            m_controller->moveLayer(id, offset);
+        }
+    }
+    m_controller->undoStack()->endMacro();
 }
 
 QUuid LayerDock::selectedLayerId() const

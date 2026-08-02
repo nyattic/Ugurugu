@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -18,8 +19,8 @@ env:
   QT_FORCE_STDERR_LOGGING: 1
 
 jobs:
-  format:
-    name: clang-format
+  static:
+    name: Format and release metadata
     runs-on: macos-15
     timeout-minutes: 10
     steps:
@@ -33,51 +34,37 @@ jobs:
       - name: Test download badge aggregation
         run: node --test .github/scripts/update-download-badge.test.js
 
-  build:
-    name: ${{ matrix.name }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-15
-            preset: macos-debug
-            qt-host: mac
-            qt-arch: clang_64
-            smoke: none
-          - name: Windows
-            os: windows-2022
-            preset: windows-debug
-            qt-host: windows
-            qt-arch: win64_msvc2022_64
-            smoke: none
-          - name: macOS ASan + UBSan
-            os: macos-15
-            preset: macos-sanitized
-            qt-host: mac
-            qt-arch: clang_64
-            smoke: none
-          - name: macOS Release package
-            os: macos-15
-            preset: macos-distribution
-            qt-host: mac
-            qt-arch: clang_64
-            smoke: macos
-          - name: macOS Coverage
-            os: macos-15
-            preset: macos-coverage
-            qt-host: mac
-            qt-arch: clang_64
-            smoke: none
-            coverage: true
-          - name: Windows Release install
-            os: windows-2022
-            preset: windows-distribution
-            qt-host: windows
-            qt-arch: win64_msvc2022_64
-            smoke: windows
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+      - name: Check release metadata
+        shell: bash
+        run: |
+          version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid project version: $version"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match project version $version"
+            exit 1
+          fi
+          for language in ko en ja; do
+            notes="release-notes/$version.$language.md"
+            if [[ ! -s "$notes" ]] || ! grep -q '[^[:space:]]' "$notes"; then
+              echo "Missing or empty release notes: $notes"
+              exit 1
+            fi
+          done
+          shopt -s nullglob
+          notes=(release-notes/"$version".*.md)
+          if [[ ${#notes[@]} -ne 3 ]]; then
+            echo "Expected exactly ko, en, and ja release notes for version $version"
+            printf 'Found: %s\n' "${notes[@]}"
+            exit 1
+          fi
+
+  translations:
+    name: Translations
+    runs-on: macos-15
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
@@ -85,13 +72,12 @@ jobs:
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
         with:
           version: '${{ env.QT_VERSION }}'
-          host: '${{ matrix.qt-host }}'
+          host: mac
           target: desktop
-          arch: '${{ matrix.qt-arch }}'
+          arch: clang_64
           cache: true
 
       - name: Check translation completeness
-        if: matrix.preset == 'macos-debug'
         run: |
           translation_dir="$RUNNER_TEMP/translations"
           mkdir -p "$translation_dir"
@@ -108,6 +94,57 @@ jobs:
             echo "Translations contain unfinished entries"
             exit 1
           fi
+
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Debug
+            os: macos-15
+            preset: macos-debug
+            qt-host: mac
+            qt-arch: clang_64
+          - name: macOS Release
+            os: macos-15
+            preset: macos-release
+            qt-host: mac
+            qt-arch: clang_64
+          - name: Windows Debug
+            os: windows-2022
+            preset: windows-debug
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+          - name: Windows Release
+            os: windows-2022
+            preset: windows-release
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+          - name: macOS ASan + UBSan
+            os: macos-15
+            preset: macos-sanitized
+            qt-host: mac
+            qt-arch: clang_64
+          - name: macOS Coverage
+            os: macos-15
+            preset: macos-coverage
+            qt-host: mac
+            qt-arch: clang_64
+            coverage: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          host: '${{ matrix.qt-host }}'
+          target: desktop
+          arch: '${{ matrix.qt-arch }}'
+          cache: true
 
       - name: Configure
         run: >-
@@ -139,6 +176,66 @@ jobs:
           printf '%s\n' "$coverage_report"
           line_coverage=$(printf '%s\n' "$coverage_report" | awk '/^TOTAL/ { value=$10; gsub("%", "", value); print value }')
           awk -v coverage="$line_coverage" 'BEGIN { exit !(coverage + 0 >= 70.0) }'
+
+      - name: Test diagnostics
+        if: failure() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Content "out/build/${{ matrix.preset }}/Testing/Temporary/LastTest.log" -ErrorAction SilentlyContinue
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
+          $testExecutable = Get-ChildItem `
+            "out/build/${{ matrix.preset }}" `
+            -Recurse `
+            -Filter wobblepaint_tests.exe |
+            Select-Object -First 1
+          if ($testExecutable) {
+            & $testExecutable.FullName 2>&1
+            "direct run exit code: $LASTEXITCODE"
+          }
+
+  package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS package
+            os: macos-15
+            preset: macos-distribution
+            qt-host: mac
+            qt-arch: clang_64
+            smoke: macos
+          - name: Windows package
+            os: windows-2022
+            preset: windows-distribution
+            qt-host: windows
+            qt-arch: win64_msvc2022_64
+            smoke: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          host: '${{ matrix.qt-host }}'
+          target: desktop
+          arch: '${{ matrix.qt-arch }}'
+          cache: true
+
+      - name: Configure
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --parallel 7 --output-on-failure
 
       - name: Test installed macOS package
         if: matrix.smoke == 'macos'
@@ -179,3 +276,28 @@ jobs:
             & $testExecutable.FullName 2>&1
             "direct run exit code: $LASTEXITCODE"
           }
+
+  quality:
+    name: Quality gate
+    if: always()
+    needs: [static, translations, build, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every quality check
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          TRANSLATIONS_RESULT: ${{ needs.translations.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: |
+          failed=0
+          for check in STATIC TRANSLATIONS BUILD PACKAGE; do
+            result_variable="${check}_RESULT"
+            result="${!result_variable}"
+            if [[ "$result" != "success" ]]; then
+              echo "$check result: $result"
+              failed=1
+            fi
+          done
+          exit "$failed"

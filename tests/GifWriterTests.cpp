@@ -1,6 +1,9 @@
 #include "app/MemoryBudget.hpp"
 #include "io/AnimationExportPolicy.hpp"
+#include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
+#include "io/RenderExportPolicy.hpp"
+#include "render/LayerCompositionPlan.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QFile>
@@ -10,9 +13,55 @@
 #include <QtTest>
 
 #include <cmath>
+#include <limits>
 
 namespace wobble
 {
+
+namespace
+{
+
+Document deepClippedExportDocument(const QSize &size)
+{
+    Document document = Document::createDefault(size);
+    document.layers.clear();
+    document.activeLayerId = {};
+    document.animationFrames = 2;
+
+    QUuid parentGroupId;
+    for (int depth = 0; depth <= 8; ++depth)
+    {
+        Layer base;
+        base.name = QStringLiteral("Base %1").arg(depth);
+        base.parentGroupId = parentGroupId;
+        base.initialCanvasSize = size;
+        document.layers.append(base);
+        if (document.activeLayerId.isNull())
+        {
+            document.activeLayerId = base.id;
+        }
+        if (depth == 8)
+        {
+            Layer clipped;
+            clipped.name = QStringLiteral("Clipped");
+            clipped.parentGroupId = parentGroupId;
+            clipped.clipToLayerBelow = true;
+            clipped.initialCanvasSize = size;
+            document.layers.append(clipped);
+            break;
+        }
+        Layer group;
+        group.name = QStringLiteral("Group %1").arg(depth);
+        group.kind = LayerKind::Group;
+        group.parentGroupId = parentGroupId;
+        group.initialCanvasSize = size;
+        document.layers.append(group);
+        parentGroupId = group.id;
+    }
+    return document;
+}
+
+}
 
 class GifWriterTests final : public QObject
 {
@@ -27,6 +76,51 @@ private slots:
             AnimationExportPolicy::estimatedWorkingBytes(QSize(4096, 4096), 3)
             > static_cast<long double>(
                 MemoryBudget::animationExportWorkingBytes));
+    }
+
+    void includesHierarchyAndPaintScratchInExportBudget()
+    {
+        constexpr long double mebibyte = 1024.0L * 1024.0L;
+        Document shallow = Document::createDefault(QSize(4096, 4096));
+        shallow.animationFrames = 2;
+        const RenderExportMemoryEstimate shallowStatic =
+            RenderExportPolicy::staticImage(shallow);
+        const RenderExportMemoryEstimate shallowAnimation =
+            RenderExportPolicy::animatedGif(shallow);
+        QVERIFY(shallowStatic.valid);
+        QVERIFY(shallowAnimation.valid);
+        QCOMPARE(shallowStatic.hierarchyTransientBytes, 128.0L * mebibyte);
+        QCOMPARE(shallowStatic.workingBytes, 320.0L * mebibyte);
+        QCOMPARE(shallowAnimation.workingBytes, 384.0L * mebibyte);
+        QVERIFY(RenderExportPolicy::staticImageFitsMemoryBudget(shallow));
+        QVERIFY(RenderExportPolicy::animatedGifFitsMemoryBudget(shallow));
+        QVERIFY(AnimationExportPolicy::fitsMemoryBudget(shallow));
+
+        const Document deep = deepClippedExportDocument(QSize(4096, 4096));
+        QVERIFY(!DocumentSerializer::toJson(deep).isEmpty());
+        const RenderExportMemoryEstimate deepStatic =
+            RenderExportPolicy::staticImage(deep);
+        const RenderExportMemoryEstimate deepAnimation =
+            RenderExportPolicy::animatedGif(deep);
+        QVERIFY(deepStatic.valid);
+        QVERIFY(deepAnimation.valid);
+        QCOMPARE(deepStatic.hierarchyTransientBytes, 704.0L * mebibyte);
+        QCOMPARE(deepStatic.workingBytes, 896.0L * mebibyte);
+        QCOMPARE(deepAnimation.workingBytes, 896.0L * mebibyte);
+        QVERIFY(!RenderExportPolicy::staticImageFitsMemoryBudget(deep));
+        QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(deep));
+        QVERIFY(!AnimationExportPolicy::fitsMemoryBudget(deep));
+    }
+
+    void rejectsOverflowingExportMemoryGeometry()
+    {
+        const int maximum = std::numeric_limits<int>::max();
+        Document document = Document::createDefault(QSize(maximum, maximum));
+        document.animationFrames = 2;
+        QVERIFY(!RenderExportPolicy::staticImage(document).valid);
+        QVERIFY(!RenderExportPolicy::animatedGif(document).valid);
+        QVERIFY(!RenderExportPolicy::staticImageFitsMemoryBudget(document));
+        QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(document));
     }
 
     void writesAnimatedGif()

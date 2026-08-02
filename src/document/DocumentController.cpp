@@ -1,6 +1,7 @@
 #include "document/DocumentController.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "document/LayerHierarchy.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
@@ -19,6 +20,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <new>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -2267,108 +2269,128 @@ void DocumentController::pushSelectionStateCommand(const QString &text,
         new TransientCommand(this, text, std::move(frozenEffects)));
 }
 
-void DocumentController::newDocument(const QSize &size)
+bool DocumentController::newDocument(const QSize &size, QString *error)
 {
-    if (m_undoStack.m_moving || hasOpenHistoryMacro())
-    {
-        failHistoryMacro();
-        return;
-    }
-    const bool wasModified = isModified();
     const QSize normalized(std::clamp(size.width(),
                                DocumentLimits::minimumCanvasEdge,
                                DocumentLimits::maximumCanvasEdge),
         std::clamp(size.height(),
             DocumentLimits::minimumCanvasEdge,
             DocumentLimits::maximumCanvasEdge));
-    const PreparedState prepared =
-        prepareState(Document::createDefault(normalized, tr("Layer 1")));
-    if (!prepared)
+    Document document;
+    try
     {
-        return;
+        document = Document::createDefault(normalized, tr("Layer 1"));
     }
-    m_currentState = prepared;
-    m_undoStack.clear();
-    m_undoStack.setClean();
-    m_currentContentRevision = 0;
-    m_savedContentRevision = 0;
-    m_nextContentRevision = 0;
-    m_currentHistoryNode = 0;
-    m_nextHistoryNode = 0;
-    m_selectionVisibilityCacheValid = false;
-    emit documentReplaced();
-    emit documentChanged();
-    emit layerThumbnailsReset();
-    emit activeLayerChanged(document().activeLayerId);
-    if (wasModified)
+    catch (const std::bad_alloc &)
     {
-        emit modifiedChanged(false);
+        if (error)
+        {
+            *error = tr("There is not enough memory to prepare the document.");
+        }
+        return false;
     }
+    return replaceDocument(
+        std::move(document), DocumentReplacementDisposition::Clean, error);
 }
 
-void DocumentController::loadDocument(Document document)
+bool DocumentController::loadDocument(Document document, QString *error)
 {
+    return replaceDocument(
+        std::move(document), DocumentReplacementDisposition::Clean, error);
+}
+
+bool DocumentController::loadRecoveredDocument(
+    Document document, QString *error)
+{
+    return replaceDocument(
+        std::move(document), DocumentReplacementDisposition::Recovered, error);
+}
+
+bool DocumentController::replaceDocument(Document document,
+    DocumentReplacementDisposition disposition,
+    QString *error)
+{
+    if (error)
+    {
+        error->clear();
+    }
     if (m_undoStack.m_moving || hasOpenHistoryMacro())
     {
-        failHistoryMacro();
-        return;
+        if (error)
+        {
+            *error =
+                tr("Cannot replace a document during a history transaction.");
+        }
+        return false;
     }
-    const bool wasModified = isModified();
-    ensureActiveLayer(document);
-    const PreparedState prepared = prepareState(std::move(document));
+    if (m_documentReplacementInProgress)
+    {
+        if (error)
+        {
+            *error = tr("Cannot replace a document during another document "
+                        "transition.");
+        }
+        return false;
+    }
+
+    QScopedValueRollback<bool> replacement(
+        m_documentReplacementInProgress, true);
+    PreparedState prepared;
+    try
+    {
+        ensureActiveLayer(document);
+        if (m_failNextDocumentReplacementPreparationForTesting)
+        {
+            m_failNextDocumentReplacementPreparationForTesting = false;
+            if (error)
+            {
+                *error = tr("The document could not be prepared.");
+            }
+            return false;
+        }
+        prepared =
+            prepareState(std::move(document), nullptr, nullptr, false, error);
+    }
+    catch (const std::bad_alloc &)
+    {
+        if (error)
+        {
+            *error = tr("There is not enough memory to prepare the document.");
+        }
+        return false;
+    }
     if (!prepared)
     {
-        return;
+        if (error && error->isEmpty())
+        {
+            *error = tr("The document could not be prepared.");
+        }
+        return false;
     }
+
+    const bool wasModified = isModified();
     m_currentState = prepared;
-    m_undoStack.clear();
-    m_undoStack.setClean();
-    m_currentContentRevision = 0;
+    const bool recovered =
+        disposition == DocumentReplacementDisposition::Recovered;
+    m_currentContentRevision = recovered ? 1 : 0;
     m_savedContentRevision = 0;
-    m_nextContentRevision = 0;
+    m_nextContentRevision = recovered ? 1 : 0;
     m_currentHistoryNode = 0;
     m_nextHistoryNode = 0;
     m_selectionVisibilityCacheValid = false;
+    m_undoStack.clear();
+    m_undoStack.setClean();
     emit documentReplaced();
     emit documentChanged();
     emit layerThumbnailsReset();
     emit activeLayerChanged(this->document().activeLayerId);
-    if (wasModified)
+    const bool modified = isModified();
+    if (modified != wasModified)
     {
-        emit modifiedChanged(false);
+        emit modifiedChanged(modified);
     }
-}
-
-void DocumentController::loadRecoveredDocument(Document document)
-{
-    if (m_undoStack.m_moving || hasOpenHistoryMacro())
-    {
-        failHistoryMacro();
-        return;
-    }
-    const bool wasModified = isModified();
-    ensureActiveLayer(document);
-    const PreparedState prepared = prepareState(std::move(document));
-    if (!prepared)
-    {
-        return;
-    }
-    m_currentState = prepared;
-    m_undoStack.clear();
-    m_currentContentRevision = 1;
-    m_savedContentRevision = 0;
-    m_nextContentRevision = 1;
-    m_currentHistoryNode = 0;
-    m_nextHistoryNode = 0;
-    m_selectionVisibilityCacheValid = false;
-    emit documentReplaced();
-    emit documentChanged();
-    emit layerThumbnailsReset();
-    emit activeLayerChanged(this->document().activeLayerId);
-    if (!wasModified)
-    {
-        emit modifiedChanged(true);
-    }
+    return true;
 }
 
 bool DocumentController::saveDocument(const QString &filePath, QString *error)
@@ -2385,6 +2407,27 @@ bool DocumentController::saveDocument(const QString &filePath, QString *error)
     return m_currentState
            && DocumentSerializer::save(
                filePath, *m_currentState, m_serializationCache, error);
+}
+
+QByteArray DocumentController::serializeDocument(
+    const QJsonObject &additionalRootFields, QString *error)
+{
+    if (error)
+    {
+        error->clear();
+    }
+    if (m_undoStack.m_moving || hasOpenHistoryMacro())
+    {
+        if (error)
+        {
+            *error = tr("Cannot save an unfinished history transaction.");
+        }
+        return {};
+    }
+    return m_currentState ? DocumentSerializer::toJson(*m_currentState,
+                                m_serializationCache,
+                                additionalRootFields)
+                          : QByteArray();
 }
 
 void DocumentController::markSaved()
@@ -3560,9 +3603,15 @@ void DocumentController::removeLayer(const QUuid &id)
     QSet<QUuid> removedIds{id};
     if (current.layers[index].kind == LayerKind::Group)
     {
+        const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(current);
+        if (!hierarchy.isValid())
+        {
+            failHistoryMacro();
+            return;
+        }
         for (const Layer &layer : current.layers)
         {
-            if (current.isLayerDescendantOf(layer.id, id))
+            if (hierarchy.isDescendantOf(layer.id, id))
             {
                 removedIds.insert(layer.id);
             }
@@ -3771,7 +3820,7 @@ void DocumentController::setLayerParentGroup(
     const bool validParent =
         groupId.isNull() || (group && group->kind == LayerKind::Group);
     if (!layer || !validParent || layer->parentGroupId == groupId
-        || id == groupId || current.isLayerDescendantOf(groupId, id))
+        || id == groupId)
     {
         failHistoryMacro();
         return;
@@ -3904,6 +3953,16 @@ bool DocumentController::tryCommitCandidate(QString text,
     {
         return false;
     }
+    const LayerHierarchyAnalysis currentHierarchy =
+        analyzeLayerHierarchy(before->document());
+    const LayerHierarchyAnalysis candidateHierarchy =
+        analyzeLayerHierarchy(candidate);
+    if (!isLayerHierarchyDepthChangeAllowed(
+            currentHierarchy, candidateHierarchy))
+    {
+        failHistoryMacro();
+        return false;
+    }
     const PreparedState after =
         prepareState(std::move(candidate), before.get());
     if (!after)
@@ -4001,7 +4060,8 @@ DocumentController::PreparedState DocumentController::prepareState(
     Document document,
     const PreparedDocument *base,
     const DocumentSerializer::ImmutableBackingLease *trusted,
-    bool historyPreflight)
+    bool historyPreflight,
+    QString *error)
 {
     if (historyPreflight && m_historyPrepareFailureCountdownForTesting == 0)
     {
@@ -4022,7 +4082,8 @@ DocumentController::PreparedState DocumentController::prepareState(
             m_serializationCache,
             effectiveBase,
             trusted,
-            DocumentLimits::maximumProjectBytes);
+            DocumentLimits::maximumProjectBytes,
+            error);
     if (!prepared)
     {
         return {};

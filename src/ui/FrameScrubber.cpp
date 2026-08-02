@@ -134,11 +134,12 @@ void FrameScrubber::paintEvent(QPaintEvent *)
             hoverRect.adjusted(0.5, 0.0, -0.5, 0.0), 4.0, 4.0);
     }
 
+    const bool animating = m_canvas->isAnimating();
     painter.setPen(Qt::NoPen);
     painter.setBrush(Theme::textDisabled());
     for (int frame = 0; frame < frames; ++frame)
     {
-        if (frame == current)
+        if (!animating && frame == current)
         {
             continue;
         }
@@ -147,12 +148,28 @@ void FrameScrubber::paintEvent(QPaintEvent *)
         painter.drawEllipse(center, 1.4, 1.4);
     }
 
-    const QRectF playhead(track.left() + slotWidth * current,
-        track.top() + slotMargin,
-        std::max(slotWidth, 6.0),
-        track.height() - slotMargin * 2.0);
-    painter.setBrush(Theme::accent());
-    painter.drawRoundedRect(playhead.adjusted(0.5, 0.0, -0.5, 0.0), 4.0, 4.0);
+    if (animating)
+    {
+        constexpr qreal markerHeight = 3.0;
+        const QRectF marker(track.left() + slotWidth * current,
+            track.bottom() - slotMargin - markerHeight,
+            std::max(slotWidth, 6.0),
+            markerHeight);
+        QColor markerColor = Theme::accent();
+        markerColor.setAlphaF(0.55);
+        painter.setBrush(markerColor);
+        painter.drawRoundedRect(marker.adjusted(0.5, 0.0, -0.5, 0.0), 1.5, 1.5);
+    }
+    else
+    {
+        const QRectF playhead(track.left() + slotWidth * current,
+            track.top() + slotMargin,
+            std::max(slotWidth, 6.0),
+            track.height() - slotMargin * 2.0);
+        painter.setBrush(Theme::accent());
+        painter.drawRoundedRect(
+            playhead.adjusted(0.5, 0.0, -0.5, 0.0), 4.0, 4.0);
+    }
 
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(hasFocus() ? Theme::accent() : Theme::border(), 1.0));

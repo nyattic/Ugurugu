@@ -17,6 +17,7 @@ namespace wobble
 
 class DocumentController;
 class DocumentControllerTestAccess;
+class MainWindowTestAccess;
 
 // Logical history prepares a complete target state before moving its cursor,
 // so a failed restore cannot partially apply a document transaction or its
@@ -124,10 +125,12 @@ public:
         const QUuid &afterLayerId,
         const QImage &afterMask);
 
-    void newDocument(const QSize &size);
-    void loadDocument(Document document);
-    void loadRecoveredDocument(Document document);
+    bool newDocument(const QSize &size, QString *error = nullptr);
+    bool loadDocument(Document document, QString *error = nullptr);
+    bool loadRecoveredDocument(Document document, QString *error = nullptr);
     bool saveDocument(const QString &filePath, QString *error = nullptr);
+    QByteArray serializeDocument(
+        const QJsonObject &additionalRootFields, QString *error = nullptr);
     void markSaved();
     bool resizeImage(const QSize &size);
     bool resizeCanvas(const QSize &size, const QPoint &contentOffset);
@@ -240,6 +243,12 @@ private:
         UsePrepared
     };
 
+    enum class DocumentReplacementDisposition
+    {
+        Clean,
+        Recovered
+    };
+
     using PreparedDocument = DocumentSerializer::PreparedDocument;
     using PreparedState = std::shared_ptr<const PreparedDocument>;
 
@@ -264,10 +273,14 @@ private:
         int mergeId,
         const QUuid &mergeScope,
         const QUuid &appendedStrokeLayerId = {});
+    bool replaceDocument(Document document,
+        DocumentReplacementDisposition disposition,
+        QString *error);
     PreparedState prepareState(Document document,
         const PreparedDocument *base = nullptr,
         const DocumentSerializer::ImmutableBackingLease *trusted = nullptr,
-        bool historyPreflight = false);
+        bool historyPreflight = false,
+        QString *error = nullptr);
     void applyPreparedState(const PreparedState &state,
         ActiveLayerPolicy activeLayerPolicy,
         const HistoryEffects &effects,
@@ -305,11 +318,14 @@ private:
     mutable QUuid m_selectionVisibilityLayerId;
     mutable qint64 m_selectionVisibilityMaskKey = 0;
     mutable bool m_selectionVisibilityCacheResult = false;
+    bool m_documentReplacementInProgress = false;
+    bool m_failNextDocumentReplacementPreparationForTesting = false;
     int m_historyPrepareFailureCountdownForTesting = -1;
     std::unique_ptr<MacroTransaction> m_macroTransaction;
 
     friend class DocumentUndoStack;
     friend class DocumentControllerTestAccess;
+    friend class MainWindowTestAccess;
 };
 
 }

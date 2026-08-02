@@ -1,4 +1,6 @@
 set(WOBBLEPAINT_CORE_SOURCES
+    src/app/ApplicationInstanceLock.cpp
+    src/app/ApplicationInstanceLock.hpp
     src/app/Logging.cpp
     src/app/Logging.hpp
     src/app/MemoryBudget.hpp
@@ -17,6 +19,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentController.cpp
     src/document/DocumentController.hpp
     src/document/DocumentLimits.hpp
+    src/document/LayerHierarchy.cpp
+    src/document/LayerHierarchy.hpp
     src/document/DocumentOperations.cpp
     src/document/DocumentOperations.hpp
     src/document/SelectionOperation.cpp
@@ -33,10 +37,14 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/DocumentSerializer.hpp
     src/io/GifWriter.cpp
     src/io/GifWriter.hpp
+    src/io/RenderExportPolicy.cpp
+    src/io/RenderExportPolicy.hpp
     src/render/ImageAffineTransformer.cpp
     src/render/ImageAffineTransformer.hpp
     src/render/ImageResampler.cpp
     src/render/ImageResampler.hpp
+    src/render/LayerCompositionPlan.cpp
+    src/render/LayerCompositionPlan.hpp
     src/render/RenderEngine.cpp
     src/render/RenderEngine.hpp
     src/render/PreviewRenderPolicy.cpp
@@ -62,6 +70,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/EraserPopoverPanel.hpp
     src/ui/EraserPresetButton.cpp
     src/ui/EraserPresetButton.hpp
+    src/ui/FileOpenEventRouter.cpp
+    src/ui/FileOpenEventRouter.hpp
     src/ui/FrameScrubber.cpp
     src/ui/FrameScrubber.hpp
     src/ui/Icons.cpp

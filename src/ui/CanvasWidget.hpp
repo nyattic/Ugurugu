@@ -121,6 +121,7 @@ public slots:
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
+    void setGroupSelectionActive(bool active);
     void fitToWindow();
     void resetZoom();
     void setZoomPercent(int percent);
@@ -321,6 +322,7 @@ private:
     SelectionShape m_selectionShape = SelectionShape::Freehand;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
+    bool m_groupSelectionActive = false;
     int m_currentFrame = 0;
     qreal m_zoom = 1.0;
     QPointF m_pan;

@@ -18,8 +18,13 @@ env:
   VELOPACK_VERSION: 1.2.0
 
 jobs:
+  quality:
+    name: Full CI quality gate
+    uses: ./.github/workflows/ci.yml
+
   macos:
     name: Build macOS release
+    needs: quality
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -133,6 +138,58 @@ jobs:
           cp "$RUNNER_TEMP/sparkle-updates/appcast.xml" artifacts/
           cp "$RUNNER_TEMP/sparkle-updates/${ARCHIVE%.zip}.ko.html" artifacts/
           cp "$RUNNER_TEMP/sparkle-updates/${ARCHIVE%.zip}.ja.html" artifacts/
+
+      - name: Verify final macOS containers
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          verify_application() {
+            application="$1"
+            smoke_root="$2"
+            if [[ ! -d "$application" ]]; then
+              echo "Missing application bundle: $application"
+              return 1
+            fi
+            mkdir -p "$smoke_root/MacOS"
+            ln -s "$application/Contents/Frameworks" "$smoke_root/Frameworks"
+            cp \
+              out/build/macos-distribution/wobblepaint_package_smoke \
+              "$smoke_root/MacOS/"
+            "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
+            codesign --verify --deep --strict "$application"
+          }
+
+          dmg=$(find artifacts -maxdepth 1 -type f -name 'WagleWaglePaint-macOS-*.dmg' -print -quit)
+          if [[ -z "$dmg" ]]; then
+            echo "Missing macOS DMG"
+            exit 1
+          fi
+          hdiutil verify "$dmg"
+          mount_root="$RUNNER_TEMP/dmg-mount"
+          mkdir -p "$mount_root"
+          hdiutil attach \
+            "$dmg" \
+            -readonly \
+            -nobrowse \
+            -mountpoint "$mount_root"
+          trap 'hdiutil detach "$mount_root"' EXIT
+          verify_application \
+            "$mount_root/WagleWaglePaint.app" \
+            "$RUNNER_TEMP/dmg-package-smoke"
+          hdiutil detach "$mount_root"
+          trap - EXIT
+
+          archive="artifacts/$ARCHIVE"
+          if [[ ! -f "$archive" ]]; then
+            echo "Missing macOS ZIP: $archive"
+            exit 1
+          fi
+          zip_root="$RUNNER_TEMP/zip-extracted"
+          mkdir -p "$zip_root"
+          ditto -x -k "$archive" "$zip_root"
+          verify_application \
+            "$zip_root/WagleWaglePaint.app" \
+            "$RUNNER_TEMP/zip-package-smoke"
 
       - name: Verify macOS compatibility
         run: |
@@ -251,6 +308,7 @@ jobs:
 
   windows:
     name: Build Windows release
+    needs: quality
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -337,6 +395,43 @@ jobs:
             -Path "artifacts\WagleWaglePaint-win-Setup.exe" `
             -NewName "WagleWaglePaint-Windows-x64-Setup.exe"
 
+      - name: Verify final Windows installer
+        shell: pwsh
+        run: |
+          $setup = Resolve-Path "artifacts\WagleWaglePaint-Windows-x64-Setup.exe"
+          $installRoot = Join-Path $env:RUNNER_TEMP "velopack-smoke"
+          $installer = Start-Process `
+            -FilePath $setup `
+            -ArgumentList @("--silent", "--installto", $installRoot) `
+            -PassThru `
+            -Wait
+          if ($installer.ExitCode -ne 0) {
+            throw "Installer exited with code $($installer.ExitCode)"
+          }
+
+          $current = Join-Path $installRoot "current"
+          $application = Join-Path $current "WagleWaglePaint.exe"
+          $update = Join-Path $installRoot "Update.exe"
+          $version = Join-Path $installRoot "sq.version"
+          foreach ($path in @($current, $application, $update, $version)) {
+            if (-not (Test-Path $path)) {
+              throw "Installed package is missing $path"
+            }
+          }
+          if ((Get-Item $application).Length -le 0 -or
+              (Get-Item $update).Length -le 0 -or
+              (Get-Item $version).Length -le 0) {
+            throw "Installed package contains an empty executable or version file"
+          }
+
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $process = Start-Process $application -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            throw "Installed application exited with code $($process.ExitCode)"
+          }
+          Stop-Process -Id $process.Id -Force
+
       - name: Create Windows release metadata
         shell: pwsh
         run: |
@@ -400,7 +495,7 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: [macos, windows]
+    needs: [quality, macos, windows]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 15

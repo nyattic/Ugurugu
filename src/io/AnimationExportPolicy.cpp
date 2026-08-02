@@ -1,6 +1,7 @@
 #include "io/AnimationExportPolicy.hpp"
 
 #include "app/MemoryBudget.hpp"
+#include "io/RenderExportPolicy.hpp"
 
 namespace wobble
 {
@@ -17,6 +18,12 @@ long double AnimationExportPolicy::estimatedWorkingBytes(
            * static_cast<long double>(frameCount) * 12.0L;
 }
 
+long double AnimationExportPolicy::estimatedWorkingBytes(
+    const Document &document)
+{
+    return RenderExportPolicy::animatedGif(document).workingBytes;
+}
+
 bool AnimationExportPolicy::fitsMemoryBudget(
     const QSize &frameSize, qsizetype frameCount)
 {
@@ -24,6 +31,11 @@ bool AnimationExportPolicy::fitsMemoryBudget(
     return bytes > 0.0L
            && bytes <= static_cast<long double>(
                   MemoryBudget::animationExportWorkingBytes);
+}
+
+bool AnimationExportPolicy::fitsMemoryBudget(const Document &document)
+{
+    return RenderExportPolicy::animatedGifFitsMemoryBudget(document);
 }
 
 }

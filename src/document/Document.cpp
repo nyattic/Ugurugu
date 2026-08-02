@@ -1,8 +1,7 @@
 #include "document/Document.hpp"
 
 #include "document/DocumentLimits.hpp"
-
-#include <QSet>
+#include "document/LayerHierarchy.hpp"
 
 #include <cmath>
 
@@ -94,49 +93,14 @@ int Document::layerIndex(const QUuid &id) const
 bool Document::isLayerDescendantOf(
     const QUuid &layerId, const QUuid &ancestorGroupId) const
 {
-    if (layerId.isNull() || ancestorGroupId.isNull()
-        || layerId == ancestorGroupId)
-    {
-        return false;
-    }
-    const Layer *current = layer(layerId);
-    QSet<QUuid> visited;
-    while (current && !current->parentGroupId.isNull())
-    {
-        if (current->parentGroupId == ancestorGroupId)
-        {
-            return true;
-        }
-        if (visited.contains(current->parentGroupId))
-        {
-            return false;
-        }
-        visited.insert(current->parentGroupId);
-        current = layer(current->parentGroupId);
-    }
-    return false;
+    return analyzeLayerHierarchy(*this).isDescendantOf(
+        layerId, ancestorGroupId);
 }
 
 int Document::layerDepth(const QUuid &id) const
 {
-    const Layer *current = layer(id);
-    QSet<QUuid> visited;
-    int depth = 0;
-    while (current && !current->parentGroupId.isNull())
-    {
-        if (visited.contains(current->parentGroupId))
-        {
-            return 0;
-        }
-        visited.insert(current->parentGroupId);
-        current = layer(current->parentGroupId);
-        if (!current)
-        {
-            return 0;
-        }
-        ++depth;
-    }
-    return depth;
+    const int depth = analyzeLayerHierarchy(*this).depth(id);
+    return depth >= 0 ? depth : 0;
 }
 
 }

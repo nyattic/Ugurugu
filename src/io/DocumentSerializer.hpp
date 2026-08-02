@@ -4,6 +4,7 @@
 #include "document/Document.hpp"
 
 #include <QCoreApplication>
+#include <QJsonObject>
 
 #include <memory>
 #include <optional>
@@ -162,9 +163,16 @@ public:
         const QString &filePath, QString *error = nullptr);
     static QByteArray toJson(const Document &document);
     static QByteArray toJson(
+        const Document &document, const QJsonObject &additionalRootFields);
+    static QByteArray toJson(
         const PreparedDocument &document, SerializationCache &cache);
+    static QByteArray toJson(const PreparedDocument &document,
+        SerializationCache &cache,
+        const QJsonObject &additionalRootFields);
     static std::optional<Document> fromJson(
         const QByteArray &data, QString *error = nullptr);
+    static std::optional<Document> fromJson(
+        const QByteArray &data, QJsonObject *root, QString *error);
 };
 
 }

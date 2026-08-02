@@ -24,22 +24,29 @@ void LayerListWidget::dropEvent(QDropEvent *event)
     }
 
     const QModelIndex target = indexAt(event->position().toPoint());
-    int insertRow = target.isValid() ? target.row() : count();
-    switch (dropIndicatorPosition())
-    {
-    case QAbstractItemView::BelowItem:
-        insertRow += 1;
-        break;
-    case QAbstractItemView::OnViewport:
-        insertRow = count();
-        break;
-    default:
-        break;
-    }
-
     event->setDropAction(Qt::IgnoreAction);
     event->accept();
-    emit reorderRequested(currentRow(), insertRow);
+    DropPlacement placement = DropPlacement::OnViewport;
+    if (target.isValid())
+    {
+        switch (dropIndicatorPosition())
+        {
+        case QAbstractItemView::AboveItem:
+            placement = DropPlacement::AboveTarget;
+            break;
+        case QAbstractItemView::BelowItem:
+            placement = DropPlacement::BelowTarget;
+            break;
+        case QAbstractItemView::OnItem:
+            placement = DropPlacement::OnTarget;
+            break;
+        case QAbstractItemView::OnViewport:
+            placement = DropPlacement::OnViewport;
+            break;
+        }
+    }
+    emit dropRequested(
+        currentRow(), target.isValid() ? target.row() : -1, placement);
 }
 
 void LayerListWidget::keyPressEvent(QKeyEvent *event)

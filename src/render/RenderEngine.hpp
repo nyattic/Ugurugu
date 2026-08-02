@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/Document.hpp"
+#include "render/LayerCompositionPlan.hpp"
 
 #include <QHash>
 #include <QImage>
@@ -36,6 +37,11 @@ public:
         quint64 packedSelectionSamples = 0;
         quint64 primitiveStrokesRendered = 0;
         quint64 pixelSelectionOperationsReplayed = 0;
+        int hierarchyPlannedPeakSurfaceCount = 0;
+        int hierarchyPeakSurfaceCount = 0;
+        quint64 hierarchyPeakSurfaceBytes = 0;
+        quint64 hierarchySurfaceAllocations = 0;
+        quint64 hierarchySurfaceReuses = 0;
     };
 
     struct LayerSplitFrame
@@ -102,6 +108,8 @@ public:
         const QSize &outputSize,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
+    static LayerCompositionMemoryEstimate estimateHierarchyMemory(
+        const Document &document, const QSize &outputSize);
     static bool supportsLayerSplit(
         const Document &document, const QUuid &layerId);
     static LayerSplitFrame renderLayerSplit(const Document &document,

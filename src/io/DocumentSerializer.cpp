@@ -2,6 +2,7 @@
 
 #include "document/DocumentLimits.hpp"
 #include "document/DocumentOperations.hpp"
+#include "document/LayerHierarchy.hpp"
 #include "document/SelectionOperation.hpp"
 
 #include <QCryptographicHash>
@@ -1953,7 +1954,8 @@ QJsonObject layerSkeletonToJson(const Layer &layer)
 QJsonObject rootToJson(const Document &document,
     const QJsonArray &layers,
     const QJsonArray &clipMasks,
-    const QJsonArray &binaryMasks)
+    const QJsonArray &binaryMasks,
+    const QJsonObject &additionalRootFields = {})
 {
     QJsonObject canvas;
     canvas.insert(QStringLiteral("width"), document.size.width());
@@ -1979,6 +1981,12 @@ QJsonObject rootToJson(const Document &document,
     root.insert(QStringLiteral("layers"), layers);
     root.insert(QStringLiteral("clipMasks"), clipMasks);
     root.insert(QStringLiteral("binaryMasks"), binaryMasks);
+    for (auto field = additionalRootFields.constBegin();
+        field != additionalRootFields.constEnd();
+        ++field)
+    {
+        root.insert(field.key(), field.value());
+    }
     return root;
 }
 
@@ -2412,22 +2420,12 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             return result;
         }
     }
-    for (const Layer &layer : source.layers)
+    if (!analyzeLayerHierarchy(source).isValid())
     {
-        if (layer.parentGroupId.isNull())
-        {
-            continue;
-        }
-        const Layer *parent = source.layer(layer.parentGroupId);
-        if (!parent || parent->kind != LayerKind::Group
-            || layer.parentGroupId == layer.id
-            || source.isLayerDescendantOf(layer.parentGroupId, layer.id))
-        {
-            setError(error,
-                DocumentSerializer::tr("The layer hierarchy is invalid."));
-            result.status = MetadataReuseStatus::Invalid;
-            return result;
-        }
+        setError(
+            error, DocumentSerializer::tr("The layer hierarchy is invalid."));
+        result.status = MetadataReuseStatus::Invalid;
+        return result;
     }
     const bool validActiveLayer =
         !std::any_of(source.layers.cbegin(),
@@ -2896,13 +2894,35 @@ bool tablesMatchPlan(const ClipMaskTable &clipMasks,
 }
 
 template <typename Cache>
-std::optional<QByteArray> serializePreparedDocument(
-    const Document &document, const PreparedPlan &plan, Cache &cache)
+std::optional<QByteArray> serializePreparedDocument(const Document &document,
+    const PreparedPlan &plan,
+    Cache &cache,
+    const QJsonObject &additionalRootFields = {})
 {
     if (plan.compactSize <= 0
         || plan.compactSize > DocumentLimits::maximumProjectBytes)
     {
         return std::nullopt;
+    }
+    qint64 expectedSize = plan.compactSize;
+    if (!additionalRootFields.isEmpty())
+    {
+        const qint64 baseRootSize =
+            QJsonDocument(rootToJson(document, {}, {}, {}))
+                .toJson(QJsonDocument::Compact)
+                .size();
+        const qint64 extendedRootSize = QJsonDocument(
+            rootToJson(document, {}, {}, {}, additionalRootFields))
+                                            .toJson(QJsonDocument::Compact)
+                                            .size();
+        const qint64 additionalBytes = extendedRootSize - baseRootSize;
+        if (additionalBytes < 0
+            || expectedSize
+                   > DocumentLimits::maximumProjectBytes - additionalBytes)
+        {
+            return std::nullopt;
+        }
+        expectedSize += additionalBytes;
     }
     const ClipMaskTable clipMasks =
         buildClipMaskTable(document, &plan, cache, plan.compactSize, true);
@@ -2929,10 +2949,10 @@ std::optional<QByteArray> serializePreparedDocument(
     {
         packedMasks.append(serializedBinaryMaskToJson(entry));
     }
-    QByteArray data =
-        QJsonDocument(rootToJson(document, layers, masks, packedMasks))
-            .toJson(QJsonDocument::Compact);
-    if (data.size() != plan.compactSize)
+    QByteArray data = QJsonDocument(
+        rootToJson(document, layers, masks, packedMasks, additionalRootFields))
+                          .toJson(QJsonDocument::Compact);
+    if (data.size() != expectedSize)
     {
         return std::nullopt;
     }
@@ -3424,21 +3444,11 @@ bool validateDocument(const Document &document,
             return false;
         }
     }
-    for (const Layer &layer : document.layers)
+    if (!analyzeLayerHierarchy(document).isValid())
     {
-        if (layer.parentGroupId.isNull())
-        {
-            continue;
-        }
-        const Layer *parent = document.layer(layer.parentGroupId);
-        if (!parent || parent->kind != LayerKind::Group
-            || layer.parentGroupId == layer.id
-            || document.isLayerDescendantOf(layer.parentGroupId, layer.id))
-        {
-            setError(error,
-                DocumentSerializer::tr("The layer hierarchy is invalid."));
-            return false;
-        }
+        setError(
+            error, DocumentSerializer::tr("The layer hierarchy is invalid."));
+        return false;
     }
     const bool validActiveLayer =
         !std::any_of(document.layers.cbegin(),
@@ -4005,13 +4015,27 @@ std::optional<Document> DocumentSerializer::load(
 
 QByteArray DocumentSerializer::toJson(const Document &document)
 {
+    return toJson(document, {});
+}
+
+QByteArray DocumentSerializer::toJson(
+    const Document &document, const QJsonObject &additionalRootFields)
+{
     SerializationCache cache;
     const std::optional<PreparedDocument> prepared = prepare(document, cache);
-    return prepared ? toJson(*prepared, cache) : QByteArray();
+    return prepared ? toJson(*prepared, cache, additionalRootFields)
+                    : QByteArray();
 }
 
 QByteArray DocumentSerializer::toJson(
     const PreparedDocument &document, SerializationCache &cache)
+{
+    return toJson(document, cache, {});
+}
+
+QByteArray DocumentSerializer::toJson(const PreparedDocument &document,
+    SerializationCache &cache,
+    const QJsonObject &additionalRootFields)
 {
     if (!document.m_impl || !cache.m_impl
         || document.m_impl->plan.compactSize <= 0
@@ -4020,13 +4044,33 @@ QByteArray DocumentSerializer::toJson(
     {
         return {};
     }
-    const std::optional<QByteArray> data = serializePreparedDocument(
-        document.m_impl->document, document.m_impl->plan, *cache.m_impl);
+    const QJsonObject rootSkeleton =
+        rootToJson(document.m_impl->document, {}, {}, {});
+    for (auto field = additionalRootFields.constBegin();
+        field != additionalRootFields.constEnd();
+        ++field)
+    {
+        if (rootSkeleton.contains(field.key()))
+        {
+            return {};
+        }
+    }
+    const std::optional<QByteArray> data =
+        serializePreparedDocument(document.m_impl->document,
+            document.m_impl->plan,
+            *cache.m_impl,
+            additionalRootFields);
     return data.value_or(QByteArray());
 }
 
 std::optional<Document> DocumentSerializer::fromJson(
     const QByteArray &data, QString *error)
+{
+    return fromJson(data, nullptr, error);
+}
+
+std::optional<Document> DocumentSerializer::fromJson(
+    const QByteArray &data, QJsonObject *parsedRoot, QString *error)
 {
     if (data.size() > DocumentLimits::maximumProjectBytes)
     {
@@ -4252,6 +4296,10 @@ std::optional<Document> DocumentSerializer::fromJson(
     if (!validateDocument(document, schemaVersion, error))
     {
         return std::nullopt;
+    }
+    if (parsedRoot)
+    {
+        *parsedRoot = root;
     }
     return document;
 }

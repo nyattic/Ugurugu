@@ -30,7 +30,9 @@ private:
 
     DocumentController *m_controller;
     QTimer m_timer;
+    QTimer m_settleTimer;
     qreal m_phase = 0.0;
+    qreal m_lastAmount = 0.0;
     bool m_shown = false;
 };
 

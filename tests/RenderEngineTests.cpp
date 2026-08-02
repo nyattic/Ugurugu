@@ -3,6 +3,7 @@
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
+#include "io/DocumentSerializer.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
 #include "render/PreviewRenderPolicy.hpp"
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <functional>
 #include <limits>
 
 namespace wobble
@@ -73,6 +75,156 @@ QImage rectangularMask(const QSize &size, const QRect &rect)
             255);
     }
     return mask;
+}
+
+QPainter::CompositionMode referenceCompositionMode(LayerBlendMode mode)
+{
+    switch (mode)
+    {
+    case LayerBlendMode::Multiply:
+        return QPainter::CompositionMode_Multiply;
+    case LayerBlendMode::Screen:
+        return QPainter::CompositionMode_Screen;
+    case LayerBlendMode::Overlay:
+        return QPainter::CompositionMode_Overlay;
+    case LayerBlendMode::Normal:
+        return QPainter::CompositionMode_SourceOver;
+    }
+    return QPainter::CompositionMode_SourceOver;
+}
+
+QImage referenceHierarchyComposition(const Document &document,
+    const QHash<QUuid, QImage> &paintLayers,
+    const QSize &outputSize)
+{
+    std::function<QImage(const QUuid &, bool)> composeStack;
+    composeStack = [&](const QUuid &parentGroupId, bool root)
+    {
+        QImage result(outputSize, QImage::Format_ARGB32_Premultiplied);
+        if (result.isNull())
+        {
+            return QImage();
+        }
+        result.fill(root ? document.background : QColor(Qt::transparent));
+
+        QImage clippingBase;
+        qreal clippingBaseOpacity = 0.0;
+        for (const Layer &layer : document.layers)
+        {
+            if (layer.parentGroupId != parentGroupId)
+            {
+                continue;
+            }
+            if (!layer.visible || layer.opacity <= 0.0)
+            {
+                if (!layer.clipToLayerBelow)
+                {
+                    clippingBase =
+                        QImage(outputSize, QImage::Format_ARGB32_Premultiplied);
+                    if (!clippingBase.isNull())
+                    {
+                        clippingBase.fill(Qt::transparent);
+                    }
+                    clippingBaseOpacity = 0.0;
+                }
+                continue;
+            }
+
+            QImage layerImage = layer.kind == LayerKind::Group
+                                    ? composeStack(layer.id, false)
+                                    : paintLayers.value(layer.id);
+            if (layerImage.isNull())
+            {
+                return QImage();
+            }
+            if (layer.clipToLayerBelow)
+            {
+                if (clippingBase.isNull() || clippingBaseOpacity <= 0.0)
+                {
+                    continue;
+                }
+                QPainter clipper(&layerImage);
+                clipper.setCompositionMode(
+                    QPainter::CompositionMode_DestinationIn);
+                clipper.setOpacity(clippingBaseOpacity);
+                clipper.drawImage(QPoint(), clippingBase);
+                clipper.end();
+            }
+            else
+            {
+                clippingBase = layerImage;
+                clippingBaseOpacity = std::clamp(layer.opacity, 0.0, 1.0);
+            }
+
+            QPainter painter(&result);
+            painter.setCompositionMode(
+                referenceCompositionMode(layer.blendMode));
+            painter.setOpacity(std::clamp(layer.opacity, 0.0, 1.0));
+            painter.drawImage(QPoint(), layerImage);
+            painter.end();
+        }
+        return result;
+    };
+    return composeStack({}, true);
+}
+
+QImage patternedSurface(
+    const QSize &size, const QColor &first, const QColor &second)
+{
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+    {
+        return {};
+    }
+    for (int y = 0; y < size.height(); ++y)
+    {
+        for (int x = 0; x < size.width(); ++x)
+        {
+            image.setPixelColor(x, y, (x + y) % 2 == 0 ? first : second);
+        }
+    }
+    return image;
+}
+
+Document adversarialClippedHierarchy(const QSize &size, int groupCount)
+{
+    Document document = Document::createDefault(size);
+    document.background = QColor(24, 32, 48);
+    document.layers.clear();
+    document.activeLayerId = {};
+
+    QUuid parentGroupId;
+    for (int depth = 0; depth <= groupCount; ++depth)
+    {
+        Layer base;
+        base.name = QStringLiteral("Base %1").arg(depth);
+        base.parentGroupId = parentGroupId;
+        base.initialCanvasSize = size;
+        document.layers.append(base);
+        if (document.activeLayerId.isNull())
+        {
+            document.activeLayerId = base.id;
+        }
+        if (depth == groupCount)
+        {
+            Layer clipped;
+            clipped.name = QStringLiteral("Clipped");
+            clipped.parentGroupId = parentGroupId;
+            clipped.clipToLayerBelow = true;
+            clipped.initialCanvasSize = size;
+            document.layers.append(clipped);
+            break;
+        }
+
+        Layer group;
+        group.name = QStringLiteral("Group %1").arg(depth);
+        group.kind = LayerKind::Group;
+        group.parentGroupId = parentGroupId;
+        group.initialCanvasSize = size;
+        document.layers.append(group);
+        parentGroupId = group.id;
+    }
+    return document;
 }
 
 QImage activeLayerPixels(const Document &document, int frameIndex = 0)
@@ -1386,6 +1538,266 @@ private slots:
         QVERIFY(std::abs(actual.green() - reference.green()) <= 1);
         QVERIFY(std::abs(actual.blue() - reference.blue()) <= 1);
         QCOMPARE(actual.alpha(), reference.alpha());
+    }
+
+    void preservesHierarchyOpacityBlendAndClippingPixels()
+    {
+        const QSize size(5, 4);
+        Document document = Document::createDefault(size);
+        document.background = QColor(35, 55, 80, 230);
+        document.layers.clear();
+        document.activeLayerId = {};
+
+        Layer rootBase;
+        rootBase.name = QStringLiteral("Root base");
+        rootBase.opacity = 0.8;
+        rootBase.blendMode = LayerBlendMode::Multiply;
+        rootBase.initialCanvasSize = size;
+
+        Layer group;
+        group.name = QStringLiteral("Group");
+        group.kind = LayerKind::Group;
+        group.opacity = 0.7;
+        group.blendMode = LayerBlendMode::Screen;
+        group.initialCanvasSize = size;
+
+        Layer childBase;
+        childBase.name = QStringLiteral("Child base");
+        childBase.parentGroupId = group.id;
+        childBase.opacity = 0.65;
+        childBase.blendMode = LayerBlendMode::Overlay;
+        childBase.initialCanvasSize = size;
+
+        Layer childClipped;
+        childClipped.name = QStringLiteral("Child clipped");
+        childClipped.parentGroupId = group.id;
+        childClipped.clipToLayerBelow = true;
+        childClipped.opacity = 0.55;
+        childClipped.blendMode = LayerBlendMode::Multiply;
+        childClipped.initialCanvasSize = size;
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.clipToLayerBelow = true;
+        top.opacity = 0.35;
+        top.blendMode = LayerBlendMode::Screen;
+        top.initialCanvasSize = size;
+
+        document.layers = {rootBase, group, childBase, childClipped, top};
+        document.activeLayerId = rootBase.id;
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+
+        RenderEngine::LayerRasterFrame frame;
+        frame.outputSize = size;
+        frame.paintLayers.insert(rootBase.id,
+            patternedSurface(
+                size, QColor(220, 45, 60, 210), QColor(45, 190, 100, 120)));
+        frame.paintLayers.insert(childBase.id,
+            patternedSurface(
+                size, QColor(40, 95, 225, 190), QColor(230, 170, 40, 90)));
+        frame.paintLayers.insert(childClipped.id,
+            patternedSurface(
+                size, QColor(220, 220, 245, 230), QColor(65, 25, 180, 160)));
+        frame.paintLayers.insert(top.id,
+            patternedSurface(
+                size, QColor(20, 200, 210, 150), QColor(240, 80, 160, 70)));
+        frame.valid = true;
+
+        const QImage expected = referenceHierarchyComposition(
+            document, frame.paintLayers, frame.outputSize);
+        const QImage actual =
+            RenderEngine::composeLayerRasterFrame(document, frame, {}, {});
+        QVERIFY(!expected.isNull());
+        QCOMPARE(actual, expected);
+    }
+
+    void preservesHiddenGroupSkipAndClippingResetPixels()
+    {
+        const QSize size(4, 3);
+        Document document = Document::createDefault(size);
+        document.background = QColor(30, 45, 65);
+        document.layers.clear();
+
+        Layer base;
+        base.name = QStringLiteral("Base");
+        base.initialCanvasSize = size;
+
+        Layer hiddenGroup;
+        hiddenGroup.name = QStringLiteral("Hidden group");
+        hiddenGroup.kind = LayerKind::Group;
+        hiddenGroup.visible = false;
+        hiddenGroup.initialCanvasSize = size;
+
+        Layer hiddenChild;
+        hiddenChild.name = QStringLiteral("Hidden child");
+        hiddenChild.parentGroupId = hiddenGroup.id;
+        hiddenChild.initialCanvasSize = size;
+
+        Layer clipped;
+        clipped.name = QStringLiteral("Clipped after hidden group");
+        clipped.clipToLayerBelow = true;
+        clipped.initialCanvasSize = size;
+
+        document.layers = {base, hiddenGroup, hiddenChild, clipped};
+        document.activeLayerId = base.id;
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+
+        RenderEngine::LayerRasterFrame frame;
+        frame.outputSize = size;
+        frame.paintLayers.insert(base.id,
+            patternedSurface(
+                size, QColor(210, 50, 65, 220), QColor(45, 175, 95, 130)));
+        frame.paintLayers.insert(hiddenChild.id,
+            patternedSurface(
+                size, QColor(30, 80, 220, 240), QColor(230, 180, 45, 180)));
+        frame.paintLayers.insert(clipped.id,
+            patternedSurface(
+                size, QColor(245, 245, 245, 255), QColor(20, 20, 20, 255)));
+        frame.valid = true;
+
+        const QImage expected = referenceHierarchyComposition(
+            document, frame.paintLayers, frame.outputSize);
+        const QImage actual =
+            RenderEngine::composeLayerRasterFrame(document, frame, {}, {});
+        QCOMPARE(actual, expected);
+        const LayerCompositionMemoryEstimate estimate =
+            RenderEngine::estimateHierarchyMemory(document, size);
+        QVERIFY(estimate.valid);
+        QCOMPARE(estimate.peakSurfaceCount, 2);
+    }
+
+    void measuresAdversarialHierarchyPeakSurfaces()
+    {
+        const Document document = adversarialClippedHierarchy(QSize(2, 2), 8);
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+        const LayerCompositionMemoryEstimate estimate =
+            RenderEngine::estimateHierarchyMemory(document, QSize(1, 1));
+        QVERIFY(estimate.valid);
+        QCOMPARE(estimate.peakSurfaceCount, 11);
+        QCOMPARE(estimate.bytesPerSurface, 4ULL);
+        QCOMPARE(estimate.peakBytes, 44ULL);
+
+        RenderEngine::ScaledRenderStats stats;
+        const QImage rendered = RenderEngine::renderScaled(document,
+            0,
+            QSize(1, 1),
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            &stats);
+        QVERIFY(!rendered.isNull());
+        QCOMPARE(stats.hierarchyPlannedPeakSurfaceCount, 11);
+        QCOMPARE(stats.hierarchyPeakSurfaceCount, 11);
+        QCOMPARE(stats.hierarchyPeakSurfaceBytes, 44ULL);
+        QVERIFY(stats.hierarchySurfaceReuses >= 8);
+    }
+
+    void handlesLegacyOverDepthHierarchyIteratively()
+    {
+        const Document document = adversarialClippedHierarchy(QSize(2, 2), 64);
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+        const LayerCompositionMemoryEstimate estimate =
+            RenderEngine::estimateHierarchyMemory(document, QSize(1, 1));
+        QVERIFY(estimate.valid);
+        QCOMPARE(estimate.peakSurfaceCount, 67);
+
+        RenderEngine::ScaledRenderStats stats;
+        const QImage rendered = RenderEngine::renderScaled(document,
+            0,
+            QSize(1, 1),
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            &stats);
+        QVERIFY(!rendered.isNull());
+        QCOMPARE(stats.hierarchyPlannedPeakSurfaceCount, 67);
+        QCOMPARE(stats.hierarchyPeakSurfaceCount, 67);
+    }
+
+    void reusesCompositionSurfacesAcrossSiblingGroups()
+    {
+        Document document = Document::createDefault(QSize(2, 2));
+        document.layers.clear();
+        document.activeLayerId = {};
+        for (int index = 0; index < 2; ++index)
+        {
+            Layer group;
+            group.name = QStringLiteral("Group %1").arg(index);
+            group.kind = LayerKind::Group;
+            group.initialCanvasSize = document.size;
+            Layer child;
+            child.name = QStringLiteral("Child %1").arg(index);
+            child.parentGroupId = group.id;
+            child.initialCanvasSize = document.size;
+            document.layers.append(group);
+            document.layers.append(child);
+            if (document.activeLayerId.isNull())
+            {
+                document.activeLayerId = child.id;
+            }
+        }
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+
+        RenderEngine::ScaledRenderStats stats;
+        const QImage rendered = RenderEngine::renderScaled(document,
+            0,
+            QSize(1, 1),
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            &stats);
+        QVERIFY(!rendered.isNull());
+        QVERIFY(stats.hierarchySurfaceReuses > 0);
+        QCOMPARE(stats.hierarchyPeakSurfaceCount,
+            stats.hierarchyPlannedPeakSurfaceCount);
+    }
+
+    void includesHierarchyTransientSurfacesInFourKPreviewBudget()
+    {
+        const QSize fourK(4096, 4096);
+        const Document document = adversarialClippedHierarchy(fourK, 8);
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+        const LayerCompositionMemoryEstimate estimate =
+            RenderEngine::estimateHierarchyMemory(document, fourK);
+        QVERIFY(estimate.valid);
+        QCOMPARE(estimate.peakSurfaceCount, 11);
+        QCOMPARE(estimate.bytesPerSurface, 64ULL * 1024ULL * 1024ULL);
+        QVERIFY(estimate.peakBytes
+                > static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB)
+                      * 1024ULL);
+
+        const QSize preview = PreviewRenderPolicy::renderSize(
+            fourK, 16.0, 1, estimate.peakSurfaceCount);
+        QVERIFY(preview.isValid());
+        QVERIFY(preview.width() < fourK.width());
+        QCOMPARE(preview.width(), preview.height());
+        const quint64 concurrentSurfaceCount = static_cast<quint64>(
+            estimate.peakSurfaceCount
+            + LayerCompositionPlan::paintOperationScratchSurfaceCount);
+        const quint64 previewBytes = static_cast<quint64>(preview.width())
+                                     * static_cast<quint64>(preview.height())
+                                     * sizeof(quint32) * concurrentSurfaceCount;
+        QVERIFY(previewBytes
+                <= static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB)
+                       * 1024ULL);
+    }
+
+    void rejectsOverflowingHierarchyMemoryEstimate()
+    {
+        const Document document = Document::createDefault(QSize(1, 1));
+        const int maximum = std::numeric_limits<int>::max();
+        const LayerCompositionMemoryEstimate estimate =
+            RenderEngine::estimateHierarchyMemory(
+                document, QSize(maximum, maximum));
+        QVERIFY(!estimate.valid);
+    }
+
+    void rejectsClippedGroupCompositionPlan()
+    {
+        Document document = Document::createDefault(QSize(16, 16));
+        Layer group;
+        group.name = QStringLiteral("Invalid clipped group");
+        group.kind = LayerKind::Group;
+        group.clipToLayerBelow = true;
+        group.initialCanvasSize = document.size;
+        document.layers.append(group);
+        QVERIFY(!RenderEngine::estimateHierarchyMemory(document, document.size)
+                .valid);
+        QVERIFY(RenderEngine::render(document, 0).isNull());
     }
 
     void clipsLayerToBaseAlphaWithinGroup()

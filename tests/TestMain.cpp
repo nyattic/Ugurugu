@@ -1,9 +1,13 @@
 #include "TestSuites.hpp"
+#include "app/ApplicationInstanceLock.hpp"
 #include "ui/Theme.hpp"
 
 #include <QApplication>
+#include <QEventLoop>
+#include <QFile>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include <array>
 
@@ -43,6 +47,13 @@ int main(int argc, char **argv)
         QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
     QSettings::setPath(
         QSettings::IniFormat, QSettings::SystemScope, settingsDirectory.path());
+    if (!qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
+            settingsDirectory.filePath(QStringLiteral("recovery.wagle"))
+                .toUtf8()))
+    {
+        qCritical("Could not isolate the test recovery file.");
+        return 1;
+    }
 
     QApplication application(argc, argv);
     QApplication::setApplicationName(QStringLiteral("WagleWaglePaint"));
@@ -52,6 +63,36 @@ int main(int argc, char **argv)
     QApplication::setOrganizationName(QStringLiteral("WagleWaglePaint"));
     QApplication::setOrganizationDomain(QStringLiteral("waglewaglepaint.dev"));
     wobble::Theme::apply(application);
+
+    const QString lockProbePath =
+        qEnvironmentVariable("WOBBLEPAINT_INSTANCE_LOCK_PROBE_PATH");
+    if (!lockProbePath.isEmpty())
+    {
+        wobble::ApplicationInstanceLock lock(lockProbePath);
+        const auto result = lock.acquire();
+        QFile ready(
+            qEnvironmentVariable("WOBBLEPAINT_INSTANCE_LOCK_PROBE_READY_PATH"));
+        if (!ready.open(QIODevice::WriteOnly))
+        {
+            return 3;
+        }
+        const QByteArray status =
+            result == wobble::ApplicationInstanceLock::AcquireResult::Acquired
+                ? QByteArrayLiteral("acquired")
+                : QByteArrayLiteral("failed");
+        if (ready.write(status) != status.size())
+        {
+            return 3;
+        }
+        ready.close();
+        if (result != wobble::ApplicationInstanceLock::AcquireResult::Acquired)
+        {
+            return 4;
+        }
+        QEventLoop loop;
+        QTimer::singleShot(30000, &loop, &QEventLoop::quit);
+        return loop.exec();
+    }
 
     const QByteArray requested = qgetenv("WOBBLEPAINT_TEST_SUITE");
     int result = 0;

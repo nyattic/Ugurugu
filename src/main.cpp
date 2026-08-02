@@ -1,5 +1,7 @@
+#include "app/ApplicationInstanceLock.hpp"
 #include "app/Logging.hpp"
 #include "app/UpdateController.hpp"
+#include "ui/FileOpenEventRouter.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/Theme.hpp"
@@ -7,7 +9,6 @@
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
-#include <QFileOpenEvent>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
@@ -60,33 +61,6 @@ void migrateLegacySettings()
     currentSettings.sync();
 }
 
-class FileOpenEventFilter final : public QObject
-{
-public:
-    explicit FileOpenEventFilter(wobble::MainWindow *window)
-        : m_window(window)
-    {
-    }
-
-protected:
-    bool eventFilter(QObject *watched, QEvent *event) override
-    {
-        if (event->type() == QEvent::FileOpen)
-        {
-            const auto *fileEvent = static_cast<QFileOpenEvent *>(event);
-            if (!fileEvent->file().isEmpty())
-            {
-                m_window->openFile(fileEvent->file());
-                return true;
-            }
-        }
-        return QObject::eventFilter(watched, event);
-    }
-
-private:
-    wobble::MainWindow *m_window;
-};
-
 }
 
 int main(int argc, char *argv[])
@@ -94,7 +68,15 @@ int main(int argc, char *argv[])
     wobble::UpdateController::initialize();
     QApplication application(argc, argv);
     configureApplicationMetadata();
-    migrateLegacySettings();
+    wobble::ApplicationInstanceLock instanceLock;
+    QString instanceError;
+    const wobble::ApplicationInstanceLock::AcquireResult instanceResult =
+        instanceLock.acquire(&instanceError);
+    if (instanceResult
+        == wobble::ApplicationInstanceLock::AcquireResult::Acquired)
+    {
+        migrateLegacySettings();
+    }
     wobble::Theme::apply(application);
 
     QTranslator qtBaseTranslator;
@@ -119,6 +101,24 @@ int main(int argc, char *argv[])
         QApplication::installTranslator(&appTranslator);
     }
 
+    if (instanceResult
+        == wobble::ApplicationInstanceLock::AcquireResult::AlreadyRunning)
+    {
+        QMessageBox::information(nullptr,
+            QObject::tr("WagleWaglePaint"),
+            QObject::tr("WagleWaglePaint is already running."));
+        return EXIT_SUCCESS;
+    }
+    if (instanceResult
+        == wobble::ApplicationInstanceLock::AcquireResult::Failed)
+    {
+        QMessageBox::critical(nullptr,
+            QObject::tr("WagleWaglePaint"),
+            QObject::tr("WagleWaglePaint could not start.\n\n%1")
+                .arg(instanceError));
+        return EXIT_FAILURE;
+    }
+
     wobble::Logging::initialize();
     spdlog::info("WagleWaglePaint {} starting",
         QApplication::applicationVersion().toStdString());
@@ -134,21 +134,52 @@ int main(int argc, char *argv[])
             &QAction::triggered,
             &updateController,
             &wobble::UpdateController::checkForUpdates);
-        FileOpenEventFilter fileOpenFilter(&window);
-        application.installEventFilter(&fileOpenFilter);
+        wobble::FileOpenEventRouter fileOpenRouter(
+            [&window](const QString &filePath)
+            {
+                if (window.openFile(filePath))
+                {
+                    window.showNormal();
+                    window.raise();
+                    window.activateWindow();
+                }
+            });
+        application.installEventFilter(&fileOpenRouter);
+        application.processEvents();
+        QString requestedFilePath;
         if (application.arguments().size() > 1)
         {
-            const QString filePath =
+            requestedFilePath =
                 QFileInfo(application.arguments().at(1)).absoluteFilePath();
-            window.openFile(filePath);
+            fileOpenRouter.discardPendingFile(requestedFilePath);
         }
         else
         {
-            window.offerRecovery();
+            requestedFilePath = fileOpenRouter.takePendingFile();
         }
-        window.show();
-        result = application.exec();
-        spdlog::info("WagleWaglePaint exiting with code {}", result);
+        const wobble::MainWindow::StartupResult startupResult =
+            window.initializeSession(requestedFilePath);
+        if (!requestedFilePath.isEmpty())
+        {
+            fileOpenRouter.discardPendingFile(requestedFilePath);
+        }
+        if (startupResult == wobble::MainWindow::StartupResult::Canceled)
+        {
+            fileOpenRouter.discardPendingFiles();
+            result = EXIT_SUCCESS;
+        }
+        else if (startupResult == wobble::MainWindow::StartupResult::Failed)
+        {
+            fileOpenRouter.discardPendingFiles();
+            result = EXIT_FAILURE;
+        }
+        else
+        {
+            window.show();
+            fileOpenRouter.setReady(true);
+            result = application.exec();
+            spdlog::info("WagleWaglePaint exiting with code {}", result);
+        }
     }
     catch (const std::exception &error)
     {

@@ -4,6 +4,7 @@
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/LayerHierarchy.hpp"
 #include "document/SelectionOperation.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "render/RenderEngine.hpp"
@@ -15,6 +16,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -42,6 +44,12 @@ QByteArray pointArray(int count)
 class DocumentControllerTestAccess final
 {
 public:
+    static void failNextDocumentReplacementPreparation(
+        DocumentController &controller)
+    {
+        controller.m_failNextDocumentReplacementPreparationForTesting = true;
+    }
+
     static void failHistoryPrepareAfter(
         DocumentController &controller, int successfulStages)
     {
@@ -52,6 +60,16 @@ public:
     static quint64 contentRevision(const DocumentController &controller)
     {
         return controller.m_currentContentRevision;
+    }
+
+    static quint64 savedContentRevision(const DocumentController &controller)
+    {
+        return controller.m_savedContentRevision;
+    }
+
+    static quint64 nextContentRevision(const DocumentController &controller)
+    {
+        return controller.m_nextContentRevision;
     }
 
     static void resetSerializationStats(DocumentController &controller)
@@ -70,6 +88,16 @@ public:
         return controller.m_currentHistoryNode;
     }
 
+    static quint64 nextHistoryNode(const DocumentController &controller)
+    {
+        return controller.m_nextHistoryNode;
+    }
+
+    static const void *stateIdentity(const DocumentController &controller)
+    {
+        return controller.m_currentState.get();
+    }
+
     static void setHistoryResidentLimit(
         DocumentController &controller, qint64 bytes)
     {
@@ -77,6 +105,149 @@ public:
         controller.m_undoStack.enforceLimits();
     }
 };
+
+struct DocumentTransitionSnapshot
+{
+    QByteArray document;
+    const void *stateIdentity = nullptr;
+    DocumentUndoStack::StorageStats historyStorage;
+    int historyCount = 0;
+    int historyIndex = 0;
+    int historyLimit = 0;
+    bool canUndo = false;
+    bool canRedo = false;
+    bool historyClean = false;
+    bool modified = false;
+    quint64 historyNode = 0;
+    quint64 nextHistoryNode = 0;
+    quint64 contentRevision = 0;
+    quint64 savedContentRevision = 0;
+    quint64 nextContentRevision = 0;
+};
+
+DocumentTransitionSnapshot documentTransitionSnapshot(
+    DocumentController &controller)
+{
+    DocumentTransitionSnapshot snapshot;
+    snapshot.document = DocumentSerializer::toJson(controller.document());
+    snapshot.stateIdentity =
+        DocumentControllerTestAccess::stateIdentity(controller);
+    snapshot.historyStorage = controller.undoStack()->storageStats();
+    snapshot.historyCount = controller.undoStack()->count();
+    snapshot.historyIndex = controller.undoStack()->index();
+    snapshot.historyLimit = controller.undoStack()->undoLimit();
+    snapshot.canUndo = controller.undoStack()->canUndo();
+    snapshot.canRedo = controller.undoStack()->canRedo();
+    snapshot.historyClean = controller.undoStack()->isClean();
+    snapshot.modified = controller.isModified();
+    snapshot.historyNode =
+        DocumentControllerTestAccess::historyNode(controller);
+    snapshot.nextHistoryNode =
+        DocumentControllerTestAccess::nextHistoryNode(controller);
+    snapshot.contentRevision =
+        DocumentControllerTestAccess::contentRevision(controller);
+    snapshot.savedContentRevision =
+        DocumentControllerTestAccess::savedContentRevision(controller);
+    snapshot.nextContentRevision =
+        DocumentControllerTestAccess::nextContentRevision(controller);
+    return snapshot;
+}
+
+void compareDocumentTransitionSnapshot(
+    DocumentController &controller, const DocumentTransitionSnapshot &expected)
+{
+    QCOMPARE(
+        DocumentSerializer::toJson(controller.document()), expected.document);
+    QCOMPARE(DocumentControllerTestAccess::stateIdentity(controller),
+        expected.stateIdentity);
+    const DocumentUndoStack::StorageStats actualStorage =
+        controller.undoStack()->storageStats();
+    QCOMPARE(
+        actualStorage.retainedLayers, expected.historyStorage.retainedLayers);
+    QCOMPARE(
+        actualStorage.retainedStrokes, expected.historyStorage.retainedStrokes);
+    QCOMPARE(actualStorage.retainedPreparedDocuments,
+        expected.historyStorage.retainedPreparedDocuments);
+    QCOMPARE(actualStorage.entryCount, expected.historyStorage.entryCount);
+    QCOMPARE(actualStorage.stagedPreparedDocuments,
+        expected.historyStorage.stagedPreparedDocuments);
+    QCOMPARE(actualStorage.peakTransientPreparedDocuments,
+        expected.historyStorage.peakTransientPreparedDocuments);
+    QCOMPARE(actualStorage.macroPreparedDocuments,
+        expected.historyStorage.macroPreparedDocuments);
+    QCOMPARE(
+        actualStorage.retainedBytes, expected.historyStorage.retainedBytes);
+    QCOMPARE(actualStorage.residentBudgetSoftExceeded,
+        expected.historyStorage.residentBudgetSoftExceeded);
+    QCOMPARE(controller.undoStack()->count(), expected.historyCount);
+    QCOMPARE(controller.undoStack()->index(), expected.historyIndex);
+    QCOMPARE(controller.undoStack()->undoLimit(), expected.historyLimit);
+    QCOMPARE(controller.undoStack()->canUndo(), expected.canUndo);
+    QCOMPARE(controller.undoStack()->canRedo(), expected.canRedo);
+    QCOMPARE(controller.undoStack()->isClean(), expected.historyClean);
+    QCOMPARE(controller.isModified(), expected.modified);
+    QCOMPARE(DocumentControllerTestAccess::historyNode(controller),
+        expected.historyNode);
+    QCOMPARE(DocumentControllerTestAccess::nextHistoryNode(controller),
+        expected.nextHistoryNode);
+    QCOMPARE(DocumentControllerTestAccess::contentRevision(controller),
+        expected.contentRevision);
+    QCOMPARE(DocumentControllerTestAccess::savedContentRevision(controller),
+        expected.savedContentRevision);
+    QCOMPARE(DocumentControllerTestAccess::nextContentRevision(controller),
+        expected.nextContentRevision);
+}
+
+void prepareDocumentTransitionFailureState(DocumentController &controller)
+{
+    controller.newDocument(QSize(96, 96));
+    const QUuid layerId = controller.document().activeLayerId;
+    controller.renameLayer(layerId, QStringLiteral("Saved layer"));
+    controller.markSaved();
+    controller.setLayerOpacity(layerId, 0.5);
+    controller.setLayerVisible(layerId, false);
+    controller.undoStack()->undo();
+}
+
+template <typename Transition>
+void verifyDocumentTransitionPreparationFailure(
+    DocumentController &controller, Transition transition)
+{
+    const DocumentTransitionSnapshot before =
+        documentTransitionSnapshot(controller);
+    QSignalSpy documentReplacedSpy(
+        &controller, &DocumentController::documentReplaced);
+    QSignalSpy documentChangedSpy(
+        &controller, &DocumentController::documentChanged);
+    QSignalSpy thumbnailsResetSpy(
+        &controller, &DocumentController::layerThumbnailsReset);
+    QSignalSpy activeLayerChangedSpy(
+        &controller, &DocumentController::activeLayerChanged);
+    QSignalSpy modifiedChangedSpy(
+        &controller, &DocumentController::modifiedChanged);
+
+    DocumentControllerTestAccess::failNextDocumentReplacementPreparation(
+        controller);
+    QString error;
+    QVERIFY(!transition(&error));
+    QVERIFY(!error.isEmpty());
+    compareDocumentTransitionSnapshot(controller, before);
+    QCOMPARE(documentReplacedSpy.count(), 0);
+    QCOMPARE(documentChangedSpy.count(), 0);
+    QCOMPARE(thumbnailsResetSpy.count(), 0);
+    QCOMPARE(activeLayerChangedSpy.count(), 0);
+    QCOMPARE(modifiedChangedSpy.count(), 0);
+
+    const QUuid layerId = controller.document().activeLayerId;
+    controller.undoStack()->redo();
+    QVERIFY(!controller.document().layer(layerId)->visible);
+    controller.undoStack()->undo();
+    QVERIFY(controller.document().layer(layerId)->visible);
+    QCOMPARE(
+        DocumentSerializer::toJson(controller.document()), before.document);
+    QCOMPARE(controller.undoStack()->index(), before.historyIndex);
+    QCOMPARE(controller.isModified(), before.modified);
+}
 
 Document documentWithStrokeCount(int count)
 {
@@ -95,11 +266,185 @@ Document documentWithStrokeCount(int count)
     return document;
 }
 
+Document documentWithNestedPaintAtDepth(int depth)
+{
+    Document document = Document::createDefault(QSize(64, 64));
+    QUuid parentId;
+    for (int index = 0; index < depth; ++index)
+    {
+        Layer group;
+        group.name = QStringLiteral("Group %1").arg(index + 1);
+        group.kind = LayerKind::Group;
+        group.parentGroupId = parentId;
+        group.initialCanvasSize = document.size;
+        parentId = group.id;
+        document.layers.append(std::move(group));
+    }
+    document.layers.first().parentGroupId = parentId;
+    return document;
+}
+
+Document documentWithGroupAtDepth(int depth)
+{
+    Document document = Document::createDefault(QSize(64, 64));
+    QUuid parentId;
+    for (int index = 0; index <= depth; ++index)
+    {
+        Layer group;
+        group.name = QStringLiteral("Group %1").arg(index + 1);
+        group.kind = LayerKind::Group;
+        group.parentGroupId = parentId;
+        group.initialCanvasSize = document.size;
+        parentId = group.id;
+        document.layers.append(std::move(group));
+    }
+    return document;
+}
+
+QUuid layerIdAtDepth(const Document &document, int depth, LayerKind kind)
+{
+    const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(document);
+    if (!hierarchy.isValid())
+    {
+        return {};
+    }
+    for (int index = 0; index < document.layers.size(); ++index)
+    {
+        if (document.layers[index].kind == kind
+            && hierarchy.depths()[index] == depth)
+        {
+            return document.layers[index].id;
+        }
+    }
+    return {};
+}
+
+template <typename Mutation>
+void verifyRejectedHierarchyMutation(
+    DocumentController &controller, Mutation mutation)
+{
+    const DocumentTransitionSnapshot before =
+        documentTransitionSnapshot(controller);
+    QSignalSpy documentChangedSpy(
+        &controller, &DocumentController::documentChanged);
+    QSignalSpy activeLayerChangedSpy(
+        &controller, &DocumentController::activeLayerChanged);
+    QSignalSpy modifiedChangedSpy(
+        &controller, &DocumentController::modifiedChanged);
+    QSignalSpy thumbnailsResetSpy(
+        &controller, &DocumentController::layerThumbnailsReset);
+
+    mutation();
+
+    compareDocumentTransitionSnapshot(controller, before);
+    QCOMPARE(documentChangedSpy.count(), 0);
+    QCOMPARE(activeLayerChangedSpy.count(), 0);
+    QCOMPARE(modifiedChangedSpy.count(), 0);
+    QCOMPARE(thumbnailsResetSpy.count(), 0);
+}
+
 class DocumentTests final : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void isolatesRecoveryFromUserData()
+    {
+        const QByteArray configured = qgetenv("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        QVERIFY(!configured.isEmpty());
+        QCOMPARE(RecoveryStore::filePath(),
+            QFileInfo(QString::fromUtf8(configured)).absoluteFilePath());
+    }
+
+    void identifiesRecoveryPathAliases()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray variable =
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const bool existed = qEnvironmentVariableIsSet(variable.constData());
+        const QByteArray previous = qgetenv(variable.constData());
+        [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
+            [&]()
+            {
+                if (existed)
+                {
+                    qputenv(variable.constData(), previous);
+                }
+                else
+                {
+                    qunsetenv(variable.constData());
+                }
+            });
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::WriteOnly));
+        QCOMPARE(recoveryFile.write(QByteArrayLiteral("recovery")), 8);
+        recoveryFile.close();
+
+        QVERIFY(RecoveryStore::isRecoveryPath(recoveryPath));
+        QVERIFY(RecoveryStore::isRecoveryPath(
+            directory.filePath(QStringLiteral("./recovery.wagle"))));
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        QVERIFY(RecoveryStore::isRecoveryPath(recoveryPath.toUpper()));
+#endif
+#ifndef Q_OS_WIN
+        const QString linkedPath =
+            directory.filePath(QStringLiteral("linked-recovery.wagle"));
+        QVERIFY(QFile::link(recoveryPath, linkedPath));
+        QVERIFY(RecoveryStore::isRecoveryPath(linkedPath));
+#endif
+        QVERIFY(!RecoveryStore::isRecoveryPath(
+            directory.filePath(QStringLiteral("other.wagle"))));
+    }
+
+    void preservesRecoveryAsSeparateProject()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray variable =
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const bool previouslySet =
+            qEnvironmentVariableIsSet(variable.constData());
+        const QByteArray previous = qgetenv(variable.constData());
+        [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
+            [&]()
+            {
+                if (previouslySet)
+                {
+                    qputenv(variable.constData(), previous);
+                }
+                else
+                {
+                    qunsetenv(variable.constData());
+                }
+            });
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv(variable.constData(), recoveryPath.toUtf8());
+
+        Document document = Document::createDefault(QSize(80, 60));
+        document.wobbleAmount = 2.5;
+        QString error;
+        QVERIFY2(DocumentSerializer::save(recoveryPath, document, &error),
+            qPrintable(error));
+
+        const QString preserved = RecoveryStore::preserve(&error);
+        QVERIFY2(!preserved.isEmpty(), qPrintable(error));
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+        QVERIFY(QFileInfo::exists(preserved));
+        QCOMPARE(QFileInfo(preserved).suffix(), QStringLiteral("wagle"));
+        QVERIFY(QFileInfo(preserved).fileName().startsWith(
+            QStringLiteral("recovery-preserved-")));
+        const std::optional<Document> restored =
+            DocumentSerializer::load(preserved, &error);
+        QVERIFY2(restored.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*restored),
+            DocumentSerializer::toJson(document));
+    }
+
     void quarantinesUnreadableRecoveryWithoutDeletingIt()
     {
         QTemporaryDir directory;
@@ -140,6 +485,195 @@ private slots:
         QCOMPARE(preservedFile.readAll(), contents);
     }
 
+    void roundTripsAtomicRecoveryMetadata()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray variable =
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const bool existed = qEnvironmentVariableIsSet(variable.constData());
+        const QByteArray previous = qgetenv(variable.constData());
+        [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
+            [&]()
+            {
+                if (existed)
+                {
+                    qputenv(variable.constData(), previous);
+                }
+                else
+                {
+                    qunsetenv(variable.constData());
+                }
+            });
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
+
+        Document document = Document::createDefault(QSize(91, 73));
+        document.layers.first().name = QStringLiteral("복구 レイヤー");
+        const RecoveryStore::Metadata metadata{
+            QUuid(QStringLiteral("12345678-1234-4abc-8def-1234567890ab")),
+            QStringLiteral(R"(\\server\공유\制作\原本.wagle)"),
+            quint64(9007199254740993ULL),
+            QDateTime(
+                QDate(2026, 8, 2), QTime(12, 34, 56, 789), QTimeZone::UTC)};
+        QString error;
+        QVERIFY2(
+            RecoveryStore::save(document, metadata, &error), qPrintable(error));
+
+        const std::optional<RecoveryStore::Snapshot> recovered =
+            RecoveryStore::load(&error);
+        QVERIFY2(recovered.has_value(), qPrintable(error));
+        QCOMPARE(
+            recovered->metadataStatus, RecoveryStore::MetadataStatus::Valid);
+        QVERIFY(recovered->metadata.has_value());
+        QCOMPARE(recovered->metadata->sessionId, metadata.sessionId);
+        QCOMPARE(recovered->metadata->sourcePath, metadata.sourcePath);
+        QCOMPARE(recovered->metadata->revision, metadata.revision);
+        QCOMPARE(recovered->metadata->timestampUtc, metadata.timestampUtc);
+        QCOMPARE(DocumentSerializer::toJson(recovered->document),
+            DocumentSerializer::toJson(document));
+
+        const std::optional<Document> openedNormally =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(openedNormally.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*openedNormally),
+            DocumentSerializer::toJson(document));
+
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        const QJsonObject recoveryRoot =
+            QJsonDocument::fromJson(recoveryBytes).object();
+        QVERIFY(recoveryRoot.value(QStringLiteral("wagleRecovery")).isObject());
+        recoveryFile.close();
+
+        const QString normalPath =
+            directory.filePath(QStringLiteral("normal.wagle"));
+        QVERIFY2(DocumentSerializer::save(normalPath, *openedNormally, &error),
+            qPrintable(error));
+        QFile normalFile(normalPath);
+        QVERIFY(normalFile.open(QIODevice::ReadOnly));
+        const QJsonObject normalRoot =
+            QJsonDocument::fromJson(normalFile.readAll()).object();
+        QVERIFY(
+            normalRoot.value(QStringLiteral("wagleRecovery")).isUndefined());
+
+        const QString preservedPath = RecoveryStore::preserve(&error);
+        QVERIFY2(!preservedPath.isEmpty(), qPrintable(error));
+        QFile preservedFile(preservedPath);
+        QVERIFY(preservedFile.open(QIODevice::ReadOnly));
+        const QByteArray preservedBytes = preservedFile.readAll();
+        const QJsonObject preservedRoot =
+            QJsonDocument::fromJson(preservedBytes).object();
+        QVERIFY(
+            preservedRoot.value(QStringLiteral("wagleRecovery")).isObject());
+        QCOMPARE(preservedBytes, recoveryBytes);
+    }
+
+    void recoversDocumentWithInvalidRecoveryMetadata()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray variable =
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const bool existed = qEnvironmentVariableIsSet(variable.constData());
+        const QByteArray previous = qgetenv(variable.constData());
+        [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
+            [&]()
+            {
+                if (existed)
+                {
+                    qputenv(variable.constData(), previous);
+                }
+                else
+                {
+                    qunsetenv(variable.constData());
+                }
+            });
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
+
+        Document document = Document::createDefault(QSize(83, 67));
+        const RecoveryStore::Metadata metadata{QUuid::createUuid(),
+            QStringLiteral("/tmp/source.wagle"),
+            7,
+            QDateTime::currentDateTimeUtc()};
+        QString error;
+        QVERIFY2(
+            RecoveryStore::save(document, metadata, &error), qPrintable(error));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        QJsonDocument json = QJsonDocument::fromJson(recoveryFile.readAll());
+        recoveryFile.close();
+        QJsonObject root = json.object();
+        QJsonObject invalidMetadata =
+            root.value(QStringLiteral("wagleRecovery")).toObject();
+        invalidMetadata.insert(QStringLiteral("formatVersion"), 99);
+        root.insert(QStringLiteral("wagleRecovery"), invalidMetadata);
+        json.setObject(root);
+        QSaveFile invalidFile(recoveryPath);
+        QVERIFY(invalidFile.open(QIODevice::WriteOnly));
+        const QByteArray invalidData = json.toJson(QJsonDocument::Compact);
+        QCOMPARE(invalidFile.write(invalidData), invalidData.size());
+        QVERIFY(invalidFile.commit());
+
+        const std::optional<RecoveryStore::Snapshot> recovered =
+            RecoveryStore::load(&error);
+        QVERIFY2(recovered.has_value(), qPrintable(error));
+        QCOMPARE(
+            recovered->metadataStatus, RecoveryStore::MetadataStatus::Invalid);
+        QVERIFY(!recovered->metadata.has_value());
+        QCOMPARE(DocumentSerializer::toJson(recovered->document),
+            DocumentSerializer::toJson(document));
+        QVERIFY(QFileInfo::exists(recoveryPath));
+    }
+
+    void preservesExistingRecoveryWhenSerializationFails()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray variable =
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const bool existed = qEnvironmentVariableIsSet(variable.constData());
+        const QByteArray previous = qgetenv(variable.constData());
+        [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
+            [&]()
+            {
+                if (existed)
+                {
+                    qputenv(variable.constData(), previous);
+                }
+                else
+                {
+                    qunsetenv(variable.constData());
+                }
+            });
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
+
+        const RecoveryStore::Metadata metadata{
+            QUuid::createUuid(), QString(), 1, QDateTime::currentDateTimeUtc()};
+        QString error;
+        QVERIFY2(RecoveryStore::save(
+                     Document::createDefault(QSize(79, 61)), metadata, &error),
+            qPrintable(error));
+        QFile beforeFile(recoveryPath);
+        QVERIFY(beforeFile.open(QIODevice::ReadOnly));
+        const QByteArray before = beforeFile.readAll();
+        beforeFile.close();
+
+        Document invalid = Document::createDefault(QSize(79, 61));
+        invalid.size = QSize();
+        QVERIFY(!RecoveryStore::save(invalid, metadata, &error));
+        QVERIFY(!error.isEmpty());
+        QFile afterFile(recoveryPath);
+        QVERIFY(afterFile.open(QIODevice::ReadOnly));
+        QCOMPARE(afterFile.readAll(), before);
+    }
+
     void createsDefaultDocument()
     {
         const QSize size(640, 360);
@@ -168,6 +702,126 @@ private slots:
         const Document localized =
             Document::createDefault(size, QStringLiteral("초기 레이어"));
         QCOMPARE(localized.layers.first().name, QStringLiteral("초기 레이어"));
+    }
+
+    void preservesStateWhenNewDocumentPreparationFails()
+    {
+        DocumentController controller;
+        prepareDocumentTransitionFailureState(controller);
+
+        verifyDocumentTransitionPreparationFailure(controller,
+            [&controller](QString *error)
+            {
+                return controller.newDocument(QSize(640, 480), error);
+            });
+    }
+
+    void preservesStateWhenLoadedDocumentPreparationFails()
+    {
+        DocumentController controller;
+        prepareDocumentTransitionFailureState(controller);
+        Document replacement = Document::createDefault(QSize(640, 480));
+        replacement.wobbleAmount = 4.0;
+
+        verifyDocumentTransitionPreparationFailure(controller,
+            [&controller, &replacement](QString *error)
+            {
+                return controller.loadDocument(std::move(replacement), error);
+            });
+    }
+
+    void preservesStateWhenRecoveredDocumentPreparationFails()
+    {
+        DocumentController controller;
+        prepareDocumentTransitionFailureState(controller);
+        Document replacement = Document::createDefault(QSize(640, 480));
+        replacement.wobbleAmount = 4.0;
+
+        verifyDocumentTransitionPreparationFailure(controller,
+            [&controller, &replacement](QString *error)
+            {
+                return controller.loadRecoveredDocument(
+                    std::move(replacement), error);
+            });
+    }
+
+    void preservesOpenHistoryWhenDocumentReplacementIsRejected()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        controller.undoStack()->beginMacro(QStringLiteral("Open macro"));
+        controller.renameLayer(layerId, QStringLiteral("Macro layer"));
+        const DocumentTransitionSnapshot before =
+            documentTransitionSnapshot(controller);
+
+        QString serializationError;
+        QVERIFY(
+            controller.serializeDocument({}, &serializationError).isEmpty());
+        QVERIFY(!serializationError.isEmpty());
+        compareDocumentTransitionSnapshot(controller, before);
+
+        QString error;
+        QVERIFY(!controller.loadDocument(
+            Document::createDefault(QSize(640, 480)), &error));
+        QVERIFY(!error.isEmpty());
+        compareDocumentTransitionSnapshot(controller, before);
+
+        controller.undoStack()->endMacro();
+        QCOMPARE(controller.undoStack()->count(), 1);
+        QCOMPARE(controller.document().layer(layerId)->name,
+            QStringLiteral("Macro layer"));
+        QVERIFY(controller.isModified());
+    }
+
+    void installsReplacementStateBeforeRejectingNestedReplacement()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QSize replacementSize(640, 480);
+        constexpr qreal replacementWobble = 4.0;
+        Document replacement = Document::createDefault(replacementSize);
+        replacement.wobbleAmount = replacementWobble;
+        bool stateInstalledBeforeSignal = false;
+        bool nestedResult = true;
+        QString nestedError;
+        QObject::connect(&controller,
+            &DocumentController::documentReplaced,
+            &controller,
+            [&]()
+            {
+                stateInstalledBeforeSignal =
+                    controller.document().size == replacementSize
+                    && qFuzzyCompare(
+                        controller.document().wobbleAmount, replacementWobble)
+                    && controller.undoStack()->count() == 0
+                    && controller.undoStack()->index() == 0
+                    && controller.undoStack()->isClean()
+                    && DocumentControllerTestAccess::historyNode(controller)
+                           == 0
+                    && DocumentControllerTestAccess::nextHistoryNode(controller)
+                           == 0
+                    && DocumentControllerTestAccess::contentRevision(controller)
+                           == 0
+                    && DocumentControllerTestAccess::savedContentRevision(
+                           controller)
+                           == 0
+                    && DocumentControllerTestAccess::nextContentRevision(
+                           controller)
+                           == 0;
+                nestedResult = controller.loadRecoveredDocument(
+                    Document::createDefault(QSize(128, 128)), &nestedError);
+            });
+
+        QString error;
+        QVERIFY(controller.loadDocument(std::move(replacement), &error));
+        QVERIFY(error.isEmpty());
+        QVERIFY(stateInstalledBeforeSignal);
+        QVERIFY(!nestedResult);
+        QVERIFY(!nestedError.isEmpty());
+        QCOMPARE(controller.document().size, replacementSize);
+        QCOMPARE(controller.document().wobbleAmount, replacementWobble);
+        QVERIFY(!controller.isModified());
     }
 
     void undoesAndRedoesStrokeWithCleanState()
@@ -1632,6 +2286,272 @@ private slots:
         Document invalidReference = *decoded;
         invalidReference.layers.last().reference = true;
         QVERIFY(DocumentSerializer::toJson(invalidReference).isEmpty());
+    }
+
+    void analyzesLayerHierarchyMetricsAndFailures()
+    {
+        const Document document = documentWithNestedPaintAtDepth(3);
+        const LayerHierarchyAnalysis hierarchy =
+            analyzeLayerHierarchy(document);
+        QVERIFY(hierarchy.isValid());
+        QCOMPARE(hierarchy.issue(), LayerHierarchyIssue::None);
+        QCOMPARE(hierarchy.maximumDepth(), 3);
+        QCOMPARE(hierarchy.depths(), QVector<int>({3, 0, 1, 2}));
+        QCOMPARE(hierarchy.subtreeHeights(), QVector<int>({0, 3, 2, 1}));
+        QCOMPARE(hierarchy.depth(document.activeLayerId), 3);
+        QCOMPARE(hierarchy.subtreeHeight(document.layers[1].id), 3);
+        QVERIFY(hierarchy.isDescendantOf(
+            document.activeLayerId, document.layers[1].id));
+        QVERIFY(!hierarchy.isDescendantOf(
+            document.layers[1].id, document.activeLayerId));
+
+        Document missingParent = document;
+        missingParent.layers.first().parentGroupId = QUuid::createUuid();
+        QCOMPARE(analyzeLayerHierarchy(missingParent).issue(),
+            LayerHierarchyIssue::MissingParent);
+
+        Document nonGroupParent = document;
+        nonGroupParent.layers[1].parentGroupId =
+            nonGroupParent.layers.first().id;
+        QCOMPARE(analyzeLayerHierarchy(nonGroupParent).issue(),
+            LayerHierarchyIssue::ParentNotGroup);
+
+        Document selfParent = document;
+        selfParent.layers[1].parentGroupId = selfParent.layers[1].id;
+        QCOMPARE(analyzeLayerHierarchy(selfParent).issue(),
+            LayerHierarchyIssue::SelfParent);
+
+        Document cyclic = document;
+        cyclic.layers[1].parentGroupId = cyclic.layers.last().id;
+        const LayerHierarchyAnalysis cyclicHierarchy =
+            analyzeLayerHierarchy(cyclic);
+        QCOMPARE(cyclicHierarchy.issue(), LayerHierarchyIssue::Cycle);
+        QCOMPARE(cyclic.layers[cyclicHierarchy.issueLayerIndex()].kind,
+            LayerKind::Group);
+
+        Document duplicate = document;
+        duplicate.layers.last().id = duplicate.layers[1].id;
+        QCOMPARE(analyzeLayerHierarchy(duplicate).issue(),
+            LayerHierarchyIssue::DuplicateLayerId);
+    }
+
+    void preservesLegacyOverDepthHierarchyThroughSerialization()
+    {
+        for (const int depth : {DocumentLimits::maximumLayerDepth,
+                 DocumentLimits::maximumLayerDepth + 1})
+        {
+            const Document source = documentWithNestedPaintAtDepth(depth);
+            const LayerHierarchyAnalysis sourceHierarchy =
+                analyzeLayerHierarchy(source);
+            QVERIFY(sourceHierarchy.isValid());
+            QCOMPARE(sourceHierarchy.maximumDepth(), depth);
+
+            const QByteArray json = DocumentSerializer::toJson(source);
+            QVERIFY(!json.isEmpty());
+            QString error;
+            const std::optional<Document> decoded =
+                DocumentSerializer::fromJson(json, &error);
+            QVERIFY2(decoded.has_value(), qPrintable(error));
+            const LayerHierarchyAnalysis decodedHierarchy =
+                analyzeLayerHierarchy(*decoded);
+            QVERIFY(decodedHierarchy.isValid());
+            QCOMPARE(decodedHierarchy.maximumDepth(), depth);
+            QCOMPARE(DocumentSerializer::toJson(*decoded), json);
+
+            QTemporaryDir directory;
+            QVERIFY(directory.isValid());
+            const QString path =
+                directory.filePath(QStringLiteral("depth-%1.wagle").arg(depth));
+            QVERIFY2(DocumentSerializer::save(path, *decoded, &error),
+                qPrintable(error));
+            const std::optional<Document> loaded =
+                DocumentSerializer::load(path, &error);
+            QVERIFY2(loaded.has_value(), qPrintable(error));
+            QCOMPARE(DocumentSerializer::toJson(*loaded), json);
+        }
+
+        const Document overDepth = documentWithNestedPaintAtDepth(
+            DocumentLimits::maximumLayerDepth + 1);
+        QJsonObject schemaEight =
+            QJsonDocument::fromJson(DocumentSerializer::toJson(overDepth))
+                .object();
+        schemaEight.insert(QStringLiteral("schemaVersion"), 8);
+        QJsonArray layers =
+            schemaEight.value(QStringLiteral("layers")).toArray();
+        for (int index = 0; index < layers.size(); ++index)
+        {
+            QJsonObject layer = layers[index].toObject();
+            layer.remove(QStringLiteral("reference"));
+            layers[index] = layer;
+        }
+        schemaEight.insert(QStringLiteral("layers"), layers);
+        QString error;
+        const std::optional<Document> decoded = DocumentSerializer::fromJson(
+            QJsonDocument(schemaEight).toJson(QJsonDocument::Compact), &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error));
+        QCOMPARE(analyzeLayerHierarchy(*decoded).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+        QVERIFY(!DocumentSerializer::toJson(*decoded).isEmpty());
+    }
+
+    void validatesHierarchyOnPreparedMetadataReuse()
+    {
+        DocumentSerializer::SerializationCache cache;
+        QString error;
+        std::optional<DocumentSerializer::PreparedDocument> base =
+            DocumentSerializer::prepare(
+                documentWithGroupAtDepth(2), cache, &error);
+        QVERIFY2(base.has_value(), qPrintable(error));
+
+        Document cyclic = base->document();
+        const QUuid rootGroup = layerIdAtDepth(cyclic, 0, LayerKind::Group);
+        const QUuid deepestGroup = layerIdAtDepth(cyclic, 2, LayerKind::Group);
+        QVERIFY(!rootGroup.isNull());
+        QVERIFY(!deepestGroup.isNull());
+        cyclic.layer(rootGroup)->parentGroupId = deepestGroup;
+        cache.resetStats();
+        error.clear();
+        const auto rejected = DocumentSerializer::prepare(std::move(cyclic),
+            cache,
+            &*base,
+            DocumentLimits::maximumProjectBytes,
+            &error);
+        QVERIFY(!rejected.has_value());
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(cache.stats().fullDocumentPreparations, 0ULL);
+
+        base = DocumentSerializer::prepare(
+            documentWithGroupAtDepth(DocumentLimits::maximumLayerDepth),
+            cache,
+            &error);
+        QVERIFY2(base.has_value(), qPrintable(error));
+        Document overDepth = base->document();
+        const QUuid paintId = overDepth.activeLayerId;
+        const QUuid depthLimitGroup = layerIdAtDepth(
+            overDepth, DocumentLimits::maximumLayerDepth, LayerKind::Group);
+        overDepth.layer(paintId)->parentGroupId = depthLimitGroup;
+        cache.resetStats();
+        error.clear();
+        const auto preserved = DocumentSerializer::prepare(std::move(overDepth),
+            cache,
+            &*base,
+            DocumentLimits::maximumProjectBytes,
+            &error);
+        QVERIFY2(preserved.has_value(), qPrintable(error));
+        QCOMPARE(analyzeLayerHierarchy(preserved->document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+        QCOMPARE(cache.stats().fullDocumentPreparations, 0ULL);
+    }
+
+    void rejectsLayerDepthGrowthWithoutChangingControllerState()
+    {
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(
+            documentWithGroupAtDepth(DocumentLimits::maximumLayerDepth)));
+        const QUuid deepestGroup = layerIdAtDepth(controller.document(),
+            DocumentLimits::maximumLayerDepth,
+            LayerKind::Group);
+        const QUuid rootPaint = controller.document().activeLayerId;
+        QVERIFY(!deepestGroup.isNull());
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, deepestGroup]
+            {
+                controller.addLayer(deepestGroup);
+            });
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, rootPaint, deepestGroup]
+            {
+                controller.setLayerParentGroup(rootPaint, deepestGroup);
+            });
+
+        QVERIFY(controller.loadDocument(
+            documentWithNestedPaintAtDepth(DocumentLimits::maximumLayerDepth)));
+        const QUuid deepestPaint = controller.document().activeLayerId;
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, deepestPaint]
+            {
+                controller.addLayerGroup(deepestPaint);
+            });
+
+        Document subtree =
+            documentWithNestedPaintAtDepth(DocumentLimits::maximumLayerDepth);
+        const QUuid subtreeRoot = layerIdAtDepth(subtree, 0, LayerKind::Group);
+        Layer targetGroup;
+        targetGroup.name = QStringLiteral("Target group");
+        targetGroup.kind = LayerKind::Group;
+        targetGroup.initialCanvasSize = subtree.size;
+        const QUuid targetGroupId = targetGroup.id;
+        subtree.layers.append(std::move(targetGroup));
+        QVERIFY(controller.loadDocument(std::move(subtree)));
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, subtreeRoot]
+            {
+                controller.addLayerGroup(subtreeRoot);
+            });
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, subtreeRoot, targetGroupId]
+            {
+                controller.setLayerParentGroup(subtreeRoot, targetGroupId);
+            });
+    }
+
+    void permitsOnlyNonGrowingLegacyHierarchyMutations()
+    {
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(documentWithNestedPaintAtDepth(
+            DocumentLimits::maximumLayerDepth + 1)));
+        const QUuid legacyPaint = controller.document().activeLayerId;
+        QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+
+        verifyRejectedHierarchyMutation(controller,
+            [&controller, legacyPaint]
+            {
+                controller.addLayerGroup(legacyPaint);
+            });
+
+        const int originalLayerCount = controller.document().layers.size();
+        controller.addLayer();
+        QCOMPARE(controller.document().layers.size(), originalLayerCount + 1);
+        QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+        QVERIFY(controller.isModified());
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.size(), originalLayerCount);
+
+        controller.duplicateLayer(legacyPaint);
+        QCOMPARE(controller.document().layers.size(), originalLayerCount + 1);
+        QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+        controller.undoStack()->undo();
+
+        controller.setLayerParentGroup(legacyPaint, {});
+        QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth);
+        controller.undoStack()->undo();
+        QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),
+            DocumentLimits::maximumLayerDepth + 1);
+    }
+
+    void acceptsMaximumWidthShallowHierarchy()
+    {
+        Document wide = Document::createDefault(QSize(64, 64));
+        while (wide.layers.size() < DocumentLimits::maximumLayers)
+        {
+            Layer layer;
+            layer.name = QStringLiteral("Layer %1").arg(wide.layers.size() + 1);
+            layer.initialCanvasSize = wide.size;
+            wide.layers.append(std::move(layer));
+        }
+        const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(wide);
+        QVERIFY(hierarchy.isValid());
+        QCOMPARE(hierarchy.maximumDepth(), 0);
+        QVERIFY(!DocumentSerializer::toJson(wide).isEmpty());
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(std::move(wide)));
+        QCOMPARE(
+            controller.document().layers.size(), DocumentLimits::maximumLayers);
     }
 
     void undoActionsCannotBypassHistoryPreflight()
@@ -3317,6 +4237,39 @@ private slots:
             &error);
         QVERIFY(!aboveHardLimit.has_value());
         QVERIFY(!error.isEmpty());
+    }
+
+    void preservesExactSerializationWithAdditionalRootFields()
+    {
+        Document source = Document::createDefault(QSize(79, 53));
+        source.layers.first().name = QStringLiteral("복구 レイヤー");
+
+        DocumentSerializer::SerializationCache cache;
+        const auto prepared = DocumentSerializer::prepare(source, cache);
+        QVERIFY(prepared.has_value());
+        const QByteArray base = DocumentSerializer::toJson(*prepared, cache);
+        QVERIFY(!base.isEmpty());
+
+        QJsonObject metadata;
+        metadata.insert(QStringLiteral("formatVersion"), 1);
+        metadata.insert(
+            QStringLiteral("revision"), QStringLiteral("9007199254740993"));
+        QJsonObject additionalRootFields;
+        additionalRootFields.insert(QStringLiteral("wagleRecovery"), metadata);
+
+        QJsonObject expectedRoot = QJsonDocument::fromJson(base).object();
+        expectedRoot.insert(QStringLiteral("wagleRecovery"), metadata);
+        const QByteArray expected =
+            QJsonDocument(expectedRoot).toJson(QJsonDocument::Compact);
+        const QByteArray extended =
+            DocumentSerializer::toJson(*prepared, cache, additionalRootFields);
+        QCOMPARE(extended, expected);
+
+        QJsonObject collidingRootFields;
+        collidingRootFields.insert(QStringLiteral("layers"), QJsonArray());
+        QVERIFY(
+            DocumentSerializer::toJson(*prepared, cache, collidingRootFields)
+                .isEmpty());
     }
 
     void freezesPreparedDocumentsAgainstRawCowAliases()

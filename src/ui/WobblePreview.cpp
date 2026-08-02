@@ -34,11 +34,28 @@ WobblePreview::WobblePreview(DocumentController *controller, QWidget *parent)
                 update();
             }
         });
+    m_settleTimer.setSingleShot(true);
+    m_settleTimer.setInterval(1000);
+    connect(&m_settleTimer,
+        &QTimer::timeout,
+        this,
+        [this]()
+        {
+            syncAnimationState();
+        });
+    m_lastAmount = m_controller->document().wobbleAmount;
     connect(m_controller,
         &DocumentController::documentChanged,
         this,
         [this]()
         {
+            const qreal amount = m_controller->document().wobbleAmount;
+            if (!qFuzzyCompare(amount, m_lastAmount))
+            {
+                m_lastAmount = amount;
+                m_settleTimer.start();
+                syncAnimationState();
+            }
             update();
         });
 }
@@ -114,7 +131,7 @@ void WobblePreview::changeEvent(QEvent *event)
 
 void WobblePreview::syncAnimationState()
 {
-    if (m_shown && isEnabled())
+    if (m_shown && isEnabled() && m_settleTimer.isActive())
     {
         m_timer.start();
     }

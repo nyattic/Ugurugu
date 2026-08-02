@@ -1,0 +1,39 @@
+#pragma once
+
+#include <QString>
+
+#include <memory>
+
+class QLockFile;
+
+namespace wobble
+{
+
+class ApplicationInstanceLock final
+{
+public:
+    enum class AcquireResult
+    {
+        Acquired,
+        AlreadyRunning,
+        Failed
+    };
+
+    explicit ApplicationInstanceLock(QString filePath = {});
+    ~ApplicationInstanceLock();
+
+    ApplicationInstanceLock(const ApplicationInstanceLock &) = delete;
+    ApplicationInstanceLock &operator=(
+        const ApplicationInstanceLock &) = delete;
+
+    AcquireResult acquire(QString *error = nullptr);
+    bool isAcquired() const;
+    QString filePath() const;
+
+private:
+    QString m_filePath;
+    std::unique_ptr<QLockFile> m_lock;
+    bool m_acquired = false;
+};
+
+}

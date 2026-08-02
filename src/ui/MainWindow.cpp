@@ -4,9 +4,11 @@
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/LayerHierarchy.hpp"
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
+#include "io/RenderExportPolicy.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/CanvasSizeDialog.hpp"
@@ -57,6 +59,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QShortcut>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -70,6 +73,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -366,6 +370,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_layerDock = new LayerDock(&m_controller, this);
     addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
+    connect(m_layerDock,
+        &LayerDock::groupSelectionChanged,
+        m_canvas,
+        &CanvasWidget::setGroupSelectionActive);
 
     createActions();
     createMenus();
@@ -383,6 +391,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(
         &m_autosaveTimer, &QTimer::timeout, this, &MainWindow::writeAutosave);
     m_autosaveTimer.start();
+    m_recoveryOwnedBySession = !QFileInfo::exists(RecoveryStore::filePath());
+    m_startupResolved = m_recoveryOwnedBySession;
 
     const QSettings settings;
     const bool geometryRestored = restoreGeometry(
@@ -396,7 +406,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
-    QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
     qApp->installEventFilter(this);
 
 #ifdef Q_OS_MACOS
@@ -410,9 +419,29 @@ bool MainWindow::openFile(const QString &filePath)
     {
         return false;
     }
+    if (!m_startupResolved)
+    {
+        return initializeSession(filePath)
+               == StartupResult::OpenedRequestedFile;
+    }
+    if (rejectReservedRecoveryPath(filePath, tr("Open failed")))
+    {
+        return false;
+    }
     if (!maybeSave())
     {
         return false;
+    }
+
+    const std::optional<Document> document = readProject(filePath);
+    return document && activateProject(filePath, *document);
+}
+
+std::optional<Document> MainWindow::readProject(const QString &filePath)
+{
+    if (filePath.isEmpty())
+    {
+        return std::nullopt;
     }
 
     QString error;
@@ -426,14 +455,33 @@ bool MainWindow::openFile(const QString &filePath)
         QMessageBox::critical(this,
             tr("Open failed"),
             tr("Could not open the project.\n\n%1").arg(error));
+        return std::nullopt;
+    }
+    return document;
+}
+
+bool MainWindow::activateProject(const QString &filePath, Document document)
+{
+    if (rejectReservedRecoveryPath(filePath, tr("Open failed")))
+    {
         return false;
     }
-
-    m_controller.loadDocument(*document);
+    QString error;
+    if (!m_controller.loadDocument(std::move(document), &error))
+    {
+        spdlog::error("Failed to prepare project {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(this,
+            tr("Open failed"),
+            tr("The project could not be prepared.\n\n%1").arg(error));
+        return false;
+    }
     m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
     clearAutosave();
     m_canvas->fitToWindow();
     updateWindowTitle();
+    warnLegacyLayerHierarchy();
     statusBar()->showMessage(tr("Opened %1").arg(m_currentFilePath), 4000);
     spdlog::info("Opened project {}", m_currentFilePath.toUtf8().constData());
     return true;
@@ -441,27 +489,151 @@ bool MainWindow::openFile(const QString &filePath)
 
 bool MainWindow::offerRecovery()
 {
+    return initializeSession() == StartupResult::Recovered;
+}
+
+MainWindow::StartupResult MainWindow::initializeSession(
+    const QString &requestedFilePath)
+{
     const QString recoveryPath = RecoveryStore::filePath();
-    if (!QFileInfo::exists(recoveryPath))
+    const bool hasRecovery = QFileInfo::exists(recoveryPath);
+    const bool hasRequestedFile =
+        !requestedFilePath.isEmpty()
+        && !RecoveryStore::isRecoveryPath(requestedFilePath);
+
+    if (!hasRecovery)
     {
-        return false;
+        m_recoveryOwnedBySession = true;
+        m_startupResolved = true;
+        if (!hasRequestedFile)
+        {
+            return StartupResult::Ready;
+        }
+        std::optional<Document> requestedDocument =
+            readProject(requestedFilePath);
+        if (!requestedDocument)
+        {
+            return StartupResult::Failed;
+        }
+        return activateProject(requestedFilePath, std::move(*requestedDocument))
+                   ? StartupResult::OpenedRequestedFile
+                   : StartupResult::Failed;
     }
 
-    const QMessageBox::StandardButton choice = QMessageBox::question(this,
+    QMessageBox dialog(QMessageBox::Question,
         tr("Recover unsaved work"),
-        tr("WagleWaglePaint found work from a previous session. "
-           "Would you like to recover it?"),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::Yes);
-    if (choice != QMessageBox::Yes)
+        hasRequestedFile
+            ? tr("WagleWaglePaint found work from a previous session. "
+                 "Choose what to do before opening %1.")
+                  .arg(QFileInfo(requestedFilePath).fileName())
+            : tr("WagleWaglePaint found work from a previous session. "
+                 "Choose whether to recover or discard it."),
+        QMessageBox::NoButton,
+        this);
+    QPushButton *recoverButton =
+        dialog.addButton(tr("Recover"), QMessageBox::AcceptRole);
+    recoverButton->setObjectName(QStringLiteral("startupRecoverButton"));
+    QPushButton *preserveButton = nullptr;
+    QPushButton *discardButton = nullptr;
+    if (hasRequestedFile)
     {
-        clearAutosave();
-        return false;
+        preserveButton = dialog.addButton(
+            tr("Keep Recovery and Open File"), QMessageBox::ActionRole);
+        preserveButton->setObjectName(
+            QStringLiteral("startupPreserveRecoveryButton"));
+        discardButton = dialog.addButton(
+            tr("Discard Recovery and Open File"), QMessageBox::DestructiveRole);
     }
+    else
+    {
+        discardButton =
+            dialog.addButton(tr("Discard"), QMessageBox::DestructiveRole);
+    }
+    discardButton->setObjectName(
+        QStringLiteral("startupDiscardRecoveryButton"));
+    QPushButton *cancelButton = dialog.addButton(QMessageBox::Cancel);
+    cancelButton->setObjectName(QStringLiteral("startupCancelButton"));
+    dialog.setDefaultButton(recoverButton);
+    dialog.exec();
+
+    if (dialog.clickedButton() == cancelButton || !dialog.clickedButton())
+    {
+        return StartupResult::Canceled;
+    }
+    if (dialog.clickedButton() == recoverButton)
+    {
+        if (!recoverAutosave())
+        {
+            return StartupResult::Failed;
+        }
+        m_recoveryOwnedBySession = true;
+        m_startupResolved = true;
+        return StartupResult::Recovered;
+    }
+    if (dialog.clickedButton() == preserveButton)
+    {
+        std::optional<Document> requestedDocument =
+            readProject(requestedFilePath);
+        if (!requestedDocument)
+        {
+            return StartupResult::Failed;
+        }
+        const QString preservedPath = preserveAutosave();
+        if (preservedPath.isEmpty())
+        {
+            return StartupResult::Failed;
+        }
+        m_recoveryOwnedBySession = true;
+        m_startupResolved = true;
+        if (!activateProject(requestedFilePath, std::move(*requestedDocument)))
+        {
+            return StartupResult::Failed;
+        }
+        statusBar()->showMessage(tr("Opened %1. Recovery preserved at %2")
+                                     .arg(m_currentFilePath, preservedPath),
+            8000);
+        return StartupResult::OpenedRequestedFile;
+    }
+    std::optional<Document> requestedDocument;
+    if (hasRequestedFile)
+    {
+        requestedDocument = readProject(requestedFilePath);
+        if (!requestedDocument)
+        {
+            return StartupResult::Failed;
+        }
+    }
+    if (!requestedDocument)
+    {
+        if (!discardAutosave())
+        {
+            return StartupResult::Failed;
+        }
+        m_startupResolved = true;
+        return StartupResult::Ready;
+    }
+    if (!activateProject(requestedFilePath, std::move(*requestedDocument)))
+    {
+        return StartupResult::Failed;
+    }
+    m_startupResolved = true;
+    if (!discardAutosave())
+    {
+        m_recoveryOwnedBySession = true;
+        m_recoverySessionId = QUuid::createUuid();
+        m_recoveryRevision = 0;
+        clearRecoveryMetadata();
+    }
+    return StartupResult::OpenedRequestedFile;
+}
+
+bool MainWindow::recoverAutosave()
+{
+    const QString recoveryPath = RecoveryStore::filePath();
 
     QString error;
-    const std::optional<Document> recovered =
-        DocumentSerializer::load(recoveryPath, &error);
+    const std::optional<RecoveryStore::Snapshot> recovered =
+        RecoveryStore::load(&error);
     if (!recovered)
     {
         spdlog::error("Failed to load recovery file {}: {}",
@@ -478,9 +650,12 @@ bool MainWindow::offerRecovery()
                 recoveryPath.toUtf8().constData(),
                 preservationError.toUtf8().constData());
         }
-        m_autosavePending = false;
-        QSettings settings;
-        settings.remove(QStringLiteral("recovery/sourcePath"));
+        if (!quarantinedPath.isEmpty())
+        {
+            m_autosavePending = false;
+            clearRecoveryMetadata();
+            m_recoveryOwnedBySession = true;
+        }
         QMessageBox::warning(this,
             tr("Recovery failed"),
             tr("The recovery file could not be opened.\n\n%1"
@@ -489,13 +664,30 @@ bool MainWindow::offerRecovery()
                 .arg(error, preservedPath));
         return false;
     }
+    if (recovered->metadataStatus == RecoveryStore::MetadataStatus::Invalid)
+    {
+        spdlog::warn("Ignored invalid recovery metadata in {}",
+            recoveryPath.toUtf8().constData());
+    }
 
-    const QSettings settings;
-    m_currentFilePath =
-        settings.value(QStringLiteral("recovery/sourcePath")).toString();
-    m_controller.loadRecoveredDocument(*recovered);
+    QString transitionError;
+    if (!m_controller.loadRecoveredDocument(
+            recovered->document, &transitionError))
+    {
+        spdlog::error("Failed to prepare recovered document: {}",
+            transitionError.toUtf8().constData());
+        QMessageBox::warning(this,
+            tr("Recovery failed"),
+            tr("The recovered document could not be prepared.\n\n%1")
+                .arg(transitionError));
+        return false;
+    }
+    m_currentFilePath.clear();
+    m_recoveryRevision = 0;
+    clearRecoveryMetadata();
     m_canvas->fitToWindow();
     updateWindowTitle();
+    warnLegacyLayerHierarchy();
     statusBar()->showMessage(tr("Recovered unsaved work."), 5000);
     return true;
 }
@@ -513,6 +705,16 @@ void MainWindow::closeEvent(QCloseEvent *event)
     saveDrawingToolSettings();
     clearAutosave();
     event->accept();
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    if (!m_initialFitApplied)
+    {
+        m_initialFitApplied = true;
+        QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
+    }
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -1853,6 +2055,10 @@ bool MainWindow::saveAs()
 
 bool MainWindow::saveToFile(const QString &filePath)
 {
+    if (rejectReservedRecoveryPath(filePath, tr("Save failed")))
+    {
+        return false;
+    }
     if (m_canvas->hasPendingSelectionTransform()
         && !m_canvas->applySelectionTransform())
     {
@@ -1886,6 +2092,20 @@ bool MainWindow::saveToFile(const QString &filePath)
     return true;
 }
 
+bool MainWindow::rejectReservedRecoveryPath(
+    const QString &filePath, const QString &title)
+{
+    if (!RecoveryStore::isRecoveryPath(filePath))
+    {
+        return false;
+    }
+    QMessageBox::warning(this,
+        title,
+        tr("The recovery file location is reserved. Choose a different "
+           "project path."));
+    return true;
+}
+
 void MainWindow::newDocument()
 {
     if (!maybeSave())
@@ -1898,9 +2118,18 @@ void MainWindow::newDocument()
     {
         return;
     }
-    clearAutosave();
-    m_controller.newDocument(size);
+    QString error;
+    if (!m_controller.newDocument(size, &error))
+    {
+        spdlog::error(
+            "Failed to prepare a new document: {}", error.toUtf8().constData());
+        QMessageBox::critical(this,
+            tr("New document failed"),
+            tr("The new document could not be prepared.\n\n%1").arg(error));
+        return;
+    }
     m_currentFilePath.clear();
+    clearAutosave();
     m_canvas->fitToWindow();
     updateWindowTitle();
     spdlog::info("Created {}x{} document", size.width(), size.height());
@@ -2119,47 +2348,123 @@ void MainWindow::editSelectedStrokeProperties()
 
 void MainWindow::writeAutosave()
 {
-    if (!hasUnsavedWork() || !m_autosavePending)
+    if (!m_startupResolved || !m_recoveryOwnedBySession || !hasUnsavedWork()
+        || !m_autosavePending
+        || (!m_currentFilePath.isEmpty()
+            && RecoveryStore::isRecoveryPath(m_currentFilePath)))
     {
         return;
     }
-    const QString filePath = RecoveryStore::filePath();
-    QString directoryError;
-    if (!RecoveryStore::ensureParentDirectory(&directoryError))
+    if (m_recoveryRevision == std::numeric_limits<quint64>::max())
     {
-        spdlog::warn("{}", directoryError.toUtf8().constData());
-        return;
+        m_recoverySessionId = QUuid::createUuid();
+        m_recoveryRevision = 0;
     }
-
+    const quint64 nextRevision = m_recoveryRevision + 1;
+    const RecoveryStore::Metadata metadata{m_recoverySessionId,
+        m_currentFilePath,
+        nextRevision,
+        QDateTime::currentDateTimeUtc()};
     QString error;
     const bool saved =
         m_canvas->hasPendingSelectionTransform()
-            ? DocumentSerializer::save(filePath,
+            ? RecoveryStore::save(
                   m_canvas->documentWithPendingSelectionTransform(),
+                  metadata,
                   &error)
-            : m_controller.saveDocument(filePath, &error);
+            : RecoveryStore::save(m_controller, metadata, &error);
     if (!saved)
     {
         spdlog::warn("Failed to write recovery file {}: {}",
-            filePath.toUtf8().constData(),
+            RecoveryStore::filePath().toUtf8().constData(),
             error.toUtf8().constData());
         return;
     }
-    QSettings settings;
-    settings.setValue(QStringLiteral("recovery/sourcePath"), m_currentFilePath);
+    m_recoveryRevision = nextRevision;
+    clearRecoveryMetadata();
     m_autosavePending = false;
 }
 
-void MainWindow::clearAutosave()
+bool MainWindow::discardAutosave()
 {
     QString error;
     if (!RecoveryStore::discard(&error))
     {
         spdlog::warn("{}", error.toUtf8().constData());
+        QMessageBox::warning(this,
+            tr("Recovery could not be discarded"),
+            tr("The recovery file was not deleted.\n\n%1").arg(error));
+        return false;
     }
     m_autosavePending = false;
+    clearRecoveryMetadata();
+    m_recoveryOwnedBySession = true;
+    m_recoverySessionId = QUuid::createUuid();
+    m_recoveryRevision = 0;
+    return true;
+}
+
+QString MainWindow::preserveAutosave()
+{
+    QString error;
+    const QString preservedPath = RecoveryStore::preserve(&error);
+    if (preservedPath.isEmpty())
+    {
+        spdlog::warn("{}", error.toUtf8().constData());
+        QMessageBox::warning(this,
+            tr("Recovery could not be preserved"),
+            tr("The recovery file was left unchanged.\n\n%1").arg(error));
+        return {};
+    }
+    m_autosavePending = false;
+    clearRecoveryMetadata();
+    m_recoveryOwnedBySession = true;
+    m_recoverySessionId = QUuid::createUuid();
+    m_recoveryRevision = 0;
+    return preservedPath;
+}
+
+void MainWindow::clearRecoveryMetadata()
+{
     QSettings settings;
     settings.remove(QStringLiteral("recovery/sourcePath"));
+}
+
+void MainWindow::warnLegacyLayerHierarchy()
+{
+    const LayerHierarchyAnalysis hierarchy =
+        analyzeLayerHierarchy(m_controller.document());
+    if (!hierarchy.isValid()
+        || hierarchy.maximumDepth() <= DocumentLimits::maximumLayerDepth)
+    {
+        return;
+    }
+
+    QMessageBox dialog(QMessageBox::Warning,
+        tr("Layer group nesting limit"),
+        tr("Some layers in this project are nested %1 levels deep inside "
+           "layer groups. The structure will be preserved, but edits cannot "
+           "increase the document's maximum nesting depth. New documents "
+           "allow up to %2 levels.")
+            .arg(hierarchy.maximumDepth())
+            .arg(DocumentLimits::maximumLayerDepth),
+        QMessageBox::Ok,
+        this);
+    dialog.setObjectName(QStringLiteral("legacyLayerDepthWarning"));
+    dialog.exec();
+}
+
+bool MainWindow::clearAutosave()
+{
+    if (!m_currentFilePath.isEmpty()
+        && RecoveryStore::isRecoveryPath(m_currentFilePath))
+    {
+        spdlog::error("Refused to delete the active project at the recovery "
+                      "path {}",
+            m_currentFilePath.toUtf8().constData());
+        return true;
+    }
+    return !m_recoveryOwnedBySession || discardAutosave();
 }
 
 void MainWindow::chooseOpenFile()
@@ -2178,12 +2483,10 @@ void MainWindow::exportGif()
 {
     const Document document = m_canvas->documentWithPendingSelectionTransform();
     const long double workingBytes =
-        AnimationExportPolicy::estimatedWorkingBytes(
-            document.size, document.animationFrames);
+        AnimationExportPolicy::estimatedWorkingBytes(document);
     if (document.size.width() <= 0 || document.size.height() <= 0
         || document.animationFrames <= 0
-        || !AnimationExportPolicy::fitsMemoryBudget(
-            document.size, document.animationFrames))
+        || !AnimationExportPolicy::fitsMemoryBudget(document))
     {
         const long double mebibytes = workingBytes / (1024.0L * 1024.0L);
         QMessageBox::warning(this,
@@ -2261,6 +2564,29 @@ void MainWindow::exportGif()
 void MainWindow::exportImage()
 {
     const int frame = m_canvas->currentFrame();
+    Document exportDocument = m_canvas->documentWithPendingSelectionTransform();
+    if (!m_canvas->isWobbleAnimationEnabled())
+    {
+        exportDocument.wobbleAmount = 0.0;
+    }
+    const RenderExportMemoryEstimate memoryEstimate =
+        RenderExportPolicy::staticImage(exportDocument);
+    if (!RenderExportPolicy::staticImageFitsMemoryBudget(exportDocument))
+    {
+        spdlog::error("Static image export exceeds the working memory budget");
+        const long double mebibytes =
+            memoryEstimate.workingBytes / (1024.0L * 1024.0L);
+        QMessageBox dialog(QMessageBox::Warning,
+            tr("Image is too large"),
+            tr("This image would need about %1 MiB of working memory. Reduce "
+               "the canvas size or layer group nesting before exporting.")
+                .arg(static_cast<double>(mebibytes), 0, 'f', 0),
+            QMessageBox::Ok,
+            this);
+        dialog.setObjectName(QStringLiteral("staticExportMemoryWarning"));
+        dialog.exec();
+        return;
+    }
     const QString pngFilter = tr("PNG images (*.png)");
     const QString jpegFilter = tr("JPEG images (*.jpg *.jpeg)");
     QString selectedFilter = pngFilter;
@@ -2282,11 +2608,6 @@ void MainWindow::exportImage()
             ? selected
             : normalizedPath(selected,
                   jpeg ? QStringLiteral("jpg") : QStringLiteral("png"));
-    Document exportDocument = m_canvas->documentWithPendingSelectionTransform();
-    if (!m_canvas->isWobbleAnimationEnabled())
-    {
-        exportDocument.wobbleAmount = 0.0;
-    }
     m_canvas->releaseTransientRenderCaches();
     m_controller.releaseTransientCaches();
     const QImage image = RenderEngine::render(exportDocument, frame);

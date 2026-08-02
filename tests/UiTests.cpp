@@ -1,3 +1,4 @@
+#include "app/RecoveryStore.hpp"
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
@@ -18,6 +19,8 @@
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
+#include "ui/LayerItemDelegate.hpp"
+#include "ui/LayerListWidget.hpp"
 #include "ui/LayerThumbnailRenderer.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
@@ -34,8 +37,10 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileInfo>
@@ -141,6 +146,160 @@ public:
 private:
     QString m_version;
 };
+
+class MainWindowTestAccess final
+{
+public:
+    static void failNextDocumentReplacementPreparation(MainWindow &window)
+    {
+        window.m_controller.m_failNextDocumentReplacementPreparationForTesting =
+            true;
+    }
+
+    static DocumentController &controller(MainWindow &window)
+    {
+        return window.m_controller;
+    }
+
+    static bool saveToFile(MainWindow &window, const QString &filePath)
+    {
+        return window.saveToFile(filePath);
+    }
+
+    static void setCurrentFilePath(MainWindow &window, const QString &filePath)
+    {
+        window.m_currentFilePath = filePath;
+    }
+
+    static bool clearAutosave(MainWindow &window)
+    {
+        return window.clearAutosave();
+    }
+
+    static void writeModifiedAutosave(MainWindow &window)
+    {
+        window.m_controller.addLayer();
+        window.m_autosavePending = true;
+        window.writeAutosave();
+    }
+
+    static bool loadDocument(MainWindow &window, Document document)
+    {
+        return window.m_controller.loadDocument(std::move(document));
+    }
+
+    static void exportImage(MainWindow &window)
+    {
+        window.exportImage();
+    }
+};
+
+void scheduleDialogButtonClick(
+    QObject *context, const QString &objectName, bool *clicked)
+{
+    QTimer::singleShot(0,
+        context,
+        [objectName, clicked]()
+        {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (!dialog)
+            {
+                return;
+            }
+            QPushButton *button = dialog->findChild<QPushButton *>(objectName);
+            if (!button)
+            {
+                dialog->reject();
+                return;
+            }
+            *clicked = true;
+            button->click();
+        });
+    QTimer::singleShot(1000,
+        context,
+        []()
+        {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (dialog)
+            {
+                dialog->reject();
+            }
+        });
+}
+
+void scheduleDialogButtonClickAndAcceptNext(QObject *context,
+    const QString &objectName,
+    bool *clicked,
+    bool *followupAccepted)
+{
+    QTimer::singleShot(0,
+        context,
+        [context, objectName, clicked, followupAccepted]()
+        {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (!dialog)
+            {
+                return;
+            }
+            QPushButton *button = dialog->findChild<QPushButton *>(objectName);
+            if (!button)
+            {
+                dialog->reject();
+                return;
+            }
+            QTimer::singleShot(0,
+                context,
+                [followupAccepted]()
+                {
+                    QDialog *followup = qobject_cast<QDialog *>(
+                        QApplication::activeModalWidget());
+                    if (!followup)
+                    {
+                        return;
+                    }
+                    *followupAccepted = true;
+                    followup->accept();
+                });
+            *clicked = true;
+            button->click();
+        });
+    QTimer::singleShot(1000,
+        context,
+        []()
+        {
+            QDialog *dialog =
+                qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (dialog)
+            {
+                dialog->reject();
+            }
+        });
+}
+
+Document nestedLayerDocument(int depth, const QSize &size = QSize(100, 100))
+{
+    Document document = Document::createDefault(size);
+    Layer paint = document.layers.takeFirst();
+    document.layers.clear();
+    QUuid parentGroupId;
+    for (int currentDepth = 0; currentDepth < depth; ++currentDepth)
+    {
+        Layer group;
+        group.name = QStringLiteral("Group %1").arg(currentDepth + 1);
+        group.kind = LayerKind::Group;
+        group.parentGroupId = parentGroupId;
+        group.initialCanvasSize = document.size;
+        parentGroupId = group.id;
+        document.layers.append(std::move(group));
+    }
+    paint.parentGroupId = parentGroupId;
+    document.activeLayerId = paint.id;
+    document.layers.append(std::move(paint));
+    return document;
+}
 
 class UiTests final : public QObject
 {
@@ -419,7 +578,7 @@ private slots:
         QTRY_VERIFY(controller.document().layer(layerId)->visible);
     }
 
-    void stopsWobblePreviewWhileTimelineIsDisabled()
+    void animatesWobblePreviewOnlyAroundChanges()
     {
         DocumentController controller;
         controller.newDocument(QSize(100, 100));
@@ -429,12 +588,18 @@ private slots:
         QVERIFY(preview);
         QShowEvent showEvent;
         QApplication::sendEvent(preview, &showEvent);
+        QVERIFY(!preview->isAnimationActive());
+
+        controller.setWobbleAmount(controller.document().wobbleAmount + 1.0);
         QVERIFY(preview->isAnimationActive());
 
         timeline.setEnabled(false);
         QVERIFY(!preview->isAnimationActive());
         timeline.setEnabled(true);
         QVERIFY(preview->isAnimationActive());
+
+        QTRY_VERIFY_WITH_TIMEOUT(!preview->isAnimationActive(), 3000);
+
         QHideEvent hideEvent;
         QApplication::sendEvent(preview, &hideEvent);
         QVERIFY(!preview->isAnimationActive());
@@ -585,6 +750,375 @@ private slots:
         QVERIFY(controller.document().layer(layerId)->reference);
         controller.undoStack()->undo();
         QVERIFY(!controller.document().layer(layerId)->reference);
+    }
+
+    void filtersLayerHierarchyActionsAtDepthLimit()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        LayerDock dock(&controller);
+        QToolButton *groupButton = dock.findChild<QToolButton *>(
+            QStringLiteral("layerAddGroupButton"));
+        QComboBox *parentCombo = dock.findChild<QComboBox *>(
+            QStringLiteral("layerParentGroupCombo"));
+        QListWidget *list = dock.findChild<QListWidget *>();
+        QVERIFY(groupButton);
+        QVERIFY(parentCombo);
+        QVERIFY(list);
+
+        for (int depth = 0; depth < DocumentLimits::maximumLayerDepth; ++depth)
+        {
+            QVERIFY(groupButton->isEnabled());
+            groupButton->click();
+        }
+        QVERIFY(!groupButton->isEnabled());
+
+        QUuid hierarchyRootId;
+        for (const Layer &layer : controller.document().layers)
+        {
+            if (layer.kind == LayerKind::Group && layer.parentGroupId.isNull())
+            {
+                hierarchyRootId = layer.id;
+                break;
+            }
+        }
+        QVERIFY(!hierarchyRootId.isNull());
+
+        controller.addLayerGroup();
+        QUuid emptyRootId;
+        for (const Layer &layer : controller.document().layers)
+        {
+            if (layer.kind == LayerKind::Group && layer.parentGroupId.isNull()
+                && layer.id != hierarchyRootId)
+            {
+                emptyRootId = layer.id;
+                break;
+            }
+        }
+        QVERIFY(!emptyRootId.isNull());
+
+        QListWidgetItem *hierarchyRootItem = nullptr;
+        for (int row = 0; row < list->count(); ++row)
+        {
+            QListWidgetItem *item = list->item(row);
+            if (item->data(LayerItemRoles::LayerId).toUuid() == hierarchyRootId)
+            {
+                hierarchyRootItem = item;
+                break;
+            }
+        }
+        QVERIFY(hierarchyRootItem);
+        list->setCurrentItem(hierarchyRootItem);
+
+        QVERIFY(!groupButton->isEnabled());
+        QCOMPARE(parentCombo->findData(QVariant::fromValue(emptyRootId)), -1);
+        QVERIFY(parentCombo->findData(QVariant::fromValue(QUuid())) >= 0);
+    }
+
+    void movesLayerAcrossGroupsByDrag()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(96, 96)));
+        const QUuid firstPaintId = controller.document().activeLayerId;
+        controller.addLayerGroup(firstPaintId);
+        const QUuid groupId =
+            controller.document().layer(firstPaintId)->parentGroupId;
+        controller.addLayer();
+        const QUuid secondPaintId = controller.document().activeLayerId;
+        controller.addLayer();
+        const QUuid rootPaintId = controller.document().activeLayerId;
+        controller.setLayerParentGroup(rootPaintId, {});
+
+        LayerDock dock(&controller);
+        auto *list = dock.findChild<LayerListWidget *>();
+        QVERIFY(list);
+        const auto rowOf = [list](const QUuid &id)
+        {
+            for (int row = 0; row < list->count(); ++row)
+            {
+                if (list->item(row)->data(LayerItemRoles::LayerId).toUuid()
+                    == id)
+                {
+                    return row;
+                }
+            }
+            return -1;
+        };
+        QCOMPARE(rowOf(groupId), 0);
+        QCOMPARE(rowOf(secondPaintId), 1);
+        QCOMPARE(rowOf(firstPaintId), 2);
+        QCOMPARE(rowOf(rootPaintId), 3);
+
+        emit list->dropRequested(rowOf(firstPaintId),
+            rowOf(rootPaintId),
+            LayerListWidget::DropPlacement::AboveTarget);
+        QVERIFY(
+            controller.document().layer(firstPaintId)->parentGroupId.isNull());
+        QCOMPARE(rowOf(groupId), 0);
+        QCOMPARE(rowOf(secondPaintId), 1);
+        QCOMPARE(rowOf(firstPaintId), 2);
+        QCOMPARE(rowOf(rootPaintId), 3);
+
+        controller.undoStack()->undo();
+        QCOMPARE(
+            controller.document().layer(firstPaintId)->parentGroupId, groupId);
+        QCOMPARE(rowOf(firstPaintId), 2);
+        controller.undoStack()->redo();
+        QVERIFY(
+            controller.document().layer(firstPaintId)->parentGroupId.isNull());
+        controller.undoStack()->undo();
+
+        emit list->dropRequested(rowOf(firstPaintId),
+            rowOf(secondPaintId),
+            LayerListWidget::DropPlacement::AboveTarget);
+        QCOMPARE(
+            controller.document().layer(firstPaintId)->parentGroupId, groupId);
+        QCOMPARE(rowOf(firstPaintId), 1);
+        QCOMPARE(rowOf(secondPaintId), 2);
+
+        emit list->dropRequested(rowOf(rootPaintId),
+            rowOf(groupId),
+            LayerListWidget::DropPlacement::BelowTarget);
+        QCOMPARE(
+            controller.document().layer(rootPaintId)->parentGroupId, groupId);
+        QCOMPARE(rowOf(rootPaintId), 1);
+
+        emit list->dropRequested(
+            rowOf(rootPaintId), -1, LayerListWidget::DropPlacement::OnViewport);
+        QVERIFY(
+            controller.document().layer(rootPaintId)->parentGroupId.isNull());
+        QCOMPARE(rowOf(rootPaintId), list->count() - 1);
+    }
+
+    void blocksDrawingWhileGroupSelected()
+    {
+        MainWindow window;
+        window.resize(1100, 720);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        LayerDock *layerDock = window.findChild<LayerDock *>();
+        QVERIFY(canvas);
+        QVERIFY(layerDock);
+        auto *list = layerDock->findChild<LayerListWidget *>();
+        QVERIFY(list);
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const QUuid paintId = controller.document().activeLayerId;
+        controller.addLayerGroup(paintId);
+        const QUuid groupId =
+            controller.document().layer(paintId)->parentGroupId;
+
+        const auto selectRowOf = [list](const QUuid &id)
+        {
+            for (int row = 0; row < list->count(); ++row)
+            {
+                QListWidgetItem *item = list->item(row);
+                if (item->data(LayerItemRoles::LayerId).toUuid() == id)
+                {
+                    list->setCurrentItem(item);
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto strokeCount = [&controller, &paintId]()
+        {
+            const Layer *layer = controller.document().layer(paintId);
+            return layer ? layer->strokes.size() : qsizetype(-1);
+        };
+        const auto drag = [canvas]()
+        {
+            const QPoint start = canvas->rect().center() - QPoint(40, 10);
+            const QPoint end = canvas->rect().center() + QPoint(40, 10);
+            QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(canvas, end, 10);
+            QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, end);
+        };
+
+        QVERIFY(selectRowOf(groupId));
+        QCOMPARE(canvas->cursor().shape(), Qt::ForbiddenCursor);
+        QSignalSpy messages(canvas, &CanvasWidget::interactionMessage);
+        drag();
+        QCOMPARE(strokeCount(), 0);
+        QVERIFY(!messages.isEmpty());
+
+        canvas->setTool(CanvasWidget::Tool::Bucket);
+        QTest::mouseClick(
+            canvas, Qt::LeftButton, Qt::NoModifier, canvas->rect().center());
+        QCOMPARE(strokeCount(), 0);
+        canvas->setTool(CanvasWidget::Tool::Brush);
+
+        QVERIFY(selectRowOf(paintId));
+        QVERIFY(canvas->cursor().shape() != Qt::ForbiddenCursor);
+        drag();
+        QCOMPARE(strokeCount(), 1);
+    }
+
+    void rejectsInvalidLayerDrops()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(96, 96)));
+        const QUuid paintId = controller.document().activeLayerId;
+        for (int depth = 0; depth < DocumentLimits::maximumLayerDepth; ++depth)
+        {
+            controller.addLayerGroup(paintId);
+        }
+        controller.addLayerGroup(QUuid());
+        const QUuid emptyGroupId = controller.document().layers.last().id;
+        QUuid outerGroupId;
+        for (const Layer &layer : controller.document().layers)
+        {
+            if (layer.kind == LayerKind::Group && layer.parentGroupId.isNull()
+                && layer.id != emptyGroupId)
+            {
+                outerGroupId = layer.id;
+                break;
+            }
+        }
+        QVERIFY(!outerGroupId.isNull());
+        QUuid secondGroupId;
+        for (const Layer &layer : controller.document().layers)
+        {
+            if (layer.parentGroupId == outerGroupId)
+            {
+                secondGroupId = layer.id;
+                break;
+            }
+        }
+        QVERIFY(!secondGroupId.isNull());
+
+        LayerDock dock(&controller);
+        auto *list = dock.findChild<LayerListWidget *>();
+        QVERIFY(list);
+        const auto rowOf = [list](const QUuid &id)
+        {
+            for (int row = 0; row < list->count(); ++row)
+            {
+                if (list->item(row)->data(LayerItemRoles::LayerId).toUuid()
+                    == id)
+                {
+                    return row;
+                }
+            }
+            return -1;
+        };
+        const int historyCount = controller.undoStack()->count();
+
+        emit list->dropRequested(rowOf(outerGroupId),
+            rowOf(emptyGroupId),
+            LayerListWidget::DropPlacement::BelowTarget);
+        QVERIFY(
+            controller.document().layer(outerGroupId)->parentGroupId.isNull());
+
+        emit list->dropRequested(rowOf(outerGroupId),
+            rowOf(secondGroupId),
+            LayerListWidget::DropPlacement::BelowTarget);
+        QVERIFY(
+            controller.document().layer(outerGroupId)->parentGroupId.isNull());
+        QCOMPARE(controller.document().layer(secondGroupId)->parentGroupId,
+            outerGroupId);
+        QCOMPARE(controller.undoStack()->count(), historyCount);
+    }
+
+    void warnsWhenOpeningLegacyLayerHierarchy()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        const QString projectPath =
+            directory.filePath(QStringLiteral("legacy-depth.wagle"));
+        QString error;
+        QVERIFY2(DocumentSerializer::save(projectPath,
+                     nestedLayerDocument(DocumentLimits::maximumLayerDepth + 1),
+                     &error),
+            qPrintable(error));
+
+        MainWindow window;
+        bool warningAccepted = false;
+        QTimer::singleShot(0,
+            &window,
+            [&warningAccepted]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog
+                    || dialog->objectName()
+                           != QStringLiteral("legacyLayerDepthWarning"))
+                {
+                    return;
+                }
+                warningAccepted = true;
+                dialog->accept();
+            });
+
+        QVERIFY(window.openFile(projectPath));
+        QVERIFY(warningAccepted);
+        QCOMPARE(
+            window.windowFilePath(), QFileInfo(projectPath).absoluteFilePath());
+    }
+
+    void warnsWhenRecoveringLegacyLayerHierarchy()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+        QString error;
+        QVERIFY2(DocumentSerializer::save(recoveryPath,
+                     nestedLayerDocument(DocumentLimits::maximumLayerDepth + 1),
+                     &error),
+            qPrintable(error));
+
+        bool recoverClicked = false;
+        bool warningAccepted = false;
+        MainWindow window;
+        scheduleDialogButtonClickAndAcceptNext(&window,
+            QStringLiteral("startupRecoverButton"),
+            &recoverClicked,
+            &warningAccepted);
+
+        QCOMPARE(
+            window.initializeSession(), MainWindow::StartupResult::Recovered);
+        QVERIFY(recoverClicked);
+        QVERIFY(warningAccepted);
+        QVERIFY(window.windowFilePath().isEmpty());
+    }
+
+    void explainsStaticExportHierarchyMemoryLimit()
+    {
+        MainWindow window;
+        QVERIFY(MainWindowTestAccess::loadDocument(window,
+            nestedLayerDocument(
+                DocumentLimits::maximumLayerDepth, QSize(4096, 4096))));
+        bool warningAccepted = false;
+        QTimer::singleShot(0,
+            &window,
+            [&warningAccepted]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog
+                    || dialog->objectName()
+                           != QStringLiteral("staticExportMemoryWarning"))
+                {
+                    return;
+                }
+                warningAccepted = true;
+                dialog->accept();
+            });
+
+        MainWindowTestAccess::exportImage(window);
+
+        QVERIFY(warningAccepted);
     }
 
     void editsStrokePropertyDialogValues()
@@ -1946,13 +2480,19 @@ private slots:
         QVERIFY(canvas->hasPendingSelectionTransform());
         QCOMPARE(stackUndoAction->text(), stackTextBefore);
 
-        const std::optional<Document> recovered =
-            DocumentSerializer::load(recoveryPath, &error);
+        const std::optional<RecoveryStore::Snapshot> recovered =
+            RecoveryStore::load(&error);
         QVERIFY2(recovered.has_value(), qPrintable(error));
-        QCOMPARE(recovered->layers.first().strokes.size(), 2);
-        QCOMPARE(recovered->layers.first().strokes.last().mode,
+        QCOMPARE(
+            recovered->metadataStatus, RecoveryStore::MetadataStatus::Valid);
+        QVERIFY(recovered->metadata.has_value());
+        QCOMPARE(recovered->metadata->sourcePath,
+            QFileInfo(filePath).absoluteFilePath());
+        QCOMPARE(recovered->metadata->revision, quint64(1));
+        QCOMPARE(recovered->document.layers.first().strokes.size(), 2);
+        QCOMPARE(recovered->document.layers.first().strokes.last().mode,
             StrokeMode::PixelSelection);
-        QCOMPARE(RenderEngine::render(*recovered, 0), preview);
+        QCOMPARE(RenderEngine::render(recovered->document, 0), preview);
 
         canvas->cancelSelectionTransform();
         QTRY_VERIFY(!QFileInfo::exists(recoveryPath));
@@ -3696,6 +4236,29 @@ private slots:
         QVERIFY(qAbs(canvas.zoom() - 1.0) < 0.0001);
     }
 
+    void fitsCanvasToViewportOnFirstShow()
+    {
+        MainWindow window;
+        QApplication::processEvents();
+
+        window.resize(1280, 820);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QVERIFY(canvas->width() > 200);
+        QVERIFY(canvas->height() > 200);
+        const QSize documentSize =
+            MainWindowTestAccess::controller(window).document().size;
+        const qreal expectedZoom =
+            std::clamp(std::min((canvas->width() - 64.0) / documentSize.width(),
+                           (canvas->height() - 64.0) / documentSize.height()),
+                0.01,
+                16.0);
+        QTRY_VERIFY(qAbs(canvas->zoom() - expectedZoom) < 0.0001);
+    }
+
     void syncsMainWindowZoomControls()
     {
         MainWindow window;
@@ -4430,6 +4993,869 @@ private slots:
         QCOMPARE(rendered.pixelColor(20, 42), QColor(Qt::white));
     }
 
+    void prioritizesRecoveryOverRequestedStartupFile()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(173, 109));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        Document requestedDocument = Document::createDefault(QSize(257, 131));
+        requestedDocument.layers.first().name = QStringLiteral("Requested");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool recoverClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(
+            &window, QStringLiteral("startupRecoverButton"), &recoverClicked);
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(recoverClicked);
+        QCOMPARE(result, MainWindow::StartupResult::Recovered);
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            DocumentSerializer::toJson(recoveryDocument));
+        QVERIFY(window.windowFilePath().isEmpty());
+        QVERIFY(!settings.contains(recoveryKey));
+        QVERIFY(QFileInfo::exists(recoveryPath));
+
+        const std::optional<Document> retainedRecovery =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(retainedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*retainedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+    }
+
+    void rejectsReservedRecoveryProjectPaths()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        const QByteArray documentBefore = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+
+        Document sentinel = Document::createDefault(QSize(167, 103));
+        sentinel.layers.first().name = QStringLiteral("Recovery sentinel");
+        QString error;
+        QVERIFY2(DocumentSerializer::save(recoveryPath, sentinel, &error),
+            qPrintable(error));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        recoveryFile.close();
+
+        const auto dismissWarning = [&window](bool *shown)
+        {
+            QTimer::singleShot(0,
+                &window,
+                [shown]()
+                {
+                    QDialog *dialog = qobject_cast<QDialog *>(
+                        QApplication::activeModalWidget());
+                    if (!dialog)
+                    {
+                        return;
+                    }
+                    *shown = true;
+                    dialog->accept();
+                });
+        };
+
+        bool openWarningShown = false;
+        dismissWarning(&openWarningShown);
+        QVERIFY(!window.openFile(recoveryPath));
+        QVERIFY(openWarningShown);
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            documentBefore);
+        QFile afterOpen(recoveryPath);
+        QVERIFY(afterOpen.open(QIODevice::ReadOnly));
+        QCOMPARE(afterOpen.readAll(), recoveryBytes);
+        afterOpen.close();
+
+        bool saveWarningShown = false;
+        dismissWarning(&saveWarningShown);
+        QVERIFY(!MainWindowTestAccess::saveToFile(window, recoveryPath));
+        QVERIFY(saveWarningShown);
+        QFile afterSave(recoveryPath);
+        QVERIFY(afterSave.open(QIODevice::ReadOnly));
+        QCOMPARE(afterSave.readAll(), recoveryBytes);
+        afterSave.close();
+
+        MainWindowTestAccess::setCurrentFilePath(window, recoveryPath);
+        MainWindowTestAccess::writeModifiedAutosave(window);
+        QVERIFY(MainWindowTestAccess::clearAutosave(window));
+        QFile afterAutosave(recoveryPath);
+        QVERIFY(afterAutosave.open(QIODevice::ReadOnly));
+        QCOMPARE(afterAutosave.readAll(), recoveryBytes);
+    }
+
+    void treatsRequestedRecoveryPathAsRecoveryOnly()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(171, 105));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        recoveryFile.close();
+
+        bool dialogInspected = false;
+        bool recoveryOnly = false;
+        MainWindow window;
+        QTimer::singleShot(0,
+            &window,
+            [&dialogInspected, &recoveryOnly]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                dialogInspected = true;
+                recoveryOnly = !dialog->findChild<QPushButton *>(
+                    QStringLiteral("startupPreserveRecoveryButton"));
+                QPushButton *cancelButton = dialog->findChild<QPushButton *>(
+                    QStringLiteral("startupCancelButton"));
+                if (cancelButton)
+                {
+                    cancelButton->click();
+                }
+                else
+                {
+                    dialog->reject();
+                }
+            });
+
+        QCOMPARE(window.initializeSession(recoveryPath),
+            MainWindow::StartupResult::Canceled);
+        QVERIFY(dialogInspected);
+        QVERIFY(recoveryOnly);
+        QFile unchangedRecovery(recoveryPath);
+        QVERIFY(unchangedRecovery.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedRecovery.readAll(), recoveryBytes);
+    }
+
+    void cancelingRecoveredSaveAsPreservesSourceAndRecovery()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString sourcePath =
+            directory.filePath(QStringLiteral("source.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(179, 107));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        const RecoveryStore::Metadata metadata{QUuid::createUuid(),
+            sourcePath,
+            4,
+            QDateTime::currentDateTimeUtc()};
+        QString error;
+        QVERIFY2(RecoveryStore::save(recoveryDocument, metadata, &error),
+            qPrintable(error));
+
+        Document newerSource = Document::createDefault(QSize(251, 149));
+        newerSource.layers.first().name = QStringLiteral("Newer source");
+        QVERIFY2(DocumentSerializer::save(sourcePath, newerSource, &error),
+            qPrintable(error));
+
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        recoveryFile.close();
+        QFile sourceFile(sourcePath);
+        QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+        const QByteArray sourceBytes = sourceFile.readAll();
+        sourceFile.close();
+
+        bool recoverClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(
+            &window, QStringLiteral("startupRecoverButton"), &recoverClicked);
+        QCOMPARE(
+            window.initializeSession(), MainWindow::StartupResult::Recovered);
+        QVERIFY(recoverClicked);
+        QVERIFY(window.windowFilePath().isEmpty());
+
+        QAction *saveAction =
+            window.findChild<QAction *>(QStringLiteral("saveAction"));
+        QVERIFY(saveAction);
+        bool saveDialogRejected = false;
+        QTimer::singleShot(0,
+            &window,
+            [&saveDialogRejected]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                saveDialogRejected = true;
+                dialog->reject();
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
+        saveAction->trigger();
+
+        QVERIFY(saveDialogRejected);
+        QVERIFY(window.windowFilePath().isEmpty());
+        QFile unchangedSource(sourcePath);
+        QVERIFY(unchangedSource.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedSource.readAll(), sourceBytes);
+        QFile unchangedRecovery(recoveryPath);
+        QVERIFY(unchangedRecovery.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedRecovery.readAll(), recoveryBytes);
+    }
+
+    void preservesRecoveryBeforeOpeningRequestedStartupFile()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(181, 113));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        Document requestedDocument = Document::createDefault(QSize(263, 137));
+        requestedDocument.layers.first().name = QStringLiteral("Requested");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool preserveClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(&window,
+            QStringLiteral("startupPreserveRecoveryButton"),
+            &preserveClicked);
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(preserveClicked);
+        QCOMPARE(result, MainWindow::StartupResult::OpenedRequestedFile);
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            DocumentSerializer::toJson(requestedDocument));
+        QCOMPARE(window.windowFilePath(),
+            QFileInfo(requestedPath).absoluteFilePath());
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+
+        const QStringList preservedFiles =
+            QDir(directory.path())
+                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
+                    QDir::Files);
+        QCOMPARE(preservedFiles.size(), 1);
+        const QString preservedPath =
+            directory.filePath(preservedFiles.first());
+        const std::optional<Document> preservedRecovery =
+            DocumentSerializer::load(preservedPath, &error);
+        QVERIFY2(preservedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*preservedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+        QVERIFY(!settings.contains(recoveryKey));
+
+        QToolButton *addLayerButton =
+            window.findChild<QToolButton *>(QStringLiteral("layerAddButton"));
+        QVERIFY(addLayerButton);
+        addLayerButton->click();
+        QTRY_VERIFY(window.isWindowModified());
+        QEvent deactivate(QEvent::ApplicationDeactivate);
+        QApplication::sendEvent(qApp, &deactivate);
+
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QVERIFY(QFileInfo::exists(preservedPath));
+        const std::optional<RecoveryStore::Snapshot> currentRecovery =
+            RecoveryStore::load(&error);
+        QVERIFY2(currentRecovery.has_value(), qPrintable(error));
+        QCOMPARE(currentRecovery->metadataStatus,
+            RecoveryStore::MetadataStatus::Valid);
+        QVERIFY(currentRecovery->metadata.has_value());
+        QCOMPARE(currentRecovery->metadata->sourcePath,
+            QFileInfo(requestedPath).absoluteFilePath());
+        QCOMPARE(currentRecovery->metadata->revision, quint64(1));
+        QVERIFY(!currentRecovery->metadata->sessionId.isNull());
+        QVERIFY(currentRecovery->metadata->timestampUtc.isValid());
+        QCOMPARE(DocumentSerializer::toJson(currentRecovery->document),
+            DocumentSerializer::toJson(
+                canvas->documentWithPendingSelectionTransform()));
+        QVERIFY(!settings.contains(recoveryKey));
+    }
+
+    void keepsRecoveryWhenStartupIsCanceled()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(191, 127));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        Document requestedDocument = Document::createDefault(QSize(269, 139));
+        requestedDocument.layers.first().name = QStringLiteral("Requested");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool cancelClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(
+            &window, QStringLiteral("startupCancelButton"), &cancelClicked);
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(cancelClicked);
+        QCOMPARE(result, MainWindow::StartupResult::Canceled);
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QCOMPARE(settings.value(recoveryKey).toString(), recoverySourcePath);
+        QVERIFY(window.windowFilePath().isEmpty());
+
+        const std::optional<Document> retainedRecovery =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(retainedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*retainedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+    }
+
+    void discardsRecoveryBeforeOpeningRequestedStartupFile()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(193, 131));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        Document requestedDocument = Document::createDefault(QSize(271, 151));
+        requestedDocument.layers.first().name = QStringLiteral("Requested");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool discardClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(&window,
+            QStringLiteral("startupDiscardRecoveryButton"),
+            &discardClicked);
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(discardClicked);
+        QCOMPARE(result, MainWindow::StartupResult::OpenedRequestedFile);
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            DocumentSerializer::toJson(requestedDocument));
+        QCOMPARE(window.windowFilePath(),
+            QFileInfo(requestedPath).absoluteFilePath());
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+        QVERIFY(!settings.contains(recoveryKey));
+        const QStringList preservedFiles =
+            QDir(directory.path())
+                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
+                    QDir::Files);
+        QVERIFY(preservedFiles.isEmpty());
+    }
+
+    void discardsRecoveryWithoutARequestedStartupFile()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(199, 137));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool discardClicked = false;
+        MainWindow window;
+        scheduleDialogButtonClick(&window,
+            QStringLiteral("startupDiscardRecoveryButton"),
+            &discardClicked);
+
+        const MainWindow::StartupResult result = window.initializeSession();
+
+        QVERIFY(discardClicked);
+        QCOMPARE(result, MainWindow::StartupResult::Ready);
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+        QVERIFY(!settings.contains(recoveryKey));
+        QVERIFY(window.windowFilePath().isEmpty());
+    }
+
+    void keepsRecoveryWhenRecoveryTransitionFails()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(217, 159));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        recoveryFile.close();
+
+        bool recoverClicked = false;
+        bool failureAccepted = false;
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        const QByteArray documentBefore = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+        MainWindowTestAccess::failNextDocumentReplacementPreparation(window);
+        scheduleDialogButtonClickAndAcceptNext(&window,
+            QStringLiteral("startupRecoverButton"),
+            &recoverClicked,
+            &failureAccepted);
+
+        QCOMPARE(window.initializeSession(), MainWindow::StartupResult::Failed);
+        QVERIFY(recoverClicked);
+        QVERIFY(failureAccepted);
+        QVERIFY(window.windowFilePath().isEmpty());
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            documentBefore);
+        QFile unchangedRecovery(recoveryPath);
+        QVERIFY(unchangedRecovery.open(QIODevice::ReadOnly));
+        QCOMPARE(unchangedRecovery.readAll(), recoveryBytes);
+    }
+
+    void preservesArchivedRecoveryWhenRequestedTransitionFails()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(219, 161));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        Document requestedDocument = Document::createDefault(QSize(281, 173));
+        requestedDocument.layers.first().name = QStringLiteral("Requested");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+        QFile recoveryFile(recoveryPath);
+        QVERIFY(recoveryFile.open(QIODevice::ReadOnly));
+        const QByteArray recoveryBytes = recoveryFile.readAll();
+        recoveryFile.close();
+
+        bool preserveClicked = false;
+        bool failureAccepted = false;
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        const QByteArray documentBefore = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+        MainWindowTestAccess::failNextDocumentReplacementPreparation(window);
+        scheduleDialogButtonClickAndAcceptNext(&window,
+            QStringLiteral("startupPreserveRecoveryButton"),
+            &preserveClicked,
+            &failureAccepted);
+
+        QCOMPARE(window.initializeSession(requestedPath),
+            MainWindow::StartupResult::Failed);
+        QVERIFY(preserveClicked);
+        QVERIFY(failureAccepted);
+        QVERIFY(window.windowFilePath().isEmpty());
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            documentBefore);
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+        const QStringList preservedFiles =
+            QDir(directory.path())
+                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
+                    QDir::Files);
+        QCOMPARE(preservedFiles.size(), 1);
+        QFile preservedFile(directory.filePath(preservedFiles.first()));
+        QVERIFY(preservedFile.open(QIODevice::ReadOnly));
+        QCOMPARE(preservedFile.readAll(), recoveryBytes);
+    }
+
+    void keepsRecoveryWhenRequestedStartupTransitionFails()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("requested.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(223, 163));
+        Document requestedDocument = Document::createDefault(QSize(277, 167));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QVERIFY2(
+            DocumentSerializer::save(requestedPath, requestedDocument, &error),
+            qPrintable(error));
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool discardClicked = false;
+        bool failureDismissed = false;
+        MainWindow window;
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+        const QByteArray documentBefore = DocumentSerializer::toJson(
+            canvas->documentWithPendingSelectionTransform());
+        MainWindowTestAccess::failNextDocumentReplacementPreparation(window);
+        QTimer::singleShot(0,
+            &window,
+            [&window, &discardClicked, &failureDismissed]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                QPushButton *discardButton = dialog->findChild<QPushButton *>(
+                    QStringLiteral("startupDiscardRecoveryButton"));
+                if (!discardButton)
+                {
+                    dialog->reject();
+                    return;
+                }
+                QTimer::singleShot(0,
+                    &window,
+                    [&failureDismissed]()
+                    {
+                        QDialog *failureDialog = qobject_cast<QDialog *>(
+                            QApplication::activeModalWidget());
+                        if (!failureDialog)
+                        {
+                            return;
+                        }
+                        failureDismissed = true;
+                        failureDialog->accept();
+                    });
+                discardClicked = true;
+                discardButton->click();
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(discardClicked);
+        QVERIFY(failureDismissed);
+        QCOMPARE(result, MainWindow::StartupResult::Failed);
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QCOMPARE(settings.value(recoveryKey).toString(), recoverySourcePath);
+        QVERIFY(window.windowFilePath().isEmpty());
+        QCOMPARE(DocumentSerializer::toJson(
+                     canvas->documentWithPendingSelectionTransform()),
+            documentBefore);
+        const std::optional<Document> retainedRecovery =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(retainedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*retainedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+    }
+
+    void keepsUnresolvedRecoveryWhenWindowCloses()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(211, 157));
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        MainWindow window;
+        QVERIFY(window.close());
+
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QCOMPARE(settings.value(recoveryKey).toString(), recoverySourcePath);
+        const std::optional<Document> retainedRecovery =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(retainedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*retainedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+    }
+
+    void keepsRecoveryWhenRequestedStartupFileIsInvalid()
+    {
+        const QString recoveryKey = QStringLiteral("recovery/sourcePath");
+        SettingValueGuard recoveryValueGuard(recoveryKey);
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.wagle"));
+        const QString requestedPath =
+            directory.filePath(QStringLiteral("invalid-request.wagle"));
+        const QString recoverySourcePath =
+            directory.filePath(QStringLiteral("original-project.wagle"));
+        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        Document recoveryDocument = Document::createDefault(QSize(197, 149));
+        recoveryDocument.layers.first().name = QStringLiteral("Recovered");
+        QString error;
+        QVERIFY2(
+            DocumentSerializer::save(recoveryPath, recoveryDocument, &error),
+            qPrintable(error));
+        QFile invalidRequestedFile(requestedPath);
+        QVERIFY(invalidRequestedFile.open(QIODevice::WriteOnly));
+        const QByteArray invalidData = QByteArrayLiteral("invalid project");
+        QCOMPARE(invalidRequestedFile.write(invalidData), invalidData.size());
+        invalidRequestedFile.close();
+
+        QSettings settings;
+        settings.setValue(recoveryKey, recoverySourcePath);
+        settings.sync();
+
+        bool discardClicked = false;
+        bool failureDismissed = false;
+        MainWindow window;
+        QTimer::singleShot(0,
+            &window,
+            [&window, &discardClicked, &failureDismissed]()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog)
+                {
+                    return;
+                }
+                QPushButton *discardButton = dialog->findChild<QPushButton *>(
+                    QStringLiteral("startupDiscardRecoveryButton"));
+                if (!discardButton)
+                {
+                    dialog->reject();
+                    return;
+                }
+                QTimer::singleShot(0,
+                    &window,
+                    [&failureDismissed]()
+                    {
+                        QDialog *failureDialog = qobject_cast<QDialog *>(
+                            QApplication::activeModalWidget());
+                        if (!failureDialog)
+                        {
+                            return;
+                        }
+                        failureDismissed = true;
+                        failureDialog->accept();
+                    });
+                discardClicked = true;
+                discardButton->click();
+            });
+        QTimer::singleShot(1000,
+            &window,
+            []()
+            {
+                QDialog *dialog =
+                    qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (dialog)
+                {
+                    dialog->reject();
+                }
+            });
+
+        const MainWindow::StartupResult result =
+            window.initializeSession(requestedPath);
+
+        QVERIFY(discardClicked);
+        QVERIFY(failureDismissed);
+        QCOMPARE(result, MainWindow::StartupResult::Failed);
+        QVERIFY(QFileInfo::exists(recoveryPath));
+        QCOMPARE(settings.value(recoveryKey).toString(), recoverySourcePath);
+        QVERIFY(window.windowFilePath().isEmpty());
+
+        const std::optional<Document> retainedRecovery =
+            DocumentSerializer::load(recoveryPath, &error);
+        QVERIFY2(retainedRecovery.has_value(), qPrintable(error));
+        QCOMPARE(DocumentSerializer::toJson(*retainedRecovery),
+            DocumentSerializer::toJson(recoveryDocument));
+    }
+
     void autosavesModifiedWork()
     {
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
@@ -4462,10 +5888,15 @@ private slots:
         QVERIFY(QFileInfo::exists(recoveryPath));
 
         QString error;
-        const std::optional<Document> recovered =
-            DocumentSerializer::load(recoveryPath, &error);
+        const std::optional<RecoveryStore::Snapshot> recovered =
+            RecoveryStore::load(&error);
         QVERIFY2(recovered.has_value(), qPrintable(error));
-        QCOMPARE(recovered->layers.first().strokes.size(), 1);
+        QCOMPARE(
+            recovered->metadataStatus, RecoveryStore::MetadataStatus::Valid);
+        QVERIFY(recovered->metadata.has_value());
+        QVERIFY(recovered->metadata->sourcePath.isEmpty());
+        QCOMPARE(recovered->metadata->revision, quint64(1));
+        QCOMPARE(recovered->document.layers.first().strokes.size(), 1);
         QFile::remove(recoveryPath);
     }
 

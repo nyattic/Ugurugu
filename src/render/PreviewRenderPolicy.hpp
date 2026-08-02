@@ -16,7 +16,8 @@ public:
 
     static QSize renderSize(const QSize &documentSize,
         qreal physicalDisplayScale,
-        int retainedSurfaceCount = 1);
+        int retainedSurfaceCount = 1,
+        int hierarchyTransientSurfaceCount = 0);
     static int cacheCostKiB(qsizetype imageBytes);
 };
 

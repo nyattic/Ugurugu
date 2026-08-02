@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/LayerListWidget.hpp"
+
 #include <QDockWidget>
 #include <QHash>
 #include <QPixmap>
@@ -19,7 +21,6 @@ namespace wobble
 {
 
 class DocumentController;
-class LayerListWidget;
 
 class LayerDock final : public QDockWidget
 {
@@ -28,6 +29,9 @@ class LayerDock final : public QDockWidget
 public:
     explicit LayerDock(
         DocumentController *controller, QWidget *parent = nullptr);
+
+signals:
+    void groupSelectionChanged(bool groupSelected);
 
 private:
     void buildContent();
@@ -39,7 +43,8 @@ private:
     void scheduleLayerThumbnail(const QUuid &id);
     void regenerateThumbnails();
     void commitOpacity(const QUuid &id, int value);
-    void handleReorder(int sourceRow, int insertRow);
+    void handleLayerDrop(
+        int sourceRow, int targetRow, LayerListWidget::DropPlacement placement);
     QUuid selectedLayerId() const;
 
     QPointer<DocumentController> m_controller;
@@ -60,6 +65,7 @@ private:
     QHash<QUuid, QPixmap> m_thumbnails;
     QSet<QUuid> m_pendingThumbnails;
     bool m_regenerateAllThumbnails = false;
+    bool m_groupSelectionActive = false;
     bool m_syncing = false;
     bool m_opacityDragging = false;
     QUuid m_opacityLayerId;

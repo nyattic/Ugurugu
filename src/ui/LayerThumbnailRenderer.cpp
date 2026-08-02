@@ -1,5 +1,6 @@
 #include "ui/LayerThumbnailRenderer.hpp"
 
+#include "document/LayerHierarchy.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <algorithm>
@@ -20,13 +21,18 @@ QSize LayerThumbnailRenderer::renderSize(const QSize &documentSize)
 QPixmap LayerThumbnailRenderer::render(
     const Document &document, const Layer &layer)
 {
+    const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(document);
+    if (!hierarchy.isValid())
+    {
+        return {};
+    }
     Document single = document;
     single.wobbleAmount = 0.0;
     single.layers.removeIf(
-        [&document, &layer](const Layer &candidate)
+        [&hierarchy, &layer](const Layer &candidate)
         {
             return candidate.id != layer.id
-                   && !document.isLayerDescendantOf(candidate.id, layer.id);
+                   && !hierarchy.isDescendantOf(candidate.id, layer.id);
         });
     if (Layer *root = single.layer(layer.id))
     {

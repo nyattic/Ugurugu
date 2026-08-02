@@ -1105,6 +1105,17 @@ void CanvasWidget::setAnimateWhileDrawing(bool animate)
     m_animateWhileDrawing = animate;
 }
 
+void CanvasWidget::setGroupSelectionActive(bool active)
+{
+    if (m_groupSelectionActive == active)
+    {
+        return;
+    }
+    m_groupSelectionActive = active;
+    updateCursor();
+    update();
+}
+
 void CanvasWidget::fitToWindow()
 {
     m_zoom = fitZoom();
@@ -1381,6 +1392,7 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
     const bool pointerUsesEraser =
         m_tabletPointerEraser || m_tool == Tool::Eraser;
     if (m_pointerOverWidget && !m_panning && !m_spacePressed && !m_pickingColor
+        && !m_groupSelectionActive
         && (m_tabletPointerEraser || m_tool == Tool::Brush
             || m_tool == Tool::Eraser))
     {
@@ -2161,8 +2173,16 @@ QSize CanvasWidget::previewRenderSize() const
         retainedSurfaces =
             std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0));
     }
-    return PreviewRenderPolicy::renderSize(
-        documentSize, displayScale, retainedSurfaces);
+    const LayerCompositionMemoryEstimate hierarchyMemory =
+        RenderEngine::estimateHierarchyMemory(document, documentSize);
+    if (!hierarchyMemory.valid)
+    {
+        return {};
+    }
+    return PreviewRenderPolicy::renderSize(documentSize,
+        displayScale,
+        retainedSurfaces,
+        hierarchyMemory.peakSurfaceCount);
 }
 
 void CanvasWidget::invalidateFrames()
@@ -2224,6 +2244,12 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     if (!layer || layer->kind != LayerKind::Paint)
     {
         emit interactionMessage(tr("Add a layer before using this tool."));
+        return;
+    }
+    if (m_groupSelectionActive)
+    {
+        emit interactionMessage(
+            tr("Groups can't be painted on. Select a paint layer to draw."));
         return;
     }
     cancelSelectionTransformForBoundary(
@@ -2618,6 +2644,13 @@ void CanvasWidget::updateCursor()
         setCursor(Qt::SizeAllCursor);
         return;
     }
+    if (m_groupSelectionActive
+        && (m_tabletPointerEraser || m_tool == Tool::Brush
+            || m_tool == Tool::Eraser || m_tool == Tool::Bucket))
+    {
+        setCursor(Qt::ForbiddenCursor);
+        return;
+    }
     const bool drawsWithRing = m_tabletPointerEraser || m_tool == Tool::Brush
                                || m_tool == Tool::Eraser;
     setCursor(drawsWithRing ? Qt::BlankCursor : Qt::CrossCursor);
@@ -2944,6 +2977,12 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
     if (!layer)
     {
         emit interactionMessage(tr("Add a layer before using this tool."));
+        return;
+    }
+    if (m_groupSelectionActive)
+    {
+        emit interactionMessage(
+            tr("Groups can't be painted on. Select a paint layer to draw."));
         return;
     }
     cancelSelectionTransformForBoundary(

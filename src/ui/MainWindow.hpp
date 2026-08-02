@@ -5,6 +5,9 @@
 #include <QList>
 #include <QMainWindow>
 #include <QTimer>
+#include <QUuid>
+
+#include <optional>
 
 class QAction;
 class QCloseEvent;
@@ -20,6 +23,7 @@ namespace wobble
 class CanvasWidget;
 class ColorSwatchRow;
 class LayerDock;
+class MainWindowTestAccess;
 class TimelineBar;
 
 class MainWindow final : public QMainWindow
@@ -27,12 +31,23 @@ class MainWindow final : public QMainWindow
     Q_OBJECT
 
 public:
+    enum class StartupResult
+    {
+        Ready,
+        Recovered,
+        OpenedRequestedFile,
+        Canceled,
+        Failed
+    };
+
     explicit MainWindow(QWidget *parent = nullptr);
     bool openFile(const QString &filePath);
     bool offerRecovery();
+    StartupResult initializeSession(const QString &requestedFilePath = {});
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
@@ -53,8 +68,17 @@ private:
     bool save();
     bool saveAs();
     bool saveToFile(const QString &filePath);
+    bool rejectReservedRecoveryPath(
+        const QString &filePath, const QString &title);
+    std::optional<Document> readProject(const QString &filePath);
+    bool activateProject(const QString &filePath, Document document);
+    bool recoverAutosave();
+    bool discardAutosave();
+    QString preserveAutosave();
+    void clearRecoveryMetadata();
+    void warnLegacyLayerHierarchy();
     void writeAutosave();
-    void clearAutosave();
+    bool clearAutosave();
     void newDocument();
     void resizeCanvas();
     void resizeImage();
@@ -102,6 +126,13 @@ private:
     QTimer m_autosaveTimer;
     QTimer m_drawingToolSettingsSaveTimer;
     bool m_autosavePending = false;
+    bool m_initialFitApplied = false;
+    bool m_startupResolved = false;
+    bool m_recoveryOwnedBySession = false;
+    QUuid m_recoverySessionId = QUuid::createUuid();
+    quint64 m_recoveryRevision = 0;
+
+    friend class MainWindowTestAccess;
 };
 
 }
