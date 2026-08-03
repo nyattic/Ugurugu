@@ -162,5 +162,7 @@ macOSではSparkle、WindowsではVelopackを通じてダウンロード・
 WagleWaglePaintは[GNU General Public License v3.0](LICENSE)のもとで
 配布されています。同梱のPretendard JPフォントは
 [SIL Open Font License 1.1](resources/fonts/OFL.txt)に従います。
+その他の依存関係の著作権およびライセンス情報は
+[サードパーティ通知](THIRD_PARTY_NOTICES.md)で確認できます。
 
 Copyright (C) 2026 Nyabi (nyattic)

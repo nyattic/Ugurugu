@@ -156,5 +156,7 @@ WagleWaglePaint is distributed under the
 [GNU General Public License v3.0](LICENSE). The bundled Pretendard JP
 font is licensed under the
 [SIL Open Font License 1.1](resources/fonts/OFL.txt).
+Copyright and license information for the remaining dependencies is in
+the [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Copyright (C) 2026 Nyabi (nyattic)
