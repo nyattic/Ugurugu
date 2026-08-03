@@ -48,15 +48,16 @@ excluding metadata requests made only to check for updates.
 Run the downloaded Setup file. WagleWaglePaint installs for the current
 user and opens when installation is complete.
 
+The Windows build is not code signed, so SmartScreen may show a warning.
+Choose **More info → Run anyway** to continue. Only download the app from
+the official Releases page.
+
 ### macOS
 
 Open the DMG and drag WagleWaglePaint into the Applications folder.
 
-The current builds are not signed with a trusted developer certificate
-or notarized, so Windows SmartScreen or macOS Gatekeeper may show a
-warning. Only download the app from the official Releases page. On
-macOS, Control-click the app, choose **Open**, and confirm the prompt if
-necessary.
+The macOS build is signed with a Developer ID and notarized by Apple, so
+it opens without any extra steps.
 
 ## Features
 

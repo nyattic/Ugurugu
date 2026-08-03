@@ -49,15 +49,16 @@ Shake Art DELUXE와 PS1 스타일 버텍스 지터에서 영감을 받았으며,
 다운로드한 Setup 파일을 실행하세요. WagleWaglePaint가 현재 사용자
 계정에 설치되고, 설치가 끝나면 자동으로 실행됩니다.
 
+Windows 빌드는 코드 서명 인증서가 없어 SmartScreen이 경고를 표시할 수
+있습니다. **추가 정보 → 실행**을 눌러 진행하세요. 앱은 반드시 공식
+Releases 페이지에서만 다운로드하세요.
+
 ### macOS
 
 DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요.
 
-현재 빌드는 신뢰할 수 있는 개발자 인증서로 서명되거나 공증되지
-않아, Windows SmartScreen이나 macOS Gatekeeper가 경고를 표시할 수
-있습니다. 앱은 반드시 공식 Releases 페이지에서만 다운로드하세요.
-macOS에서는 앱을 Control-클릭한 뒤 **열기**를 선택하고, 필요하면
-확인 창을 승인하세요.
+macOS 빌드는 Developer ID로 서명되고 Apple의 공증을 받았으므로 별도
+조작 없이 바로 열립니다.
 
 ## 기능
 
