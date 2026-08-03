@@ -50,6 +50,9 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/AnimationExportPolicy.hpp
     src/io/DocumentSerializer.cpp
     src/io/DocumentSerializer.hpp
+    src/io/serializer/MaskAssetTable.cpp
+    src/io/serializer/MaskAssetTable.hpp
+    src/io/serializer/SerializerSchema.hpp
     src/io/ExportWorker.cpp
     src/io/ExportWorker.hpp
     src/io/GifWriter.cpp
