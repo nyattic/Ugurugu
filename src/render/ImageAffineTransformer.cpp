@@ -9,6 +9,10 @@ namespace wobble
 namespace
 {
 
+// Same 16.16 fixed point contract as ImageResampler: transforming a target
+// rectangle on its own has to match the corresponding part of transforming the
+// whole target, so a regional repaint cannot seam against what is already on
+// screen.
 constexpr qint64 fixedScale = qint64(1) << 16;
 constexpr qint64 fixedHalf = fixedScale / 2;
 

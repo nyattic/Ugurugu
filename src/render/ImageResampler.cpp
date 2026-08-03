@@ -7,9 +7,12 @@ namespace wobble
 namespace
 {
 
-// Source coordinates are 16.16 fixed point throughout this file, so identical
-// inputs resample identically on every platform. Floating point would let the
-// exported pixels drift from the preview.
+// Source coordinates are 16.16 fixed point throughout this file so that
+// resampleRegion returns exactly the bytes resample would have produced for
+// that rectangle. The renderer redraws only dirty regions, and float
+// accumulation would let a region disagree with its neighbours by a level or
+// two and leave a visible seam. Qt's own smooth scale gives no such guarantee,
+// which is why this resampler exists at all.
 constexpr qint64 fixedScale = qint64(1) << 16;
 constexpr qint64 fixedHalf = fixedScale / 2;
 
