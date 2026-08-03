@@ -18,9 +18,8 @@ as a looping GIF.
 Inspired by Shake Art DELUXE and PS1-style vertex jitter, with layers,
 tablet pressure, selections, project files, and automatic updates.
 
-> [!WARNING]
-> WagleWaglePaint is currently in beta. You may run into bugs or rough
-> edges. Bug reports are very welcome — please open a
+> [!NOTE]
+> Bug reports are very welcome — please open a
 > [GitHub Issue](https://github.com/nyattic/WagleWaglePaint/issues) with
 > what you did, what you expected, and what happened instead. Attaching
 > the `.wagle` project file helps a lot.
