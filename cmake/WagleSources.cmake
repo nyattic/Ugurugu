@@ -56,6 +56,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/serializer/DocumentValidation.hpp
     src/io/serializer/MaskAssetTable.cpp
     src/io/serializer/MaskAssetTable.hpp
+    src/io/serializer/PreparedPlanBuilder.cpp
+    src/io/serializer/PreparedPlanBuilder.hpp
     src/io/serializer/SerializerSchema.hpp
     src/io/ExportWorker.cpp
     src/io/ExportWorker.hpp
