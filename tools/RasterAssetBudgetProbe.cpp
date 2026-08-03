@@ -102,7 +102,9 @@ QString contentId(const QImage &image)
 
 QByteArray deflatePayload(const QImage &image)
 {
-    if (image.bytesPerLine() != image.width() * bytesPerPixel)
+    const qsizetype rowBytes =
+        static_cast<qsizetype>(image.width()) * bytesPerPixel;
+    if (image.bytesPerLine() != rowBytes)
     {
         return {};
     }

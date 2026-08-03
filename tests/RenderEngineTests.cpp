@@ -14,6 +14,8 @@ int runRenderEngineTests(int argc, char **argv)
     result |= runStrokeCoverageTests(argc, argv);
     result |= runLayerSplitPreviewTests(argc, argv);
     result |= runLegacyRenderGoldenTests(argc, argv);
+    result |= runFrozenFillMaskTests(argc, argv);
+    result |= runMotionTimeModelTests(argc, argv);
     result |= runStrokeRenderingTests(argc, argv);
     result |= runSelectionPreviewTests(argc, argv);
     result |= runBrushRenderingTests(argc, argv);

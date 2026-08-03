@@ -266,7 +266,8 @@ void drawSprayDab(QPainter &painter,
 {
     const int particlesPerPoint =
         std::clamp(qRound(brush.density * 6.0), 1, 24);
-    const int noiseFrame = brush.animatedJitter ? frameIndex : 0;
+    const int noiseFrame =
+        brush.animatedJitter && brush.wobbleScale > 0.0 ? frameIndex : 0;
     const qreal pressureSize =
         pressureScale(brush.sizeDynamics, point.pressure);
     const QColor particleColor = colorWithOpacity(color,

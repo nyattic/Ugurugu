@@ -90,6 +90,62 @@ private slots:
         QCOMPARE(layer.strokes.first().brush.wobbleScale, 0.4);
     }
 
+    void keepsLineWobbleAfterSwitchingFromWobbleSpray()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setBrushRoughness(1.25);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const auto drawStroke = [&canvas](int verticalOffset)
+        {
+            const QPoint start =
+                canvas.rect().center() + QPoint(-40, verticalOffset);
+            const QPoint end =
+                canvas.rect().center() + QPoint(40, verticalOffset);
+            QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(&canvas, end, 5);
+            QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+        };
+
+        canvas.setBrushPreset(QStringLiteral("wobble-spray"));
+        drawStroke(-30);
+        QVERIFY(controller.document()
+                .layers.first()
+                .strokes.constLast()
+                .brush.animatedJitter);
+
+        int verticalOffset = -20;
+        for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
+        {
+            if (preset.settings.engine != BrushEngine::Line)
+            {
+                continue;
+            }
+            canvas.setBrushPreset(preset.id);
+            QCOMPARE(canvas.brushRoughness(), 1.25);
+            drawStroke(verticalOffset);
+            verticalOffset += 5;
+
+            const Stroke &stroke =
+                controller.document().layers.first().strokes.constLast();
+            QCOMPARE(stroke.brush.engine, BrushEngine::Line);
+            QCOMPARE(stroke.brush.wobbleScale, 1.25);
+
+            Document isolated = Document::createDefault(QSize(100, 100));
+            isolated.animationFrames = 10;
+            isolated.wobbleAmount = 4.0;
+            isolated.layers.first().strokes = {stroke};
+            QVERIFY2(RenderEngine::render(isolated, 0)
+                         != RenderEngine::render(isolated, 1),
+                qPrintable(preset.id));
+        }
+    }
+
     void keepsBrushAndEraserSizesIndependent()
     {
         DocumentController controller;

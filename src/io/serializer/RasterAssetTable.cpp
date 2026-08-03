@@ -315,7 +315,7 @@ RasterAssetRegistrationResult RasterAssetTable::registerCanonical(
     entry.decodedBytes = *decoded;
     m_decodedBytes += entry.decodedBytes;
     m_payloadBytes += entry.compressedRgba.size();
-    m_entries.insert(id, std::move(entry));
+    m_entries.insert(id, entry);
     return {RasterAssetRegistrationStatus::Registered, id};
 }
 

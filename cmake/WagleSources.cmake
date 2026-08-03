@@ -25,6 +25,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentControllerLayers.cpp
     src/document/DocumentControllerStrokes.cpp
     src/document/DocumentLimits.hpp
+    src/document/FrozenFillMask.cpp
+    src/document/FrozenFillMask.hpp
     src/document/history/DocumentDelta.cpp
     src/document/history/DocumentDelta.hpp
     src/document/history/DocumentUndoStack.cpp
@@ -81,6 +83,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/IncrementalStrokeRenderer.hpp
     src/render/LayerCompositionPlan.cpp
     src/render/LayerCompositionPlan.hpp
+    src/render/MotionTimeModel.cpp
+    src/render/MotionTimeModel.hpp
     src/render/engine/DisplayScaleReplay.cpp
     src/render/engine/DisplayScaleReplay.hpp
     src/render/engine/LayerHierarchyCompositor.cpp
@@ -193,12 +197,14 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/DocumentResizeTests.cpp
     tests/DocumentSchemaTests.cpp
     tests/DocumentTests.cpp
+    tests/FrozenFillMaskTests.cpp
     tests/GifWriterTests.cpp
     tests/LayerCommandTests.cpp
     tests/LayerCompositionTests.cpp
     tests/LayerSplitPreviewTests.cpp
     tests/LegacyRenderGoldenTests.cpp
     tests/MaskRegressionTests.cpp
+    tests/MotionTimeModelTests.cpp
     tests/RasterAssetTableTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp

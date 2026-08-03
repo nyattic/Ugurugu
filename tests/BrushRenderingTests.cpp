@@ -106,7 +106,8 @@ private slots:
 
     void onlyAnimatedSprayChangesWithoutWobble()
     {
-        auto renderPreset = [](const QString &presetId, int frame)
+        auto renderPreset =
+            [](const QString &presetId, int frame, qreal wobbleScale = 1.0)
         {
             Document document = Document::createDefault(QSize(96, 72));
             document.wobbleAmount = 0.0;
@@ -115,6 +116,7 @@ private slots:
             stroke.color = Qt::black;
             stroke.width = 44.0;
             stroke.brush = BrushPresetCatalog::find(presetId)->settings;
+            stroke.brush.wobbleScale = wobbleScale;
             stroke.points = {
                 {QPointF(18.0, 36.0), 1.0}, {QPointF(78.0, 36.0), 1.0}};
             document.layers.first().strokes.append(stroke);
@@ -125,6 +127,8 @@ private slots:
             renderPreset(QStringLiteral("pixel-spray"), 1));
         QVERIFY(renderPreset(QStringLiteral("wobble-spray"), 0)
                 != renderPreset(QStringLiteral("wobble-spray"), 1));
+        QCOMPARE(renderPreset(QStringLiteral("wobble-spray"), 0, 0.0),
+            renderPreset(QStringLiteral("wobble-spray"), 1, 0.0));
     }
 
     void handlesDotsAndDuplicatePoints()

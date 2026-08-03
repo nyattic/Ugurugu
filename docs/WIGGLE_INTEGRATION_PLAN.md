@@ -99,7 +99,7 @@ WWP는 다음 기반을 이미 갖추고 있다.
 | Insert Image | RGBA 원본을 보존하는 op과 자산 저장소가 없음 | 별도 raster asset과 image op |
 | Smooth 모션 | 프레임별 독립 해시 노이즈이며 시간 보간이 없음 | 주기적인 결정론적 시간 샘플링 |
 | Tolerance Fill | 기존 Fill은 알파 경계(`qAlpha >= 128`)만 본다 | legacy Fill 보존과 색 비교 기준 추가 |
-| Lasso Paint | 기존 Fill은 polygon이 아니라 seed flood fill | polygon fill 또는 동결된 coverage mask |
+| Lasso Paint | 기존 Fill은 polygon이 아니라 seed flood fill | cropped 1-bit coverage mask 동결 |
 | Merge Down | opacity, blend, clip, group 때문에 일반 벡터 병합 불가 | 안전한 부분집합만 벡터 병합 |
 | `.wawa` 가져오기 | native binary와 web JSON이 같은 확장자를 사용 | native v10만 선택적으로 변환 |
 
@@ -112,7 +112,7 @@ WWT 기능 목록과 겹치지만 WWP에 이미 구현된 부분이 있다. 새 
 | 항목 | 현재 상태 |
 | --- | --- |
 | 참조 대상 선택 | `CanvasWandReference{ActiveLayer, ReferenceLayers, AllVisibleLayers}`가 Wand에 구현돼 있고 `drawingTools/wand/reference`로 저장된다. Bucket에는 아직 없다 |
-| Fill mask 동결 | `Stroke::fillMask`가 schema 5 보존용으로 남아 있고 직렬화·중복 제거·replay(`applyFillStroke`의 coverage 경로)까지 배선돼 있다. 새 fill에 재사용하기로 결정하면 schema 5 전용이라는 현재 코드 계약도 함께 갱신한다 |
+| Fill mask 동결 | schema 5의 full-canvas `Stroke::fillMask` replay와 `PackedMaskRegion`의 cropped 1-bit 저장·중복 제거 경로가 있다. 새 fill은 후자를 재사용한다 |
 | Fill 경계 페더링 | `applyFillStroke`가 이미 mask 바깥 1픽셀을 기존 알파에 비례해 blend한다 |
 | Antialias 플래그 | `BrushSettings::antialiasing`이 있고 bucket이 이미 실어 보내지만 Fill replay는 현재 이 값을 읽지 않는다 |
 | 최근 색 | `ColorSwatchRow`가 12칸 최근 색을 QSettings에 저장한다. 저장 팔레트는 없다 |
@@ -151,12 +151,28 @@ FPS는 재생과 내보내기의 샘플링 속도로 유지한다. 흔들림 속
 - frame과 문서 설정만으로 pose를 계산하는 순수 함수다.
 - animation frame 범위 안에서 주기적으로 반복된다.
 - `Classic`은 현재 프레임별 WWP 렌더를 그대로 사용한다.
-- `Smooth`는 인접한 결정론적 pose 사이를 시간축으로 보간하거나 주기적인 연속 노이즈를 사용한다.
-- `Stepped`는 `holdFrames` 동안 pose를 유지한다.
-- `motionSpeed`는 FPS와 독립적으로 시간축 변화 빈도를 조정한다.
+- `Smooth`와 `Stepped`는 한 루프의 결정론적 pose 수인
+  `motionPoseCount`를 공유한다.
+- `motionPoseCount`는 1 이상 animation frame 수 이하인 정수이며 FPS와
+  독립적으로 시간축 변화 빈도를 조정한다.
+- `Smooth`는 인접 pose를 cubic smoothstep으로 보간하고 마지막 pose에서
+  첫 pose로 연속적으로 감싼다.
+- `Stepped`는 `floor(normalizedFrame * motionPoseCount / frameCount)`로
+  pose를 고른다.
 - WWT의 Shake Speed와 Step Speed 상수는 그대로 복제하지 않는다.
 
-Smooth 구현 방식은 기술 spike에서 렌더 안정성, 루프 경계, coverage 비용을 비교한 뒤 확정한다. 순차적으로 누적되는 mutable phase는 도입하지 않는다.
+기술 spike에서는 30프레임을 8개 pose로 나누는 것처럼 프레임 수가
+나누어떨어지지 않는 경우도 비교했다. `holdFrames`를 그대로 쓰면 마지막
+hold만 짧아진다. 채택한 Stepped 식은 모든 프레임을 한 번씩 사용하면서
+pose별 hold 길이 차이를 최대 1프레임으로 제한한다. 따라서 별도
+`holdFrames` 필드는 두지 않는다. UI에서 속도로 표현하더라도 문서에는
+의미가 명확한 `motionPoseCount`를 저장한다.
+
+Smooth의 보간 계수는 항상 0 이상 1 이하이므로 두 pose의 변위를 잇는
+선분 밖으로 overshoot하지 않는다. 기존 최대 변위 coverage bound를 늘릴
+필요가 없다. 새 style을 실제 렌더에 연결할 때 prepared plan과 incremental
+render cache identity에는 style, pose count, 정규화된 시간 sample을 포함한다.
+순차적으로 누적되는 mutable phase는 도입하지 않는다.
 
 ### 결정 C: 흔들림 파라미터의 스코프
 
@@ -165,8 +181,7 @@ Smooth 구현 방식은 기술 spike에서 렌더 안정성, 루프 경계, cove
 초기 후보 필드는 다음과 같다.
 
 - motion style: `Classic`, `Smooth`, `Stepped`
-- motion speed
-- hold frames
+- motion pose count
 - detail
 - linked amount
 - randomness
@@ -314,14 +329,40 @@ WWP는 이 둘을 분리해서 노출한다. 묶어서 옮기면 "합성을 보�
 - 다른 레이어나 합성을 참조한 결과: replay 시 재계산하지 않고 저장된 mask로 **동결한다**
 - 활성 레이어 + 색 tolerance: **단계 1 spike에서 결정한다.** 색 비교는 프레임마다 결과가 달라질 수 있어 절차적으로 두면 채움 영역이 프레임 간에 튈 수 있고, 동결하면 선을 따라가지 않는다. 두 결과를 실제로 렌더해 보고 고른다
 
-동결 경로는 새로 만들 것이 없다. `Stroke::fillMask`가 schema 5 보존용으로 남아 있고 직렬화·중복 제거·replay까지 이미 배선돼 있으므로, 새 fill이 이 필드를 채우기만 하면 된다.
+동결 의미는 신규 Fill과 Lasso Paint가 공유하지만 schema 5 보존용인
+full-canvas `Stroke::fillMask`를 새 문서에 그대로 쓰지는 않는다. 4K에서는
+fill 하나마다 decoded 16 MiB를 계속 보유하기 때문이다. 새 동결 결과는
+`PackedMaskRegion`과 같은 cropped 1-bit coverage로 저장하고 content id로
+중복 제거한다. 캡처 중에만 full-canvas 임시 mask를 허용하며, replay와
+coverage는 packed bits를 직접 샘플링하거나 출력 크기별 cache를 사용한다.
 
-Lasso Paint는 기존 `StrokeMode::Fill`의 seed flood fill을 재사용하지 않는다. 다음 두 구현을 비교한 뒤 하나를 선택한다.
+#### Lasso Paint는 frozen coverage를 사용한다
 
-- 정적인 polygon coverage mask를 동결해 채우기
-- polygon 정점을 저장하고 WWP 흔들림으로 렌더하는 `PolygonFill` op
+`wobblepaint_fill_representation_probe`에서 4K canvas, 512점 freehand
+polygon, 60프레임을 비교했다. 정적 mask와 매 프레임 4px 변위한 polygon은
+같은 odd-even, binary raster 규칙으로 만들었다. 시간은 macOS Debug
+빌드의 단일 실행 기준이다.
 
-WWT의 `FillPolygon` 결과를 재현할 필요는 없다.
+| 표현 | 지속 메모리 | JSON에 들어갈 base64/points | 래스터 비용 |
+| --- | ---: | ---: | ---: |
+| full-canvas frozen grayscale | 16,777,216 bytes | 52,544 bytes | 최초 2 ms |
+| cropped 1-bit frozen mask (2983×2980 bounds) | 1,111,540 bytes | 24,548 bytes | 최초 생성 후 고정 |
+| `PolygonFill` 512 points | point 배열 | 19,843 bytes | 60프레임 34 ms |
+
+Polygon points가 파일에서 4,705 bytes 작고 이 표본의 재래스터 비용도
+절대적으로 크지 않았다. 따라서 성능만으로는 어느 쪽도 탈락하지 않는다.
+선택 기준은 애니메이션 의미와 통합 복잡도다.
+
+- Lasso Paint는 사용자가 확정한 영역을 모든 프레임에서 동일하게 채운다.
+- 캡처 시 기존 Lasso와 같은 odd-even 규칙으로 0/255 mask를 한 번 만든다.
+- cropped 1-bit backing은 undo snapshot과 content id가 같은 op 사이에서
+  공유한다.
+- 정점 변형, 새 noise channel, 프레임별 coverage, motion cache identity가
+  필요한 `PolygonFill` op은 초기 schema 10에 넣지 않는다.
+- WWT의 `FillPolygon` 결과를 재현하지 않는다.
+
+schema 10의 정확한 operation 필드명은 첫 구현 묶음 9번에서 확정한다.
+schema 5 `fillMask`는 legacy load와 기존 골든을 위해 그대로 유지한다.
 
 ### 결정 F: Merge Down
 
@@ -360,7 +401,7 @@ WWT의 `FillPolygon` 결과를 재현할 필요는 없다.
 | --- | --- | --- | --- |
 | 선 표현 | Detail | 핵심 | 현재 detail 상수의 안전한 파라미터화 |
 | 선 표현 | Smooth / Stepped | 핵심 | WWP식 결정론적 시간 모델 |
-| 선 표현 | Motion Speed / Hold Frames | 핵심 | FPS와 분리 |
+| 선 표현 | Motion Pose Count | 핵심 | Smooth와 Stepped가 공유, FPS와 분리 |
 | 선 표현 | Linked / Randomness | 핵심 | 새 노이즈 채널 사용 |
 | 선 표현 | Broken Line | 핵심 | 분리된 visible run과 coverage 필요 |
 | 채색 | Bucket 비교 기준(색/알파 tolerance) | 핵심 | legacy Fill은 그대로 유지 |
@@ -368,7 +409,7 @@ WWT의 `FillPolygon` 결과를 재현할 필요는 없다.
 | 채색 | Bucket Antialias | 낮음 | 신규 아님. 기존 경계 페더링과의 관계 정리 |
 | 선택 | Invert Selection / Select All | 완료 | `EDIT_BEHAVIOR_ALIGNMENT_PLAN.md` 단계 B에서 구현 완료 |
 | 자산 | Insert Image | 핵심 | 비파괴 삽입. 결정 D의 두 예산이 선결 조건 |
-| 도구 | Lasso Paint | 중요 | polygon 표현 결정 필요 |
+| 도구 | Lasso Paint | 중요 | cropped 1-bit frozen coverage |
 | 레이어 | 제한된 Merge Down | 중요 | 안전 조건에서만 벡터 유지 |
 | 색상 | Palette | 중요 | 최근 색과 저장 팔레트 역할 분리 |
 | 설정 | WWP Preset | 중요 | WWP 자체 포맷 우선 |
@@ -418,8 +459,8 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 - [x] v1.0.0 schema 9 렌더 골든 corpus 생성
 - [x] Clang-Tidy diagnostics를 warnings-as-errors로 올리고 macOS CI 게이트 연결
 - [ ] 기능별 포함·제외와 사용자 동작 계약 확정
-- [ ] WWP식 Smooth / Stepped 시간 모델 후보 정의
-- [ ] raster asset의 pixel format과 메모리 예산 정의
+- [x] WWP식 Smooth / Stepped 시간 모델 후보 정의
+- [x] raster asset의 pixel format과 메모리 예산 정의
 - [ ] legacy Fill과 새 Bucket의 경계 확정
 - [ ] Merge Down 안전 조건 확정
 - [ ] WWT 코드나 자산을 직접 반입할 항목이 있으면 provenance 확인
@@ -434,14 +475,14 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 
 예상 기간: 2~3주
 
-- [ ] Smooth 시간 보간 또는 연속 노이즈 prototype
-- [ ] Stepped와 Hold Frames의 루프 경계 검증
+- [x] Smooth 시간 보간 prototype
+- [x] Stepped의 균등 hold와 루프 경계 검증
 - [ ] Broken Line의 visible run, coverage, incremental render prototype
 - [ ] `RasterAssetTable`과 image op prototype
 - [x] `maximumProjectBytes`와 `MemoryBudget` 결정 (결정 D의 선결 조건)
 - [ ] 활성 레이어 + 색 tolerance를 절차적으로 둘지 동결할지 렌더 비교로 결정
 - [x] `DocumentDelta::mergeScalar`를 필드 집합 기반으로 일반화
-- [ ] frozen Fill mask와 PolygonFill 후보 비교
+- [x] frozen Fill mask와 PolygonFill 후보 비교
 - [ ] schema 10 motion/Fill 필드와 operation 확정
 - [ ] schema 11 raster asset/image op 경계 초안 확정
 
@@ -460,8 +501,7 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 예상 기간: 3~5주
 
 - [ ] Detail
-- [ ] Motion Style과 Motion Speed
-- [ ] Hold Frames
+- [ ] Motion Style과 Motion Pose Count
 - [ ] Linked와 Randomness
 - [ ] Broken Line, Break Amount, Break Range
 - [ ] 지우개 wobble 입력 옵션
@@ -556,12 +596,12 @@ Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스
 
 ### 새 기능
 
-- 각 motion style의 loop, hold, speed, zero amount, extreme range
+- 각 motion style의 loop, pose count, zero amount, extreme range
 - Broken Line의 gap, coverage bound, 선택 표시, incremental redraw
 - **tolerance 0이 기존 알파 경계 fill과 픽셀 단위로 같은 결과를 낼 것**
 - tolerance 최대값, alpha-only와 RGBA 경계, 참조 대상 3종
 - 색 tolerance fill을 여러 프레임에서 렌더했을 때 채움 영역이 정한 정책(절차적 또는 동결)대로 동작할 것
-- PolygonFill 또는 frozen lasso mask의 저장·undo·재생
+- cropped 1-bit frozen lasso mask의 저장·undo·재생
 - 새 흔들림 슬라이더를 연속으로 드래그했을 때 서로 다른 필드가 한 undo 항목으로 합쳐지지 않을 것
 - raster asset dedup, 삭제, copy, undo/redo, recovery
 - **반복 변형 무열화**: 확대 → 축소 → 확대한 결과가 같은 최종 행렬을 한 번에 적용한 결과와 픽셀 단위로 같을 것
@@ -650,9 +690,9 @@ WWT의 좌측 슬라이더 패널을 재현하지 않는다. WWP의 기존 팝�
 3. [x] Classic 렌더 경로의 변경 금지 경계 확정
 4. [x] `maximumProjectBytes`와 `MemoryBudget` 결정 — Insert Image 착수의 선결 조건
 5. [x] `DocumentDelta::mergeScalar` 일반화 — 새 문서 필드 추가의 선결 조건
-6. [ ] Smooth와 Stepped 시간 모델 prototype 비교
+6. [x] Smooth와 Stepped 시간 모델 prototype 비교
 7. [x] `RasterAssetTable`의 canonical format과 예산 prototype
-8. [ ] frozen Fill mask와 PolygonFill 표현 비교
+8. [x] frozen Fill mask와 PolygonFill 표현 비교
 9. [ ] 문서 필드와 operation 목록 확정
 10. [ ] schema 10/11 경계와 전체 integration checklist 작성
 
