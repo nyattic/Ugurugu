@@ -1054,7 +1054,6 @@ void MainWindow::editSelectedStrokeProperties()
     StrokePropertiesDialog::Values values;
     bool colorMixed = false;
     bool widthMixed = false;
-    bool roughnessMixed = false;
     for (const Stroke &stroke : layer->strokes)
     {
         if (!selected.contains(stroke.id))
@@ -1079,22 +1078,16 @@ void MainWindow::editSelectedStrokeProperties()
             if (!values.widthSupported)
             {
                 values.width = stroke.width;
-                values.roughness = stroke.brush.wobbleScale;
             }
-            else
+            else if (values.width
+                     && !qFuzzyCompare(*values.width, stroke.width))
             {
-                widthMixed =
-                    widthMixed || !qFuzzyCompare(*values.width, stroke.width);
-                roughnessMixed = roughnessMixed
-                                 || !qFuzzyCompare(*values.roughness,
-                                     stroke.brush.wobbleScale);
+                widthMixed = true;
             }
             values.widthSupported = true;
-            values.roughnessSupported = true;
         }
     }
-    if (!values.colorSupported && !values.widthSupported
-        && !values.roughnessSupported)
+    if (!values.colorSupported && !values.widthSupported)
     {
         return;
     }
@@ -1106,21 +1099,13 @@ void MainWindow::editSelectedStrokeProperties()
     {
         values.width.reset();
     }
-    if (roughnessMixed)
-    {
-        values.roughness.reset();
-    }
-
     StrokePropertiesDialog dialog(values, this);
     if (dialog.exec() != QDialog::Accepted)
     {
         return;
     }
-    m_controller.updateStrokeAttributes(layerId,
-        strokeIds,
-        dialog.color(),
-        dialog.selectedWidth(),
-        dialog.roughness());
+    m_controller.updateStrokeAttributes(
+        layerId, strokeIds, dialog.color(), dialog.selectedWidth());
 }
 
 void MainWindow::writeAutosave()

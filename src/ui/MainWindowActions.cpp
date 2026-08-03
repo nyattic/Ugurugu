@@ -334,7 +334,7 @@ void MainWindow::createActions()
         QStringLiteral("editStrokePropertiesAction"));
     m_editStrokePropertiesAction->setIcon(Icons::icon(IconGlyph::Brush));
     m_editStrokePropertiesAction->setToolTip(
-        tr("Change the color, width, or roughness of selected strokes"));
+        tr("Change the color or width of selected strokes"));
     m_editStrokePropertiesAction->setEnabled(false);
     registerShortcut(m_editStrokePropertiesAction, {});
     connect(m_editStrokePropertiesAction,

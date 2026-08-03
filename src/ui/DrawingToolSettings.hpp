@@ -25,7 +25,6 @@ constexpr auto activePresetKey = "drawingTools/brush/presetId";
 constexpr auto activeEraserPresetKey = "drawingTools/eraser/presetId";
 constexpr auto activeColorKey = "drawingTools/brush/color";
 constexpr auto recentColorsKey = "brush/recentColors";
-constexpr auto roughnessKey = "drawingTools/brush/roughness";
 constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
 constexpr auto eraserStabilizationKey = "drawingTools/eraser/stabilization";

@@ -641,21 +641,16 @@ bool DocumentController::removeSelectedContent(const QUuid &layerId,
 bool DocumentController::updateStrokeAttributes(const QUuid &layerId,
     const QVector<QUuid> &strokeIds,
     const std::optional<QColor> &color,
-    const std::optional<qreal> &width,
-    const std::optional<qreal> &roughness)
+    const std::optional<qreal> &width)
 {
     const Document &current = document();
     const Layer *layer = current.layer(layerId);
     if (!layer || layer->kind != LayerKind::Paint || strokeIds.isEmpty()
-        || (!color && !width && !roughness) || (color && !color->isValid())
+        || (!color && !width) || (color && !color->isValid())
         || (width
             && (!std::isfinite(*width)
                 || *width < DocumentLimits::minimumStrokeWidth
-                || *width > DocumentLimits::maximumStrokeWidth))
-        || (roughness
-            && (!std::isfinite(*roughness)
-                || *roughness < DocumentLimits::minimumBrushWobbleScale
-                || *roughness > DocumentLimits::maximumBrushWobbleScale)))
+                || *width > DocumentLimits::maximumStrokeWidth)))
     {
         return rejectHistoryMutation();
     }
@@ -684,14 +679,6 @@ bool DocumentController::updateStrokeAttributes(const QUuid &layerId,
             && !qFuzzyCompare(stroke.width, *width))
         {
             stroke.width = *width;
-            changed = true;
-        }
-        if (roughness
-            && (stroke.mode == StrokeMode::Paint
-                || stroke.mode == StrokeMode::Erase)
-            && !qFuzzyCompare(stroke.brush.wobbleScale, *roughness))
-        {
-            stroke.brush.wobbleScale = *roughness;
             changed = true;
         }
     }

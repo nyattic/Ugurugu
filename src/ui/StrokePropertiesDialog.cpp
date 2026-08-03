@@ -48,19 +48,6 @@ StrokePropertiesDialog::StrokePropertiesDialog(
     m_widthSpin->setValue(values.width.value_or(6.0));
     m_widthSpin->setEnabled(values.widthSupported);
     form->addRow(m_widthCheck, m_widthSpin);
-
-    m_roughnessCheck = new QCheckBox(tr("Roughness"), this);
-    m_roughnessCheck->setEnabled(values.roughnessSupported);
-    m_roughnessCheck->setChecked(values.roughness.has_value());
-    m_roughnessSpin = new QDoubleSpinBox(this);
-    m_roughnessSpin->setObjectName(QStringLiteral("strokeRoughnessSpin"));
-    m_roughnessSpin->setRange(DocumentLimits::minimumBrushWobbleScale * 100.0,
-        DocumentLimits::maximumBrushWobbleScale * 100.0);
-    m_roughnessSpin->setDecimals(0);
-    m_roughnessSpin->setSuffix(tr("%"));
-    m_roughnessSpin->setValue(values.roughness.value_or(1.0) * 100.0);
-    m_roughnessSpin->setEnabled(values.roughnessSupported);
-    form->addRow(m_roughnessCheck, m_roughnessSpin);
     layout->addLayout(form);
 
     m_buttons = new QDialogButtonBox(
@@ -78,14 +65,7 @@ StrokePropertiesDialog::StrokePropertiesDialog(
         {
             m_widthCheck->setChecked(true);
         });
-    connect(m_roughnessSpin,
-        &QDoubleSpinBox::valueChanged,
-        this,
-        [this]()
-        {
-            m_roughnessCheck->setChecked(true);
-        });
-    for (QCheckBox *check : {m_colorCheck, m_widthCheck, m_roughnessCheck})
+    for (QCheckBox *check : {m_colorCheck, m_widthCheck})
     {
         connect(check,
             &QCheckBox::toggled,
@@ -107,13 +87,6 @@ std::optional<qreal> StrokePropertiesDialog::selectedWidth() const
 {
     return m_widthCheck->isChecked()
                ? std::optional<qreal>(m_widthSpin->value())
-               : std::nullopt;
-}
-
-std::optional<qreal> StrokePropertiesDialog::roughness() const
-{
-    return m_roughnessCheck->isChecked()
-               ? std::optional<qreal>(m_roughnessSpin->value() / 100.0)
                : std::nullopt;
 }
 
@@ -142,8 +115,7 @@ void StrokePropertiesDialog::updateColorButton()
 void StrokePropertiesDialog::updateAcceptState()
 {
     m_buttons->button(QDialogButtonBox::Ok)
-        ->setEnabled(m_colorCheck->isChecked() || m_widthCheck->isChecked()
-                     || m_roughnessCheck->isChecked());
+        ->setEnabled(m_colorCheck->isChecked() || m_widthCheck->isChecked());
 }
 
 }

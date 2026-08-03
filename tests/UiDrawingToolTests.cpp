@@ -66,7 +66,7 @@ private slots:
         QCOMPARE(canvas.brushColor(), translucent);
     }
 
-    void appliesBrushRoughnessToNewStrokes()
+    void usesPresetWobbleScaleForNewStrokes()
     {
         DocumentController controller;
         controller.newDocument(QSize(100, 100));
@@ -76,9 +76,6 @@ private slots:
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
 
-        canvas.setBrushRoughness(0.4);
-        QCOMPARE(canvas.brushRoughness(), 0.4);
-
         const QPoint center(200, 200);
         QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, center);
         QTest::mouseMove(&canvas, center + QPoint(40, 0), 5);
@@ -87,7 +84,8 @@ private slots:
 
         const Layer &layer = controller.document().layers.first();
         QCOMPARE(layer.strokes.size(), 1);
-        QCOMPARE(layer.strokes.first().brush.wobbleScale, 0.4);
+        QCOMPARE(layer.strokes.first().brush.wobbleScale,
+            BrushPresetCatalog::defaultPreset().settings.wobbleScale);
     }
 
     void keepsLineWobbleAfterSwitchingFromWobbleSpray()
@@ -97,7 +95,6 @@ private slots:
         CanvasWidget canvas(&controller);
         canvas.resize(400, 400);
         canvas.setAnimating(false);
-        canvas.setBrushRoughness(1.25);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
 
@@ -127,14 +124,13 @@ private slots:
                 continue;
             }
             canvas.setBrushPreset(preset.id);
-            QCOMPARE(canvas.brushRoughness(), 1.25);
             drawStroke(verticalOffset);
             verticalOffset += 5;
 
             const Stroke &stroke =
                 controller.document().layers.first().strokes.constLast();
             QCOMPARE(stroke.brush.engine, BrushEngine::Line);
-            QCOMPARE(stroke.brush.wobbleScale, 1.25);
+            QCOMPARE(stroke.brush.wobbleScale, preset.settings.wobbleScale);
 
             Document isolated = Document::createDefault(QSize(100, 100));
             isolated.animationFrames = 10;
@@ -278,7 +274,6 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
 
         canvas.setBrushPreset(QStringLiteral("soft-airbrush"));
-        canvas.setBrushRoughness(0.35);
         canvas.setBrushAntialiasing(true);
         canvas.setTool(CanvasWidget::Tool::Eraser);
         const QPoint center = canvas.rect().center();
@@ -356,7 +351,6 @@ private slots:
             canvas->setEraserPreset(QStringLiteral("kneaded-eraser"));
             canvas->setEraserWidth(49.0);
             canvas->setEraserStabilization(0.12);
-            canvas->setBrushRoughness(0.37);
             canvas->setBrushAntialiasing(true);
             canvas->setBrushColor(rememberedColor);
             canvas->setWandReference(
@@ -383,7 +377,6 @@ private slots:
         QCOMPARE(restored->brushStabilization(), 0.64);
         QCOMPARE(restored->eraserWidth(), 49.0);
         QCOMPARE(restored->eraserStabilization(), 0.12);
-        QCOMPARE(restored->brushRoughness(), 0.37);
         QVERIFY(restored->brushAntialiasing());
         QCOMPARE(restored->brushColor(), rememberedColor);
         QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
@@ -409,8 +402,6 @@ private slots:
         SelectionShapeButton *selectionShapeButton =
             restoredWindow.findChild<SelectionShapeButton *>(
                 QStringLiteral("selectionShapeEllipseButton"));
-        QSpinBox *roughnessSpin = restoredWindow.findChild<QSpinBox *>(
-            QStringLiteral("brushRoughnessSpin"));
         QCheckBox *antialiasingToggle = restoredWindow.findChild<QCheckBox *>(
             QStringLiteral("brushAntialiasingToggle"));
         QVERIFY(eraserAction);
@@ -420,7 +411,8 @@ private slots:
         QVERIFY(eraserStabilizationSpin);
         QVERIFY(wandReferenceButton);
         QVERIFY(selectionShapeButton);
-        QVERIFY(roughnessSpin);
+        QVERIFY(!restoredWindow.findChild<QSpinBox *>(
+            QStringLiteral("brushRoughnessSpin")));
         QVERIFY(antialiasingToggle);
         QVERIFY(eraserAction->isChecked());
         QCOMPARE(brushSizeSpin->value(), 47);
@@ -433,7 +425,6 @@ private slots:
         QCOMPARE(selectionShapeButton->shape(),
             CanvasWidget::SelectionShape::Ellipse);
         QVERIFY(selectionShapeButton->isChecked());
-        QCOMPARE(roughnessSpin->value(), 37);
         QVERIFY(antialiasingToggle->isChecked());
 
         restored->setBrushPreset(QStringLiteral("monoline"));
@@ -551,7 +542,6 @@ private slots:
         QCOMPARE(canvas->eraserWidth(), 1.0);
         QCOMPARE(canvas->brushStabilization(), 1.0);
         QCOMPARE(canvas->eraserStabilization(), 0.0);
-        QCOMPARE(canvas->brushRoughness(), 1.0);
         QVERIFY(!canvas->brushAntialiasing());
         QCOMPARE(canvas->brushColor(), QColor(Qt::black));
         QCOMPARE(
@@ -565,17 +555,14 @@ private slots:
 
         const qreal brushWidth = canvas->brushWidth();
         const qreal eraserWidth = canvas->eraserWidth();
-        const qreal roughness = canvas->brushRoughness();
         const qreal brushStabilization = canvas->brushStabilization();
         const qreal eraserStabilization = canvas->eraserStabilization();
         canvas->setBrushWidth(std::numeric_limits<qreal>::quiet_NaN());
         canvas->setEraserWidth(std::numeric_limits<qreal>::infinity());
-        canvas->setBrushRoughness(std::numeric_limits<qreal>::quiet_NaN());
         canvas->setBrushStabilization(std::numeric_limits<qreal>::infinity());
         canvas->setEraserStabilization(std::numeric_limits<qreal>::quiet_NaN());
         QCOMPARE(canvas->brushWidth(), brushWidth);
         QCOMPARE(canvas->eraserWidth(), eraserWidth);
-        QCOMPARE(canvas->brushRoughness(), roughness);
         QCOMPARE(canvas->brushStabilization(), brushStabilization);
         QCOMPARE(canvas->eraserStabilization(), eraserStabilization);
     }

@@ -68,7 +68,6 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     m_activeStroke.brush = erasing ? m_eraserSettings : m_brushSettings;
     if (!erasing)
     {
-        m_activeStroke.brush.wobbleScale = m_brushRoughness;
         m_activeStroke.brush.antialiasing = m_brushAntialiasing;
     }
     if (!m_selectionMask.isNull() && m_selectionLayer == document.activeLayerId)

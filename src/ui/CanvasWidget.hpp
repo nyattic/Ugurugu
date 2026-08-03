@@ -47,7 +47,6 @@ public:
     qreal brushPresetWidth(const QString &presetId) const;
     qreal eraserWidth() const;
     qreal eraserPresetWidth(const QString &presetId) const;
-    qreal brushRoughness() const;
     qreal brushStabilization() const;
     qreal brushPresetStabilization(const QString &presetId) const;
     qreal eraserStabilization() const;
@@ -97,7 +96,6 @@ public slots:
     void setBrushPresetWidth(const QString &presetId, qreal width);
     void setEraserWidth(qreal width);
     void setEraserPresetWidth(const QString &presetId, qreal width);
-    void setBrushRoughness(qreal roughness);
     void setBrushStabilization(qreal strength);
     void setBrushPresetStabilization(const QString &presetId, qreal strength);
     void setEraserStabilization(qreal strength);
@@ -130,7 +128,6 @@ signals:
     void brushColorChanged(const QColor &color);
     void brushWidthChanged(qreal width);
     void eraserWidthChanged(qreal width);
-    void brushRoughnessChanged(qreal roughness);
     void brushStabilizationChanged(qreal strength);
     void eraserStabilizationChanged(qreal strength);
     void brushAntialiasingChanged(bool antialiasing);
@@ -301,7 +298,6 @@ private:
     QColor m_brushColor = Qt::black;
     qreal m_brushWidth = 6.0;
     qreal m_eraserWidth = 6.0;
-    qreal m_brushRoughness = 1.0;
     StrokeStabilizer m_strokeStabilizer;
     bool m_brushAntialiasing = false;
     bool m_wobbleAnimationEnabled = true;

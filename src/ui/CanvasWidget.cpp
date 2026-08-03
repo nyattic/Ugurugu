@@ -185,11 +185,6 @@ qreal CanvasWidget::eraserPresetWidth(const QString &presetId) const
         DocumentLimits::maximumStrokeWidth);
 }
 
-qreal CanvasWidget::brushRoughness() const
-{
-    return m_brushRoughness;
-}
-
 qreal CanvasWidget::brushStabilization() const
 {
     return brushPresetStabilization(m_brushPresetId);
@@ -833,24 +828,6 @@ void CanvasWidget::setEraserPresetWidth(const QString &presetId, qreal width)
         return;
     }
     m_eraserPresetWidths.insert(preset->id, normalized);
-}
-
-void CanvasWidget::setBrushRoughness(qreal roughness)
-{
-    if (!std::isfinite(roughness))
-    {
-        return;
-    }
-    const qreal normalized = std::clamp(roughness,
-        DocumentLimits::minimumBrushWobbleScale,
-        DocumentLimits::maximumBrushWobbleScale);
-    if (qFuzzyCompare(m_brushRoughness, normalized))
-    {
-        return;
-    }
-    m_brushRoughness = normalized;
-    emit brushRoughnessChanged(normalized);
-    update();
 }
 
 void CanvasWidget::setBrushStabilization(qreal strength)

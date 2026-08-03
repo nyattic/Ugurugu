@@ -22,10 +22,8 @@ public:
     {
         bool colorSupported = false;
         bool widthSupported = false;
-        bool roughnessSupported = false;
         std::optional<QColor> color;
         std::optional<qreal> width;
-        std::optional<qreal> roughness;
     };
 
     explicit StrokePropertiesDialog(
@@ -33,7 +31,6 @@ public:
 
     std::optional<QColor> color() const;
     std::optional<qreal> selectedWidth() const;
-    std::optional<qreal> roughness() const;
 
 private:
     void chooseColor();
@@ -43,10 +40,8 @@ private:
     QColor m_color = Qt::black;
     QCheckBox *m_colorCheck = nullptr;
     QCheckBox *m_widthCheck = nullptr;
-    QCheckBox *m_roughnessCheck = nullptr;
     QPushButton *m_colorButton = nullptr;
     QDoubleSpinBox *m_widthSpin = nullptr;
-    QDoubleSpinBox *m_roughnessSpin = nullptr;
     QDialogButtonBox *m_buttons = nullptr;
 };
 

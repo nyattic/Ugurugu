@@ -99,11 +99,6 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setEraserPreset(EraserPresetCatalog::find(storedEraserPresetId)
                                   ? storedEraserPresetId
                                   : defaultEraser.id);
-    m_canvas->setBrushRoughness(realSetting(settings,
-        QString::fromLatin1(roughnessKey),
-        1.0,
-        DocumentLimits::minimumBrushWobbleScale,
-        DocumentLimits::maximumBrushWobbleScale));
     m_canvas->setBrushAntialiasing(
         boolSetting(settings, QString::fromLatin1(antialiasingKey), false));
 
@@ -200,13 +195,6 @@ void MainWindow::connectDrawingToolSettings()
             schedule();
         });
     connect(m_canvas,
-        &CanvasWidget::brushRoughnessChanged,
-        this,
-        [schedule](qreal)
-        {
-            schedule();
-        });
-    connect(m_canvas,
         &CanvasWidget::brushAntialiasingChanged,
         this,
         [schedule](bool)
@@ -257,7 +245,6 @@ void MainWindow::saveDrawingToolSettings()
     settings.setValue(activeEraserPresetKey, m_canvas->eraserPresetId());
     settings.setValue(
         activeColorKey, m_canvas->brushColor().name(QColor::HexArgb));
-    settings.setValue(roughnessKey, m_canvas->brushRoughness());
     settings.setValue(antialiasingKey, m_canvas->brushAntialiasing());
     settings.setValue(
         wandReferenceKey, wandReferenceSettingsId(m_canvas->wandReference()));

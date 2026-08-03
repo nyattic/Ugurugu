@@ -189,8 +189,7 @@ public:
     bool updateStrokeAttributes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const std::optional<QColor> &color,
-        const std::optional<qreal> &width,
-        const std::optional<qreal> &roughness);
+        const std::optional<qreal> &width);
     void removeStrokes(const QUuid &layerId, const QVector<QUuid> &strokeIds);
     void addLayer(const QUuid &parentGroupId = {});
     void addLayerGroup(const QUuid &childId = {});

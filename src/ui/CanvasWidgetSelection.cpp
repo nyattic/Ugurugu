@@ -517,7 +517,6 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         DocumentLimits::minimumStrokeWidth,
         DocumentLimits::maximumStrokeWidth);
     fillStroke.brush = m_brushSettings;
-    fillStroke.brush.wobbleScale = m_brushRoughness;
     fillStroke.brush.antialiasing = m_brushAntialiasing;
     if (!m_selectionMask.isNull())
     {

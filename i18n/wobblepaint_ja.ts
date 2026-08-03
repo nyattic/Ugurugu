@@ -175,23 +175,6 @@
 <context>
     <name>wobble::BrushPopoverPanel</name>
     <message>
-        <location filename="../src/ui/BrushPopoverPanel.cpp" line="118"/>
-        <source>ROUGHNESS</source>
-        <translation>粗さ</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/BrushPopoverPanel.cpp" line="129"/>
-        <location filename="../src/ui/BrushPopoverPanel.cpp" line="130"/>
-        <location filename="../src/ui/BrushPopoverPanel.cpp" line="137"/>
-        <source>Line roughness</source>
-        <translation>線の粗さ</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/BrushPopoverPanel.cpp" line="136"/>
-        <source>%</source>
-        <translation>%</translation>
-    </message>
-    <message>
         <location filename="../src/ui/BrushPopoverPanel.cpp" line="177"/>
         <source>ANTI-ALIASING</source>
         <translation>アンチエイリアス</translation>
@@ -2524,8 +2507,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="337"/>
-        <source>Change the color, width, or roughness of selected strokes</source>
-        <translation>選択したストロークの色、太さ、粗さを変更します</translation>
+        <source>Change the color or width of selected strokes</source>
+        <translation>選択したストロークの色または太さを変更します</translation>
     </message>
 </context>
 <context>
@@ -2686,16 +2669,6 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/StrokePropertiesDialog.cpp" line="47"/>
         <source> px</source>
         <translation> px</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/StrokePropertiesDialog.cpp" line="52"/>
-        <source>Roughness</source>
-        <translation>粗さ</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/StrokePropertiesDialog.cpp" line="60"/>
-        <source>%</source>
-        <translation>%</translation>
     </message>
     <message>
         <location filename="../src/ui/StrokePropertiesDialog.cpp" line="124"/>

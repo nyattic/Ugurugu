@@ -104,12 +104,12 @@ private slots:
         controller.undoStack()->setClean();
 
         QVERIFY(controller.updateStrokeAttributes(
-            layerId, {paint.id}, QColor(90, 110, 130), 15.0, 1.75));
+            layerId, {paint.id}, QColor(90, 110, 130), 15.0));
         const Stroke &edited =
             controller.document().layer(layerId)->strokes.first();
         QCOMPARE(edited.color, QColor(90, 110, 130));
         QCOMPARE(edited.width, 15.0);
-        QCOMPARE(edited.brush.wobbleScale, 1.75);
+        QCOMPARE(edited.brush.wobbleScale, paint.brush.wobbleScale);
 
         controller.undoStack()->undo();
         const Stroke &restored =
@@ -122,7 +122,7 @@ private slots:
                      .layer(layerId)
                      ->strokes.first()
                      .brush.wobbleScale,
-            1.75);
+            paint.brush.wobbleScale);
     }
 
     void roundTripsLayerHierarchySchema()

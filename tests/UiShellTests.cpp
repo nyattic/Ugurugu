@@ -961,25 +961,19 @@ private slots:
         StrokePropertiesDialog::Values values;
         values.colorSupported = true;
         values.widthSupported = true;
-        values.roughnessSupported = true;
         values.color = QColor(10, 20, 30);
         values.width = 8.0;
-        values.roughness = 0.75;
         StrokePropertiesDialog dialog(values);
 
         QDoubleSpinBox *width = dialog.findChild<QDoubleSpinBox *>(
             QStringLiteral("strokeWidthSpin"));
-        QDoubleSpinBox *roughness = dialog.findChild<QDoubleSpinBox *>(
-            QStringLiteral("strokeRoughnessSpin"));
         QVERIFY(width);
-        QVERIFY(roughness);
+        QVERIFY(!dialog.findChild<QDoubleSpinBox *>(
+            QStringLiteral("strokeRoughnessSpin")));
         width->setValue(18.0);
-        roughness->setValue(140.0);
         QVERIFY(dialog.selectedWidth().has_value());
-        QVERIFY(dialog.roughness().has_value());
         QVERIFY(dialog.color().has_value());
         QCOMPARE(*dialog.selectedWidth(), 18.0);
-        QCOMPARE(*dialog.roughness(), 1.4);
         QCOMPARE(*dialog.color(), *values.color);
     }
 
