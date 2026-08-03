@@ -44,6 +44,10 @@ void migrateLegacySettings()
         return;
     }
 
+    // QSettings resolves its backing store from the application and
+    // organization names, so the only way to read the pre-rename WobblePaint
+    // settings is to adopt that identity for the length of one construction
+    // and restore the current one immediately afterwards.
     QApplication::setApplicationName(QStringLiteral("WobblePaint"));
     QApplication::setOrganizationName(QStringLiteral("WobblePaint"));
     QApplication::setOrganizationDomain(QStringLiteral("wobblepaint.dev"));

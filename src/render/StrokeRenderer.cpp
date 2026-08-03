@@ -27,6 +27,10 @@ quint64 mixHash(quint64 value)
     return value ^ (value >> 31U);
 }
 
+// Wobble must be a pure function of the stroke seed, the frame, the point
+// index and the channel, with no generator state anywhere. That is what lets
+// the preview, an export, an incremental tile redraw and a redo all produce
+// the same frame; introducing sequential state here would desynchronize them.
 qreal signedNoise(quint64 seed, int frame, int index, quint64 channel)
 {
     quint64 value = seed;

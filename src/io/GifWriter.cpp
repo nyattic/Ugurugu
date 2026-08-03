@@ -114,6 +114,9 @@ void appendWord(QByteArray &output, int value)
     appendByte(output, value >> 8);
 }
 
+// Buckets the histogram at RGB555, so median cut works over at most 32768
+// distinct colors instead of the full 24-bit space. Five bits per channel is
+// finer than the 256-entry table the format can carry.
 int colorKey(QRgb color)
 {
     return ((qRed(color) >> 3) << 10) | ((qGreen(color) >> 3) << 5)
@@ -180,6 +183,8 @@ int component(const HistogramEntry &entry, int axis)
 QVector<QRgb> buildPalette(
     const QVector<HistogramEntry> &entries, bool hasTransparency)
 {
+    // A GIF color table holds at most 256 entries, and index 0 is reserved for
+    // the transparent color whenever the animation needs one.
     const int maximumOpaqueColors = hasTransparency ? 255 : 256;
     QVector<ColorBox> boxes;
 
@@ -361,6 +366,8 @@ QByteArray frameIndices(
             reinterpret_cast<const QRgb *>(image.constScanLine(y));
         for (int x = 0; x < image.width(); ++x)
         {
+            // GIF transparency is all or nothing, so partial alpha has to
+            // collapse to a threshold rather than blend.
             const QRgb color = row[x];
             const quint8 paletteIndex = hasTransparency && qAlpha(color) < 128
                                             ? 0
@@ -372,6 +379,9 @@ QByteArray frameIndices(
     return indices;
 }
 
+// GIF's LZW variant: the two codes just above the index range are reserved for
+// clear and end-of-stream, codes widen as the dictionary grows, and 4096 is the
+// largest code the format allows before the dictionary must be reset.
 QByteArray compressLzw(const QByteArray &indices, int minimumCodeSize)
 {
     const int clearCode = 1 << minimumCodeSize;
@@ -608,6 +618,8 @@ bool GifWriter::write(const QString &path,
     const QVector<QRgb> palette = buildPalette(entries, hasTransparency);
     const QVector<quint8> colorMap =
         buildColorMap(entries, palette, hasTransparency);
+    // The global color table must be a power of two long, and the screen
+    // descriptor stores its size as log2(entries) - 1.
     int tableSize = 2;
     int tableBits = 1;
 
@@ -622,6 +634,8 @@ bool GifWriter::write(const QString &path,
     output.append("GIF89a", 6);
     appendWord(output, width);
     appendWord(output, height);
+    // Packed field: global color table present, 8-bit color resolution, and
+    // the table size in the low three bits.
     appendByte(output, 0x80 | 0x70 | (tableBits - 1));
     appendByte(output, 0);
     appendByte(output, 0);

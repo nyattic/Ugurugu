@@ -7,9 +7,15 @@ namespace wobble
 namespace
 {
 
+// Source coordinates are 16.16 fixed point throughout this file, so identical
+// inputs resample identically on every platform. Floating point would let the
+// exported pixels drift from the preview.
 constexpr qint64 fixedScale = qint64(1) << 16;
 constexpr qint64 fixedHalf = fixedScale / 2;
 
+// Maps the center of a target pixel to the center of the source pixel grid.
+// The trailing half-pixel shift moves that center into the index space the
+// bilinear taps expect; dropping it biases the whole image by half a pixel.
 qint64 sourceCoordinate(
     int targetCoordinate, int sourceExtent, int targetExtent)
 {

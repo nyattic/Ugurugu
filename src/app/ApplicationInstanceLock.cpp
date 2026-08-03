@@ -59,6 +59,10 @@ ApplicationInstanceLock::AcquireResult ApplicationInstanceLock::acquire(
     }
 
     m_lock = std::make_unique<QLockFile>(m_filePath);
+    // Disables only the age-based staleness rule, so a session that stays open
+    // past the default timeout never has its lock stolen. QLockFile still
+    // reclaims a lock whose owning process is gone, which is what recovers
+    // from a crash.
     m_lock->setStaleLockTime(0);
     if (m_lock->tryLock())
     {
