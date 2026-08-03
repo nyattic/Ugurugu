@@ -74,12 +74,19 @@ public:
         {
             return;
         }
-
-        // Claim the interval before starting the network request. A temporary
-        // outage must not turn every application launch into another poll;
-        // the explicit Check for Updates action remains available.
-        settings.setValue(QString::fromLatin1(lastAutomaticCheckKey), now);
         startCheck(false);
+    }
+
+    // Only a completed check consumes the interval. Claiming it before the
+    // request would make an offline launch cost a full interval, which is the
+    // case where the user is most likely to be missing a fix. A failure
+    // therefore retries at the next launch, not sooner: nothing reschedules
+    // this within a session.
+    void recordAutomaticCheck()
+    {
+        QSettings settings;
+        settings.setValue(QString::fromLatin1(lastAutomaticCheckKey),
+            QDateTime::currentDateTimeUtc());
     }
 
     void startCheck(bool interactive)
@@ -113,6 +120,11 @@ public:
                                 .arg(result.error));
                     }
                     return;
+                }
+
+                if (!interactive)
+                {
+                    recordAutomaticCheck();
                 }
 
                 if (!result.update)

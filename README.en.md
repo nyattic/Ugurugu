@@ -136,8 +136,10 @@ on macOS.
 
 ## Automatic updates
 
-WagleWaglePaint checks for updates after launch. You can also use
-**Help → Check for Updates** at any time. Updates are downloaded and
+WagleWaglePaint checks for updates when it starts, skipping the check if
+it already ran in the last six hours, so opening the app several times a
+day does not mean several checks. You can also use **Help → Check for
+Updates** at any time. Updates are downloaded and
 installed through Sparkle on macOS and Velopack on Windows, and the
 update alert shows the release notes for the new version.
 

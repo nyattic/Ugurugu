@@ -8,7 +8,9 @@ namespace wobble
 class UpdateCheckPolicy final
 {
 public:
-    static constexpr qint64 automaticCheckIntervalSeconds = 24 * 60 * 60;
+    // Four opportunities a day, so a fix reaches a user who keeps the app
+    // open all day without turning every launch into a request.
+    static constexpr qint64 automaticCheckIntervalSeconds = 6 * 60 * 60;
 
     static bool isAutomaticCheckDue(
         const QDateTime &lastCheck, const QDateTime &now);

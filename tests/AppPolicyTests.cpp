@@ -226,7 +226,7 @@ private slots:
         qApp->removeEventFilter(&router);
     }
 
-    void limitsAutomaticUpdateChecksToOncePerDay()
+    void limitsAutomaticUpdateChecksToOnePerInterval()
     {
         const QDateTime now(QDate(2026, 8, 1), QTime(12, 0), QTimeZone::UTC);
         QVERIFY(UpdateCheckPolicy::isAutomaticCheckDue({}, now));

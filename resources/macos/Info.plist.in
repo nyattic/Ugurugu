@@ -36,7 +36,11 @@
     <string>https://github.com/nyattic/WagleWaglePaint/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>mLaqOS+6ecy63XvvlA7/LdNrLJO4fLrSWmy+2B/w2ow=</string>
+    <!-- Keep in step with UpdateCheckPolicy::automaticCheckIntervalSeconds,
+         which paces the Windows updater. Sparkle owns the schedule here and
+         already retries a failed check, so the two platforms only agree if
+         this number matches. -->
     <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+    <integer>21600</integer>
 </dict>
 </plist>
