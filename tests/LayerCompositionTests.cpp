@@ -9,6 +9,33 @@ class LayerCompositionTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void keepsTransparentBackgroundUnpaintedInRenderedFrame()
+    {
+        Document document = Document::createDefault(QSize(16, 16));
+        document.background = QColor(0, 0, 0, 0);
+        document.wobbleAmount = 0.0;
+        Layer &layer = document.layers.first();
+
+        Stroke stroke = makeStroke(StrokeMode::Paint,
+            QColor(210, 70, 125),
+            8.0,
+            1,
+            {QPointF(8.0, 8.0)});
+        stroke.brush.tipShape = BrushTipShape::Square;
+        stroke.brush.sizeDynamics = 0.0;
+        stroke.brush.wobbleScale = 0.0;
+        stroke.brush.antialiasing = false;
+        layer.strokes.append(stroke);
+
+        const QImage rendered = RenderEngine::render(document, 0);
+        QVERIFY(!rendered.isNull());
+        QVERIFY(rendered.hasAlphaChannel());
+        // The painted centre stays opaque while an untouched corner keeps the
+        // transparency that PNG and GIF export rely on.
+        QCOMPARE(rendered.pixelColor(8, 8).alpha(), 255);
+        QCOMPARE(rendered.pixelColor(0, 0).alpha(), 0);
+    }
+
     void rendersLayerBlendModes_data()
     {
         QTest::addColumn<int>("blendMode");

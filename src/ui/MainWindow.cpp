@@ -887,6 +887,22 @@ void MainWindow::resizeImage()
     }
 }
 
+void MainWindow::chooseBackgroundColor()
+{
+    // ShowAlphaChannel is what exposes a transparent background: alpha 0 is a
+    // valid choice here, not an accident to be corrected.
+    const QColor chosen =
+        QColorDialog::getColor(m_controller.document().background,
+            this,
+            tr("Canvas background"),
+            QColorDialog::ShowAlphaChannel);
+    if (!chosen.isValid())
+    {
+        return;
+    }
+    m_controller.setBackground(chosen);
+}
+
 void MainWindow::scaleSelection()
 {
     bool accepted = false;

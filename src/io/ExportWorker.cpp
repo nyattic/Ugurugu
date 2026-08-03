@@ -7,6 +7,7 @@
 #include <QDeadlineTimer>
 #include <QImageWriter>
 #include <QMutexLocker>
+#include <QPainter>
 #include <QSaveFile>
 
 #include <algorithm>
@@ -182,11 +183,28 @@ void ExportWorker::complete(const Request &request,
 
 bool ExportWorker::writeImage(const Request &request, QString *error)
 {
-    const QImage image = RenderEngine::render(request.document, request.frame);
+    QImage image = RenderEngine::render(request.document, request.frame);
     if (image.isNull())
     {
         *error = tr("The image could not be rendered.");
         return false;
+    }
+    if (request.jpeg && image.hasAlphaChannel())
+    {
+        // JPEG cannot store alpha. Compositing onto white keeps a transparent
+        // background looking like the paper the user drew on; letting the
+        // writer drop the channel would silently produce black instead.
+        QImage opaque(image.size(), QImage::Format_RGB32);
+        if (opaque.isNull())
+        {
+            *error = tr("The image could not be rendered.");
+            return false;
+        }
+        opaque.fill(Qt::white);
+        QPainter painter(&opaque);
+        painter.drawImage(0, 0, image);
+        painter.end();
+        image = std::move(opaque);
     }
     if (canceled())
     {

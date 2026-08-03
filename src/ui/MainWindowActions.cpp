@@ -221,6 +221,14 @@ void MainWindow::createActions()
     connect(
         resizeImageAction, &QAction::triggered, this, &MainWindow::resizeImage);
 
+    auto *backgroundAction = new QAction(tr("Canvas background…"), this);
+    backgroundAction->setObjectName(QStringLiteral("backgroundAction"));
+    registerShortcut(backgroundAction, {});
+    connect(backgroundAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::chooseBackgroundColor);
+
     m_moveSelectionAction = new QAction(tr("Move selection"), this);
     m_moveSelectionAction->setObjectName(QStringLiteral("moveSelectionAction"));
     m_moveSelectionAction->setCheckable(true);
@@ -665,6 +673,8 @@ void MainWindow::createMenus()
         findChild<QAction *>(QStringLiteral("resizeImageAction")));
     editMenu->addAction(
         findChild<QAction *>(QStringLiteral("resizeCanvasAction")));
+    editMenu->addAction(
+        findChild<QAction *>(QStringLiteral("backgroundAction")));
     editMenu->addSeparator();
     QMenu *selectionMenu = editMenu->addMenu(tr("&Selection"));
     selectionMenu->addAction(m_moveSelectionAction);

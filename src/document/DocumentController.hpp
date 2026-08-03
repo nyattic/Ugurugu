@@ -187,6 +187,10 @@ public:
     void setLayerClipToBelow(const QUuid &id, bool clipped);
     void setLayerParentGroup(const QUuid &id, const QUuid &groupId);
     void moveLayer(const QUuid &id, int offset);
+    // Accepts any valid colour, including a partly or fully transparent one.
+    // A transparent background is what makes sticker-style PNG and GIF export
+    // possible, so alpha is deliberately not clamped away here.
+    void setBackground(const QColor &color);
     void setWobbleAmount(qreal amount);
     void setAnimationFrames(int frames);
     void setFramesPerSecond(qreal fps);

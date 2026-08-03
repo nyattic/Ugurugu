@@ -824,6 +824,19 @@ void DocumentController::setActiveLayer(const QUuid &id)
     emit activeLayerChanged(id);
 }
 
+void DocumentController::setBackground(const QColor &color)
+{
+    const Document &current = document();
+    if (!color.isValid() || current.background == color)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.background = color;
+    tryCommitCandidate(tr("Change background"), std::move(candidate));
+}
+
 void DocumentController::setWobbleAmount(qreal amount)
 {
     if (!std::isfinite(amount))

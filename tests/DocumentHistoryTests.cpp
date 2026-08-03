@@ -57,6 +57,38 @@ private slots:
         QVERIFY(controller.undoStack()->isClean());
     }
 
+    void undoesAndRedoesTransparentBackground()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 48));
+        const QColor original = controller.document().background;
+        QVERIFY(original.alpha() == 255);
+
+        controller.setBackground(QColor(0, 0, 0, 0));
+        QCOMPARE(controller.document().background.alpha(), 0);
+        QVERIFY(controller.isModified());
+        QVERIFY(controller.undoStack()->canUndo());
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().background, original);
+
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().background.alpha(), 0);
+    }
+
+    void rejectsBackgroundChangeThatChangesNothing()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 48));
+        const int entries = controller.undoStack()->count();
+
+        controller.setBackground(controller.document().background);
+        QCOMPARE(controller.undoStack()->count(), entries);
+
+        controller.setBackground(QColor());
+        QCOMPARE(controller.undoStack()->count(), entries);
+    }
+
     void transientCommandsDoNotModifyDocument()
     {
         DocumentController controller;

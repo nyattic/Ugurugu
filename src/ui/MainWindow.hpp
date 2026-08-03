@@ -87,6 +87,7 @@ private:
     void newDocument();
     void resizeCanvas();
     void resizeImage();
+    void chooseBackgroundColor();
     void scaleSelection();
     void rotateSelection();
     void editSelectedStrokeProperties();
