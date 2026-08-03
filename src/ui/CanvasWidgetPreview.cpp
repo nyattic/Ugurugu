@@ -1,0 +1,408 @@
+#include "document/DocumentLimits.hpp"
+#include "document/SelectionOperation.hpp"
+#include "render/PreviewRenderPolicy.hpp"
+#include "render/RenderEngine.hpp"
+#include "ui/CanvasViewport.hpp"
+#include "ui/CanvasWidget.hpp"
+
+#include <QPainter>
+
+#include <algorithm>
+#include <cmath>
+
+namespace wobble
+{
+
+using namespace canvas_detail;
+
+QTransform CanvasWidget::documentTransform() const
+{
+    const QSize canvasSize = m_controller->document().size;
+    if (!canvasSize.isValid())
+    {
+        return {};
+    }
+    const QPointF center(width() * 0.5, height() * 0.5);
+    const QPointF canvasCenter(
+        canvasSize.width() * 0.5, canvasSize.height() * 0.5);
+
+    QTransform transform;
+    transform.translate(center.x() + m_pan.x(), center.y() + m_pan.y());
+    transform.scale(m_canvasMirrored ? -m_zoom : m_zoom, m_zoom);
+    transform.translate(-canvasCenter.x(), -canvasCenter.y());
+    return transform;
+}
+
+qreal CanvasWidget::fitZoom() const
+{
+    const QSize canvasSize = m_controller->document().size;
+    if (!canvasSize.isValid())
+    {
+        return 1.0;
+    }
+    const qreal availableWidth = std::max(1.0, width() - canvasMargin * 2.0);
+    const qreal availableHeight = std::max(1.0, height() - canvasMargin * 2.0);
+    return std::clamp(std::min(availableWidth / canvasSize.width(),
+                          availableHeight / canvasSize.height()),
+        minimumZoom,
+        maximumZoom);
+}
+
+QPointF CanvasWidget::mapToDocument(
+    const QPointF &widgetPosition, bool *inside) const
+{
+    bool invertible = false;
+    const QTransform inverse = documentTransform().inverted(&invertible);
+    const QPointF position =
+        invertible ? inverse.map(widgetPosition) : QPointF();
+    const QRectF bounds(
+        QPointF(0.0, 0.0), QSizeF(m_controller->document().size));
+    if (inside)
+    {
+        *inside = invertible && bounds.contains(position);
+    }
+    return position;
+}
+
+QPointF CanvasWidget::clampedDocumentPosition(const QPointF &position) const
+{
+    const QSize size = m_controller->document().size;
+    return QPointF(
+        std::clamp(position.x(), 0.0, static_cast<qreal>(size.width())),
+        std::clamp(position.y(), 0.0, static_cast<qreal>(size.height())));
+}
+
+QImage CanvasWidget::frameImage(int frame)
+{
+    const QSize renderSize = previewRenderSize();
+    if (renderSize != m_cachedRenderSize)
+    {
+        m_frameCache.clear();
+        m_cachedRenderSize = renderSize;
+    }
+    if (QImage *cached = m_frameCache.object(frame))
+    {
+        return *cached;
+    }
+    QImage image;
+    if (m_previewSplit.valid && m_previewSplitFrame == frame
+        && m_previewSplit.below.size() == renderSize)
+    {
+        image = RenderEngine::composeLayerSplit(
+            m_previewSplit, m_previewSplit.layerBase);
+    }
+    if (image.isNull() && m_previewLayerRasters.valid
+        && m_previewLayerRasterFrame == frame
+        && m_previewLayerRasters.outputSize == renderSize)
+    {
+        image = RenderEngine::composeLayerRasterFrame(
+            displayDocument(), m_previewLayerRasters, {}, {});
+    }
+    if (image.isNull())
+    {
+        image =
+            RenderEngine::renderScaled(displayDocument(), frame, renderSize);
+    }
+    if (image.isNull())
+    {
+        return {};
+    }
+    const int cost = PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
+    m_frameCache.insert(frame, new QImage(image), cost);
+    return image;
+}
+
+QImage CanvasWidget::activeStrokePreview(
+    const Document &document, const QSize &renderSize, bool &resolved)
+{
+    if (m_activeStrokePreviewResolved
+        && m_activeStrokePreviewRenderSize == renderSize
+        && m_activeStrokePreviewFrame == m_currentFrame)
+    {
+        resolved = true;
+        return m_activeStrokePreview;
+    }
+
+    QImage preview;
+    if (document.layer(m_activeStrokeLayer))
+    {
+        const RenderEngine::LayerSplitFrame &split =
+            previewSplit(m_activeStrokeLayer, renderSize);
+        if (split.valid)
+        {
+            const IncrementalStrokeRenderer::Update update =
+                m_incrementalStrokeRenderer.update(split.layerBase,
+                    document,
+                    m_activeStroke,
+                    m_currentFrame,
+                    renderSize);
+            const QImage baseFrame = frameImage(m_currentFrame);
+            if (update.valid && !baseFrame.isNull())
+            {
+                if (m_composedPreviewFrame.size() != baseFrame.size()
+                    || m_composedPreviewBaseKey != baseFrame.cacheKey())
+                {
+                    m_composedPreviewFrame = baseFrame.copy();
+                    m_composedPreviewBaseKey = baseFrame.cacheKey();
+                }
+                QPainter painter(&m_composedPreviewFrame);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                bool composedAllPatches = true;
+                for (const IncrementalStrokeRenderer::Patch &patch :
+                    update.patches)
+                {
+                    const QImage composed =
+                        RenderEngine::composeLayerSplitRegion(
+                            split, patch.layerImage, patch.bounds);
+                    if (composed.isNull())
+                    {
+                        composedAllPatches = false;
+                        break;
+                    }
+                    painter.drawImage(patch.bounds.topLeft(), composed);
+                }
+                painter.end();
+                if (composedAllPatches)
+                {
+                    preview = m_composedPreviewFrame;
+                }
+                else
+                {
+                    m_composedPreviewFrame = baseFrame.copy();
+                    m_composedPreviewBaseKey = baseFrame.cacheKey();
+                }
+            }
+        }
+        if (preview.isNull())
+        {
+            const RenderEngine::LayerRasterFrame &rasters =
+                previewLayerRasters(renderSize);
+            const auto cached =
+                rasters.paintLayers.constFind(m_activeStrokeLayer);
+            if (rasters.valid && cached != rasters.paintLayers.cend())
+            {
+                const IncrementalStrokeRenderer::Update update =
+                    m_incrementalStrokeRenderer.update(cached.value(),
+                        document,
+                        m_activeStroke,
+                        m_currentFrame,
+                        renderSize);
+                const QImage baseFrame = frameImage(m_currentFrame);
+                if (update.valid && !baseFrame.isNull())
+                {
+                    if (m_composedPreviewFrame.size() != baseFrame.size()
+                        || m_composedPreviewBaseKey != baseFrame.cacheKey())
+                    {
+                        m_composedPreviewFrame = baseFrame.copy();
+                        m_composedPreviewBaseKey = baseFrame.cacheKey();
+                    }
+                    QPainter painter(&m_composedPreviewFrame);
+                    painter.setCompositionMode(
+                        QPainter::CompositionMode_Source);
+                    bool composedAllPatches = true;
+                    for (const IncrementalStrokeRenderer::Patch &patch :
+                        update.patches)
+                    {
+                        const QImage composed =
+                            RenderEngine::composeLayerRasterFrameRegion(
+                                document,
+                                rasters,
+                                m_activeStrokeLayer,
+                                patch.layerImage,
+                                patch.bounds);
+                        if (composed.isNull())
+                        {
+                            composedAllPatches = false;
+                            break;
+                        }
+                        painter.drawImage(patch.bounds.topLeft(), composed);
+                    }
+                    painter.end();
+                    if (composedAllPatches)
+                    {
+                        preview = m_composedPreviewFrame;
+                    }
+                    else
+                    {
+                        m_composedPreviewFrame = baseFrame.copy();
+                        m_composedPreviewBaseKey = baseFrame.cacheKey();
+                    }
+                }
+            }
+        }
+    }
+    if (preview.isNull())
+    {
+        preview = interactionPreview(document, renderSize);
+    }
+    m_activeStrokePreview = preview;
+    m_activeStrokePreviewRenderSize = renderSize;
+    m_activeStrokePreviewFrame = m_currentFrame;
+    m_activeStrokePreviewResolved = !preview.isNull();
+    resolved = m_activeStrokePreviewResolved;
+    return preview;
+}
+
+void CanvasWidget::invalidateActiveStrokePreview()
+{
+    m_activeStrokePreview = {};
+    m_activeStrokePreviewRenderSize = {};
+    m_activeStrokePreviewFrame = -1;
+    m_activeStrokePreviewResolved = false;
+}
+
+QImage CanvasWidget::interactionPreview(
+    Document document, const QSize &renderSize) const
+{
+    Layer *layer = nullptr;
+    if (m_drawing && !m_activeStroke.points.isEmpty())
+    {
+        layer = document.layer(m_activeStrokeLayer);
+        if (layer)
+        {
+            layer->strokes.append(m_activeStroke);
+        }
+    }
+    else if (hasPendingSelectionTransform())
+    {
+        layer = document.layer(m_selectionTransformSession.layer);
+        if (layer)
+        {
+            Stroke operation;
+            operation.mode = StrokeMode::PixelSelection;
+            operation.pixelSelectionOp =
+                m_selectionTransformSession.previewOperation;
+            layer->strokes.append(std::move(operation));
+        }
+    }
+    if (!layer || layer->kind != LayerKind::Paint)
+    {
+        return {};
+    }
+    return RenderEngine::renderScaled(document, m_currentFrame, renderSize);
+}
+
+const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
+    const QUuid &layerId, const QSize &renderSize)
+{
+    if (!m_previewSplit.valid || m_previewSplitLayer != layerId
+        || m_previewSplitFrame != m_currentFrame
+        || m_previewSplit.below.size() != renderSize)
+    {
+        m_previewSplit = RenderEngine::renderLayerSplit(
+            displayDocument(), m_currentFrame, renderSize, layerId);
+        m_previewSplitLayer = layerId;
+        m_previewSplitFrame = m_currentFrame;
+    }
+    return m_previewSplit;
+}
+
+const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
+    const QSize &renderSize)
+{
+    if (m_previewLayerRasterFrame != m_currentFrame
+        || m_previewLayerRasters.outputSize != renderSize)
+    {
+        m_frameCache.clear();
+        m_previewLayerRasters = RenderEngine::renderLayerRasterFrame(
+            displayDocument(),
+            m_currentFrame,
+            renderSize,
+            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024);
+        m_previewLayerRasterFrame = m_currentFrame;
+    }
+    return m_previewLayerRasters;
+}
+
+QSize CanvasWidget::previewRenderSize() const
+{
+    if (m_zoomRenderTimer.isActive() && m_cachedRenderSize.isValid())
+    {
+        return m_cachedRenderSize;
+    }
+    const Document &document = m_controller->document();
+    const QSize documentSize = document.size;
+    const qreal displayScale =
+        std::abs(documentTransform().m11()) * devicePixelRatioF();
+    int retainedSurfaces = m_animating ? document.animationFrames : 1;
+    if (m_drawing
+        && !RenderEngine::supportsLayerSplit(document, m_activeStrokeLayer))
+    {
+        int paintSurfaces = 0;
+        bool hasEmptyLayer = false;
+        for (const Layer &layer : document.layers)
+        {
+            if (layer.kind != LayerKind::Paint)
+            {
+                continue;
+            }
+            if (layer.strokes.isEmpty())
+            {
+                hasEmptyLayer = true;
+            }
+            else
+            {
+                ++paintSurfaces;
+            }
+        }
+        retainedSurfaces =
+            std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0));
+    }
+    const LayerCompositionMemoryEstimate hierarchyMemory =
+        RenderEngine::estimateHierarchyMemory(document, documentSize);
+    if (!hierarchyMemory.valid)
+    {
+        return {};
+    }
+    return PreviewRenderPolicy::renderSize(documentSize,
+        displayScale,
+        retainedSurfaces,
+        hierarchyMemory.peakSurfaceCount);
+}
+
+void CanvasWidget::invalidateFrames()
+{
+    m_frameCache.clear();
+    m_cachedRenderSize = {};
+    m_colorPickFrame = {};
+    m_colorPickFrameIndex = -1;
+    m_previewSplit = {};
+    m_previewSplitLayer = QUuid();
+    m_previewSplitFrame = -1;
+    m_previewLayerRasters = {};
+    m_previewLayerRasterFrame = -1;
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
+    invalidateActiveStrokePreview();
+    m_incrementalStrokeRenderer.clear();
+    m_editableStrokeIds.clear();
+    m_editableStrokeMaskKey = 0;
+    m_editableStrokeLayer = QUuid();
+    m_editableStrokeFrame = -1;
+    const int frames = std::max(1, m_controller->document().animationFrames);
+    m_currentFrame %= frames;
+    updateTimerInterval();
+    notifyZoomChanged();
+    update();
+}
+
+void CanvasWidget::updateTimerInterval()
+{
+    const qreal fps = std::clamp(m_controller->document().framesPerSecond,
+        DocumentLimits::minimumFramesPerSecond,
+        DocumentLimits::maximumFramesPerSecond);
+    m_animationTimer.setInterval(std::max(1, qRound(1000.0 / fps)));
+}
+
+void CanvasWidget::advanceFrame()
+{
+    if (!m_animating || (m_drawing && !m_animateWhileDrawing) || m_panning
+        || m_zoomDragging || m_pickingColor || m_movingSelection
+        || m_areaSelectionActive)
+    {
+        return;
+    }
+    setCurrentFrame(m_currentFrame + 1);
+}
+}
