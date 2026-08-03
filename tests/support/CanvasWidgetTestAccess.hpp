@@ -29,6 +29,11 @@ public:
     {
         return canvas.m_frameCache.object(frame) != nullptr;
     }
+
+    static PreviewSurfaceUsage previewSurfaceUsage(const CanvasWidget &canvas)
+    {
+        return canvas.previewSurfaceUsage();
+    }
 };
 
 }

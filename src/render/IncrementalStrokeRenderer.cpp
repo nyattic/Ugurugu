@@ -150,12 +150,19 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
         m_layerTiles.insert(tile, image);
         result.patches.append({bounds, std::move(image)});
     }
-    for (auto tile = m_layerTiles.cbegin(); tile != m_layerTiles.cend(); ++tile)
-    {
-        result.cachedTileBytes += tile.value().sizeInBytes();
-    }
+    result.cachedTileBytes = cachedTileBytes();
     result.valid = true;
     return result;
+}
+
+quint64 IncrementalStrokeRenderer::cachedTileBytes() const
+{
+    quint64 bytes = 0;
+    for (auto tile = m_layerTiles.cbegin(); tile != m_layerTiles.cend(); ++tile)
+    {
+        bytes += tile.value().sizeInBytes();
+    }
+    return bytes;
 }
 
 bool IncrementalStrokeRenderer::applyTo(QImage &layerImage) const

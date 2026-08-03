@@ -46,6 +46,15 @@ QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
         std::max(1, qCeil(documentSize.height() * scale)));
 }
 
+int PreviewRenderPolicy::frameCacheCostKiB(
+    qint64 pinnedBytes, qint64 singleFrameBytes)
+{
+    const qint64 budgetBytes = static_cast<qint64>(maximumCacheKiB) * 1024;
+    const qint64 available = std::max(
+        std::max<qint64>(singleFrameBytes, 0), budgetBytes - pinnedBytes);
+    return cacheCostKiB(static_cast<qsizetype>(available));
+}
+
 int PreviewRenderPolicy::cacheCostKiB(qsizetype imageBytes)
 {
     if (imageBytes <= 0)

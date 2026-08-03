@@ -14,11 +14,23 @@ public:
     static constexpr int maximumCacheKiB = MemoryBudget::previewCacheKiB;
     static constexpr qreal maximumPreviewEdge = 4096.0;
 
+    // Surfaces an active stroke keeps resident alongside the frame it composes
+    // over: the layer split's below, layerBase and above, plus the working copy
+    // patches are drawn into. The frame itself is counted by the caller as a
+    // retained surface.
+    static constexpr int activeStrokeSurfaceCount = 4;
+
     static QSize renderSize(const QSize &documentSize,
         qreal physicalDisplayScale,
         int retainedSurfaceCount = 1,
         int hierarchyTransientSurfaceCount = 0);
     static int cacheCostKiB(qsizetype imageBytes);
+    // Frame cache ceiling once the surfaces that cannot be dropped on demand
+    // are accounted for. One frame always stays cacheable: an active stroke
+    // re-copies its whole base whenever the frame it composes over is not the
+    // same cached instance, which costs far more than the single-frame
+    // overshoot that keeping it can cause.
+    static int frameCacheCostKiB(qint64 pinnedBytes, qint64 singleFrameBytes);
 };
 
 }

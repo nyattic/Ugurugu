@@ -3,6 +3,7 @@
 #include "document/DocumentController.hpp"
 #include "input/StrokeStabilizer.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
+#include "render/PreviewMemoryUsage.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/CanvasTypes.hpp"
 
@@ -187,6 +188,8 @@ private:
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
     QSize previewRenderSize() const;
+    PreviewSurfaceUsage previewSurfaceUsage() const;
+    void updateFrameCacheBudget();
     QImage frameImage(int frame);
     QImage activeStrokePreview(
         const Document &document, const QSize &renderSize, bool &resolved);

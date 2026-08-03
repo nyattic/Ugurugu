@@ -247,6 +247,91 @@ private slots:
                           << penUpMilliseconds << " ms";
     }
 
+    void keepsEveryPreviewSurfaceInsideTheDeclaredBudget()
+    {
+        const QSize canvasSize(4096, 4096);
+        Document document = Document::createDefault(canvasSize);
+        document.animationFrames = 3;
+        document.wobbleAmount = 3.0;
+        for (int index = 0; index < 3; ++index)
+        {
+            Layer layer;
+            layer.name = QStringLiteral("Paint %1").arg(index + 1);
+            layer.kind = LayerKind::Paint;
+            layer.initialCanvasSize = canvasSize;
+            Stroke stroke;
+            stroke.width = 48.0;
+            stroke.points = {{QPointF(200.0 + index * 300.0, 200.0), 1.0},
+                {QPointF(3800.0, 3800.0 - index * 300.0), 1.0}};
+            layer.strokes.append(stroke);
+            document.layers.append(std::move(layer));
+        }
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(100);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
+
+        PreviewSurfaceUsage peak;
+        const auto sample = [&canvas, &peak]()
+        {
+            const PreviewSurfaceUsage usage =
+                CanvasWidgetTestAccess::previewSurfaceUsage(canvas);
+            if (usage.totalBytes() > peak.totalBytes())
+            {
+                peak = usage;
+            }
+        };
+
+        for (int frame = 0; frame < controller.document().animationFrames;
+            ++frame)
+        {
+            canvas.setCurrentFrame(frame);
+            canvas.repaint();
+            sample();
+        }
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(80, 0));
+        for (int step = -60; step <= 80; step += 20)
+        {
+            QTest::mouseMove(&canvas, center + QPoint(step, step / 4), 1);
+            canvas.repaint();
+            sample();
+        }
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(80, 20));
+        canvas.repaint();
+        sample();
+
+        // Sampled while the pick is still held, because releasing drops the
+        // native-size frame the picker renders.
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::AltModifier, center);
+        canvas.repaint();
+        sample();
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::AltModifier, center);
+
+        constexpr qint64 budgetBytes =
+            static_cast<qint64>(MemoryBudget::previewCacheKiB) * 1024;
+        constexpr qreal mib = 1024.0 * 1024.0;
+        qInfo().nospace() << "4K preview peak " << peak.totalBytes() / mib
+                          << " MiB of " << budgetBytes / mib
+                          << " MiB budget (frames "
+                          << peak.frameCacheBytes / mib << ", split "
+                          << peak.layerSplitBytes / mib << ", rasters "
+                          << peak.layerRasterBytes / mib << ", composed "
+                          << peak.composedPreviewBytes / mib << ", colour pick "
+                          << peak.colorPickBytes / mib << ", tiles "
+                          << peak.strokeTileBytes / mib << ")";
+        QVERIFY(peak.totalBytes() <= budgetBytes);
+    }
+
     void fitsCanvasToViewportOnFirstShow()
     {
         MainWindow window;

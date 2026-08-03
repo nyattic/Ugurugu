@@ -168,6 +168,12 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
     m_activeStroke = Stroke();
     m_activeStrokeLayer = QUuid();
     invalidateActiveStrokePreview();
+    // Only written to while a stroke is live, and its pixels survive as the
+    // promoted frame below. Releasing it here is what frees the budget the
+    // promotion needs.
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
     m_strokeStabilizer.reset();
     const DocumentController::AddStrokeResult result =
         commitStroke(layerId, std::move(completed));
@@ -190,6 +196,7 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
             m_previewLayerRasters = std::move(promotedRasters);
             m_previewLayerRasterFrame = promotedFrameIndex;
         }
+        updateFrameCacheBudget();
     }
     update();
 }
@@ -392,6 +399,7 @@ void CanvasWidget::endColorPick()
     m_pickingColor = false;
     m_colorPickFrame = {};
     m_colorPickFrameIndex = -1;
+    updateFrameCacheBudget();
     updateCursor();
     update();
 }
@@ -414,8 +422,10 @@ void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
         {
             document.wobbleAmount = 0.0;
         }
+        m_colorPickFrame = {};
         m_colorPickFrame = RenderEngine::render(document, m_currentFrame);
         m_colorPickFrameIndex = m_currentFrame;
+        updateFrameCacheBudget();
     }
     if (m_colorPickFrame.isNull())
     {

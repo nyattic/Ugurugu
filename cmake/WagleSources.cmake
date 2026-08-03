@@ -84,6 +84,7 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/RenderEngine.cpp
     src/render/RenderEngine.hpp
     src/render/RenderEngineStrokes.cpp
+    src/render/PreviewMemoryUsage.hpp
     src/render/PreviewRenderPolicy.cpp
     src/render/PreviewRenderPolicy.hpp
     src/render/StrokeCoverageRenderer.cpp

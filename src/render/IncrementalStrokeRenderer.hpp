@@ -44,6 +44,7 @@ public:
     // Requires layerImage to match the cached output size exactly and to be
     // ARGB32_Premultiplied; tiles are copied over it, not composited.
     bool applyTo(QImage &layerImage) const;
+    quint64 cachedTileBytes() const;
     void clear();
 
 private:

@@ -240,6 +240,7 @@ QImage CanvasWidget::activeStrokePreview(
     m_activeStrokePreviewFrame = m_currentFrame;
     m_activeStrokePreviewResolved = !preview.isNull();
     resolved = m_activeStrokePreviewResolved;
+    updateFrameCacheBudget();
     return preview;
 }
 
@@ -289,10 +290,12 @@ const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
         || m_previewSplitFrame != m_currentFrame
         || m_previewSplit.below.size() != renderSize)
     {
+        m_previewSplit = {};
         m_previewSplit = RenderEngine::renderLayerSplit(
             displayDocument(), m_currentFrame, renderSize, layerId);
         m_previewSplitLayer = layerId;
         m_previewSplitFrame = m_currentFrame;
+        updateFrameCacheBudget();
     }
     return m_previewSplit;
 }
@@ -304,12 +307,16 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
         || m_previewLayerRasters.outputSize != renderSize)
     {
         m_frameCache.clear();
-        m_previewLayerRasters = RenderEngine::renderLayerRasterFrame(
-            displayDocument(),
-            m_currentFrame,
-            renderSize,
-            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024);
+        m_previewLayerRasters = {};
+        const qint64 budgetBytes =
+            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024;
+        m_previewLayerRasters =
+            RenderEngine::renderLayerRasterFrame(displayDocument(),
+                m_currentFrame,
+                renderSize,
+                budgetBytes - previewSurfaceUsage().pinnedBytes());
         m_previewLayerRasterFrame = m_currentFrame;
+        updateFrameCacheBudget();
     }
     return m_previewLayerRasters;
 }
@@ -325,8 +332,16 @@ QSize CanvasWidget::previewRenderSize() const
     const qreal displayScale =
         std::abs(documentTransform().m11()) * devicePixelRatioF();
     int retainedSurfaces = m_animating ? document.animationFrames : 1;
-    if (m_drawing
-        && !RenderEngine::supportsLayerSplit(document, m_activeStrokeLayer))
+    // Sized for an active stroke whether or not one is in progress. Reserving
+    // only while drawing would change the render size the moment a stroke
+    // starts, and that discards every preview cache mid-interaction.
+    const QUuid strokeLayerId =
+        m_drawing ? m_activeStrokeLayer : document.activeLayerId;
+    if (RenderEngine::supportsLayerSplit(document, strokeLayerId))
+    {
+        retainedSurfaces += PreviewRenderPolicy::activeStrokeSurfaceCount;
+    }
+    else
     {
         int paintSurfaces = 0;
         bool hasEmptyLayer = false;
@@ -346,7 +361,8 @@ QSize CanvasWidget::previewRenderSize() const
             }
         }
         retainedSurfaces =
-            std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0));
+            std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0))
+            + 1;
     }
     const LayerCompositionMemoryEstimate hierarchyMemory =
         RenderEngine::estimateHierarchyMemory(document, documentSize);
@@ -358,6 +374,50 @@ QSize CanvasWidget::previewRenderSize() const
         displayScale,
         retainedSurfaces,
         hierarchyMemory.peakSurfaceCount);
+}
+
+PreviewSurfaceUsage CanvasWidget::previewSurfaceUsage() const
+{
+    PreviewSurfaceUsage usage;
+    usage.frameCacheBytes =
+        static_cast<qint64>(m_frameCache.totalCost()) * 1024;
+    if (m_previewSplit.valid)
+    {
+        usage.layerSplitBytes = m_previewSplit.below.sizeInBytes()
+                                + m_previewSplit.layerBase.sizeInBytes()
+                                + m_previewSplit.above.sizeInBytes();
+    }
+    for (auto layer = m_previewLayerRasters.paintLayers.cbegin();
+        layer != m_previewLayerRasters.paintLayers.cend();
+        ++layer)
+    {
+        usage.layerRasterBytes += layer.value().sizeInBytes();
+    }
+    usage.composedPreviewBytes = m_composedPreviewFrame.sizeInBytes();
+    // The resolved stroke preview usually is the composed frame rather than a
+    // copy of it, so its bytes may only be added when the two do not share one
+    // backing store.
+    if (!m_activeStrokePreview.isNull()
+        && m_activeStrokePreview.cacheKey()
+               != m_composedPreviewFrame.cacheKey())
+    {
+        usage.composedPreviewBytes += m_activeStrokePreview.sizeInBytes();
+    }
+    usage.colorPickBytes = m_colorPickFrame.sizeInBytes();
+    usage.strokeTileBytes =
+        static_cast<qint64>(m_incrementalStrokeRenderer.cachedTileBytes());
+    return usage;
+}
+
+void CanvasWidget::updateFrameCacheBudget()
+{
+    const qint64 frameBytes =
+        m_cachedRenderSize.isValid()
+            ? static_cast<qint64>(m_cachedRenderSize.width())
+                  * m_cachedRenderSize.height() * 4
+            : 0;
+    m_frameCache.setMaxCost(PreviewRenderPolicy::frameCacheCostKiB(
+        previewSurfaceUsage().pinnedBytes(), frameBytes));
 }
 
 void CanvasWidget::invalidateFrames()
@@ -382,6 +442,7 @@ void CanvasWidget::invalidateFrames()
     m_editableStrokeFrame = -1;
     const int frames = std::max(1, m_controller->document().animationFrames);
     m_currentFrame %= frames;
+    updateFrameCacheBudget();
     updateTimerInterval();
     notifyZoomChanged();
     update();
