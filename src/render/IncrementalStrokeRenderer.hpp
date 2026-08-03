@@ -25,6 +25,7 @@ public:
         quint64 sourcePointsProcessed = 0;
         quint64 tilesRendered = 0;
         quint64 pixelsRendered = 0;
+        quint64 primitiveInstancesRendered = 0;
         quint64 cachedTileBytes = 0;
         bool geometryRebuilt = false;
         bool valid = false;
@@ -49,6 +50,13 @@ public:
 
 private:
     static constexpr int tileEdge = 256;
+    static constexpr qsizetype checkpointPrimitiveInterval = 64;
+
+    struct TileCheckpoint
+    {
+        QImage image;
+        int throughPrimitiveExclusive = 0;
+    };
 
     QVector<QPoint> tilesForBounds(
         const QRectF &bounds, const Document &document) const;
@@ -59,16 +67,31 @@ private:
         qsizetype first,
         const Document &document,
         QSet<QPoint> &dirtyTiles);
+    void advanceTileCheckpoint(const QImage &baseLayer,
+        const Document &document,
+        const Stroke &stroke,
+        const StrokeRenderer::PreparedStroke &prepared,
+        const QPoint &tile,
+        qsizetype stablePrimitiveExclusive,
+        quint64 &primitiveInstancesRendered);
+    bool paintTilePrimitives(QImage &image,
+        const QRect &bounds,
+        const Document &document,
+        const Stroke &stroke,
+        const StrokeRenderer::PreparedStroke &prepared,
+        const QVector<int> &primitiveIndexes);
     QImage renderTile(const QImage &baseLayer,
         const Document &document,
         const Stroke &stroke,
         const StrokeRenderer::PreparedStroke &prepared,
-        const QPoint &tile);
+        const QPoint &tile,
+        quint64 &primitiveInstancesRendered);
 
     StrokeRenderer::IncrementalGeometry m_geometry;
     QHash<QPoint, QVector<int>> m_primitivesByTile;
     QVector<QVector<QPoint>> m_tilesByPrimitive;
     QHash<QPoint, QImage> m_layerTiles;
+    QHash<QPoint, TileCheckpoint> m_tileCheckpoints;
     QPainterPath m_clipPath;
     qint64 m_clipMaskKey = 0;
     qint64 m_baseLayerKey = 0;

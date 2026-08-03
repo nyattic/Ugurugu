@@ -348,6 +348,63 @@ private slots:
         }
     }
 
+    void checkpointsLocalizedHundredPixelDabEraserReplay()
+    {
+        const QSize canvasSize(4096, 4096);
+        const QSize outputSize(1024, 1024);
+        Document document = Document::createDefault(canvasSize);
+        document.background = Qt::transparent;
+        document.animationFrames = 30;
+        document.wobbleAmount = 1.6;
+        QImage base(outputSize, QImage::Format_ARGB32_Premultiplied);
+        base.fill(QColor(65, 120, 210, 230));
+
+        Stroke stroke;
+        stroke.mode = StrokeMode::Erase;
+        stroke.seed = 0x13579bdfULL;
+        stroke.width = 100.0;
+        stroke.brush.engine = BrushEngine::Airbrush;
+        stroke.brush.spacing = 0.08;
+        stroke.brush.hardness = 0.25;
+        stroke.brush.flow = 0.18;
+        stroke.brush.opacity = 0.9;
+        stroke.brush.antialiasing = true;
+
+        constexpr int pointCount = 1200;
+        IncrementalStrokeRenderer renderer;
+        quint64 primitiveInstancesRendered = 0;
+        QElapsedTimer timer;
+        timer.start();
+        for (int index = 0; index < pointCount; ++index)
+        {
+            const qreal angle = index * 0.075;
+            stroke.points.append({QPointF(2048.0 + std::cos(angle) * 120.0,
+                                      2048.0 + std::sin(angle) * 120.0),
+                1.0});
+            const IncrementalStrokeRenderer::Update update =
+                renderer.update(base, document, stroke, 4, outputSize);
+            QVERIFY(update.valid);
+            primitiveInstancesRendered += update.primitiveInstancesRendered;
+        }
+        const qint64 elapsed = timer.elapsed();
+
+        QImage actual = base;
+        QVERIFY(renderer.applyTo(actual));
+        QImage expected = base;
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            expected, document, {stroke}, 4, outputSize));
+        QCOMPARE(actual, expected);
+        QVERIFY(primitiveInstancesRendered
+                < static_cast<quint64>(pointCount) * 512ULL);
+        QVERIFY(renderer.cachedTileBytes()
+                <= static_cast<quint64>(outputSize.width())
+                       * outputSize.height() * sizeof(QRgb) * 2ULL);
+        qInfo().nospace()
+            << "4K-localized 100px dab eraser replay took " << elapsed
+            << " ms and rendered " << primitiveInstancesRendered
+            << " primitive instances with stable-prefix checkpoints";
+    }
+
     void boundsLongPrefixReplayWorkAtFourK()
     {
         const QSize canvasSize(4096, 4096);

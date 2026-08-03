@@ -10,6 +10,7 @@
 
 #include <QCache>
 #include <QColor>
+#include <QFutureWatcher>
 #include <QHash>
 #include <QImage>
 #include <QPainterPath>
@@ -17,6 +18,9 @@
 #include <QSet>
 #include <QTimer>
 #include <QWidget>
+
+#include <atomic>
+#include <memory>
 
 class QMouseEvent;
 class QTabletEvent;
@@ -40,6 +44,7 @@ public:
 
     explicit CanvasWidget(
         DocumentController *controller, QWidget *parent = nullptr);
+    ~CanvasWidget() override;
 
     Tool tool() const;
     QColor brushColor() const;
@@ -202,6 +207,9 @@ private:
     const RenderEngine::LayerRasterFrame &previewLayerRasters(
         const QSize &renderSize);
     void invalidateFrames();
+    void cancelFrameCacheWarmup();
+    void scheduleFrameCacheWarmup();
+    void renderNextFrameCacheWarmup();
     void updateTimerInterval();
     void advanceFrame();
     void beginStroke(const QPointF &widgetPosition,
@@ -320,6 +328,15 @@ private:
     bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
+    std::shared_ptr<const Document> m_frameCacheWarmupDocument;
+    std::shared_ptr<std::atomic_bool> m_frameCacheWarmupCancellation;
+    QVector<int> m_frameCacheWarmupFrames;
+    QSize m_frameCacheWarmupRenderSize;
+    qsizetype m_frameCacheWarmupCursor = 0;
+    quint64 m_frameCacheWarmupGeneration = 0;
+    bool m_frameCacheWarmupActive = false;
+    bool m_frameCacheWarmupWorkerRunning = false;
+    QFutureWatcher<QImage> m_frameCacheWarmupWatcher;
     QImage m_colorPickFrame;
     int m_colorPickFrameIndex = -1;
     RenderEngine::LayerSplitFrame m_previewSplit;

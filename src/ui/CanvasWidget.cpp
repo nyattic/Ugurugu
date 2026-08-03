@@ -137,6 +137,12 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
 
     updateTimerInterval();
     m_animationTimer.start();
+    scheduleFrameCacheWarmup();
+}
+
+CanvasWidget::~CanvasWidget()
+{
+    cancelFrameCacheWarmup();
 }
 
 CanvasWidget::Tool CanvasWidget::tool() const
@@ -1015,14 +1021,23 @@ void CanvasWidget::setAnimating(bool animating)
     }
     const QSize previousPreviewSize = previewRenderSize();
     m_animating = animating;
-    if (previewRenderSize() != previousPreviewSize)
+    const bool previewSizeChanged = previewRenderSize() != previousPreviewSize;
+    if (previewSizeChanged)
     {
         invalidateFrames();
+    }
+    else if (!m_animating)
+    {
+        cancelFrameCacheWarmup();
     }
     if (m_animating)
     {
         updateTimerInterval();
         m_animationTimer.start();
+        if (!previewSizeChanged)
+        {
+            scheduleFrameCacheWarmup();
+        }
     }
     else
     {

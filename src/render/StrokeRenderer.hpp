@@ -75,7 +75,7 @@ void paint(
 void paintPrimitives(QPainter &painter,
     const Stroke &stroke,
     const PreparedStroke &prepared,
-    QVector<int> primitiveIndexes);
+    const QVector<int> &primitiveIndexes);
 QRectF primitiveBounds(
     const Stroke &stroke, const PreparedStroke &prepared, int primitiveIndex);
 int primitiveCount(const Stroke &stroke, const PreparedStroke &prepared);

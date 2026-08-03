@@ -1,8 +1,22 @@
+set(
+    WOBBLEPAINT_LLVM_TOOL_HINTS
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+    "/opt/homebrew/opt/llvm/bin"
+    "/usr/local/opt/llvm/bin"
+)
+if(WIN32 AND CMAKE_GENERATOR_INSTANCE)
+    list(
+        APPEND
+        WOBBLEPAINT_LLVM_TOOL_HINTS
+        "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/x64/bin"
+        "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/bin"
+    )
+endif()
+
 find_program(
     WOBBLEPAINT_CLANG_FORMAT
     NAMES clang-format
-    HINTS
-    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin"
+    HINTS ${WOBBLEPAINT_LLVM_TOOL_HINTS}
 )
 if(WOBBLEPAINT_CLANG_FORMAT)
     file(
@@ -39,18 +53,42 @@ endif()
 find_program(
     WOBBLEPAINT_CLANG_TIDY
     NAMES clang-tidy
-    HINTS
-    "/opt/homebrew/opt/llvm/bin"
-    "/usr/local/opt/llvm/bin"
+    HINTS ${WOBBLEPAINT_LLVM_TOOL_HINTS}
 )
 find_program(
     WOBBLEPAINT_RUN_CLANG_TIDY
     NAMES run-clang-tidy run-clang-tidy.py
-    HINTS
-    "/opt/homebrew/opt/llvm/bin"
-    "/usr/local/opt/llvm/bin"
+    HINTS ${WOBBLEPAINT_LLVM_TOOL_HINTS}
 )
-if(WOBBLEPAINT_CLANG_TIDY AND WOBBLEPAINT_RUN_CLANG_TIDY)
+set(
+    WOBBLEPAINT_RUN_CLANG_TIDY_COMMAND
+    "${WOBBLEPAINT_RUN_CLANG_TIDY}"
+)
+if(WIN32 AND WOBBLEPAINT_RUN_CLANG_TIDY)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        list(
+            PREPEND
+            WOBBLEPAINT_RUN_CLANG_TIDY_COMMAND
+            "${Python3_EXECUTABLE}"
+        )
+    else()
+        set(WOBBLEPAINT_RUN_CLANG_TIDY_COMMAND)
+    endif()
+endif()
+if(WOBBLEPAINT_CLANG_TIDY AND WOBBLEPAINT_RUN_CLANG_TIDY_COMMAND)
+    set(WOBBLEPAINT_TIDY_PATH_SEPARATOR "[/\\\\]")
+    string(
+        REPLACE
+        "/"
+        "${WOBBLEPAINT_TIDY_PATH_SEPARATOR}"
+        WOBBLEPAINT_TIDY_SOURCE_ROOT
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    set(
+        WOBBLEPAINT_TIDY_SOURCE_PATTERN
+        "^${WOBBLEPAINT_TIDY_SOURCE_ROOT}${WOBBLEPAINT_TIDY_PATH_SEPARATOR}(src|tests|tools)${WOBBLEPAINT_TIDY_PATH_SEPARATOR}.*\\.(cpp|mm)$"
+    )
     set(WOBBLEPAINT_CLANG_TIDY_ARGUMENTS)
     if(APPLE)
         execute_process(
@@ -71,18 +109,22 @@ if(WOBBLEPAINT_CLANG_TIDY AND WOBBLEPAINT_RUN_CLANG_TIDY)
     add_custom_target(
         wobblepaint_tidy
         COMMAND
-        "${WOBBLEPAINT_RUN_CLANG_TIDY}"
+        ${WOBBLEPAINT_RUN_CLANG_TIDY_COMMAND}
         -p
         "${CMAKE_BINARY_DIR}"
         -clang-tidy-binary
         "${WOBBLEPAINT_CLANG_TIDY}"
         -quiet
         ${WOBBLEPAINT_CLANG_TIDY_ARGUMENTS}
-        "^${CMAKE_CURRENT_SOURCE_DIR}/(src|tests|tools)/.*\\.(cpp|mm)$"
+        "${WOBBLEPAINT_TIDY_SOURCE_PATTERN}"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         USES_TERMINAL
         VERBATIM
     )
+    add_dependencies(wobblepaint_tidy WagleWaglePaint)
+    if(TARGET wobblepaint_tests)
+        add_dependencies(wobblepaint_tidy wobblepaint_tests)
+    endif()
 endif()
 
 if(APPLE)

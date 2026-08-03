@@ -747,21 +747,31 @@ void paint(
 void paintPrimitives(QPainter &painter,
     const Stroke &stroke,
     const PreparedStroke &prepared,
-    QVector<int> primitiveIndexes)
+    const QVector<int> &primitiveIndexes)
 {
     if (!prepared.valid || primitiveIndexes.isEmpty())
     {
         return;
     }
-    std::sort(primitiveIndexes.begin(), primitiveIndexes.end());
-    primitiveIndexes.erase(
-        std::unique(primitiveIndexes.begin(), primitiveIndexes.end()),
-        primitiveIndexes.end());
+    QVector<int> normalizedIndexes;
+    const QVector<int> *orderedIndexes = &primitiveIndexes;
+    if (!std::is_sorted(primitiveIndexes.cbegin(), primitiveIndexes.cend())
+        || std::adjacent_find(
+               primitiveIndexes.cbegin(), primitiveIndexes.cend())
+               != primitiveIndexes.cend())
+    {
+        normalizedIndexes = primitiveIndexes;
+        std::sort(normalizedIndexes.begin(), normalizedIndexes.end());
+        normalizedIndexes.erase(
+            std::unique(normalizedIndexes.begin(), normalizedIndexes.end()),
+            normalizedIndexes.end());
+        orderedIndexes = &normalizedIndexes;
+    }
     const QColor color =
         stroke.mode == StrokeMode::Erase ? Qt::black : stroke.color;
     if (stroke.brush.engine == BrushEngine::Airbrush)
     {
-        for (const int index : primitiveIndexes)
+        for (const int index : *orderedIndexes)
         {
             if (index >= 0 && index < prepared.points.size())
             {
@@ -778,7 +788,7 @@ void paintPrimitives(QPainter &painter,
     {
         painter.setRenderHint(QPainter::Antialiasing, false);
         painter.setPen(Qt::NoPen);
-        for (const int index : primitiveIndexes)
+        for (const int index : *orderedIndexes)
         {
             if (index >= 0 && index < prepared.points.size())
             {
@@ -810,7 +820,7 @@ void paintPrimitives(QPainter &painter,
         int last;
     };
     QVector<Range> ranges;
-    for (const int primitive : primitiveIndexes)
+    for (const int primitive : *orderedIndexes)
     {
         if (primitive < 0 || primitive >= prepared.points.size() - 1)
         {

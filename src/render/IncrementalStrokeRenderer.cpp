@@ -78,6 +78,7 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
         m_primitivesByTile.clear();
         m_tilesByPrimitive.clear();
         m_layerTiles.clear();
+        m_tileCheckpoints.clear();
         m_clipPath = {};
         m_clipMaskKey = 0;
     }
@@ -104,6 +105,22 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
     if (geometry.rebuilt || geometry.renderingModeChanged)
     {
         rebuildFrom = 0;
+        m_tileCheckpoints.clear();
+    }
+    else
+    {
+        for (auto checkpoint = m_tileCheckpoints.begin();
+            checkpoint != m_tileCheckpoints.end();)
+        {
+            if (checkpoint->throughPrimitiveExclusive > rebuildFrom)
+            {
+                checkpoint = m_tileCheckpoints.erase(checkpoint);
+            }
+            else
+            {
+                ++checkpoint;
+            }
+        }
     }
     removePrimitiveIndexesFrom(rebuildFrom, dirtyTiles);
     addPrimitiveIndexesFrom(
@@ -111,6 +128,7 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
 
     if (m_clipMaskKey != stroke.clipMask.cacheKey())
     {
+        m_tileCheckpoints.clear();
         m_clipPath = maskPath(stroke.clipMask);
         m_clipMaskKey = stroke.clipMask.cacheKey();
         for (auto tile = m_layerTiles.cbegin(); tile != m_layerTiles.cend();
@@ -135,9 +153,22 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
         if (primitives == m_primitivesByTile.cend() || primitives->isEmpty())
         {
             m_layerTiles.remove(tile);
+            m_tileCheckpoints.remove(tile);
             continue;
         }
-        QImage image = renderTile(baseLayer, document, stroke, prepared, tile);
+        advanceTileCheckpoint(baseLayer,
+            document,
+            stroke,
+            prepared,
+            tile,
+            rebuildFrom,
+            result.primitiveInstancesRendered);
+        QImage image = renderTile(baseLayer,
+            document,
+            stroke,
+            prepared,
+            tile,
+            result.primitiveInstancesRendered);
         if (image.isNull())
         {
             clear();
@@ -161,6 +192,12 @@ quint64 IncrementalStrokeRenderer::cachedTileBytes() const
     for (auto tile = m_layerTiles.cbegin(); tile != m_layerTiles.cend(); ++tile)
     {
         bytes += tile.value().sizeInBytes();
+    }
+    for (auto checkpoint = m_tileCheckpoints.cbegin();
+        checkpoint != m_tileCheckpoints.cend();
+        ++checkpoint)
+    {
+        bytes += checkpoint->image.sizeInBytes();
     }
     return bytes;
 }
@@ -187,6 +224,7 @@ void IncrementalStrokeRenderer::clear()
     m_primitivesByTile.clear();
     m_tilesByPrimitive.clear();
     m_layerTiles.clear();
+    m_tileCheckpoints.clear();
     m_clipPath = {};
     m_clipMaskKey = 0;
     m_baseLayerKey = 0;
@@ -284,21 +322,70 @@ void IncrementalStrokeRenderer::addPrimitiveIndexesFrom(const Stroke &stroke,
     }
 }
 
-QImage IncrementalStrokeRenderer::renderTile(const QImage &baseLayer,
+void IncrementalStrokeRenderer::advanceTileCheckpoint(const QImage &baseLayer,
     const Document &document,
     const Stroke &stroke,
     const StrokeRenderer::PreparedStroke &prepared,
-    const QPoint &tile)
+    const QPoint &tile,
+    qsizetype stablePrimitiveExclusive,
+    quint64 &primitiveInstancesRendered)
 {
-    const QRect bounds = tileBounds(tile);
-    if (bounds.isEmpty())
+    // Line strokes are rendered as connected paths. Splitting those paths at
+    // a checkpoint changes joins and antialiased edge coverage, so only the
+    // independent-dab engines can safely flatten a stable prefix.
+    if (stroke.brush.engine == BrushEngine::Line)
     {
-        return {};
+        return;
     }
-    QImage image = baseLayer.copy(bounds);
-    if (image.isNull())
+    const auto primitives = m_primitivesByTile.constFind(tile);
+    if (primitives == m_primitivesByTile.cend() || primitives->isEmpty())
     {
-        return {};
+        m_tileCheckpoints.remove(tile);
+        return;
+    }
+
+    stablePrimitiveExclusive = std::max<qsizetype>(0, stablePrimitiveExclusive);
+    auto checkpoint = m_tileCheckpoints.find(tile);
+    const int checkpointExclusive = checkpoint == m_tileCheckpoints.end()
+                                        ? 0
+                                        : checkpoint->throughPrimitiveExclusive;
+    const auto first = std::lower_bound(
+        primitives->cbegin(), primitives->cend(), checkpointExclusive);
+    const auto last = std::lower_bound(primitives->cbegin(),
+        primitives->cend(),
+        static_cast<int>(stablePrimitiveExclusive));
+    if (last - first < checkpointPrimitiveInterval)
+    {
+        return;
+    }
+
+    const QRect bounds = tileBounds(tile);
+    QImage image = checkpoint == m_tileCheckpoints.end()
+                       ? baseLayer.copy(bounds)
+                       : checkpoint->image;
+    const QVector<int> stablePrimitives(first, last);
+    if (image.isNull()
+        || !paintTilePrimitives(
+            image, bounds, document, stroke, prepared, stablePrimitives))
+    {
+        m_tileCheckpoints.remove(tile);
+        return;
+    }
+    primitiveInstancesRendered += stablePrimitives.size();
+    m_tileCheckpoints.insert(
+        tile, {std::move(image), static_cast<int>(stablePrimitiveExclusive)});
+}
+
+bool IncrementalStrokeRenderer::paintTilePrimitives(QImage &image,
+    const QRect &bounds,
+    const Document &document,
+    const Stroke &stroke,
+    const StrokeRenderer::PreparedStroke &prepared,
+    const QVector<int> &primitiveIndexes)
+{
+    if (image.isNull() || bounds.isEmpty())
+    {
+        return false;
     }
     const qreal horizontalScale =
         static_cast<qreal>(m_outputSize.width()) / document.size.width();
@@ -323,7 +410,43 @@ QImage IncrementalStrokeRenderer::renderTile(const QImage &baseLayer,
                                    : QPainter::CompositionMode_SourceOver);
     painter.setBrush(Qt::NoBrush);
     StrokeRenderer::paintPrimitives(
-        painter, stroke, prepared, m_primitivesByTile.value(tile));
+        painter, stroke, prepared, primitiveIndexes);
+    return true;
+}
+
+QImage IncrementalStrokeRenderer::renderTile(const QImage &baseLayer,
+    const Document &document,
+    const Stroke &stroke,
+    const StrokeRenderer::PreparedStroke &prepared,
+    const QPoint &tile,
+    quint64 &primitiveInstancesRendered)
+{
+    const QRect bounds = tileBounds(tile);
+    if (bounds.isEmpty())
+    {
+        return {};
+    }
+    const auto primitives = m_primitivesByTile.constFind(tile);
+    if (primitives == m_primitivesByTile.cend())
+    {
+        return {};
+    }
+    const auto checkpoint = m_tileCheckpoints.constFind(tile);
+    const int checkpointExclusive = checkpoint == m_tileCheckpoints.cend()
+                                        ? 0
+                                        : checkpoint->throughPrimitiveExclusive;
+    QImage image = checkpoint == m_tileCheckpoints.cend()
+                       ? baseLayer.copy(bounds)
+                       : checkpoint->image;
+    const auto first = std::lower_bound(
+        primitives->cbegin(), primitives->cend(), checkpointExclusive);
+    const QVector<int> remainingPrimitives(first, primitives->cend());
+    if (!paintTilePrimitives(
+            image, bounds, document, stroke, prepared, remainingPrimitives))
+    {
+        return {};
+    }
+    primitiveInstancesRendered += remainingPrimitives.size();
     return image;
 }
 

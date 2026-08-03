@@ -212,7 +212,20 @@ public:
             owner,
             [this, watcher, progress]()
             {
-                const DownloadResult result = watcher->result();
+                DownloadResult result;
+                try
+                {
+                    result = watcher->result();
+                }
+                catch (const std::exception &error)
+                {
+                    result.error = QString::fromUtf8(error.what());
+                }
+                catch (...)
+                {
+                    result.error = UpdateController::tr(
+                        "The update download failed unexpectedly.");
+                }
                 watcher->deleteLater();
                 progress->close();
                 progress->deleteLater();
@@ -235,15 +248,17 @@ public:
                 }
             });
 
+        const auto sharedUpdate =
+            std::make_shared<const Velopack::UpdateInfo>(update);
         watcher->setFuture(QtConcurrent::run(
-            [update](QPromise<DownloadResult> &promise)
+            [sharedUpdate](QPromise<DownloadResult> &promise)
             {
                 promise.setProgressRange(0, 100);
                 try
                 {
                     auto manager = createUpdateManager();
                     manager->DownloadUpdates(
-                        update,
+                        *sharedUpdate,
                         [](void *data, size_t value)
                         {
                             auto *downloadPromise =
@@ -252,7 +267,7 @@ public:
                                 std::clamp(static_cast<int>(value), 0, 100));
                         },
                         &promise);
-                    promise.addResult(DownloadResult{update, {}});
+                    promise.addResult(DownloadResult{*sharedUpdate, {}});
                 }
                 catch (const std::exception &error)
                 {

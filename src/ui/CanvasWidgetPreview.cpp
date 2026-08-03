@@ -5,7 +5,9 @@
 #include "ui/CanvasViewport.hpp"
 #include "ui/CanvasWidget.hpp"
 
+#include <QFutureWatcher>
 #include <QPainter>
+#include <QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
@@ -422,6 +424,7 @@ void CanvasWidget::updateFrameCacheBudget()
 
 void CanvasWidget::invalidateFrames()
 {
+    cancelFrameCacheWarmup();
     m_frameCache.clear();
     m_cachedRenderSize = {};
     m_colorPickFrame = {};
@@ -446,6 +449,155 @@ void CanvasWidget::invalidateFrames()
     updateTimerInterval();
     notifyZoomChanged();
     update();
+    scheduleFrameCacheWarmup();
+}
+
+void CanvasWidget::cancelFrameCacheWarmup()
+{
+    if (m_frameCacheWarmupCancellation)
+    {
+        m_frameCacheWarmupCancellation->store(true, std::memory_order_relaxed);
+    }
+    ++m_frameCacheWarmupGeneration;
+    m_frameCacheWarmupActive = false;
+    m_frameCacheWarmupCancellation.reset();
+    m_frameCacheWarmupDocument.reset();
+    m_frameCacheWarmupFrames.clear();
+    m_frameCacheWarmupRenderSize = {};
+    m_frameCacheWarmupCursor = 0;
+}
+
+void CanvasWidget::scheduleFrameCacheWarmup()
+{
+    const quint64 generation = m_frameCacheWarmupGeneration;
+    QTimer::singleShot(0,
+        this,
+        [this, generation]()
+        {
+            if (generation != m_frameCacheWarmupGeneration || !m_animating
+                || !m_wobbleAnimationEnabled || m_drawing)
+            {
+                return;
+            }
+
+            const QSize renderSize = previewRenderSize();
+            const int frameCount =
+                std::max(1, m_controller->document().animationFrames);
+            if (renderSize.isEmpty() || frameCount <= 1)
+            {
+                return;
+            }
+            if (m_cachedRenderSize != renderSize)
+            {
+                m_frameCache.clear();
+                m_cachedRenderSize = renderSize;
+            }
+
+            QVector<int> missingFrames;
+            missingFrames.reserve(frameCount);
+            for (int offset = 0; offset < frameCount; ++offset)
+            {
+                const int frame = (m_currentFrame + offset) % frameCount;
+                if (!m_frameCache.object(frame))
+                {
+                    missingFrames.append(frame);
+                }
+            }
+            if (missingFrames.isEmpty())
+            {
+                return;
+            }
+
+            m_frameCacheWarmupDocument =
+                std::make_shared<const Document>(displayDocument());
+            m_frameCacheWarmupCancellation =
+                std::make_shared<std::atomic_bool>(false);
+            m_frameCacheWarmupFrames = std::move(missingFrames);
+            m_frameCacheWarmupRenderSize = renderSize;
+            m_frameCacheWarmupCursor = 0;
+            m_frameCacheWarmupActive = true;
+            renderNextFrameCacheWarmup();
+        });
+}
+
+void CanvasWidget::renderNextFrameCacheWarmup()
+{
+    if (m_frameCacheWarmupWorkerRunning)
+    {
+        return;
+    }
+    if (!m_frameCacheWarmupActive || !m_frameCacheWarmupDocument
+        || !m_frameCacheWarmupCancellation
+        || m_frameCacheWarmupCursor >= m_frameCacheWarmupFrames.size())
+    {
+        m_frameCacheWarmupActive = false;
+        m_frameCacheWarmupCancellation.reset();
+        m_frameCacheWarmupDocument.reset();
+        m_frameCacheWarmupFrames.clear();
+        m_frameCacheWarmupRenderSize = {};
+        m_frameCacheWarmupCursor = 0;
+        update();
+        return;
+    }
+
+    const quint64 generation = m_frameCacheWarmupGeneration;
+    const int frame = m_frameCacheWarmupFrames[m_frameCacheWarmupCursor];
+    const QSize renderSize = m_frameCacheWarmupRenderSize;
+    const std::shared_ptr<const Document> document = m_frameCacheWarmupDocument;
+    const std::shared_ptr<std::atomic_bool> cancellation =
+        m_frameCacheWarmupCancellation;
+    m_frameCacheWarmupWorkerRunning = true;
+    connect(
+        &m_frameCacheWarmupWatcher,
+        &QFutureWatcher<QImage>::finished,
+        this,
+        [this, generation, frame, renderSize, cancellation]()
+        {
+            const QImage image = m_frameCacheWarmupWatcher.result();
+            m_frameCacheWarmupWorkerRunning = false;
+            if (generation != m_frameCacheWarmupGeneration
+                || cancellation != m_frameCacheWarmupCancellation
+                || cancellation->load(std::memory_order_relaxed))
+            {
+                QTimer::singleShot(
+                    0, this, &CanvasWidget::renderNextFrameCacheWarmup);
+                return;
+            }
+            if (previewRenderSize() != renderSize)
+            {
+                cancelFrameCacheWarmup();
+                QTimer::singleShot(
+                    0, this, &CanvasWidget::renderNextFrameCacheWarmup);
+                return;
+            }
+            if (!image.isNull())
+            {
+                m_cachedRenderSize = renderSize;
+                updateFrameCacheBudget();
+                const int cost =
+                    PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
+                m_frameCache.insert(frame, new QImage(image), cost);
+            }
+            ++m_frameCacheWarmupCursor;
+            QTimer::singleShot(
+                0, this, &CanvasWidget::renderNextFrameCacheWarmup);
+        },
+        Qt::SingleShotConnection);
+    m_frameCacheWarmupWatcher.setFuture(QtConcurrent::run(
+        [document, cancellation, frame, renderSize]()
+        {
+            if (cancellation->load(std::memory_order_relaxed))
+            {
+                return QImage();
+            }
+            QImage image =
+                RenderEngine::renderScaled(*document, frame, renderSize);
+            if (cancellation->load(std::memory_order_relaxed))
+            {
+                return QImage();
+            }
+            return image;
+        }));
 }
 
 void CanvasWidget::updateTimerInterval()
@@ -458,9 +610,9 @@ void CanvasWidget::updateTimerInterval()
 
 void CanvasWidget::advanceFrame()
 {
-    if (!m_animating || (m_drawing && !m_animateWhileDrawing) || m_panning
-        || m_zoomDragging || m_pickingColor || m_movingSelection
-        || m_areaSelectionActive)
+    if (!m_animating || m_frameCacheWarmupActive
+        || (m_drawing && !m_animateWhileDrawing) || m_panning || m_zoomDragging
+        || m_pickingColor || m_movingSelection || m_areaSelectionActive)
     {
         return;
     }

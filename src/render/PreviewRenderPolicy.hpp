@@ -15,10 +15,10 @@ public:
     static constexpr qreal maximumPreviewEdge = 4096.0;
 
     // Surfaces an active stroke keeps resident alongside the frame it composes
-    // over: the layer split's below, layerBase and above, plus the working copy
-    // patches are drawn into. The frame itself is counted by the caller as a
-    // retained surface.
-    static constexpr int activeStrokeSurfaceCount = 4;
+    // over: the layer split's below, layerBase and above, the working copy
+    // patches are drawn into, and bounded stable-prefix tile checkpoints. The
+    // frame itself is counted by the caller as a retained surface.
+    static constexpr int activeStrokeSurfaceCount = 5;
 
     static QSize renderSize(const QSize &documentSize,
         qreal physicalDisplayScale,

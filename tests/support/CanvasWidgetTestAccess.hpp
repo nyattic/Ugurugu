@@ -30,6 +30,16 @@ public:
         return canvas.m_frameCache.object(frame) != nullptr;
     }
 
+    static bool frameCacheWarmupActive(const CanvasWidget &canvas)
+    {
+        return canvas.m_frameCacheWarmupActive;
+    }
+
+    static int cachedFrameCount(const CanvasWidget &canvas)
+    {
+        return canvas.m_frameCache.size();
+    }
+
     static PreviewSurfaceUsage previewSurfaceUsage(const CanvasWidget &canvas)
     {
         return canvas.previewSurfaceUsage();

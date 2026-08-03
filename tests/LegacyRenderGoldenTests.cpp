@@ -74,29 +74,45 @@ private slots:
 
     void matchesV100Pixels_data()
     {
-        // These fixtures and hashes were produced by v1.0.0 commit 9117cc4
-        // with Qt 6.11.1. Change them only with an explicit compatibility
-        // decision, never to make an unexplained renderer change pass.
+        // These fixtures and hashes pin v1.0.0 commit 9117cc4 with Qt 6.11.1.
+        // Classic motion used the platform math library, so animated pixels
+        // differ between the shipped macOS and Windows builds. Keep each
+        // platform pinned to its own v1 output; static fixtures are shared.
         QTest::addColumn<QString>("fileName");
         QTest::addColumn<int>("frame");
         QTest::addColumn<QByteArray>("expectedHash");
 
+#ifdef Q_OS_WIN
+        const QByteArray animatedFrame0 = QByteArrayLiteral(
+            "a880bb01875276e0b373b34d104f6dd24480c34d98505e23e5afb87d404167ab");
+        const QByteArray animatedFrame1 = QByteArrayLiteral(
+            "19aeda40525e865fd7b3d2eb8656c23117cb779d5edf513356b0c7ac5e3f46c3");
+        const QByteArray animatedFrame6 = QByteArrayLiteral(
+            "6d8b84ef5ad1d2953c5259e0b7751fc2aa3eba3a5f8a46fbdf69ba0bfb280aed");
+        const QByteArray animatedFrame11 = QByteArrayLiteral(
+            "fdb8a8ba30fa8ba7a7e4ff302e1accdd5460bfba09785ec9c09504b167947466");
+#else
+        const QByteArray animatedFrame0 = QByteArrayLiteral(
+            "6a089d1cc7bf17863051b39db06df5ab2c1eb6c2ee5a29a6de923046e3080065");
+        const QByteArray animatedFrame1 = QByteArrayLiteral(
+            "508cb433b5517a0f3cfedf1446a6761fa842efbfa7505a00d7dff95ddfc48c15");
+        const QByteArray animatedFrame6 = QByteArrayLiteral(
+            "fa53aece48211e3e85b5dfb39b85fae8df214888a2d84ed2c7373a3ed066bf59");
+        const QByteArray animatedFrame11 = QByteArrayLiteral(
+            "f1524157872b85482731cc57e72537769e80ef8f06799ce10b5e5d0a2a237175");
+#endif
         QTest::newRow("animated-frame-0")
             << QStringLiteral("animated-paint-erase.wagle") << 0
-            << QByteArrayLiteral("6a089d1cc7bf17863051b39db06df5ab2c1eb6c2ee5a2"
-                                 "9a6de923046e3080065");
+            << animatedFrame0;
         QTest::newRow("animated-frame-1")
             << QStringLiteral("animated-paint-erase.wagle") << 1
-            << QByteArrayLiteral("508cb433b5517a0f3cfedf1446a6761fa842efbfa7505"
-                                 "a00d7dff95ddfc48c15");
+            << animatedFrame1;
         QTest::newRow("animated-frame-6")
             << QStringLiteral("animated-paint-erase.wagle") << 6
-            << QByteArrayLiteral("fa53aece48211e3e85b5dfb39b85fae8df214888a2d84"
-                                 "ed2c7373a3ed066bf59");
+            << animatedFrame6;
         QTest::newRow("animated-frame-11")
             << QStringLiteral("animated-paint-erase.wagle") << 11
-            << QByteArrayLiteral("f1524157872b85482731cc57e72537769e80ef8f06799"
-                                 "ce10b5e5d0a2a237175");
+            << animatedFrame11;
         QTest::newRow("fill-hierarchy-frame-0")
             << QStringLiteral("fill-hierarchy.wagle") << 0
             << QByteArrayLiteral("04cb57d78a702ae774db20c02cab5dff3a0a2aa1db866"

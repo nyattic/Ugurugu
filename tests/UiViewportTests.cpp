@@ -1,6 +1,8 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <cmath>
+
 namespace wobble
 {
 
@@ -246,6 +248,73 @@ private slots:
             canvas, canvas.currentFrame()));
         qInfo().nospace() << "4K pen-up cache promotion and next paint took "
                           << penUpMilliseconds << " ms";
+    }
+
+    void warmsAnimatedFourKFramesOffTheUiThreadAfterErasing()
+    {
+        Document document = Document::createDefault(QSize(4096, 4096));
+        document.animationFrames = 30;
+        document.wobbleAmount = 1.6;
+        Stroke background;
+        background.color = QColor(220, 70, 50);
+        background.width = 320.0;
+        background.points = {{QPointF(300.0, 1200.0), 1.0},
+            {QPointF(1100.0, 2800.0), 1.0},
+            {QPointF(2100.0, 1300.0), 1.0},
+            {QPointF(3100.0, 2900.0), 1.0},
+            {QPointF(3800.0, 1500.0), 1.0}};
+        document.layers.first().strokes.append(background);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setZoomPercent(25);
+        canvas.setTool(CanvasWidget::Tool::Eraser);
+        canvas.setEraserWidth(100.0);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas), 30, 10000);
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(70, 0));
+        for (int step = 0; step < 160; ++step)
+        {
+            const qreal angle = step * 0.31;
+            const QPoint offset(
+                qRound(std::cos(angle) * 70.0), qRound(std::sin(angle) * 45.0));
+            QTest::mouseMove(&canvas, center + offset);
+        }
+
+        QElapsedTimer timer;
+        timer.start();
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(70, 0));
+        QApplication::processEvents(QEventLoop::AllEvents, 5);
+        const qreal penUpMilliseconds =
+            static_cast<qreal>(timer.nsecsElapsed()) / 1000000.0;
+
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
+            canvas, canvas.currentFrame()));
+        QVERIFY(CanvasWidgetTestAccess::frameCacheWarmupActive(canvas)
+                || CanvasWidgetTestAccess::cachedFrameCount(canvas) == 30);
+#ifdef NDEBUG
+        QVERIFY2(penUpMilliseconds < 500.0,
+            qPrintable(QStringLiteral("4K animated pen-up blocked for %1 ms")
+                    .arg(penUpMilliseconds)));
+#endif
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas), 30, 10000);
+        qInfo().nospace() << "4K 100px animated eraser pen-up returned in "
+                          << penUpMilliseconds
+                          << " ms; remaining frames were warmed asynchronously";
     }
 
     void keepsEveryPreviewSurfaceInsideTheDeclaredBudget()

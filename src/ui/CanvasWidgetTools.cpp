@@ -59,6 +59,9 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
         return;
     }
 
+    // Input latency takes priority over speculative animation frames. The
+    // completed stroke will schedule a fresh warmup for the new document.
+    cancelFrameCacheWarmup();
     m_activeStroke = Stroke();
     m_activeStroke.seed = QRandomGenerator::global()->generate64();
     const bool erasing = tabletEraser || m_tool == Tool::Eraser;
