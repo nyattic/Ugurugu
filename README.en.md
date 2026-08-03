@@ -84,8 +84,11 @@ necessary.
 - A timeline with a live preview and adjustable wobble strength, frame
   count, and FPS
 - 1–1600% zoom, true 100% actual-pixel view, and fit-to-window
+- A canvas background colour that can be fully transparent, for sticker-style
+  PNG and GIF output with no background
 - Looping GIF and still-image PNG/JPG export with progress and cancellation,
-  plus `.wagle` project files
+  plus `.wagle` project files. GIF export lets you pick a size and whether to
+  keep transparency, and shows the memory it needs before you start
 - Crash recovery and restored tool, color, and brush settings on restart
 - Customizable shortcuts and an English, Korean, or Japanese interface
 - Automatic updates through Sparkle on macOS and Velopack on Windows
