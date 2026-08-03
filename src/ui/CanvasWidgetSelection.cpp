@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace wobble
 {
@@ -301,6 +302,7 @@ void CanvasWidget::evaluateSelectionVisibility()
     const Layer *layer = document.layer(layerId);
     if (!layer || !layer->visible || layer->opacity <= 0.0 || mask.isNull())
     {
+        m_armSelectionMoveMode = false;
         m_selectedStrokes.clear();
         if (layer && !mask.isNull())
         {
@@ -345,6 +347,11 @@ void CanvasWidget::evaluateSelectionVisibility()
             }
             m_selectedStrokes = std::move(selected);
             notifySelectionTransformAvailability();
+            if (std::exchange(m_armSelectionMoveMode, false)
+                && !m_selectedStrokes.isEmpty())
+            {
+                setSelectionMoveMode(true);
+            }
             emit interactionMessage(
                 m_selectedStrokes.isEmpty()
                     ? tr("No content in the selected area.")

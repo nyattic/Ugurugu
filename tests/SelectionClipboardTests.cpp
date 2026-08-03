@@ -273,6 +273,54 @@ private slots:
         QCOMPARE(rendered.size(), QSize(64, 64));
     }
 
+    void pasteWithDeltaShiftsCopyAndMovesSelectionToTheNewLayer()
+    {
+        const Document source = clipboardSourceDocument();
+        const QImage mask =
+            rectangularSelectionMask(source.size, QRect(10, 20, 70, 50));
+        const std::optional<SelectionClipboardCodec::Copy> copy =
+            SelectionClipboardCodec::makeCopy(
+                source, source.layers.first().id, mask, 0);
+        QVERIFY(copy.has_value());
+        QCOMPARE(copy->canvasSize, source.size);
+        QVERIFY(!copy->layer.strokes.isEmpty());
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(source));
+        QSignalSpy selectionSpy(&controller,
+            &DocumentController::selectionHistoryStateRequested);
+        const QByteArray before =
+            DocumentSerializer::toJson(controller.document());
+        QCOMPARE(controller.pasteLayer(
+                     copy->layer, copy->canvasSize, QPointF(12, 12), mask),
+            DocumentController::PasteLayerResult::Pasted);
+
+        const Document &after = controller.document();
+        QCOMPARE(after.layers.size(), 2);
+        const Layer &pastedLayer = after.layers[1];
+        QCOMPARE(after.activeLayerId, pastedLayer.id);
+        const Stroke &move = pastedLayer.strokes.last();
+        QCOMPARE(move.mode, StrokeMode::PixelSelection);
+        QVERIFY(move.pixelSelectionOp.has_value());
+        QVERIFY(move.pixelSelectionOp->clearSource);
+        QVERIFY(move.pixelSelectionOp->drawDestination);
+        QCOMPARE(move.pixelSelectionOp->transform,
+            QTransform::fromTranslate(12, 12));
+
+        QCOMPARE(selectionSpy.count(), 1);
+        QCOMPARE(selectionSpy.last().at(0).value<QUuid>(), pastedLayer.id);
+        const QImage movedMask = selectionSpy.last().at(1).value<QImage>();
+        QVERIFY(!movedMask.isNull());
+        QVERIFY(movedMask.constScanLine(25 + 12)[15 + 12] >= 128);
+        QVERIFY(movedMask.constScanLine(25)[11] < 128);
+
+        controller.undoStack()->undo();
+        QCOMPARE(DocumentSerializer::toJson(controller.document()), before);
+        QCOMPARE(selectionSpy.count(), 2);
+        QCOMPARE(selectionSpy.last().at(0).value<QUuid>(),
+            source.layers.first().id);
+    }
+
     void undoAfterPasteRestoresTheDocument()
     {
         const Document source = clipboardSourceDocument();

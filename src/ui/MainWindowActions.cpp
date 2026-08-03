@@ -309,8 +309,9 @@ void MainWindow::createActions()
 
     m_copySelectionAction = new QAction(tr("&Copy"), this);
     m_copySelectionAction->setObjectName(QStringLiteral("copySelectionAction"));
+    m_copySelectionAction->setIcon(Icons::icon(IconGlyph::Copy));
     m_copySelectionAction->setToolTip(
-        tr("Copy the selection to the clipboard"));
+        tr("Copy the selection to a new layer and the clipboard"));
     m_copySelectionAction->setEnabled(false);
     registerShortcut(m_copySelectionAction, QKeySequence(QKeySequence::Copy));
     connect(m_copySelectionAction,
@@ -326,19 +327,6 @@ void MainWindow::createActions()
         &QAction::triggered,
         this,
         &MainWindow::pasteFromClipboard);
-
-    m_copyPasteSelectionAction = new QAction(tr("Copy and paste"), this);
-    m_copyPasteSelectionAction->setObjectName(
-        QStringLiteral("copyPasteSelectionAction"));
-    m_copyPasteSelectionAction->setIcon(Icons::icon(IconGlyph::CopyPaste));
-    m_copyPasteSelectionAction->setToolTip(
-        tr("Copy the selection and paste it as a new layer"));
-    m_copyPasteSelectionAction->setEnabled(false);
-    registerShortcut(m_copyPasteSelectionAction, {});
-    connect(m_copyPasteSelectionAction,
-        &QAction::triggered,
-        this,
-        &MainWindow::copyAndPasteSelection);
 
     m_duplicateSelectionAction = new QAction(tr("Duplicate selection"), this);
     m_duplicateSelectionAction->setObjectName(
@@ -462,7 +450,6 @@ void MainWindow::createActions()
         m_rotateSelectionAction->setEnabled(hasContent);
         m_cutSelectionAction->setEnabled(hasContent);
         m_copySelectionAction->setEnabled(hasContent);
-        m_copyPasteSelectionAction->setEnabled(hasContent);
         m_invertSelectionAction->setEnabled(hasArea);
         m_duplicateSelectionAction->setEnabled(hasContent);
         m_editStrokePropertiesAction->setEnabled(
@@ -508,7 +495,7 @@ void MainWindow::createActions()
     selectionBar->addAction(m_applySelectionTransformAction);
     selectionBar->addAction(m_cancelSelectionTransformAction);
     selectionBar->addSeparator();
-    selectionBar->addAction(m_copyPasteSelectionAction);
+    selectionBar->addAction(m_copySelectionAction);
     selectionBar->addAction(m_duplicateSelectionAction);
     selectionBar->addAction(m_editStrokePropertiesAction);
     selectionBar->addAction(m_deleteSelectionAction);
@@ -709,7 +696,6 @@ void MainWindow::createActions()
     addAction(m_cutSelectionAction);
     addAction(m_copySelectionAction);
     addAction(m_pasteAction);
-    addAction(m_copyPasteSelectionAction);
     addAction(m_moveSelectionAction);
     addAction(m_scaleSelectionAction);
     addAction(m_rotateSelectionAction);
@@ -778,7 +764,6 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_applySelectionTransformAction);
     selectionMenu->addAction(m_cancelSelectionTransformAction);
     selectionMenu->addSeparator();
-    selectionMenu->addAction(m_copyPasteSelectionAction);
     selectionMenu->addAction(m_duplicateSelectionAction);
     selectionMenu->addAction(m_editStrokePropertiesAction);
     selectionMenu->addAction(m_deleteSelectionAction);

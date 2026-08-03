@@ -1,6 +1,7 @@
 #pragma once
 
 #include "document/DocumentController.hpp"
+#include "io/SelectionClipboardCodec.hpp"
 #include "input/StrokeStabilizer.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
 #include "render/PreviewMemoryUsage.hpp"
@@ -233,6 +234,7 @@ private:
     void updateCursor();
     void notifyZoomChanged();
     QRect pointerUpdateRect() const;
+    bool copySelectionToClipboard(SelectionClipboardCodec::Copy *outCopy);
     bool selectionContains(const QPointF &documentPosition) const;
     void beginAreaSelection(const QPointF &documentPosition,
         SelectionCombine combine = SelectionCombine::Replace);
@@ -362,6 +364,9 @@ private:
     QPointF m_areaSelectionAnchor;
     QPointF m_areaSelectionCurrent;
     bool m_areaSelectionActive = false;
+    // Move mode requires the async visibility evaluation to confirm content,
+    // so copySelection arms it here and the evaluation result applies it.
+    bool m_armSelectionMoveMode = false;
     SelectionCombine m_areaSelectionCombine = SelectionCombine::Replace;
     SelectionState m_selectionBeforeArea;
     bool m_hasSelectionBeforeArea = false;

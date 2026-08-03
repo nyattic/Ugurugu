@@ -1000,15 +1000,6 @@ void MainWindow::pasteFromClipboard()
     }
 }
 
-void MainWindow::copyAndPasteSelection()
-{
-    if (!m_canvas->copySelection())
-    {
-        return;
-    }
-    pasteFromClipboard();
-}
-
 void MainWindow::scaleSelection()
 {
     bool accepted = false;

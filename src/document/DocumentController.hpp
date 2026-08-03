@@ -197,8 +197,14 @@ public:
     void duplicateLayer(const QUuid &id);
     // Inserts the pasted layer above the active layer in the same group
     // scope without touching the active layer's content. A rejected paste
-    // leaves the document unchanged.
-    PasteLayerResult pasteLayer(Layer layer, const QSize &sourceCanvasSize);
+    // leaves the document unchanged. When selectionMask is given the copy
+    // is shifted by contentDelta on the new layer and the current selection
+    // follows it there as part of the same undo entry; that form requires
+    // sourceCanvasSize to match the document size.
+    PasteLayerResult pasteLayer(Layer layer,
+        const QSize &sourceCanvasSize,
+        const QPointF &contentDelta = {},
+        const QImage &selectionMask = {});
     void removeLayer(const QUuid &id);
     void clearLayer(const QUuid &id);
     RenameLayerResult renameLayer(const QUuid &id, const QString &name);

@@ -503,20 +503,11 @@ bool CanvasWidget::duplicateSelection()
     return duplicated;
 }
 
-bool CanvasWidget::copySelection()
+bool CanvasWidget::copySelectionToClipboard(
+    SelectionClipboardCodec::Copy *outCopy)
 {
-    if (m_selectedStrokes.isEmpty() || m_selectionMask.isNull())
-    {
-        return false;
-    }
-    if (hasPendingSelectionTransform())
-    {
-        emit interactionMessage(
-            tr("Apply or cancel the selection transform before copying."));
-        return false;
-    }
     QString error;
-    const std::optional<SelectionClipboardCodec::Copy> copy =
+    std::optional<SelectionClipboardCodec::Copy> copy =
         SelectionClipboardCodec::makeCopy(m_controller->document(),
             m_selectionLayer,
             m_selectionMask,
@@ -533,7 +524,44 @@ bool CanvasWidget::copySelection()
     mimeData->setData(SelectionClipboardCodec::mimeType(), copy->payload);
     mimeData->setImageData(copy->raster);
     QGuiApplication::clipboard()->setMimeData(mimeData);
-    emit interactionMessage(tr("Selection copied."));
+    if (outCopy)
+    {
+        *outCopy = std::move(*copy);
+    }
+    return true;
+}
+
+bool CanvasWidget::copySelection()
+{
+    if (m_selectedStrokes.isEmpty() || m_selectionMask.isNull())
+    {
+        return false;
+    }
+    if (hasPendingSelectionTransform())
+    {
+        emit interactionMessage(
+            tr("Apply or cancel the selection transform before copying."));
+        return false;
+    }
+    SelectionClipboardCodec::Copy copy;
+    if (!copySelectionToClipboard(&copy))
+    {
+        return false;
+    }
+    const QPointF delta = clampedSelectionDelta(QPointF(12.0, 12.0));
+    if (m_controller->pasteLayer(std::move(copy.layer),
+            copy.canvasSize,
+            delta,
+            m_selectionMask)
+        != DocumentController::PasteLayerResult::Pasted)
+    {
+        emit interactionMessage(
+            tr("The copy could not be placed on a new layer."));
+        return false;
+    }
+    m_armSelectionMoveMode = true;
+    emit interactionMessage(
+        tr("Copied to a new layer. Drag inside the selection to move it."));
     return true;
 }
 
@@ -549,7 +577,7 @@ bool CanvasWidget::cutSelection()
             tr("Apply or cancel the selection transform before cutting."));
         return false;
     }
-    if (!copySelection())
+    if (!copySelectionToClipboard(nullptr))
     {
         return false;
     }

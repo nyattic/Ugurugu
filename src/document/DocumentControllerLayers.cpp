@@ -2,6 +2,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/LayerHierarchy.hpp"
+#include "document/SelectionOperation.hpp"
 #include "document/history/HistoryEffects.hpp"
 
 #include <memory>
@@ -182,7 +183,10 @@ void DocumentController::duplicateLayer(const QUuid &id)
 }
 
 DocumentController::PasteLayerResult DocumentController::pasteLayer(
-    Layer layer, const QSize &sourceCanvasSize)
+    Layer layer,
+    const QSize &sourceCanvasSize,
+    const QPointF &contentDelta,
+    const QImage &selectionMask)
 {
     const auto reject = [this](PasteLayerResult result)
     {
@@ -195,13 +199,23 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
     {
         return reject(PasteLayerResult::RejectedInvalidLayer);
     }
+    const bool followsSelection = !selectionMask.isNull();
+    if (followsSelection
+        && (selectionMask.size() != current.size
+            || selectionMask.format() != QImage::Format_Grayscale8
+            || sourceCanvasSize != current.size))
+    {
+        return reject(PasteLayerResult::RejectedInvalidLayer);
+    }
     if (current.layers.size() >= DocumentLimits::maximumLayers)
     {
         return reject(PasteLayerResult::RejectedLayerLimit);
     }
     const bool needsReframe = sourceCanvasSize != current.size;
-    const qsizetype pastedStrokeCount =
-        layer.strokes.size() + (needsReframe ? 1 : 0);
+    const bool shiftsContent = followsSelection
+        && !(qFuzzyIsNull(contentDelta.x()) && qFuzzyIsNull(contentDelta.y()));
+    const qsizetype pastedStrokeCount = layer.strokes.size()
+        + (needsReframe ? 1 : 0) + (shiftsContent ? 1 : 0);
     const qsizetype existingStrokeCount = totalStrokeCount(current);
     if (pastedStrokeCount > DocumentLimits::maximumStrokesPerLayer
         || existingStrokeCount > DocumentLimits::maximumTotalStrokes
@@ -218,6 +232,38 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
                > DocumentLimits::maximumTotalPoints - existingPointCount)
     {
         return reject(PasteLayerResult::RejectedPointLimit);
+    }
+    QImage nextSelectionMask;
+    if (shiftsContent)
+    {
+        QTransform shift;
+        shift.translate(contentDelta.x(), contentDelta.y());
+        const std::optional<PixelSelectionOp> moveOperation =
+            makePixelSelectionOp(selectionMask,
+                shift,
+                /*clearSource=*/true,
+                /*drawDestination=*/true);
+        if (!moveOperation)
+        {
+            return reject(PasteLayerResult::RejectedInvalidLayer);
+        }
+        Stroke move;
+        move.mode = StrokeMode::PixelSelection;
+        move.points.clear();
+        move.pixelSelectionOp = *moveOperation;
+        layer.strokes.append(std::move(move));
+        nextSelectionMask = transformedSelectionSupport(selectionMask,
+            current.size,
+            shift,
+            moveOperation->sampling);
+        if (nextSelectionMask.isNull())
+        {
+            return reject(PasteLayerResult::RejectedInvalidLayer);
+        }
+    }
+    else if (followsSelection)
+    {
+        nextSelectionMask = selectionMask;
     }
     if (needsReframe)
     {
@@ -270,7 +316,21 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
     effects->afterDocumentChanged.append(
         HistoryEffects::LayerThumbnail{layerId});
     effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
-    if (!tryCommitCandidate(tr("Paste"),
+    if (followsSelection)
+    {
+        const std::optional<PackedMaskRegion> packedBefore =
+            packBinaryMask(selectionMask);
+        const std::optional<PackedMaskRegion> packedAfter =
+            packBinaryMask(nextSelectionMask);
+        if (!packedBefore || !packedAfter)
+        {
+            return reject(PasteLayerResult::RejectedMaskLimit);
+        }
+        effects->selectionState = HistoryEffects::SelectionStateTransition{
+            {current.activeLayerId, *packedBefore}, {layerId, *packedAfter}};
+    }
+    if (!tryCommitCandidate(
+            followsSelection ? tr("Copy selection") : tr("Paste"),
             std::move(candidate),
             std::move(effects),
             ActiveLayerPolicy::UsePrepared))

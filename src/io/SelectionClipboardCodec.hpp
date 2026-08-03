@@ -26,6 +26,10 @@ public:
         QByteArray payload;
         // Selection-bounded ARGB32 frame for pasting into external apps.
         QImage raster;
+        // The same layer the payload serializes, for callers that place the
+        // copy into the current document without a clipboard round trip.
+        Layer layer;
+        QSize canvasSize;
     };
 
     struct Pasted

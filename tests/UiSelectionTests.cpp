@@ -178,13 +178,6 @@ private slots:
         QTRY_VERIFY(copyAction->isEnabled());
         QVERIFY(cutAction->isEnabled());
 
-        copyAction->trigger();
-        const QMimeData *mimeData =
-            QGuiApplication::clipboard()->mimeData();
-        QVERIFY(mimeData);
-        QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
-        QVERIFY(mimeData->hasImage());
-
         const QByteArray originalStrokes = DocumentSerializer::toJson(
             [&]
             {
@@ -193,10 +186,22 @@ private slots:
                 single.activeLayerId = originalLayerId;
                 return single;
             }());
-        pasteAction->trigger();
+        copyAction->trigger();
+        const QMimeData *mimeData =
+            QGuiApplication::clipboard()->mimeData();
+        QVERIFY(mimeData);
+        QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
+        QVERIFY(mimeData->hasImage());
+
+        // Copy itself places the shifted copy on a new layer, keeps the
+        // selection following it there, and arms move mode.
         QTRY_COMPARE(
             controller.document().layers.size(), initialLayerCount + 1);
-        QVERIFY(controller.document().activeLayerId != originalLayerId);
+        const QUuid copyLayerId = controller.document().activeLayerId;
+        QVERIFY(copyLayerId != originalLayerId);
+        QVERIFY(canvas->hasSelection());
+        QCOMPARE(canvas->selectionLayerId(), copyLayerId);
+        QTRY_VERIFY(canvas->selectionMoveMode());
         QCOMPARE(DocumentSerializer::toJson(
                      [&]
                      {
@@ -206,6 +211,11 @@ private slots:
                          return single;
                      }()),
             originalStrokes);
+
+        pasteAction->trigger();
+        QTRY_COMPARE(
+            controller.document().layers.size(), initialLayerCount + 2);
+        QVERIFY(controller.document().activeLayerId != copyLayerId);
     }
 
     void showsShortcutChangeNoticeOnceForUpgradedProfiles()
@@ -251,53 +261,6 @@ private slots:
             QVERIFY(!window.findChild<QMessageBox *>(
                 QStringLiteral("shortcutChangeNotice")));
         }
-    }
-
-    void copyPasteButtonPastesAsNewLayerInOneStep()
-    {
-        MainWindow window;
-        window.resize(1000, 680);
-        window.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&window));
-
-        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QAction *lassoAction =
-            window.findChild<QAction *>(QStringLiteral("lassoAction"));
-        QAction *copyPasteAction = window.findChild<QAction *>(
-            QStringLiteral("copyPasteSelectionAction"));
-        QVERIFY(canvas);
-        QVERIFY(lassoAction);
-        QVERIFY(copyPasteAction);
-        QVERIFY(!copyPasteAction->isEnabled());
-
-        DocumentController &controller =
-            MainWindowTestAccess::controller(window);
-        const int initialLayerCount = controller.document().layers.size();
-        const QUuid originalLayerId = controller.document().activeLayerId;
-
-        const QPoint center = canvas->rect().center();
-        QTest::mousePress(
-            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 0));
-        QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
-        QTest::mouseRelease(
-            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 0));
-        QTRY_COMPARE(
-            controller.document().layer(originalLayerId)->strokes.size(), 1);
-
-        lassoAction->trigger();
-        dragFreehandQuad(canvas,
-            center - QPoint(60, 40),
-            center + QPoint(60, 40),
-            Qt::NoModifier);
-        QTRY_VERIFY(canvas->hasTransformableSelection());
-        QTRY_VERIFY(copyPasteAction->isEnabled());
-
-        copyPasteAction->trigger();
-        QTRY_COMPARE(
-            controller.document().layers.size(), initialLayerCount + 1);
-        QVERIFY(controller.document().activeLayerId != originalLayerId);
-        QCOMPARE(
-            controller.document().layer(originalLayerId)->strokes.size(), 1);
     }
 
     void ctrlDDeselectsAndDuplicateHasNoDefaultShortcut()
@@ -496,8 +459,10 @@ private slots:
 
         const QByteArray beforeCut =
             DocumentSerializer::toJson(controller.document());
+        const int layerCountBeforeCut = controller.document().layers.size();
         cutAction->trigger();
         QTRY_VERIFY(!canvas->hasSelection());
+        QCOMPARE(controller.document().layers.size(), layerCountBeforeCut);
         const Layer *layer = controller.document().layer(layerId);
         QVERIFY(layer);
         QCOMPARE(layer->strokes.size(), 2);

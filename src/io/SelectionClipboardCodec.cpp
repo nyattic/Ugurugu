@@ -91,7 +91,7 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     payloadDocument.framesPerSecond = document.framesPerSecond;
     payloadDocument.wobbleAmount = document.wobbleAmount;
     payloadDocument.activeLayerId = copy.id;
-    payloadDocument.layers = {std::move(copy)};
+    payloadDocument.layers = {copy};
 
     DocumentSerializer::SerializationCache cache;
     const std::optional<DocumentSerializer::PreparedDocument> prepared =
@@ -110,6 +110,8 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     result.raster = RenderEngine::render(payloadDocument, frameIndex)
                         .copy(packedSelection->bounds)
                         .convertToFormat(QImage::Format_ARGB32);
+    result.layer = std::move(copy);
+    result.canvasSize = document.size;
     return result;
 }
 

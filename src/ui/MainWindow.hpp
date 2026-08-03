@@ -90,7 +90,6 @@ private:
     void resizeImage();
     void chooseBackgroundColor();
     void pasteFromClipboard();
-    void copyAndPasteSelection();
     void scaleSelection();
     void rotateSelection();
     void editSelectedStrokeProperties();
@@ -127,7 +126,6 @@ private:
     QAction *m_cutSelectionAction = nullptr;
     QAction *m_copySelectionAction = nullptr;
     QAction *m_pasteAction = nullptr;
-    QAction *m_copyPasteSelectionAction = nullptr;
     QAction *m_selectAllAction = nullptr;
     QAction *m_invertSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
