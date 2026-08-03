@@ -18,8 +18,12 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/brush/EraserPreset.hpp
     src/document/Document.cpp
     src/document/Document.hpp
+    src/document/DocumentBudget.cpp
+    src/document/DocumentBudget.hpp
     src/document/DocumentController.cpp
     src/document/DocumentController.hpp
+    src/document/DocumentControllerLayers.cpp
+    src/document/DocumentControllerStrokes.cpp
     src/document/DocumentLimits.hpp
     src/document/history/DocumentDelta.cpp
     src/document/history/DocumentDelta.hpp
