@@ -68,6 +68,104 @@ jobs:
           "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
           codesign --verify --deep --strict "$application"
 
+      - name: Import the Developer ID certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "$name is not configured"
+              exit 1
+            fi
+          done
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(uuidgen)
+          certificate="$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" \
+            -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" \
+            "$keychain" > /dev/null
+          security list-keychain -d user -s "$keychain" login.keychain-db
+          rm -f "$certificate"
+
+      - name: Sign the application with Developer ID
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          if [[ -z "$MACOS_SIGNING_IDENTITY" ]]; then
+            echo "MACOS_SIGNING_IDENTITY is not configured"
+            exit 1
+          fi
+          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          sparkle="$application/Contents/Frameworks/Sparkle.framework"
+          sign() {
+            codesign --force --timestamp --options runtime \
+              --sign "$MACOS_SIGNING_IDENTITY" "$@"
+          }
+          # Nested code is signed innermost first. Notarization rejects
+          # submissions signed with --deep, and Sparkle ships a helper
+          # application plus XPC services that each need their own signature.
+          for service in "$sparkle/Versions/B/XPCServices"/*.xpc; do
+            [[ -e "$service" ]] || continue
+            sign "$service"
+          done
+          sign "$sparkle/Versions/B/Autoupdate"
+          sign "$sparkle/Versions/B/Updater.app"
+          sign "$sparkle"
+          while IFS= read -r -d '' plugin; do
+            sign "$plugin"
+          done < <(find \
+            "$application/Contents/PlugIns" \
+            "$application/Contents/Frameworks" \
+            -name '*.dylib' -print0)
+          for framework in "$application/Contents/Frameworks"/*.framework; do
+            if [[ "$framework" == "$sparkle" ]]; then
+              continue
+            fi
+            sign "$framework"
+          done
+          sign "$application"
+          codesign --verify --deep --strict --verbose=2 "$application"
+
+      - name: Notarize and staple the application
+        env:
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          for name in \
+            MACOS_NOTARY_APPLE_ID \
+            MACOS_NOTARY_PASSWORD \
+            MACOS_NOTARY_TEAM_ID
+          do
+            if [[ -z "${!name}" ]]; then
+              echo "$name is not configured"
+              exit 1
+            fi
+          done
+          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          submission="$RUNNER_TEMP/notarize-application.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$application" "$submission"
+          xcrun notarytool submit "$submission" \
+            --apple-id "$MACOS_NOTARY_APPLE_ID" \
+            --password "$MACOS_NOTARY_PASSWORD" \
+            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --wait
+          # Stapled before the DMG and the Sparkle archive are built, so both
+          # ship a bundle Gatekeeper accepts without a network round trip.
+          xcrun stapler staple "$application"
+          xcrun stapler validate "$application"
+          spctl --assess --type execute --verbose=4 "$application"
+
       - name: Package DMG and prepare Sparkle update
         id: package
         run: |
@@ -116,6 +214,34 @@ jobs:
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
+      - name: Notarize and staple the DMG
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          dmg=$(find artifacts \
+            -maxdepth 1 \
+            -type f \
+            -name 'WagleWaglePaint-macOS-*.dmg' \
+            -print -quit)
+          if [[ -z "$dmg" ]]; then
+            echo "Missing macOS DMG"
+            exit 1
+          fi
+          # The disk image carries its own signature and ticket, so the very
+          # first open is accepted offline too, not just the app inside it.
+          codesign --force --timestamp \
+            --sign "$MACOS_SIGNING_IDENTITY" "$dmg"
+          xcrun notarytool submit "$dmg" \
+            --apple-id "$MACOS_NOTARY_APPLE_ID" \
+            --password "$MACOS_NOTARY_PASSWORD" \
+            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+
       - name: Sign Sparkle update and generate appcast
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
@@ -159,6 +285,8 @@ jobs:
               "$smoke_root/MacOS/"
             "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
             codesign --verify --deep --strict "$application"
+            xcrun stapler validate "$application"
+            spctl --assess --type execute --verbose=4 "$application"
           }
 
           dmg=$(find artifacts -maxdepth 1 -type f -name 'WagleWaglePaint-macOS-*.dmg' -print -quit)
