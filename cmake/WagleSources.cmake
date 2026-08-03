@@ -52,6 +52,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/DocumentSerializer.hpp
     src/io/serializer/DocumentJsonCodec.cpp
     src/io/serializer/DocumentJsonCodec.hpp
+    src/io/serializer/DocumentValidation.cpp
+    src/io/serializer/DocumentValidation.hpp
     src/io/serializer/MaskAssetTable.cpp
     src/io/serializer/MaskAssetTable.hpp
     src/io/serializer/SerializerSchema.hpp
