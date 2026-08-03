@@ -2,6 +2,7 @@
 
 #include "app/MemoryBudget.hpp"
 #include "document/Document.hpp"
+#include "document/history/HistoryTypes.hpp"
 #include "io/DocumentSerializer.hpp"
 
 #include <QObject>
@@ -28,18 +29,7 @@ class DocumentUndoStack final : public QObject
     Q_OBJECT
 
 public:
-    struct StorageStats
-    {
-        qsizetype retainedLayers = 0;
-        qsizetype retainedStrokes = 0;
-        qsizetype retainedPreparedDocuments = 0;
-        qsizetype entryCount = 0;
-        qsizetype stagedPreparedDocuments = 0;
-        qsizetype peakTransientPreparedDocuments = 0;
-        qsizetype macroPreparedDocuments = 0;
-        qint64 retainedBytes = 0;
-        bool residentBudgetSoftExceeded = false;
-    };
+    using StorageStats = history::StorageStats;
 
     static constexpr qint64 maximumResidentBytes =
         MemoryBudget::historyResidentBytes;
@@ -229,7 +219,6 @@ signals:
         const QUuid &layerId, const QImage &mask);
 
 private:
-    struct DocumentDelta;
     struct HistoryEffects;
     struct MacroTransaction;
     class DocumentCommand;

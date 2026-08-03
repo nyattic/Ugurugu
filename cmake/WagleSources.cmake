@@ -21,8 +21,11 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentController.cpp
     src/document/DocumentController.hpp
     src/document/DocumentLimits.hpp
+    src/document/history/DocumentDelta.cpp
+    src/document/history/DocumentDelta.hpp
     src/document/history/HistoryMemory.cpp
     src/document/history/HistoryMemory.hpp
+    src/document/history/HistoryTypes.hpp
     src/document/LayerHierarchy.cpp
     src/document/LayerHierarchy.hpp
     src/document/DocumentOperations.cpp
