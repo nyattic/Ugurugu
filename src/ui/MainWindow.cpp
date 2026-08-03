@@ -533,9 +533,8 @@ void MainWindow::showShortcutChangeNoticeOnce()
     auto *dialog = new QMessageBox(QMessageBox::Information,
         tr("Shortcut change"),
         tr("Ctrl+D now deselects, matching the convention of other drawing "
-           "tools. Duplicate selection is still in the Selection menu and "
-           "the action bar, and you can give it a shortcut in the Shortcuts "
-           "tab of the settings."),
+           "tools. To duplicate content, copy it with Ctrl+C: the copy is "
+           "placed on a new layer and can be dragged right away."),
         QMessageBox::Ok,
         this);
     dialog->setObjectName(QStringLiteral("shortcutChangeNotice"));

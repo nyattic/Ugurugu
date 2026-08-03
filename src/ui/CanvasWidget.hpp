@@ -81,7 +81,6 @@ public:
     bool flipSelectionVertically();
     bool applySelectionTransform();
     void cancelSelectionTransform();
-    bool duplicateSelection();
     bool copySelection();
     bool cutSelection();
     bool deleteSelection();

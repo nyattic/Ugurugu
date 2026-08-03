@@ -482,27 +482,6 @@ void CanvasWidget::cancelSelectionTransform()
     emit interactionMessage(tr("Selection transform canceled."));
 }
 
-bool CanvasWidget::duplicateSelection()
-{
-    if (m_selectedStrokes.isEmpty())
-    {
-        return false;
-    }
-    cancelSelectionTransformForBoundary(
-        tr("The pending transform was canceled before duplicating."));
-    setSelectionMoveMode(false);
-    const QPointF delta = clampedSelectionDelta(QPointF(12.0, 12.0));
-    const bool duplicated = m_controller->duplicateStrokes(m_selectionLayer,
-        QVector<QUuid>(m_selectedStrokes.cbegin(), m_selectedStrokes.cend()),
-        delta,
-        m_selectionMask);
-    if (!duplicated)
-    {
-        emit interactionMessage(tr("The selection could not be duplicated."));
-    }
-    return duplicated;
-}
-
 bool CanvasWidget::copySelectionToClipboard(
     SelectionClipboardCodec::Copy *outCopy)
 {

@@ -275,8 +275,6 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *deselectAction = window.findChild<QAction *>(
             QStringLiteral("deselectSelectionAction"));
-        QAction *duplicateAction = window.findChild<QAction *>(
-            QStringLiteral("duplicateSelectionAction"));
         QAction *selectAllAction =
             window.findChild<QAction *>(QStringLiteral("selectAllAction"));
         QAction *invertAction = window.findChild<QAction *>(
@@ -284,12 +282,12 @@ private slots:
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(deselectAction);
-        QVERIFY(duplicateAction);
         QVERIFY(selectAllAction);
         QVERIFY(invertAction);
         QCOMPARE(deselectAction->shortcut(),
             QKeySequence(QStringLiteral("Ctrl+D")));
-        QVERIFY(duplicateAction->shortcut().isEmpty());
+        QVERIFY(!window.findChild<QAction *>(
+            QStringLiteral("duplicateSelectionAction")));
         QCOMPARE(
             selectAllAction->shortcut(), QKeySequence(QKeySequence::SelectAll));
         QCOMPARE(invertAction->shortcut(),
@@ -736,8 +734,8 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("scaleSelectionAction"));
         QAction *rotateAction = window.findChild<QAction *>(
             QStringLiteral("rotateSelectionAction"));
-        QAction *duplicateAction = window.findChild<QAction *>(
-            QStringLiteral("duplicateSelectionAction"));
+        QAction *copyAction =
+            window.findChild<QAction *>(QStringLiteral("copySelectionAction"));
         QAction *moveAction =
             window.findChild<QAction *>(QStringLiteral("moveSelectionAction"));
         QAction *applyTransformAction = window.findChild<QAction *>(
@@ -758,7 +756,7 @@ private slots:
         QVERIFY(bucketAction);
         QVERIFY(scaleAction);
         QVERIFY(rotateAction);
-        QVERIFY(duplicateAction);
+        QVERIFY(copyAction);
         QVERIFY(moveAction);
         QVERIFY(applyTransformAction);
         QVERIFY(cancelTransformAction);
@@ -768,7 +766,7 @@ private slots:
         QVERIFY(cancelTransformButton);
         QVERIFY(!scaleAction->isEnabled());
         QVERIFY(!rotateAction->isEnabled());
-        QVERIFY(!duplicateAction->isEnabled());
+        QVERIFY(!copyAction->isEnabled());
         QVERIFY(!moveAction->isEnabled());
         QVERIFY(!applyTransformAction->isEnabled());
         QVERIFY(!cancelTransformAction->isEnabled());
@@ -796,7 +794,7 @@ private slots:
         QTRY_VERIFY(canvas->hasTransformableSelection());
         QTRY_VERIFY(scaleAction->isEnabled());
         QTRY_VERIFY(rotateAction->isEnabled());
-        QTRY_VERIFY(duplicateAction->isEnabled());
+        QTRY_VERIFY(copyAction->isEnabled());
         QTRY_VERIFY(moveAction->isEnabled());
         QTRY_VERIFY(actionBar->isVisible());
 
@@ -814,11 +812,11 @@ private slots:
         QTRY_VERIFY(!canvas->hasSelectionTransformSession());
         QVERIFY(!applyTransformAction->isEnabled());
         QVERIFY(!cancelTransformAction->isEnabled());
-        duplicateAction->trigger();
+        QTRY_VERIFY(copyAction->isEnabled());
+        copyAction->trigger();
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
-        QTest::mouseClick(moveButton, Qt::LeftButton);
-        QVERIFY(canvas->selectionMoveMode());
+        QTRY_VERIFY(canvas->selectionMoveMode());
         moveButton->setFocus();
         QVERIFY(moveButton->hasFocus());
         QTest::keyClick(moveButton, Qt::Key_Escape);
@@ -1701,7 +1699,7 @@ private slots:
             QStringLiteral("flipSelectionVerticalAction"),
             QStringLiteral("applySelectionTransformAction"),
             QStringLiteral("cancelSelectionTransformAction"),
-            QStringLiteral("duplicateSelectionAction"),
+            QStringLiteral("copySelectionAction"),
             QStringLiteral("deleteSelectionAction"),
             QStringLiteral("deselectSelectionAction"),
         };
@@ -1897,16 +1895,19 @@ private slots:
             originalDocument);
 
         QVERIFY(canvas.scaleSelection(1.1));
-        const int beforeDuplicateIndex = controller.undoStack()->index();
-        QVERIFY(canvas.duplicateSelection());
-        QVERIFY(!canvas.hasSelectionTransformSession());
-        QCOMPARE(controller.undoStack()->index(), beforeDuplicateIndex + 1);
-        const Stroke &duplicateOperation =
-            controller.document().layers.first().strokes.last();
-        QCOMPARE(duplicateOperation.mode, StrokeMode::PixelSelection);
-        QVERIFY(duplicateOperation.pixelSelectionOp.has_value());
+        QVERIFY(!canvas.copySelection());
+        QVERIFY(canvas.hasSelectionTransformSession());
+        canvas.cancelSelectionTransform();
+        const int beforeCopyIndex = controller.undoStack()->index();
+        QVERIFY(canvas.copySelection());
+        QCOMPARE(controller.undoStack()->index(), beforeCopyIndex + 1);
+        QCOMPARE(controller.document().layers.size(), 2);
+        const Stroke &copyMoveOperation =
+            controller.document().layers.last().strokes.last();
+        QCOMPARE(copyMoveOperation.mode, StrokeMode::PixelSelection);
+        QVERIFY(copyMoveOperation.pixelSelectionOp.has_value());
         QVERIFY(qFuzzyCompare(
-            duplicateOperation.pixelSelectionOp->transform.dx() + 1.0, 13.0));
+            copyMoveOperation.pixelSelectionOp->transform.dx() + 1.0, 13.0));
         controller.undoStack()->undo();
         QCOMPARE(DocumentSerializer::toJson(controller.document()),
             originalDocument);

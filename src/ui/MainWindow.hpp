@@ -128,7 +128,6 @@ private:
     QAction *m_pasteAction = nullptr;
     QAction *m_selectAllAction = nullptr;
     QAction *m_invertSelectionAction = nullptr;
-    QAction *m_duplicateSelectionAction = nullptr;
     QAction *m_editStrokePropertiesAction = nullptr;
     QAction *m_moveSelectionAction = nullptr;
     QAction *m_flipSelectionHorizontalAction = nullptr;

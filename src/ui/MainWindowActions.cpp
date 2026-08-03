@@ -328,18 +328,6 @@ void MainWindow::createActions()
         this,
         &MainWindow::pasteFromClipboard);
 
-    m_duplicateSelectionAction = new QAction(tr("Duplicate selection"), this);
-    m_duplicateSelectionAction->setObjectName(
-        QStringLiteral("duplicateSelectionAction"));
-    m_duplicateSelectionAction->setIcon(Icons::icon(IconGlyph::Duplicate));
-    m_duplicateSelectionAction->setToolTip(tr("Duplicate selected content"));
-    m_duplicateSelectionAction->setEnabled(false);
-    registerShortcut(m_duplicateSelectionAction, {});
-    connect(m_duplicateSelectionAction,
-        &QAction::triggered,
-        m_canvas,
-        &CanvasWidget::duplicateSelection);
-
     m_editStrokePropertiesAction =
         new QAction(tr("Edit selected stroke properties…"), this);
     m_editStrokePropertiesAction->setObjectName(
@@ -451,7 +439,6 @@ void MainWindow::createActions()
         m_cutSelectionAction->setEnabled(hasContent);
         m_copySelectionAction->setEnabled(hasContent);
         m_invertSelectionAction->setEnabled(hasArea);
-        m_duplicateSelectionAction->setEnabled(hasContent);
         m_editStrokePropertiesAction->setEnabled(
             hasContent && m_canvas->hasEditableStrokeSelection()
             && !m_canvas->hasSelectionTransformSession());
@@ -496,7 +483,6 @@ void MainWindow::createActions()
     selectionBar->addAction(m_cancelSelectionTransformAction);
     selectionBar->addSeparator();
     selectionBar->addAction(m_copySelectionAction);
-    selectionBar->addAction(m_duplicateSelectionAction);
     selectionBar->addAction(m_editStrokePropertiesAction);
     selectionBar->addAction(m_deleteSelectionAction);
     selectionBar->addSeparator();
@@ -703,7 +689,6 @@ void MainWindow::createActions()
     addAction(m_flipSelectionVerticalAction);
     addAction(m_applySelectionTransformAction);
     addAction(m_cancelSelectionTransformAction);
-    addAction(m_duplicateSelectionAction);
     addAction(m_editStrokePropertiesAction);
     addAction(m_deleteSelectionAction);
     addAction(m_deselectSelectionAction);
@@ -764,7 +749,6 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_applySelectionTransformAction);
     selectionMenu->addAction(m_cancelSelectionTransformAction);
     selectionMenu->addSeparator();
-    selectionMenu->addAction(m_duplicateSelectionAction);
     selectionMenu->addAction(m_editStrokePropertiesAction);
     selectionMenu->addAction(m_deleteSelectionAction);
     editMenu->addSeparator();
