@@ -60,6 +60,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/serializer/MaskAssetTable.hpp
     src/io/serializer/PreparedPlanBuilder.cpp
     src/io/serializer/PreparedPlanBuilder.hpp
+    src/io/serializer/RasterAssetTable.cpp
+    src/io/serializer/RasterAssetTable.hpp
     src/io/serializer/SerializerSchema.hpp
     src/io/ExportWorker.cpp
     src/io/ExportWorker.hpp
@@ -67,6 +69,10 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/GifWriter.hpp
     src/io/RenderExportPolicy.cpp
     src/io/RenderExportPolicy.hpp
+    src/render/ClassicStrokeMotion.cpp
+    src/render/ClassicStrokeMotion.hpp
+    src/render/DeterministicNoise.cpp
+    src/render/DeterministicNoise.hpp
     src/render/ImageAffineTransformer.cpp
     src/render/ImageAffineTransformer.hpp
     src/render/ImageResampler.cpp
@@ -181,6 +187,7 @@ set(WOBBLEPAINT_UI_SOURCES
 set(WOBBLEPAINT_TEST_SOURCES
     tests/AppPolicyTests.cpp
     tests/BrushRenderingTests.cpp
+    tests/ClassicStrokeMotionTests.cpp
     tests/DocumentHistoryTests.cpp
     tests/DocumentLifecycleTests.cpp
     tests/DocumentResizeTests.cpp
@@ -192,6 +199,7 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/LayerSplitPreviewTests.cpp
     tests/LegacyRenderGoldenTests.cpp
     tests/MaskRegressionTests.cpp
+    tests/RasterAssetTableTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp
     tests/SelectionClipboardTests.cpp

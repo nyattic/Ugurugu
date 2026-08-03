@@ -98,3 +98,16 @@ if(APPLE)
     )
     wobblepaint_target_defaults(wobblepaint_render_release_notes)
 endif()
+
+add_executable(
+    wobblepaint_raster_asset_probe
+    EXCLUDE_FROM_ALL
+    tools/RasterAssetBudgetProbe.cpp
+)
+target_link_libraries(
+    wobblepaint_raster_asset_probe
+    PRIVATE
+    Qt6::Core
+    Qt6::Gui
+)
+wobblepaint_target_defaults(wobblepaint_raster_asset_probe)

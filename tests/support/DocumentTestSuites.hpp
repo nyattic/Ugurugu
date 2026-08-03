@@ -11,5 +11,6 @@ int runDocumentResizeTests(int argc, char **argv);
 int runStrokeCommandTests(int argc, char **argv);
 int runSelectionClipboardTests(int argc, char **argv);
 int runSerializationBudgetTests(int argc, char **argv);
+int runRasterAssetTableTests(int argc, char **argv);
 
 }

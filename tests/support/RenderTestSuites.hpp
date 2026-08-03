@@ -3,6 +3,7 @@
 namespace wobble
 {
 
+int runClassicStrokeMotionTests(int argc, char **argv);
 int runRenderPreviewTests(int argc, char **argv);
 int runWobbleAnimationTests(int argc, char **argv);
 int runLayerCompositionTests(int argc, char **argv);

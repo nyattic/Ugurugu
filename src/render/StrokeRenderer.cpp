@@ -1,6 +1,8 @@
 #include "render/StrokeRenderer.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "render/ClassicStrokeMotion.hpp"
+#include "render/DeterministicNoise.hpp"
 
 #include <QRadialGradient>
 
@@ -18,42 +20,6 @@ constexpr qsizetype maximumResampledPoints =
     DocumentLimits::maximumPointsPerStroke;
 constexpr qsizetype maximumBrushDabs = 50000;
 constexpr qsizetype maximumSprayParticles = 250000;
-
-quint64 mixHash(quint64 value)
-{
-    value += 0x9e3779b97f4a7c15ULL;
-    value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
-    value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
-    return value ^ (value >> 31U);
-}
-
-// Wobble must be a pure function of the stroke seed, the frame, the point
-// index and the channel, with no generator state anywhere. That is what lets
-// the preview, an export, an incremental tile redraw and a redo all produce
-// the same frame; introducing sequential state here would desynchronize them.
-qreal signedNoise(quint64 seed, int frame, int index, quint64 channel)
-{
-    quint64 value = seed;
-    value ^= mixHash(static_cast<quint64>(frame + 1) * 0x517cc1b727220a95ULL);
-    value ^=
-        mixHash(static_cast<quint64>(index + 4099) * 0x6eed0e9da4d94a4fULL);
-    value ^= channel;
-    const quint64 result = mixHash(value);
-    const qreal unit =
-        static_cast<qreal>(result >> 11U) / static_cast<qreal>(1ULL << 53U);
-    return unit * 2.0 - 1.0;
-}
-
-qreal smoothFieldNoise(
-    quint64 seed, int frame, qreal coordinate, quint64 channel)
-{
-    const int left = static_cast<int>(std::floor(coordinate));
-    const qreal fraction = coordinate - static_cast<qreal>(left);
-    const qreal blend = fraction * fraction * (3.0 - 2.0 * fraction);
-    const qreal a = signedNoise(seed, frame, left, channel);
-    const qreal b = signedNoise(seed, frame, left + 1, channel);
-    return a + (b - a) * blend;
-}
 
 bool validPoint(const StrokePoint &point)
 {
@@ -289,11 +255,6 @@ void drawAirbrushDab(QPainter &painter,
     painter.restore();
 }
 
-qreal unitNoise(quint64 seed, int frame, int index, quint64 channel)
-{
-    return (signedNoise(seed, frame, index, channel) + 1.0) * 0.5;
-}
-
 void drawSprayDab(QPainter &painter,
     const StrokePoint &point,
     const QColor &color,
@@ -323,18 +284,18 @@ void drawSprayDab(QPainter &painter,
             return;
         }
         const int noiseIndex = static_cast<int>(emitted);
-        const qreal angle =
-            unitNoise(seed, noiseFrame, noiseIndex, 0x36d1a53bULL)
-            * std::numbers::pi * 2.0;
-        const qreal radius =
-            std::sqrt(unitNoise(seed, noiseFrame, noiseIndex, 0x9c8e31d7ULL))
-            * brush.scatter * baseWidth * 0.5;
+        const qreal angle = DeterministicNoise::unitValue(
+                                seed, noiseFrame, noiseIndex, 0x36d1a53bULL)
+                            * std::numbers::pi * 2.0;
+        const qreal radius = std::sqrt(DeterministicNoise::unitValue(
+                                 seed, noiseFrame, noiseIndex, 0x9c8e31d7ULL))
+                             * brush.scatter * baseWidth * 0.5;
         const QPointF position =
             point.position + QPointF(std::cos(angle), std::sin(angle)) * radius;
-        const qreal jitter =
-            1.0
-            + signedNoise(seed, noiseFrame, noiseIndex, 0xa24baed4ULL)
-                  * brush.sizeJitter * 0.75;
+        const qreal jitter = 1.0
+                             + DeterministicNoise::signedValue(
+                                   seed, noiseFrame, noiseIndex, 0xa24baed4ULL)
+                                   * brush.sizeJitter * 0.75;
         const qreal particleDiameter = std::max(0.5,
             baseWidth * brush.particleSize * pressureSize
                 * std::max(0.1, jitter));
@@ -351,14 +312,6 @@ void drawSprayDab(QPainter &painter,
             painter.drawEllipse(bounds);
         }
     }
-}
-
-qreal renderedWidth(const Stroke &stroke, int frame, qreal wobbleAmount)
-{
-    const qreal widthNoiseScale = std::clamp(wobbleAmount / 1.6, 0.0, 1.0);
-    const qreal frameWidthNoise =
-        widthNoiseScale * signedNoise(stroke.seed, frame, 0, 0x1a67d3c4ULL);
-    return std::max(0.5, stroke.width * (1.0 + frameWidthNoise * 0.025));
 }
 
 qsizetype maximumPointsFor(const Stroke &stroke)
@@ -404,7 +357,8 @@ GeometryUpdate IncrementalGeometry::update(
     const int normalizedFrame =
         ((frameIndex % normalizedCount) + normalizedCount) % normalizedCount;
     const qreal strokeWobble = wobbleAmount * stroke.brush.wobbleScale;
-    const qreal width = renderedWidth(stroke, normalizedFrame, strokeWobble);
+    const qreal width = ClassicStrokeMotion::renderedWidth(
+        stroke.width, stroke.seed, normalizedFrame, strokeWobble);
     const qreal spacing = spacingFor(stroke, width);
     const qsizetype maximum = maximumPointsFor(stroke);
     const bool canAppend =
@@ -692,10 +646,8 @@ void IncrementalGeometry::displaceSamples(const Stroke &stroke,
     {
         m_arcLengths[0] = 0.0;
     }
-    const qreal amplitude = std::max(0.0, wobbleAmount)
-                            * (0.82 + std::min(stroke.width, 40.0) * 0.018);
-    constexpr qreal swayWavelength = 26.0;
-    constexpr qreal detailWavelength = 9.0;
+    const qreal amplitude =
+        ClassicStrokeMotion::displacementAmplitude(stroke.width, wobbleAmount);
     for (qsizetype index = changedFrom; index < m_samples.size(); ++index)
     {
         if (index > 0)
@@ -712,25 +664,12 @@ void IncrementalGeometry::displaceSamples(const Stroke &stroke,
             m_samples[std::min<qsizetype>(m_samples.size() - 1, index + 1)]
                 .position;
         const QPointF tangent = normalized(after - before);
-        const QPointF normal(-tangent.y(), tangent.x());
-        const qreal sway = smoothFieldNoise(stroke.seed,
-            normalizedFrame,
-            arcLength / swayWavelength,
-            0xb5297a4dULL);
-        const qreal detail = smoothFieldNoise(stroke.seed,
-            normalizedFrame,
-            arcLength / detailWavelength + 31.0,
-            0x1b56c4e9ULL);
-        const qreal normalOffset = sway * 0.72 + detail * 0.28;
-        const qreal tangentOffset = smoothFieldNoise(stroke.seed,
-            normalizedFrame,
-            arcLength / swayWavelength + 57.0,
-            0x68e31da4ULL);
-        const qreal pressureFactor = 0.8 + sample.pressure * 0.2;
-        m_prepared.points[index] = sample;
-        m_prepared.points[index].position +=
-            normal * normalOffset * amplitude * pressureFactor
-            + tangent * tangentOffset * amplitude * 0.3;
+        m_prepared.points[index] = ClassicStrokeMotion::displacedSample(sample,
+            tangent,
+            arcLength,
+            amplitude,
+            stroke.seed,
+            normalizedFrame);
     }
 }
 

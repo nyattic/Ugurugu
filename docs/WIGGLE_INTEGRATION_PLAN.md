@@ -136,6 +136,12 @@ v1.0.0 태그에서 대표 schema 9 문서 3개를 생성하고 10개 프레임�
 
 기존 문서는 항상 legacy 렌더 경로를 사용한다. 새 기능의 기본값만으로 legacy 경로를 흉내 내지 않는다.
 
+Classic 위치·폭 흔들림의 v1.0.0 계수와 noise channel은
+`ClassicStrokeMotion`에 격리했다. 상태 없는 공통 noise 생성은
+`DeterministicNoise`가 맡고, 스트로크 렌더와 coverage 계산은 같은 Classic
+진폭 계약을 사용한다. 새 motion style은 이 상수나 channel을 수정하지 않고
+별도 경로로 추가한다.
+
 ### 결정 B: WWP식 시간 모델
 
 FPS는 재생과 내보내기의 샘플링 속도로 유지한다. 흔들림 속도를 FPS에 합치지 않는다.
@@ -228,19 +234,53 @@ op으로 두면 "이미지 레이어"는 image op 하나만 든 평범한 Paint 
 
 `MaskAssetTable`은 직접 재사용하지 않는다.
 
-#### 선결 조건: 두 예산이 지금 상태로는 이미지를 못 받는다
+#### 자산 형식과 예산 결정
 
-이 둘을 정하기 전에는 raster asset 구현을 시작하지 않는다.
+schema에 연결하지 않은 `RasterAssetTable` prototype과
+`wobblepaint_raster_asset_probe`로 결정했다.
 
-**문서 크기 한도.** `DocumentLimits::maximumProjectBytes`는 32 MiB이고 저장·로드·자동 저장·복구 전 경로에서 하드 강제된다(`DocumentSerializer`, `RecoveryStore`, `RecoveryWriter`, `PreparedPlanBuilder`). 4096×4096 RGBA는 디코드 기준 64 MiB이고, 무손실 압축 후 base64를 거치면 사진 한 장으로 문서 예산 전체를 소진할 수 있다.
+- canonical pixel은 top-to-bottom, tightly packed, straight-alpha
+  `QImage::Format_RGBA8888`이다
+- 유효한 입력 color space는 sRGB로 변환하고, profile이 없으면 sRGB로
+  간주한다. EXIF orientation 적용은 이미지 import 경계의 책임이다
+- content id는 format tag, width, height, canonical pixel의 SHA-256이다
+- payload는 `qCompress(level 6)`로 무손실 압축한다. 4K 사진형 표본 한
+  장에서 PNG보다 34% 작았고, 압축 payload만 문서에 보존하기로 했다
+- decoded image는 문서나 undo에 넣지 않고 별도 캐시에서만 유지한다
+- 같은 content id의 자산과 undo snapshot은 payload backing을 공유한다
 
-원본 보존이 계약이 된 이상 사이드카/컨테이너 분리는 배제한다 — `.wagle`의 단일 파일 성질이 복구·자동 저장·배포 전체의 전제이기 때문이다. 따라서 **`maximumProjectBytes` 상향 + 삽입 이미지 픽셀 수 상한**의 조합으로 간다. 두 수치는 단계 1에서 실측으로 정한다.
+4K 사진형 deterministic 표본을 압축 payload만 보존하는 모델로 측정한
+결과는 다음과 같다. 시간은 Debug 빌드, RSS는 macOS의
+`/usr/bin/time -l` 기준이다.
 
-상향이 감당 가능하다고 보는 근거는 압축 payload가 content id로 캐시된다는 점이다(`payloadCacheKey`). 변형만 바꾸면 자산 바이트는 그대로이므로 자동 저장마다 이미지를 다시 압축하지 않는다. 자동 저장은 30초 간격이고 워커에서 돌므로 매 틱 비용은 base64 인코딩과 파일 쓰기가 지배한다. 다만 그 비용도 0은 아니므로 실측이 필요하다.
+| 자산 수 | decoded 합계 | qCompress payload | JSON/base64 | 최초 압축 | 반복 JSON | 파일 쓰기 | peak RSS |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 64 MiB | 47.7 MiB | 63.6 MiB | 2.32 s | 145 ms | 12 ms | 575 MiB |
+| 3 | 192 MiB | 143.0 MiB | 190.7 MiB | 7.14 s | 781 ms | 35 ms | 1.21 GiB |
+| 5 | 320 MiB | 238.4 MiB | 317.8 MiB | 11.55 s | 726 ms | 56 ms | 1.93 GiB |
 
-실측 항목: 4K 사진 1·3·5장에 대한 저장 시간, 자동 저장 1틱 시간, 복구 파일 크기, peak RSS.
+PNG level 6은 한 장에서 payload 64.1 MiB, JSON 85.5 MiB, peak RSS
+831 MiB였다. 최초 압축은 0.89초로 빨랐지만 파일과 저장 peak가 더 커서
+채택하지 않았다.
 
-**프로세스 메모리 예산.** `MemoryBudget`은 768 MiB 목표에 대해 두 개의 `static_assert`로 이미 꽉 차 있다(history 192 + export 512, 그리고 history + serialization cache + preview 조합). 새 RGBA decode 예산을 추가하면 컴파일이 깨진다. 어느 항목을 줄일지, 아니면 `residentTargetBytes`를 올릴지를 단계 1에서 먼저 정한다.
+실측에 따라 한도를 다음처럼 고정한다.
+
+- `maximumProjectBytes`: 128 MiB
+- 단일 raster asset: 최대 16,777,216 pixel, decoded 64 MiB
+- distinct raster decoded 논리량: 256 MiB
+- distinct compressed raster payload: 72 MiB
+- decoded raster cache: 128 MiB
+- serialization cache: 64 MiB
+- process resident target: 1 GiB
+- project serialization working set: 512 MiB
+
+128 MiB 파일 한도와 72 MiB payload 한도는 임의의 4K RGBA 한 장을
+받으면서 3장·5장 사진형 표본은 JSON을 만들기 전에 거부한다. 압축이 잘
+되는 이미지 여러 장은 distinct decoded 256 MiB 한도까지 허용된다.
+저장·복구는 단일 `.wagle` 파일을 유지한다. export 전에는 preview,
+serialization, decoded raster cache를 비우고, 프로젝트 직렬화 전에는
+decoded raster cache를 비우는 계약을 `MemoryBudget`의 `static_assert`에
+반영했다.
 
 원본 보존은 history에도 영향을 준다. 변형을 되돌릴 때 자산 바이트까지 복제하면 undo 한 번에 수십 MiB가 잡힌다. 자산은 content id로 공유하고 op의 변환 행렬만 delta에 담아야 한다 — `DocumentDelta`가 payload backing을 공유로 유지하는 기존 방식과 같은 원칙이다.
 
@@ -398,7 +438,7 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 - [ ] Stepped와 Hold Frames의 루프 경계 검증
 - [ ] Broken Line의 visible run, coverage, incremental render prototype
 - [ ] `RasterAssetTable`과 image op prototype
-- [ ] `maximumProjectBytes`와 `MemoryBudget` 결정 (결정 D의 선결 조건)
+- [x] `maximumProjectBytes`와 `MemoryBudget` 결정 (결정 D의 선결 조건)
 - [ ] 활성 레이어 + 색 tolerance를 절차적으로 둘지 동결할지 렌더 비교로 결정
 - [x] `DocumentDelta::mergeScalar`를 필드 집합 기반으로 일반화
 - [ ] frozen Fill mask와 PolygonFill 후보 비교
@@ -607,11 +647,11 @@ WWT의 좌측 슬라이더 패널을 재현하지 않는다. WWP의 기존 팝�
 
 1. [x] v1.0.0 렌더 골든 corpus 생성
 2. [x] Clang-Tidy warnings-as-errors와 CI 게이트 확정
-3. [ ] Classic 렌더 경로의 변경 금지 경계 확정
-4. [ ] `maximumProjectBytes`와 `MemoryBudget` 결정 — Insert Image 착수의 선결 조건
+3. [x] Classic 렌더 경로의 변경 금지 경계 확정
+4. [x] `maximumProjectBytes`와 `MemoryBudget` 결정 — Insert Image 착수의 선결 조건
 5. [x] `DocumentDelta::mergeScalar` 일반화 — 새 문서 필드 추가의 선결 조건
 6. [ ] Smooth와 Stepped 시간 모델 prototype 비교
-7. [ ] `RasterAssetTable`의 canonical format과 예산 prototype
+7. [x] `RasterAssetTable`의 canonical format과 예산 prototype
 8. [ ] frozen Fill mask와 PolygonFill 표현 비교
 9. [ ] 문서 필드와 operation 목록 확정
 10. [ ] schema 10/11 경계와 전체 integration checklist 작성

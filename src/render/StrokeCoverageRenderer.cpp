@@ -3,6 +3,7 @@
 #include "document/DocumentLimits.hpp"
 #include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
+#include "render/ClassicStrokeMotion.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
 
@@ -273,10 +274,8 @@ QRect primitiveCoverageBounds(const Document &document,
             right = std::max(right, point.position.x());
             bottom = std::max(bottom, point.position.y());
         }
-        const qreal wobble =
-            std::max(0.0, document.wobbleAmount * stroke.brush.wobbleScale);
-        const qreal displacement =
-            wobble * (0.82 + std::min(stroke.width, 40.0) * 0.018) * 1.3;
+        const qreal displacement = ClassicStrokeMotion::maximumDisplacement(
+            stroke.width, document.wobbleAmount * stroke.brush.wobbleScale);
         const qreal brushReach = std::max(0.5, stroke.width) * 1.025 * 2.1;
         const qreal margin = displacement + brushReach + 4.0;
         bounds = QRectF(QPointF(left, top), QPointF(right, bottom))
