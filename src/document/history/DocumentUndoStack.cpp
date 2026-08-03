@@ -2,8 +2,6 @@
 #include "document/history/HistoryMemory.hpp"
 #include "document/history/LogicalHistoryCommand.hpp"
 
-#include <QAction>
-#include <QPointer>
 #include <QScopedValueRollback>
 
 #include <algorithm>
@@ -18,13 +16,17 @@ using history::MemoryFootprint;
 
 struct DocumentUndoStack::Impl
 {
-    std::vector<std::unique_ptr<QUndoCommand>> entries;
+    std::vector<std::unique_ptr<LogicalHistoryCommand>> entries;
     int index = 0;
     int cleanIndex = 0;
     int undoLimit = 64;
     qsizetype peakTransientPreparedDocuments = 0;
-    std::vector<QPointer<QAction>> undoActions;
-    std::vector<QPointer<QAction>> redoActions;
+    // Last values handed to observers, so notifyHistoryState only emits on an
+    // actual change instead of on every mutation.
+    bool notifiedCanUndo = false;
+    bool notifiedCanRedo = false;
+    QString notifiedUndoText;
+    QString notifiedRedoText;
 };
 
 DocumentUndoStack::DocumentUndoStack(DocumentController *owner)
@@ -74,7 +76,7 @@ void DocumentUndoStack::setUndoLimit(int limit)
     }
     m_impl->undoLimit = limit;
     enforceLimits();
-    updateActions();
+    notifyHistoryState();
 }
 
 void DocumentUndoStack::setClean()
@@ -100,12 +102,12 @@ void DocumentUndoStack::clear()
     m_impl->entries.clear();
     m_impl->index = 0;
     m_impl->cleanIndex = 0;
-    updateActions();
+    notifyHistoryState();
 }
 
-void DocumentUndoStack::push(QUndoCommand *rawCommand)
+void DocumentUndoStack::push(LogicalHistoryCommand *rawCommand)
 {
-    std::unique_ptr<QUndoCommand> command(rawCommand);
+    std::unique_ptr<LogicalHistoryCommand> command(rawCommand);
     if (!m_impl || !command || m_moving || hasOpenMacro())
     {
         return;
@@ -130,7 +132,7 @@ void DocumentUndoStack::push(QUndoCommand *rawCommand)
     if (mayMergeAcrossCurrentBoundary && m_impl->index > 0
         && command->id() >= 0)
     {
-        QUndoCommand *previous =
+        LogicalHistoryCommand *previous =
             m_impl->entries[static_cast<size_t>(m_impl->index - 1)].get();
         if (previous && previous->id() == command->id())
         {
@@ -150,7 +152,7 @@ void DocumentUndoStack::push(QUndoCommand *rawCommand)
     }
     m_moving = false;
     enforceLimits();
-    updateActions();
+    notifyHistoryState();
 }
 
 void DocumentUndoStack::undo()
@@ -160,7 +162,7 @@ void DocumentUndoStack::undo()
         return;
     }
     QScopedValueRollback<bool> movement(m_moving, true);
-    QUndoCommand *command =
+    LogicalHistoryCommand *command =
         m_impl->entries[static_cast<size_t>(m_impl->index - 1)].get();
     if (!command || !m_owner->preflightHistoryMovement(command, false))
     {
@@ -174,7 +176,7 @@ void DocumentUndoStack::undo()
     --m_impl->index;
     m_owner->clearHistoryPreflight(command);
     m_moving = false;
-    updateActions();
+    notifyHistoryState();
 }
 
 void DocumentUndoStack::redo()
@@ -184,7 +186,7 @@ void DocumentUndoStack::redo()
         return;
     }
     QScopedValueRollback<bool> movement(m_moving, true);
-    QUndoCommand *command =
+    LogicalHistoryCommand *command =
         m_impl->entries[static_cast<size_t>(m_impl->index)].get();
     if (!command || !m_owner->preflightHistoryMovement(command, true))
     {
@@ -198,7 +200,7 @@ void DocumentUndoStack::redo()
     ++m_impl->index;
     m_owner->clearHistoryPreflight(command);
     m_moving = false;
-    updateActions();
+    notifyHistoryState();
 }
 
 void DocumentUndoStack::beginMacro(const QString &text)
@@ -232,75 +234,55 @@ bool DocumentUndoStack::hasOpenMacro() const
     return m_owner && m_owner->hasOpenHistoryMacro();
 }
 
-QAction *DocumentUndoStack::createUndoAction(QObject *parent)
+QString DocumentUndoStack::undoText() const
 {
-    auto *action = new QAction(parent);
-    QObject::connect(action,
-        &QAction::triggered,
-        this,
-        [this]()
-        {
-            undo();
-        });
-    m_impl->undoActions.emplace_back(action);
-    updateActions();
-    return action;
+    if (!m_impl || !canUndo())
+    {
+        return tr("Undo");
+    }
+    return tr("Undo %1").arg(
+        m_impl->entries[static_cast<size_t>(m_impl->index - 1)]->text());
 }
 
-QAction *DocumentUndoStack::createRedoAction(QObject *parent)
+QString DocumentUndoStack::redoText() const
 {
-    auto *action = new QAction(parent);
-    QObject::connect(action,
-        &QAction::triggered,
-        this,
-        [this]()
-        {
-            redo();
-        });
-    m_impl->redoActions.emplace_back(action);
-    updateActions();
-    return action;
+    if (!m_impl || !canRedo())
+    {
+        return tr("Redo");
+    }
+    return tr("Redo %1").arg(
+        m_impl->entries[static_cast<size_t>(m_impl->index)]->text());
 }
 
-void DocumentUndoStack::updateActions()
+void DocumentUndoStack::notifyHistoryState()
 {
     if (!m_impl)
     {
         return;
     }
-    const QString undoText =
-        canUndo() ? tr("Undo %1").arg(
-                        m_impl->entries[static_cast<size_t>(m_impl->index - 1)]
-                            ->text())
-                  : tr("Undo");
-    const QString redoText =
-        canRedo()
-            ? tr("Redo %1").arg(
-                  m_impl->entries[static_cast<size_t>(m_impl->index)]->text())
-            : tr("Redo");
-    for (auto iterator = m_impl->undoActions.begin();
-        iterator != m_impl->undoActions.end();)
+    const bool undoAvailable = canUndo();
+    const bool redoAvailable = canRedo();
+    const QString nextUndoText = undoText();
+    const QString nextRedoText = redoText();
+    if (m_impl->notifiedCanUndo != undoAvailable)
     {
-        if (!*iterator)
-        {
-            iterator = m_impl->undoActions.erase(iterator);
-            continue;
-        }
-        (*iterator)->setEnabled(canUndo());
-        (*iterator)->setText(undoText);
-        ++iterator;
+        m_impl->notifiedCanUndo = undoAvailable;
+        emit canUndoChanged(undoAvailable);
     }
-    for (auto iterator = m_impl->redoActions.begin();
-        iterator != m_impl->redoActions.end();)
+    if (m_impl->notifiedCanRedo != redoAvailable)
     {
-        if (!*iterator)
-        {
-            iterator = m_impl->redoActions.erase(iterator);
-            continue;
-        }
-        (*iterator)->setEnabled(canRedo());
-        (*iterator)->setText(redoText);
-        ++iterator;
+        m_impl->notifiedCanRedo = redoAvailable;
+        emit canRedoChanged(redoAvailable);
+    }
+    if (m_impl->notifiedUndoText != nextUndoText)
+    {
+        m_impl->notifiedUndoText = nextUndoText;
+        emit undoTextChanged(nextUndoText);
+    }
+    if (m_impl->notifiedRedoText != nextRedoText)
+    {
+        m_impl->notifiedRedoText = nextRedoText;
+        emit redoTextChanged(nextRedoText);
     }
 }
 
@@ -319,20 +301,14 @@ DocumentUndoStack::StorageStats DocumentUndoStack::storageStats() const
     {
         total.macroPreparedDocuments = m_owner->macroPreparedDocumentCount();
     }
-    for (const std::unique_ptr<QUndoCommand> &entry : m_impl->entries)
+    for (const std::unique_ptr<LogicalHistoryCommand> &entry : m_impl->entries)
     {
-        const auto *logical =
-            dynamic_cast<const LogicalHistoryCommand *>(entry.get());
-        if (!logical)
-        {
-            continue;
-        }
-        const StorageStats command = logical->storageStats();
+        const StorageStats command = entry->storageStats();
         total.retainedLayers += command.retainedLayers;
         total.retainedStrokes += command.retainedStrokes;
         total.retainedPreparedDocuments += command.retainedPreparedDocuments;
         total.stagedPreparedDocuments += command.stagedPreparedDocuments;
-        logical->accountStorage(footprint);
+        entry->accountStorage(footprint);
     }
     total.retainedBytes = footprint.totalBytes();
     total.residentBudgetSoftExceeded =

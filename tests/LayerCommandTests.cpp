@@ -449,15 +449,11 @@ private slots:
         const QUuid layerId = controller.document().activeLayerId;
         controller.renameLayer(layerId, QStringLiteral("Renamed"));
 
-        std::unique_ptr<QAction> undoAction(
-            controller.undoStack()->createUndoAction(nullptr));
-        std::unique_ptr<QAction> redoAction(
-            controller.undoStack()->createRedoAction(nullptr));
-        QVERIFY(undoAction->isEnabled());
-        QVERIFY(!redoAction->isEnabled());
+        QVERIFY(controller.undoStack()->canUndo());
+        QVERIFY(!controller.undoStack()->canRedo());
 
         DocumentControllerTestAccess::failHistoryPrepareAfter(controller, 0);
-        undoAction->trigger();
+        controller.undoStack()->undo();
         QCOMPARE(controller.undoStack()->index(), 1);
         QCOMPARE(controller.document().layer(layerId)->name,
             QStringLiteral("Renamed"));
@@ -465,12 +461,12 @@ private slots:
             controller.undoStack()->storageStats().retainedPreparedDocuments,
             qsizetype(0));
 
-        undoAction->trigger();
+        controller.undoStack()->undo();
         QCOMPARE(controller.undoStack()->index(), 0);
         QCOMPARE(controller.document().layer(layerId)->name,
             QStringLiteral("Layer 1"));
-        QVERIFY(redoAction->isEnabled());
-        redoAction->trigger();
+        QVERIFY(controller.undoStack()->canRedo());
+        controller.undoStack()->redo();
         QCOMPARE(controller.undoStack()->index(), 1);
         QCOMPARE(controller.document().layer(layerId)->name,
             QStringLiteral("Renamed"));

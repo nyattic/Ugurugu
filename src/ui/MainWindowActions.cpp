@@ -151,11 +151,6 @@ void MainWindow::createActions()
     checkForUpdatesAction->setObjectName(
         QStringLiteral("checkForUpdatesAction"));
 
-    QAction *stackUndoAction = m_controller.undoStack()->createUndoAction(this);
-    stackUndoAction->setObjectName(QStringLiteral("undoStackAction"));
-    QAction *stackRedoAction = m_controller.undoStack()->createRedoAction(this);
-    stackRedoAction->setObjectName(QStringLiteral("redoStackAction"));
-
     QAction *undoAction = new QAction(tr("&Undo"), this);
     undoAction->setObjectName(QStringLiteral("undoAction"));
     undoAction->setIcon(Icons::icon(IconGlyph::Undo));
@@ -166,22 +161,34 @@ void MainWindow::createActions()
     redoAction->setIcon(Icons::icon(IconGlyph::Redo));
     registerShortcut(redoAction, QKeySequence(QKeySequence::Redo));
 
-    const auto syncHistoryActions =
-        [this, undoAction, redoAction, stackUndoAction, stackRedoAction]()
+    // A pending selection transform is undone before any history entry, so the
+    // visible undo action reflects that first and the stack's own state only
+    // when nothing is pending.
+    const auto syncHistoryActions = [this, undoAction, redoAction]()
     {
+        DocumentUndoStack *stack = m_controller.undoStack();
         const bool pending = m_canvas->hasPendingSelectionTransform();
-        undoAction->setEnabled(pending || stackUndoAction->isEnabled());
+        undoAction->setEnabled(pending || stack->canUndo());
         undoAction->setText(
-            pending ? tr("Undo Selection Transform") : stackUndoAction->text());
-        redoAction->setEnabled(!pending && stackRedoAction->isEnabled());
-        redoAction->setText(stackRedoAction->text());
+            pending ? tr("Undo Selection Transform") : stack->undoText());
+        redoAction->setEnabled(!pending && stack->canRedo());
+        redoAction->setText(stack->redoText());
     };
-    connect(stackUndoAction, &QAction::changed, this, syncHistoryActions);
-    connect(stackRedoAction, &QAction::changed, this, syncHistoryActions);
+    for (const auto signal : {&DocumentUndoStack::canUndoChanged,
+             &DocumentUndoStack::canRedoChanged})
+    {
+        connect(m_controller.undoStack(), signal, this, syncHistoryActions);
+    }
+    for (const auto signal : {&DocumentUndoStack::undoTextChanged,
+             &DocumentUndoStack::redoTextChanged})
+    {
+        connect(m_controller.undoStack(), signal, this, syncHistoryActions);
+    }
     connect(m_canvas,
         &CanvasWidget::selectionTransformSessionChanged,
         this,
         syncHistoryActions);
+    syncHistoryActions();
     connect(undoAction,
         &QAction::triggered,
         this,

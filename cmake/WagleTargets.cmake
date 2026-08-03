@@ -8,12 +8,14 @@ endif()
 
 add_library(wobblepaint_core STATIC ${WOBBLEPAINT_CORE_SOURCES})
 target_include_directories(wobblepaint_core PUBLIC src)
+# Deliberately no Qt6::Widgets. The document, render and IO core must stay
+# usable from a non-widget UI, so anything needing QtWidgets belongs in
+# wobblepaint_ui instead.
 target_link_libraries(
     wobblepaint_core
     PUBLIC
     Qt6::Core
     Qt6::Gui
-    Qt6::Widgets
     spdlog::spdlog
 )
 wobblepaint_target_defaults(wobblepaint_core)

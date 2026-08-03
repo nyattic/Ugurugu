@@ -392,12 +392,12 @@ private slots:
         controller.newDocument(QSize(96, 96));
         const QUuid layerId = controller.document().activeLayerId;
         controller.undoStack()->setUndoLimit(3);
-        QAction *undoAction =
-            controller.undoStack()->createUndoAction(&controller);
-        QAction *redoAction =
-            controller.undoStack()->createRedoAction(&controller);
-        QVERIFY(!undoAction->isEnabled());
-        QVERIFY(!redoAction->isEnabled());
+        QSignalSpy undoAvailability(
+            controller.undoStack(), &DocumentUndoStack::canUndoChanged);
+        QSignalSpy redoAvailability(
+            controller.undoStack(), &DocumentUndoStack::canRedoChanged);
+        QVERIFY(!controller.undoStack()->canUndo());
+        QVERIFY(!controller.undoStack()->canRedo());
 
         for (int index = 0; index < 4; ++index)
         {
@@ -405,8 +405,9 @@ private slots:
         }
         QCOMPARE(controller.undoStack()->count(), 3);
         QCOMPARE(controller.undoStack()->index(), 3);
-        QVERIFY(undoAction->isEnabled());
-        QVERIFY(!redoAction->isEnabled());
+        QVERIFY(controller.undoStack()->canUndo());
+        QVERIFY(!controller.undoStack()->canRedo());
+        QVERIFY(!undoAvailability.isEmpty());
 
         while (controller.undoStack()->canUndo())
         {
@@ -414,14 +415,14 @@ private slots:
         }
         QCOMPARE(controller.undoStack()->index(), 0);
         QVERIFY(!controller.undoStack()->isClean());
-        QVERIFY(!undoAction->isEnabled());
-        QVERIFY(redoAction->isEnabled());
+        QVERIFY(!controller.undoStack()->canUndo());
+        QVERIFY(controller.undoStack()->canRedo());
+        QVERIFY(!redoAvailability.isEmpty());
 
         controller.undoStack()->redo();
         QVERIFY(controller.undoStack()->canRedo());
         controller.renameLayer(layerId, QStringLiteral("New branch"));
         QVERIFY(!controller.undoStack()->canRedo());
-        QVERIFY(!redoAction->isEnabled());
     }
 
     void evictsRedoTailWhenLimitShrinksNearCursor()

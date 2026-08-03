@@ -10,9 +10,6 @@
 
 #include <memory>
 
-class QAction;
-class QUndoCommand;
-
 namespace wobble
 {
 
@@ -23,6 +20,7 @@ class MainWindowTestAccess;
 namespace history
 {
 struct HistoryEffects;
+class LogicalHistoryCommand;
 }
 
 // Logical history prepares a complete target state before moving its cursor,
@@ -55,15 +53,24 @@ public:
     void redo();
     void beginMacro(const QString &text);
     void endMacro();
-    QAction *createUndoAction(QObject *parent);
-    QAction *createRedoAction(QObject *parent);
+    // Display strings for the next undo/redo step, already localized. The
+    // stack composes them so their translation context stays with the history
+    // module rather than moving to whichever UI presents them.
+    QString undoText() const;
+    QString redoText() const;
     StorageStats storageStats() const;
+
+signals:
+    void canUndoChanged(bool canUndo);
+    void canRedoChanged(bool canRedo);
+    void undoTextChanged(const QString &text);
+    void redoTextChanged(const QString &text);
 
 private:
     struct Impl;
 
-    void push(QUndoCommand *command);
-    void updateActions();
+    void push(history::LogicalHistoryCommand *command);
+    void notifyHistoryState();
     void enforceLimits();
     void failOpenMacro();
     bool hasOpenMacro() const;
@@ -291,11 +298,13 @@ private:
         quint64 historyNode,
         quint64 contentRevision);
     qsizetype macroPreparedDocumentCount() const;
-    bool preflightHistoryMovement(const QUndoCommand *command, bool forward);
-    void applyHistoryMovement(QUndoCommand *command, bool forward);
-    void clearHistoryPreflight(const QUndoCommand *command);
+    bool preflightHistoryMovement(
+        const history::LogicalHistoryCommand *command, bool forward);
+    void applyHistoryMovement(
+        history::LogicalHistoryCommand *command, bool forward);
+    void clearHistoryPreflight(const history::LogicalHistoryCommand *command);
     DocumentUndoStack::StorageStats historyStorageStats(
-        const QUndoCommand *command) const;
+        const history::LogicalHistoryCommand *command) const;
     void notifyDocumentChanged();
     void dispatchHistoryEffects(const HistoryEffects &effects,
         CommitDirection direction,

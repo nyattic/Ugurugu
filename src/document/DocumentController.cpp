@@ -13,13 +13,11 @@
 #include "io/DocumentSerializer.hpp"
 #include "render/RenderEngine.hpp"
 
-#include <QAction>
 #include <QHash>
 #include <QPainter>
 #include <QPointer>
 #include <QScopedValueRollback>
 #include <QSet>
-#include <QUndoCommand>
 
 #include <algorithm>
 #include <cmath>
@@ -117,7 +115,7 @@ public:
         return m_mergeId;
     }
 
-    bool mergeWith(const QUndoCommand *other) override
+    bool mergeWith(const LogicalHistoryCommand *other) override
     {
         const auto *command = dynamic_cast<const DocumentCommand *>(other);
         if (!command || command->m_owner != m_owner
@@ -1110,19 +1108,17 @@ void DocumentController::applyPreparedState(const PreparedState &state,
 }
 
 bool DocumentController::preflightHistoryMovement(
-    const QUndoCommand *command, bool forward)
+    const LogicalHistoryCommand *command, bool forward)
 {
     if (!command || !m_currentState)
     {
         return false;
     }
-    auto *logical = const_cast<LogicalHistoryCommand *>(
-        dynamic_cast<const LogicalHistoryCommand *>(command));
-    return logical && logical->preflight(forward);
+    return const_cast<LogicalHistoryCommand *>(command)->preflight(forward);
 }
 
 void DocumentController::applyHistoryMovement(
-    QUndoCommand *command, bool forward)
+    LogicalHistoryCommand *command, bool forward)
 {
     if (!command)
     {
@@ -1138,30 +1134,24 @@ void DocumentController::applyHistoryMovement(
     }
 }
 
-void DocumentController::clearHistoryPreflight(const QUndoCommand *command)
+void DocumentController::clearHistoryPreflight(
+    const LogicalHistoryCommand *command)
 {
-    auto *logical = const_cast<LogicalHistoryCommand *>(
-        dynamic_cast<const LogicalHistoryCommand *>(command));
-    if (logical)
+    if (command)
     {
-        logical->clearPreflight();
+        const_cast<LogicalHistoryCommand *>(command)->clearPreflight();
     }
 }
 
 DocumentUndoStack::StorageStats DocumentController::historyStorageStats(
-    const QUndoCommand *command) const
+    const LogicalHistoryCommand *command) const
 {
     DocumentUndoStack::StorageStats total;
     if (!command)
     {
         return total;
     }
-    if (const auto *logical =
-            dynamic_cast<const LogicalHistoryCommand *>(command))
-    {
-        return logical->storageStats();
-    }
-    return total;
+    return command->storageStats();
 }
 
 void DocumentController::dispatchHistoryEffects(const HistoryEffects &effects,

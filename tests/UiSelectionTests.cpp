@@ -744,12 +744,12 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *saveAction =
             window.findChild<QAction *>(QStringLiteral("saveAction"));
-        QAction *stackUndoAction =
-            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
+        DocumentUndoStack *undoStack =
+            MainWindowTestAccess::controller(window).undoStack();
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
-        QVERIFY(stackUndoAction);
+        QVERIFY(undoStack);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
@@ -767,14 +767,14 @@ private slots:
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QImage preview = RenderEngine::render(
             canvas->documentWithPendingSelectionTransform(), 0);
-        const QString stackTextBeforeSave = stackUndoAction->text();
+        const QString stackTextBeforeSave = undoStack->undoText();
 
         saveAction->trigger();
         QTRY_VERIFY(!window.isWindowModified());
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(!canvas->hasSelectionTransformSession());
-        QVERIFY(stackUndoAction->isEnabled());
-        QVERIFY(stackUndoAction->text() != stackTextBeforeSave);
+        QVERIFY(undoStack->canUndo());
+        QVERIFY(undoStack->undoText() != stackTextBeforeSave);
 
         const std::optional<Document> saved =
             DocumentSerializer::load(filePath, &error);
@@ -826,12 +826,12 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *saveAction =
             window.findChild<QAction *>(QStringLiteral("saveAction"));
-        QAction *stackUndoAction =
-            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
+        DocumentUndoStack *undoStack =
+            MainWindowTestAccess::controller(window).undoStack();
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
-        QVERIFY(stackUndoAction);
+        QVERIFY(undoStack);
         canvas->setZoomPercent(100);
 
         lassoAction->trigger();
@@ -854,8 +854,8 @@ private slots:
         QVERIFY(canvas->hasPendingSelectionTransform());
         const QTransform rejected = canvas->pendingSelectionTransform();
         QVERIFY(rejected.dx() > 89.0);
-        const QString stackTextBeforeSave = stackUndoAction->text();
-        const bool stackEnabledBeforeSave = stackUndoAction->isEnabled();
+        const QString stackTextBeforeSave = undoStack->undoText();
+        const bool stackEnabledBeforeSave = undoStack->canUndo();
 
         bool failureShown = false;
         QTimer::singleShot(0,
@@ -888,8 +888,8 @@ private slots:
         QVERIFY(canvas->hasPendingSelectionTransform());
         QCOMPARE(canvas->pendingSelectionTransform(), rejected);
         QVERIFY(window.isWindowModified());
-        QCOMPARE(stackUndoAction->text(), stackTextBeforeSave);
-        QCOMPARE(stackUndoAction->isEnabled(), stackEnabledBeforeSave);
+        QCOMPARE(undoStack->undoText(), stackTextBeforeSave);
+        QCOMPARE(undoStack->canUndo(), stackEnabledBeforeSave);
         QFile unchangedFile(filePath);
         QVERIFY(unchangedFile.open(QIODevice::ReadOnly));
         QCOMPARE(unchangedFile.readAll(), savedBytes);
@@ -929,11 +929,11 @@ private slots:
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
         QAction *lassoAction =
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
-        QAction *stackUndoAction =
-            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
+        DocumentUndoStack *undoStack =
+            MainWindowTestAccess::controller(window).undoStack();
         QVERIFY(canvas);
         QVERIFY(lassoAction);
-        QVERIFY(stackUndoAction);
+        QVERIFY(undoStack);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
@@ -948,7 +948,7 @@ private slots:
 
         QVERIFY(canvas->rotateSelection(25.0));
         QVERIFY(canvas->hasPendingSelectionTransform());
-        const QString stackTextBefore = stackUndoAction->text();
+        const QString stackTextBefore = undoStack->undoText();
         const QImage preview = RenderEngine::render(
             canvas->documentWithPendingSelectionTransform(), 0);
 
@@ -957,7 +957,7 @@ private slots:
         QVERIFY(MainWindowTestAccess::flushAutosave(window));
         QVERIFY(QFileInfo::exists(recoveryPath));
         QVERIFY(canvas->hasPendingSelectionTransform());
-        QCOMPARE(stackUndoAction->text(), stackTextBefore);
+        QCOMPARE(undoStack->undoText(), stackTextBefore);
 
         const std::optional<RecoveryStore::Snapshot> recovered =
             RecoveryStore::load(&error);
@@ -1015,17 +1015,14 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("undoAction"));
         QAction *redoAction =
             window.findChild<QAction *>(QStringLiteral("redoAction"));
-        QAction *stackUndoAction =
-            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
-        QAction *stackRedoAction =
-            window.findChild<QAction *>(QStringLiteral("redoStackAction"));
+        DocumentUndoStack *undoStack =
+            MainWindowTestAccess::controller(window).undoStack();
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(saveAction);
         QVERIFY(undoAction);
         QVERIFY(redoAction);
-        QVERIFY(stackUndoAction);
-        QVERIFY(stackRedoAction);
+        QVERIFY(undoStack);
 
         lassoAction->trigger();
         const QPoint center = canvas->rect().center();
@@ -1043,9 +1040,9 @@ private slots:
         saveAction->trigger();
         QTRY_VERIFY(!window.isWindowModified());
         QTRY_VERIFY(canvas->hasTransformableSelection());
-        const QString stackUndoTextClean = stackUndoAction->text();
-        const bool stackUndoEnabledClean = stackUndoAction->isEnabled();
-        const bool stackRedoEnabledClean = stackRedoAction->isEnabled();
+        const QString stackUndoTextClean = undoStack->undoText();
+        const bool stackUndoEnabledClean = undoStack->canUndo();
+        const bool stackRedoEnabledClean = undoStack->canRedo();
         const QByteArray cleanDocument = DocumentSerializer::toJson(
             canvas->documentWithPendingSelectionTransform());
 
@@ -1058,25 +1055,25 @@ private slots:
         QVERIFY(canvas->hasPendingSelectionTransform());
         QVERIFY(undoAction->isEnabled());
         QVERIFY(!redoAction->isEnabled());
-        QVERIFY(undoAction->text() != stackUndoAction->text());
+        QVERIFY(undoAction->text() != undoStack->undoText());
         QTRY_VERIFY(window.isWindowModified());
 
         undoAction->trigger();
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(canvas->hasTransformableSelection());
         QVERIFY(!canvas->selectionMoveMode());
-        QCOMPARE(stackUndoAction->text(), stackUndoTextClean);
-        QCOMPARE(stackUndoAction->isEnabled(), stackUndoEnabledClean);
-        QCOMPARE(stackRedoAction->isEnabled(), stackRedoEnabledClean);
+        QCOMPARE(undoStack->undoText(), stackUndoTextClean);
+        QCOMPARE(undoStack->canUndo(), stackUndoEnabledClean);
+        QCOMPARE(undoStack->canRedo(), stackRedoEnabledClean);
         QCOMPARE(DocumentSerializer::toJson(
                      canvas->documentWithPendingSelectionTransform()),
             cleanDocument);
         QTRY_VERIFY(!window.isWindowModified());
-        QCOMPARE(undoAction->text(), stackUndoAction->text());
+        QCOMPARE(undoAction->text(), undoStack->undoText());
 
         undoAction->trigger();
         QTRY_VERIFY(window.isWindowModified());
-        QVERIFY(stackRedoAction->isEnabled());
+        QVERIFY(undoStack->canRedo());
         QVERIFY(redoAction->isEnabled());
         QTRY_VERIFY(canvas->hasTransformableSelection());
 
@@ -1085,11 +1082,11 @@ private slots:
         QVERIFY(!redoAction->isEnabled());
         redoAction->trigger();
         QVERIFY(canvas->hasPendingSelectionTransform());
-        QVERIFY(stackRedoAction->isEnabled());
+        QVERIFY(undoStack->canRedo());
 
         undoAction->trigger();
         QVERIFY(!canvas->hasPendingSelectionTransform());
-        QVERIFY(stackRedoAction->isEnabled());
+        QVERIFY(undoStack->canRedo());
         QVERIFY(redoAction->isEnabled());
     }
 
@@ -1126,12 +1123,12 @@ private slots:
             window.findChild<QAction *>(QStringLiteral("lassoAction"));
         QAction *undoAction =
             window.findChild<QAction *>(QStringLiteral("undoAction"));
-        QAction *stackUndoAction =
-            window.findChild<QAction *>(QStringLiteral("undoStackAction"));
+        DocumentUndoStack *undoStack =
+            MainWindowTestAccess::controller(window).undoStack();
         QVERIFY(canvas);
         QVERIFY(lassoAction);
         QVERIFY(undoAction);
-        QVERIFY(stackUndoAction);
+        QVERIFY(undoStack);
         QVERIFY(!undoAction->isEnabled());
 
         const QImage originalFrame = RenderEngine::render(
@@ -1152,13 +1149,13 @@ private slots:
         QVERIFY(canvas->rotateSelection(30.0));
         QVERIFY(canvas->hasPendingSelectionTransform());
         QVERIFY(undoAction->isEnabled());
-        QVERIFY(undoAction->text() != stackUndoAction->text());
+        QVERIFY(undoAction->text() != undoStack->undoText());
 
         undoAction->trigger();
         QVERIFY(!canvas->hasPendingSelectionTransform());
         QVERIFY(canvas->hasTransformableSelection());
         QTRY_VERIFY(!window.isWindowModified());
-        QCOMPARE(undoAction->text(), stackUndoAction->text());
+        QCOMPARE(undoAction->text(), undoStack->undoText());
         QCOMPARE(RenderEngine::render(
                      canvas->documentWithPendingSelectionTransform(), 0),
             originalFrame);
