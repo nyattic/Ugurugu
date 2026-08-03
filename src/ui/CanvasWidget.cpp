@@ -6,16 +6,20 @@
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
+#include "io/SelectionClipboardCodec.hpp"
 #include "render/PreviewRenderPolicy.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/CanvasViewport.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/Theme.hpp"
 
+#include <QClipboard>
 #include <QEnterEvent>
 #include <QFutureWatcher>
+#include <QGuiApplication>
 #include <QHash>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QNativeGestureEvent>
 #include <QPaintEvent>
@@ -499,6 +503,72 @@ bool CanvasWidget::duplicateSelection()
     return duplicated;
 }
 
+bool CanvasWidget::copySelection()
+{
+    if (m_selectedStrokes.isEmpty() || m_selectionMask.isNull())
+    {
+        return false;
+    }
+    if (hasPendingSelectionTransform())
+    {
+        emit interactionMessage(
+            tr("Apply or cancel the selection transform before copying."));
+        return false;
+    }
+    QString error;
+    const std::optional<SelectionClipboardCodec::Copy> copy =
+        SelectionClipboardCodec::makeCopy(m_controller->document(),
+            m_selectionLayer,
+            m_selectionMask,
+            m_currentFrame,
+            &error);
+    if (!copy)
+    {
+        emit interactionMessage(error.isEmpty()
+                ? tr("The selection could not be copied.")
+                : error);
+        return false;
+    }
+    auto *mimeData = new QMimeData;
+    mimeData->setData(SelectionClipboardCodec::mimeType(), copy->payload);
+    mimeData->setImageData(copy->raster);
+    QGuiApplication::clipboard()->setMimeData(mimeData);
+    emit interactionMessage(tr("Selection copied."));
+    return true;
+}
+
+bool CanvasWidget::cutSelection()
+{
+    if (m_selectedStrokes.isEmpty() || m_selectionMask.isNull())
+    {
+        return false;
+    }
+    if (hasPendingSelectionTransform())
+    {
+        emit interactionMessage(
+            tr("Apply or cancel the selection transform before cutting."));
+        return false;
+    }
+    if (!copySelection())
+    {
+        return false;
+    }
+    setSelectionMoveMode(false);
+    DocumentUndoStack *undoStack = m_controller->undoStack();
+    undoStack->beginMacro(tr("Cut selection"));
+    const bool removed = m_controller->removeSelectedContent(m_selectionLayer,
+        QVector<QUuid>(m_selectedStrokes.cbegin(), m_selectedStrokes.cend()),
+        m_selectionMask);
+    undoStack->endMacro();
+    if (!removed)
+    {
+        emit interactionMessage(tr("The selection could not be cut."));
+        return false;
+    }
+    emit interactionMessage(tr("Selection cut."));
+    return true;
+}
+
 bool CanvasWidget::deleteSelection()
 {
     if (m_selectedStrokes.isEmpty() || m_selectionMask.isNull())
@@ -517,6 +587,41 @@ bool CanvasWidget::deleteSelection()
             tr("The selected content could not be deleted."));
     }
     return removed;
+}
+
+void CanvasWidget::selectAll()
+{
+    const Document &document = m_controller->document();
+    if (!document.layer(document.activeLayerId))
+    {
+        emit interactionMessage(tr("Add a layer before using this tool."));
+        return;
+    }
+    cancelSelectionTransformForBoundary(
+        tr("The pending selection transform was canceled before selecting."));
+    cancelAreaSelection();
+    setSelectionMoveMode(false);
+    QImage mask(document.size, QImage::Format_Grayscale8);
+    mask.fill(255);
+    pushSelectionChange(currentSelectionState(),
+        selectionStateForMask(std::move(mask)),
+        tr("Select all"));
+}
+
+void CanvasWidget::invertSelection()
+{
+    if (m_selectionMask.isNull())
+    {
+        return;
+    }
+    cancelSelectionTransformForBoundary(
+        tr("The pending transform was canceled before inverting."));
+    setSelectionMoveMode(false);
+    QImage mask = m_selectionMask;
+    mask.invertPixels();
+    pushSelectionChange(currentSelectionState(),
+        selectionStateForMask(std::move(mask)),
+        tr("Invert selection"));
 }
 
 void CanvasWidget::deselectSelection()

@@ -156,18 +156,18 @@
         <translation>アプリケーションで予期しないエラーが発生しました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="104"/>
-        <location filename="../src/ui/MainWindow.cpp" line="105"/>
+        <location filename="../src/ui/MainWindow.cpp" line="107"/>
+        <location filename="../src/ui/MainWindow.cpp" line="108"/>
         <source> px</source>
         <translation> px</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="106"/>
+        <location filename="../src/ui/MainWindow.cpp" line="109"/>
         <source>Width</source>
         <translation>幅</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="107"/>
+        <location filename="../src/ui/MainWindow.cpp" line="110"/>
         <source>Height</source>
         <translation>高さ</translation>
     </message>
@@ -418,81 +418,132 @@
 <context>
     <name>wobble::CanvasWidget</name>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="229"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="250"/>
         <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
         <translation>B ブラシ · E 消しゴム · Space 移動 · スクロール / Ctrl+Space ズーム · P 再生</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="410"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="491"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="52"/>
         <source>The active layer is hidden. Make it visible to draw.</source>
         <translation>アクティブレイヤーが非表示です。描画するには表示してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="336"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="388"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="597"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="357"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="469"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="38"/>
         <source>Add a layer before using this tool.</source>
         <translation>このツールを使う前にレイヤーを追加してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="66"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="70"/>
         <source>The pending selection transform was canceled because the document changed.</source>
         <translation>ドキュメントが変更されたため、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="390"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="394"/>
         <source>The selection could not be scaled.</source>
         <translation>選択範囲を拡大・縮小できません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="421"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="425"/>
         <source>The selection could not be rotated.</source>
         <translation>選択範囲を回転できません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="462"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="466"/>
         <source>The selection transform could not be applied.</source>
         <translation>選択範囲の変形を適用できません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="465"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="469"/>
         <source>Selection transform applied.</source>
         <translation>選択範囲の変形を適用しました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="478"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="482"/>
         <source>Selection transform canceled.</source>
         <translation>選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="488"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="492"/>
         <source>The pending transform was canceled before duplicating.</source>
         <translation>複製する前に、保留中の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="509"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="515"/>
+        <source>Apply or cancel the selection transform before copying.</source>
+        <translation>コピーする前に選択範囲の変形を適用するか取り消してください。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="528"/>
+        <source>The selection could not be copied.</source>
+        <translation>選択範囲をコピーできませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="536"/>
+        <source>Selection copied.</source>
+        <translation>選択範囲をコピーしました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="549"/>
+        <source>Apply or cancel the selection transform before cutting.</source>
+        <translation>切り取る前に選択範囲の変形を適用するか取り消してください。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="558"/>
+        <source>Cut selection</source>
+        <translation>選択範囲の切り取り</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="565"/>
+        <source>The selection could not be cut.</source>
+        <translation>選択範囲を切り取れませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="568"/>
+        <source>Selection cut.</source>
+        <translation>選択範囲を切り取りました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="579"/>
         <source>The pending transform was canceled before deleting.</source>
         <translation>削除する前に、保留中の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="530"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="608"/>
+        <source>Select all</source>
+        <translation>すべて選択</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="618"/>
+        <source>The pending transform was canceled before inverting.</source>
+        <translation>反転する前に保留中の変形を取り消しました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="624"/>
+        <source>Invert selection</source>
+        <translation>選択範囲を反転</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidget.cpp" line="635"/>
         <source>The pending transform was canceled before deselecting.</source>
         <translation>選択を解除する前に、保留中の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="566"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="671"/>
         <source>The pending selection transform was canceled when changing tools.</source>
         <translation>ツールを変更したため、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="328"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="549"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="349"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="572"/>
         <source>Drag inside the selection to move it.</source>
         <translation>選択範囲の内側をドラッグして移動してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="394"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="475"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="44"/>
         <source>Groups can&apos;t be painted on. Select a paint layer to draw.</source>
         <translation>グループには描画できません。描画するにはペイントレイヤーを選択してください。</translation>
@@ -503,109 +554,122 @@
         <translation>描画する前に、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="416"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="497"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="58"/>
         <source>The active layer opacity is 0%. Increase it to draw.</source>
         <translation>アクティブレイヤーの不透明度が0%です。描画するには上げてください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="63"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="328"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="601"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="99"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="388"/>
         <source>The pending selection transform was canceled before selecting.</source>
         <translation>新しく選択する前に、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="292"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="351"/>
         <source>Selected content. Use the action bar to transform or remove it.</source>
         <translation>内容を選択しました。アクションバーから変形または削除できます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="251"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="291"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="310"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="350"/>
         <source>No content in the selected area.</source>
         <translation>選択した範囲に内容がありません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="371"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="182"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="454"/>
+        <source>Add to selection</source>
+        <translation>選択範囲に追加</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="183"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="455"/>
+        <source>Subtract from selection</source>
+        <translation>選択範囲から削除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="443"/>
         <source>Click an empty area surrounded by lines to select it.</source>
         <translation>線で囲まれた空白部分をクリックすると選択できます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="362"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="431"/>
         <source>Set a visible paint layer as a reference layer first.</source>
         <translation>先に表示中のペイントレイヤーを参照レイヤーに設定してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="404"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="485"/>
         <source>Click inside the selected area to fill it.</source>
         <translation>選択範囲の内側をクリックすると塗りつぶします。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="186"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="245"/>
         <source>Select area</source>
         <translation>範囲を選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="497"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="501"/>
         <source>The selection could not be duplicated.</source>
         <translation>選択範囲を複製できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="517"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="587"/>
         <source>The selected content could not be deleted.</source>
         <translation>選択内容を削除できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="532"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="112"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="335"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="358"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="369"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="637"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="156"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="400"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="426"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="440"/>
         <source>Deselect</source>
         <translation>選択を解除</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="398"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="479"/>
         <source>The pending selection transform was canceled before filling.</source>
         <translation>塗りつぶす前に、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="450"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="531"/>
         <source>The selection transform could not be started.</source>
         <translation>選択範囲の変形を開始できません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="834"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="915"/>
         <source>The pending selection transform was canceled before resizing.</source>
         <translation>サイズを変更する前に、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="915"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="996"/>
         <source>The selected content could not be flipped.</source>
         <translation>選択内容を反転できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="207"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="214"/>
         <source>The stroke was simplified because the project point limit was reached.</source>
         <translation>プロジェクトのポイント数の上限に達したため、ストロークを簡略化しました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="211"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="218"/>
         <source>The stroke could not be added because its layer is no longer available.</source>
         <translation>レイヤーが利用できなくなったため、ストロークを追加できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="215"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="222"/>
         <source>The stroke could not be added because the project stroke limit was reached.</source>
         <translation>プロジェクトのストローク数の上限に達したため、ストロークを追加できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="219"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="226"/>
         <source>The stroke could not be added because the project point limit was reached.</source>
         <translation>プロジェクトのポイント数の上限に達したため、ストロークを追加できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="225"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="232"/>
         <source>The stroke could not be added.</source>
         <translation>ストロークを追加できませんでした。</translation>
     </message>
@@ -705,42 +769,47 @@
         <translation>レイヤーの複製</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="244"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="273"/>
+        <source>Paste</source>
+        <translation>貼り付け</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="343"/>
         <source>Delete layer</source>
         <translation>レイヤーの削除</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="268"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="367"/>
         <source>Clear layer</source>
         <translation>レイヤーの消去</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="300"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="399"/>
         <source>Rename layer</source>
         <translation>レイヤー名の変更</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="319"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="418"/>
         <source>Toggle layer visibility</source>
         <translation>レイヤー表示の切り替え</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="336"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="435"/>
         <source>Set reference layer</source>
         <translation>参照レイヤーを設定</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="359"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="458"/>
         <source>Change layer opacity</source>
         <translation>レイヤー不透明度の変更</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="381"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="480"/>
         <source>Change layer blend mode</source>
         <translation>レイヤーのブレンドモードを変更</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="461"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="560"/>
         <source>Move layer</source>
         <translation>レイヤーの移動</translation>
     </message>
@@ -807,12 +876,12 @@
         <translation>レイヤーグループを追加</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="402"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="501"/>
         <source>Change layer clipping</source>
         <translation>レイヤーのクリッピングを変更</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="425"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="524"/>
         <source>Move layer into group</source>
         <translation>レイヤーをグループへ移動</translation>
     </message>
@@ -1621,15 +1690,15 @@
 <context>
     <name>wobble::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="215"/>
-        <location filename="../src/ui/MainWindow.cpp" line="244"/>
-        <location filename="../src/ui/MainWindow.cpp" line="253"/>
-        <location filename="../src/ui/MainWindow.cpp" line="264"/>
+        <location filename="../src/ui/MainWindow.cpp" line="218"/>
+        <location filename="../src/ui/MainWindow.cpp" line="247"/>
+        <location filename="../src/ui/MainWindow.cpp" line="256"/>
+        <location filename="../src/ui/MainWindow.cpp" line="267"/>
         <source>Open failed</source>
         <translation>開けませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="245"/>
+        <location filename="../src/ui/MainWindow.cpp" line="248"/>
         <source>Could not open the project.
 
 %1</source>
@@ -1638,58 +1707,58 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="273"/>
+        <location filename="../src/ui/MainWindow.cpp" line="276"/>
         <source>Opened %1</source>
         <translation>%1 を開きました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="312"/>
+        <location filename="../src/ui/MainWindow.cpp" line="315"/>
         <source>Recover unsaved work</source>
         <translation>未保存の作業を復元</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="314"/>
+        <location filename="../src/ui/MainWindow.cpp" line="317"/>
         <source>WagleWaglePaint found work from a previous session. Choose what to do before opening %1.</source>
         <translation>前回のセッションの作業が見つかりました。%1 を開く前に、この作業の処理方法を選択してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="317"/>
+        <location filename="../src/ui/MainWindow.cpp" line="320"/>
         <source>WagleWaglePaint found work from a previous session. Choose whether to recover or discard it.</source>
         <translation>前回のセッションの作業が見つかりました。復元するか破棄するかを選択してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="322"/>
+        <location filename="../src/ui/MainWindow.cpp" line="325"/>
         <source>Recover</source>
         <translation>復元</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="329"/>
+        <location filename="../src/ui/MainWindow.cpp" line="332"/>
         <source>Keep Recovery and Open File</source>
         <translation>復元ファイルを保持してファイルを開く</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="333"/>
+        <location filename="../src/ui/MainWindow.cpp" line="336"/>
         <source>Discard Recovery and Open File</source>
         <translation>復元ファイルを破棄してファイルを開く</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="338"/>
+        <location filename="../src/ui/MainWindow.cpp" line="341"/>
         <source>Discard</source>
         <translation>破棄</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="380"/>
+        <location filename="../src/ui/MainWindow.cpp" line="383"/>
         <source>Opened %1. Recovery preserved at %2</source>
         <translation>%1 を開きました。復元ファイルは %2 に保持されています</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="453"/>
-        <location filename="../src/ui/MainWindow.cpp" line="473"/>
+        <location filename="../src/ui/MainWindow.cpp" line="456"/>
+        <location filename="../src/ui/MainWindow.cpp" line="476"/>
         <source>Recovery failed</source>
         <translation>復元に失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="454"/>
+        <location filename="../src/ui/MainWindow.cpp" line="457"/>
         <source>The recovery file could not be opened.
 
 %1
@@ -1704,22 +1773,74 @@ The recovery file was not deleted. You can find it at:
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="484"/>
+        <location filename="../src/ui/MainWindow.cpp" line="487"/>
         <source>Recovered unsaved work.</source>
         <translation>未保存の作業を復元しました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="897"/>
+        <location filename="../src/ui/MainWindow.cpp" line="534"/>
+        <source>Shortcut change</source>
+        <translation>ショートカットの変更</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="535"/>
+        <source>Ctrl+D now deselects, matching the convention of other drawing tools. Duplicate selection is still in the Selection menu and the action bar, and you can give it a shortcut in the Shortcuts tab of the settings.</source>
+        <translation>Ctrl+D は他のお絵かきツールの慣例に合わせて選択解除になりました。選択範囲の複製は選択メニューとアクションバーに残っており、設定のショートカットタブでショートカットを割り当てられます。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="930"/>
         <source>Canvas background</source>
         <translation>キャンバスの背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1101"/>
+        <location filename="../src/ui/MainWindow.cpp" line="948"/>
+        <location filename="../src/ui/MainWindow.cpp" line="960"/>
+        <source>There is nothing to paste.</source>
+        <translation>貼り付ける内容がありません。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="956"/>
+        <source>Pasting images from other apps is not supported yet.</source>
+        <translation>他のアプリからの画像の貼り付けはまだサポートされていません。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="971"/>
+        <location filename="../src/ui/MainWindow.cpp" line="998"/>
+        <source>The clipboard content could not be pasted.</source>
+        <translation>クリップボードの内容を貼り付けられませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="978"/>
+        <source>Pasted as a new layer.</source>
+        <translation>新しいレイヤーとして貼り付けました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="981"/>
+        <source>The paste was rejected because the document already has the maximum number of layers.</source>
+        <translation>ドキュメントがレイヤー数の上限に達しているため、貼り付けは拒否されました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="985"/>
+        <source>The paste was rejected because it would exceed the stroke limit.</source>
+        <translation>ストローク数の上限を超えるため、貼り付けは拒否されました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="989"/>
+        <source>The paste was rejected because it would exceed the point limit.</source>
+        <translation>ポイント数の上限を超えるため、貼り付けは拒否されました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="993"/>
+        <source>The paste was rejected because it would exceed the mask budget.</source>
+        <translation>マスク予算を超えるため、貼り付けは拒否されました。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1207"/>
         <source>Recovery could not be discarded</source>
         <translation>復元ファイルを破棄できませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1102"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1208"/>
         <source>The recovery file was not deleted.
 
 %1</source>
@@ -1728,12 +1849,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1234"/>
         <source>Recovery could not be preserved</source>
         <translation>復元ファイルを保持できませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1235"/>
         <source>The recovery file was left unchanged.
 
 %1</source>
@@ -1747,7 +1868,7 @@ The recovery file was not deleted. You can find it at:
         <translation>新規(&amp;N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="265"/>
+        <location filename="../src/ui/MainWindow.cpp" line="268"/>
         <source>The project could not be prepared.
 
 %1</source>
@@ -1756,7 +1877,7 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="474"/>
+        <location filename="../src/ui/MainWindow.cpp" line="477"/>
         <source>The recovered document could not be prepared.
 
 %1</source>
@@ -1815,7 +1936,7 @@ The recovery file was not deleted. You can find it at:
         <translation>やり直す(&amp;R)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="172"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="173"/>
         <source>Undo Selection Transform</source>
         <translation>選択範囲の変形を元に戻す</translation>
     </message>
@@ -1846,220 +1967,280 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="278"/>
+        <source>Select &amp;all</source>
+        <translation>すべて選択(&amp;A)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="280"/>
+        <source>Select the whole canvas</source>
+        <translation>キャンバス全体を選択</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="287"/>
+        <source>&amp;Invert selection</source>
+        <translation>選択範囲を反転(&amp;I)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="290"/>
+        <source>Invert the selected area</source>
+        <translation>選択した範囲を反転</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="299"/>
+        <source>Cu&amp;t</source>
+        <translation>切り取り(&amp;T)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="302"/>
+        <source>Copy the selection to the clipboard and delete it</source>
+        <translation>選択範囲をクリップボードにコピーして削除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="310"/>
+        <source>&amp;Copy</source>
+        <translation>コピー(&amp;C)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="313"/>
+        <source>Copy the selection to the clipboard</source>
+        <translation>選択範囲をクリップボードにコピー</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="321"/>
+        <source>&amp;Paste</source>
+        <translation>貼り付け(&amp;P)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="323"/>
+        <source>Paste the clipboard as a new layer</source>
+        <translation>クリップボードを新しいレイヤーとして貼り付け</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="330"/>
+        <source>Copy and paste</source>
+        <translation>コピー＋貼り付け</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="335"/>
+        <source>Copy the selection and paste it as a new layer</source>
+        <translation>選択範囲をコピーして新しいレイヤーとして貼り付け</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="343"/>
         <source>Duplicate selection</source>
         <translation>選択範囲を複製</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="282"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="347"/>
         <source>Duplicate selected content</source>
         <translation>選択内容を複製</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="306"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="370"/>
         <source>Flip selection horizontally</source>
         <translation>選択範囲を左右反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="312"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="376"/>
         <source>Flip selected content horizontally</source>
         <translation>選択内容を左右反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="320"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="384"/>
         <source>Flip selection vertically</source>
         <translation>選択範囲を上下反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="326"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="390"/>
         <source>Flip selected content vertically</source>
         <translation>選択内容を上下反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="333"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="397"/>
         <source>Apply transform</source>
         <translation>変形を適用</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="338"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="402"/>
         <source>Apply selection transform (Enter)</source>
         <translation>選択範囲の変形を適用（Enter）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="348"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="412"/>
         <source>Cancel transform</source>
         <translation>変形をキャンセル</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="353"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="417"/>
         <source>Cancel selection transform (Esc)</source>
         <translation>選択範囲の変形をキャンセル（Esc）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="361"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="365"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="425"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="429"/>
         <source>Delete selected content</source>
         <translation>選択内容を削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="372"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="436"/>
         <source>Deselect</source>
         <translation>選択を解除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="376"/>
-        <source>Deselect (Esc)</source>
-        <translation>選択を解除（Esc）</translation>
+        <location filename="../src/ui/MainWindowActions.cpp" line="440"/>
+        <source>Deselect (Ctrl+D)</source>
+        <translation>選択を解除 (Ctrl+D)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="384"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="449"/>
         <source>Cancel current canvas action</source>
         <translation>現在のキャンバス操作をキャンセル</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="449"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="519"/>
         <source>Clear active layer</source>
         <translation>アクティブレイヤーを消去</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="469"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="539"/>
         <source>Zoom &amp;in</source>
         <translation>拡大(&amp;I)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="476"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="546"/>
         <source>Zoom &amp;out</source>
         <translation>縮小(&amp;O)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="482"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="552"/>
         <source>Actual &amp;pixels</source>
         <translation>実ピクセル(&amp;P)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="484"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="554"/>
         <source>Show the canvas at 100%</source>
         <translation>キャンバスを100%で表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="491"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="561"/>
         <source>&amp;Fit canvas</source>
         <translation>キャンバスを画面に合わせる(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="498"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="568"/>
         <source>Flip canvas horizontally</source>
         <translation>キャンバスを左右反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="513"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="583"/>
         <source>&amp;Animate preview</source>
         <translation>プレビューを再生(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="528"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="598"/>
         <source>&amp;Brush</source>
         <translation>ブラシ(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="534"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="604"/>
         <source>&amp;Eraser</source>
         <translation>消しゴム(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="540"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="610"/>
         <source>&amp;Area select</source>
         <translation>範囲選択(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="546"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="616"/>
         <source>Auto se&amp;lect</source>
         <translation>自動選択(&amp;L)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="552"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="622"/>
         <source>Paint &amp;bucket</source>
         <translation>塗りつぶし(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="661"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="737"/>
         <source>&amp;File</source>
         <translation>ファイル(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="675"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="751"/>
         <source>&amp;Edit</source>
         <translation>編集(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="686"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="766"/>
         <source>&amp;Selection</source>
         <translation>選択範囲(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="708"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="791"/>
         <source>&amp;View</source>
         <translation>表示(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="719"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="802"/>
         <source>&amp;Tools</source>
         <translation>ツール(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="726"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="809"/>
         <source>&amp;Help</source>
         <translation>ヘルプ(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="733"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="816"/>
         <source>Tools</source>
         <translation>ツール</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="818"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="901"/>
         <source>Choose brush color</source>
         <translation>ブラシの色を選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="819"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="828"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="902"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="911"/>
         <source>Brush color</source>
         <translation>ブラシの色</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="886"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="887"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="969"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="970"/>
         <source>Canvas zoom</source>
         <translation>キャンバスのズーム</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="893"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="976"/>
         <source>%</source>
         <translation>%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="896"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="897"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="979"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="980"/>
         <source>Canvas zoom percentage</source>
         <translation>キャンバスのズーム倍率</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="732"/>
+        <location filename="../src/ui/MainWindow.cpp" line="765"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then save again.</source>
         <translation>適用待ちの選択範囲の変形を適用できませんでした。変形を調整するかキャンセルしてから、もう一度保存してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="766"/>
+        <location filename="../src/ui/MainWindow.cpp" line="799"/>
         <source>The recovery file location is reserved. Choose a different project path.</source>
         <translation>復元ファイルの場所は予約されています。別のプロジェクトパスを選択してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1158"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1264"/>
         <source>Layer group nesting limit</source>
         <translation>レイヤーグループのネスト上限</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1159"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1265"/>
         <source>Some layers in this project are nested %1 levels deep inside layer groups. The structure will be preserved, but edits cannot increase the document&apos;s maximum nesting depth. New documents allow up to %2 levels.</source>
         <translation>このプロジェクトの一部のレイヤーは、グループ内で %1 段階の深さまでネストされています。現在の構造はそのまま保持されますが、編集によってドキュメントの最大ネスト段階を増やすことはできません。新規ドキュメントでは最大 %2 段階まで使用できます。</translation>
     </message>
@@ -2074,12 +2255,12 @@ The recovery file was not deleted. You can find it at:
         <translation>この画像のレンダリングには約 %1 MiB の作業メモリが必要です。書き出す前にキャンバスサイズまたはレイヤーグループのネスト段階を減らしてください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="789"/>
+        <location filename="../src/ui/MainWindow.cpp" line="822"/>
         <source>New document failed</source>
         <translation>新規ドキュメントの作成に失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="790"/>
+        <location filename="../src/ui/MainWindow.cpp" line="823"/>
         <source>The new document could not be prepared.
 
 %1</source>
@@ -2088,40 +2269,40 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="818"/>
-        <location filename="../src/ui/MainWindow.cpp" line="863"/>
+        <location filename="../src/ui/MainWindow.cpp" line="851"/>
+        <location filename="../src/ui/MainWindow.cpp" line="896"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then change the size again.</source>
         <translation>適用待ちの選択範囲の変形を適用できませんでした。変形を調整するかキャンセルしてから、もう一度サイズを変更してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="828"/>
+        <location filename="../src/ui/MainWindow.cpp" line="861"/>
         <source>Resize canvas</source>
         <translation>キャンバスのサイズ変更</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="817"/>
-        <location filename="../src/ui/MainWindow.cpp" line="840"/>
+        <location filename="../src/ui/MainWindow.cpp" line="850"/>
+        <location filename="../src/ui/MainWindow.cpp" line="873"/>
         <source>Canvas size</source>
         <translation>キャンバスサイズ</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="841"/>
+        <location filename="../src/ui/MainWindow.cpp" line="874"/>
         <source>The canvas size could not be changed. Try a smaller size or offset.</source>
         <translation>キャンバスサイズを変更できませんでした。より小さいサイズまたはオフセットをお試しください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="873"/>
+        <location filename="../src/ui/MainWindow.cpp" line="906"/>
         <source>Resize image</source>
         <translation>画像サイズを変更</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="862"/>
-        <location filename="../src/ui/MainWindow.cpp" line="884"/>
+        <location filename="../src/ui/MainWindow.cpp" line="895"/>
+        <location filename="../src/ui/MainWindow.cpp" line="917"/>
         <source>Image size</source>
         <translation>画像サイズ</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="885"/>
+        <location filename="../src/ui/MainWindow.cpp" line="918"/>
         <source>The image size could not be changed. Try smaller dimensions.</source>
         <translation>画像サイズを変更できませんでした。より小さい寸法をお試しください。</translation>
     </message>
@@ -2140,52 +2321,52 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1210"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1316"/>
         <source>Export &amp;image…</source>
         <translation>画像で書き出す(&amp;I)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="811"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="894"/>
         <source>Quick access</source>
         <translation>クイックアクセス</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="917"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1000"/>
         <source>x %1  y %2</source>
         <translation>x %1  y %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="953"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1036"/>
         <source>Ready</source>
         <translation>準備完了</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="594"/>
+        <location filename="../src/ui/MainWindow.cpp" line="627"/>
         <source>Untitled</source>
         <translation>無題</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="596"/>
+        <location filename="../src/ui/MainWindow.cpp" line="629"/>
         <source>%1[*] — WagleWaglePaint</source>
         <translation>%1[*] — WagleWaglePaint</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="634"/>
+        <location filename="../src/ui/MainWindow.cpp" line="667"/>
         <source>Unsaved changes</source>
         <translation>未保存の変更</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="639"/>
+        <location filename="../src/ui/MainWindow.cpp" line="672"/>
         <source>The document has unsaved changes.</source>
         <translation>ドキュメントに未保存の変更があります。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="644"/>
+        <location filename="../src/ui/MainWindow.cpp" line="677"/>
         <source>Save (S)</source>
         <translation>保存(S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="648"/>
+        <location filename="../src/ui/MainWindow.cpp" line="681"/>
         <source>Don&apos;t Save (N)</source>
         <translation>保存しない(N)</translation>
     </message>
@@ -2195,7 +2376,7 @@ The recovery file was not deleted. You can find it at:
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="651"/>
+        <location filename="../src/ui/MainWindow.cpp" line="684"/>
         <source>Cancel (ESC)</source>
         <translation>キャンセル(ESC)</translation>
     </message>
@@ -2220,24 +2401,24 @@ The recovery file was not deleted. You can find it at:
         <translation>ドラッグして選択内容を移動</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="708"/>
+        <location filename="../src/ui/MainWindow.cpp" line="741"/>
         <source>Save project</source>
         <translation>プロジェクトを保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="710"/>
+        <location filename="../src/ui/MainWindow.cpp" line="743"/>
         <source>WagleWaglePaint projects (*.wagle)</source>
         <translation>WagleWaglePaintプロジェクト (*.wagle)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="720"/>
-        <location filename="../src/ui/MainWindow.cpp" line="731"/>
-        <location filename="../src/ui/MainWindow.cpp" line="744"/>
+        <location filename="../src/ui/MainWindow.cpp" line="753"/>
+        <location filename="../src/ui/MainWindow.cpp" line="764"/>
+        <location filename="../src/ui/MainWindow.cpp" line="777"/>
         <source>Save failed</source>
         <translation>保存に失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="745"/>
+        <location filename="../src/ui/MainWindow.cpp" line="778"/>
         <source>Could not save the project.
 
 %1</source>
@@ -2246,42 +2427,42 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="752"/>
+        <location filename="../src/ui/MainWindow.cpp" line="785"/>
         <source>Saved %1</source>
         <translation>%1 を保存しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="778"/>
+        <location filename="../src/ui/MainWindow.cpp" line="811"/>
         <source>New document</source>
         <translation>新規ドキュメント</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="910"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1016"/>
         <source>Scale selection</source>
         <translation>選択範囲の拡大・縮小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="911"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1017"/>
         <source>Scale (%)</source>
         <translation>倍率 (%)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="927"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1033"/>
         <source>Rotate selection</source>
         <translation>選択範囲の回転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="928"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1034"/>
         <source>Angle (degrees)</source>
         <translation>角度（度）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1187"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1293"/>
         <source>Open project</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1189"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1295"/>
         <source>WagleWaglePaint projects (*.wagle *.wobble);;All files (*)</source>
         <translation>WagleWaglePaintプロジェクト (*.wagle *.wobble);;すべてのファイル (*)</translation>
     </message>
@@ -2346,7 +2527,7 @@ The recovery file was not deleted. You can find it at:
         <translation>PNG画像 (*.png)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1209"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1315"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="116"/>
         <source>Export current frame as &amp;image…</source>
         <translation>現在のフレームを画像で書き出す(&amp;I)…</translation>
@@ -2357,14 +2538,43 @@ The recovery file was not deleted. You can find it at:
         <translation>JPEG画像 (*.jpg *.jpeg)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="292"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="356"/>
         <source>Edit selected stroke properties…</source>
         <translation>選択したストロークのプロパティを編集…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="297"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="361"/>
         <source>Change the color, width, or roughness of selected strokes</source>
         <translation>選択したストロークの色、太さ、粗さを変更します</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::SelectionClipboardCodec</name>
+    <message>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="39"/>
+        <source>The selected layer cannot be copied.</source>
+        <translation>選択したレイヤーはコピーできません。</translation>
+    </message>
+    <message>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="45"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="107"/>
+        <source>The selection could not be copied.</source>
+        <translation>選択範囲をコピーできませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="52"/>
+        <source>The selection is empty.</source>
+        <translation>選択範囲が空です。</translation>
+    </message>
+    <message>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="77"/>
+        <source>The layer is too complex to copy.</source>
+        <translation>レイヤーが複雑すぎてコピーできません。</translation>
+    </message>
+    <message>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="128"/>
+        <source>The clipboard content is not supported.</source>
+        <translation>サポートされていないクリップボードの内容です。</translation>
     </message>
 </context>
 <context>

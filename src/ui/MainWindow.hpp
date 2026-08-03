@@ -82,12 +82,15 @@ private:
     void handleAutosaveWritten(
         bool success, quint64 revision, const QString &error);
     void warnLegacyLayerHierarchy();
+    void showShortcutChangeNoticeOnce();
     void writeAutosave();
     bool clearAutosave();
     void newDocument();
     void resizeCanvas();
     void resizeImage();
     void chooseBackgroundColor();
+    void pasteFromClipboard();
+    void copyAndPasteSelection();
     void scaleSelection();
     void rotateSelection();
     void editSelectedStrokeProperties();
@@ -121,6 +124,12 @@ private:
     QAction *m_bucketAction = nullptr;
     QAction *m_scaleSelectionAction = nullptr;
     QAction *m_rotateSelectionAction = nullptr;
+    QAction *m_cutSelectionAction = nullptr;
+    QAction *m_copySelectionAction = nullptr;
+    QAction *m_pasteAction = nullptr;
+    QAction *m_copyPasteSelectionAction = nullptr;
+    QAction *m_selectAllAction = nullptr;
+    QAction *m_invertSelectionAction = nullptr;
     QAction *m_duplicateSelectionAction = nullptr;
     QAction *m_editStrokePropertiesAction = nullptr;
     QAction *m_moveSelectionAction = nullptr;

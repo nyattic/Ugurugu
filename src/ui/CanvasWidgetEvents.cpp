@@ -24,6 +24,27 @@ namespace wobble
 
 using namespace canvas_detail;
 
+namespace
+{
+
+// Alt stays the eyedropper for paint tools; only the selection tools read
+// it as subtract, which resolves the modifier conflict without changing
+// color picking anywhere else.
+CanvasSelectionCombine selectionCombineForModifiers(
+    Qt::KeyboardModifiers modifiers)
+{
+    const bool add = modifiers.testFlag(Qt::ShiftModifier);
+    const bool subtract = modifiers.testFlag(Qt::AltModifier);
+    if (add == subtract)
+    {
+        return CanvasSelectionCombine::Replace;
+    }
+    return add ? CanvasSelectionCombine::Add
+               : CanvasSelectionCombine::Subtract;
+}
+
+}
+
 bool CanvasWidget::event(QEvent *event)
 {
     if (event->type() == QEvent::NativeGesture)
@@ -344,10 +365,12 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
             beginStroke(event->position(), 1.0, false, event->timestamp());
             break;
         case Tool::Lasso:
-            beginAreaSelection(documentPosition);
+            beginAreaSelection(documentPosition,
+                selectionCombineForModifiers(event->modifiers()));
             break;
         case Tool::Wand:
-            computeWandSelection(documentPosition);
+            computeWandSelection(documentPosition,
+                selectionCombineForModifiers(event->modifiers()));
             break;
         case Tool::Bucket:
             applyBucketFill(documentPosition);
@@ -554,13 +577,15 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         m_tabletSequence = true;
         if (!eraser && m_tool == Tool::Lasso)
         {
-            beginAreaSelection(mapToDocument(event->position()));
+            beginAreaSelection(mapToDocument(event->position()),
+                selectionCombineForModifiers(event->modifiers()));
             event->accept();
             return;
         }
         if (!eraser && m_tool == Tool::Wand)
         {
-            computeWandSelection(mapToDocument(event->position()));
+            computeWandSelection(mapToDocument(event->position()),
+                selectionCombineForModifiers(event->modifiers()));
             event->accept();
             return;
         }

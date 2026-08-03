@@ -275,14 +275,78 @@ void MainWindow::createActions()
         this,
         &MainWindow::rotateSelection);
 
+    m_selectAllAction = new QAction(tr("Select &all"), this);
+    m_selectAllAction->setObjectName(QStringLiteral("selectAllAction"));
+    m_selectAllAction->setToolTip(tr("Select the whole canvas"));
+    registerShortcut(m_selectAllAction, QKeySequence(QKeySequence::SelectAll));
+    connect(m_selectAllAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::selectAll);
+
+    m_invertSelectionAction = new QAction(tr("&Invert selection"), this);
+    m_invertSelectionAction->setObjectName(
+        QStringLiteral("invertSelectionAction"));
+    m_invertSelectionAction->setToolTip(tr("Invert the selected area"));
+    m_invertSelectionAction->setEnabled(false);
+    registerShortcut(m_invertSelectionAction,
+        QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+    connect(m_invertSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::invertSelection);
+
+    m_cutSelectionAction = new QAction(tr("Cu&t"), this);
+    m_cutSelectionAction->setObjectName(QStringLiteral("cutSelectionAction"));
+    m_cutSelectionAction->setToolTip(
+        tr("Copy the selection to the clipboard and delete it"));
+    m_cutSelectionAction->setEnabled(false);
+    registerShortcut(m_cutSelectionAction, QKeySequence(QKeySequence::Cut));
+    connect(m_cutSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::cutSelection);
+
+    m_copySelectionAction = new QAction(tr("&Copy"), this);
+    m_copySelectionAction->setObjectName(QStringLiteral("copySelectionAction"));
+    m_copySelectionAction->setToolTip(
+        tr("Copy the selection to the clipboard"));
+    m_copySelectionAction->setEnabled(false);
+    registerShortcut(m_copySelectionAction, QKeySequence(QKeySequence::Copy));
+    connect(m_copySelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::copySelection);
+
+    m_pasteAction = new QAction(tr("&Paste"), this);
+    m_pasteAction->setObjectName(QStringLiteral("pasteAction"));
+    m_pasteAction->setToolTip(tr("Paste the clipboard as a new layer"));
+    registerShortcut(m_pasteAction, QKeySequence(QKeySequence::Paste));
+    connect(m_pasteAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::pasteFromClipboard);
+
+    m_copyPasteSelectionAction = new QAction(tr("Copy and paste"), this);
+    m_copyPasteSelectionAction->setObjectName(
+        QStringLiteral("copyPasteSelectionAction"));
+    m_copyPasteSelectionAction->setIcon(Icons::icon(IconGlyph::CopyPaste));
+    m_copyPasteSelectionAction->setToolTip(
+        tr("Copy the selection and paste it as a new layer"));
+    m_copyPasteSelectionAction->setEnabled(false);
+    registerShortcut(m_copyPasteSelectionAction, {});
+    connect(m_copyPasteSelectionAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::copyAndPasteSelection);
+
     m_duplicateSelectionAction = new QAction(tr("Duplicate selection"), this);
     m_duplicateSelectionAction->setObjectName(
         QStringLiteral("duplicateSelectionAction"));
     m_duplicateSelectionAction->setIcon(Icons::icon(IconGlyph::Duplicate));
     m_duplicateSelectionAction->setToolTip(tr("Duplicate selected content"));
     m_duplicateSelectionAction->setEnabled(false);
-    registerShortcut(
-        m_duplicateSelectionAction, QKeySequence(QStringLiteral("Ctrl+D")));
+    registerShortcut(m_duplicateSelectionAction, {});
     connect(m_duplicateSelectionAction,
         &QAction::triggered,
         m_canvas,
@@ -373,8 +437,9 @@ void MainWindow::createActions()
     m_deselectSelectionAction->setObjectName(
         QStringLiteral("deselectSelectionAction"));
     m_deselectSelectionAction->setIcon(Icons::icon(IconGlyph::Deselect));
-    m_deselectSelectionAction->setToolTip(tr("Deselect (Esc)"));
-    registerShortcut(m_deselectSelectionAction, {});
+    m_deselectSelectionAction->setToolTip(tr("Deselect (Ctrl+D)"));
+    registerShortcut(
+        m_deselectSelectionAction, QKeySequence(QStringLiteral("Ctrl+D")));
     connect(m_deselectSelectionAction,
         &QAction::triggered,
         m_canvas,
@@ -395,6 +460,10 @@ void MainWindow::createActions()
         m_moveSelectionAction->setEnabled(hasContent);
         m_scaleSelectionAction->setEnabled(hasContent);
         m_rotateSelectionAction->setEnabled(hasContent);
+        m_cutSelectionAction->setEnabled(hasContent);
+        m_copySelectionAction->setEnabled(hasContent);
+        m_copyPasteSelectionAction->setEnabled(hasContent);
+        m_invertSelectionAction->setEnabled(hasArea);
         m_duplicateSelectionAction->setEnabled(hasContent);
         m_editStrokePropertiesAction->setEnabled(
             hasContent && m_canvas->hasEditableStrokeSelection()
@@ -439,6 +508,7 @@ void MainWindow::createActions()
     selectionBar->addAction(m_applySelectionTransformAction);
     selectionBar->addAction(m_cancelSelectionTransformAction);
     selectionBar->addSeparator();
+    selectionBar->addAction(m_copyPasteSelectionAction);
     selectionBar->addAction(m_duplicateSelectionAction);
     selectionBar->addAction(m_editStrokePropertiesAction);
     selectionBar->addAction(m_deleteSelectionAction);
@@ -634,6 +704,12 @@ void MainWindow::createActions()
     addAction(redoAction);
     addAction(resizeImageAction);
     addAction(resizeCanvasAction);
+    addAction(m_selectAllAction);
+    addAction(m_invertSelectionAction);
+    addAction(m_cutSelectionAction);
+    addAction(m_copySelectionAction);
+    addAction(m_pasteAction);
+    addAction(m_copyPasteSelectionAction);
     addAction(m_moveSelectionAction);
     addAction(m_scaleSelectionAction);
     addAction(m_rotateSelectionAction);
@@ -676,6 +752,10 @@ void MainWindow::createMenus()
     editMenu->addAction(findChild<QAction *>(QStringLiteral("undoAction")));
     editMenu->addAction(findChild<QAction *>(QStringLiteral("redoAction")));
     editMenu->addSeparator();
+    editMenu->addAction(m_cutSelectionAction);
+    editMenu->addAction(m_copySelectionAction);
+    editMenu->addAction(m_pasteAction);
+    editMenu->addSeparator();
     editMenu->addAction(
         findChild<QAction *>(QStringLiteral("resizeImageAction")));
     editMenu->addAction(
@@ -684,6 +764,10 @@ void MainWindow::createMenus()
         findChild<QAction *>(QStringLiteral("backgroundAction")));
     editMenu->addSeparator();
     QMenu *selectionMenu = editMenu->addMenu(tr("&Selection"));
+    selectionMenu->addAction(m_selectAllAction);
+    selectionMenu->addAction(m_invertSelectionAction);
+    selectionMenu->addAction(m_deselectSelectionAction);
+    selectionMenu->addSeparator();
     selectionMenu->addAction(m_moveSelectionAction);
     selectionMenu->addAction(m_scaleSelectionAction);
     selectionMenu->addAction(m_rotateSelectionAction);
@@ -694,11 +778,10 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_applySelectionTransformAction);
     selectionMenu->addAction(m_cancelSelectionTransformAction);
     selectionMenu->addSeparator();
+    selectionMenu->addAction(m_copyPasteSelectionAction);
     selectionMenu->addAction(m_duplicateSelectionAction);
     selectionMenu->addAction(m_editStrokePropertiesAction);
     selectionMenu->addAction(m_deleteSelectionAction);
-    selectionMenu->addSeparator();
-    selectionMenu->addAction(m_deselectSelectionAction);
     editMenu->addSeparator();
     editMenu->addAction(
         findChild<QAction *>(QStringLiteral("clearLayerAction")));

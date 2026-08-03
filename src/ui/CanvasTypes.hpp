@@ -26,4 +26,11 @@ enum class CanvasSelectionShape
     Ellipse
 };
 
+enum class CanvasSelectionCombine
+{
+    Replace,
+    Add,
+    Subtract
+};
+
 }

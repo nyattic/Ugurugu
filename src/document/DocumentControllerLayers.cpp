@@ -181,6 +181,105 @@ void DocumentController::duplicateLayer(const QUuid &id)
         ActiveLayerPolicy::UsePrepared);
 }
 
+DocumentController::PasteLayerResult DocumentController::pasteLayer(
+    Layer layer, const QSize &sourceCanvasSize)
+{
+    const auto reject = [this](PasteLayerResult result)
+    {
+        failHistoryMacro();
+        return result;
+    };
+    const Document &current = document();
+    if (layer.kind != LayerKind::Paint || layer.strokes.isEmpty()
+        || !sourceCanvasSize.isValid())
+    {
+        return reject(PasteLayerResult::RejectedInvalidLayer);
+    }
+    if (current.layers.size() >= DocumentLimits::maximumLayers)
+    {
+        return reject(PasteLayerResult::RejectedLayerLimit);
+    }
+    const bool needsReframe = sourceCanvasSize != current.size;
+    const qsizetype pastedStrokeCount =
+        layer.strokes.size() + (needsReframe ? 1 : 0);
+    const qsizetype existingStrokeCount = totalStrokeCount(current);
+    if (pastedStrokeCount > DocumentLimits::maximumStrokesPerLayer
+        || existingStrokeCount > DocumentLimits::maximumTotalStrokes
+        || pastedStrokeCount
+               > DocumentLimits::maximumTotalStrokes - existingStrokeCount)
+    {
+        return reject(PasteLayerResult::RejectedStrokeLimit);
+    }
+    const qsizetype pastedPointCount = layerPointCount(layer);
+    const qsizetype existingPointCount = totalPointCount(current);
+    if (pastedPointCount > DocumentLimits::maximumTotalPoints
+        || existingPointCount > DocumentLimits::maximumTotalPoints
+        || pastedPointCount
+               > DocumentLimits::maximumTotalPoints - existingPointCount)
+    {
+        return reject(PasteLayerResult::RejectedPointLimit);
+    }
+    if (needsReframe)
+    {
+        // The pasted strokes stay in source-document coordinates; a trailing
+        // canvas reframe moves the layer's framebuffer epoch to this
+        // document's size, the same way resizeCanvas migrates layers.
+        Stroke reframe;
+        reframe.mode = StrokeMode::Reframe;
+        reframe.reframeOp = ReframeOp{ReframeMode::Canvas,
+            SamplingMode::Nearest,
+            sourceCanvasSize,
+            current.size,
+            QPoint()};
+        reframe.points.clear();
+        layer.strokes.append(std::move(reframe));
+    }
+    layer.id = QUuid::createUuid();
+    for (Stroke &stroke : layer.strokes)
+    {
+        stroke.id = QUuid::createUuid();
+    }
+    layer.name = nextLayerName();
+    layer.visible = true;
+    layer.reference = false;
+    layer.clipToLayerBelow = false;
+    if (!layer.initialCanvasSize.isValid())
+    {
+        layer.initialCanvasSize = sourceCanvasSize;
+    }
+    const Layer *active = current.layer(current.activeLayerId);
+    layer.parentGroupId = active ? active->parentGroupId : QUuid();
+    const QUuid layerId = layer.id;
+    Document candidate = current;
+    const int activeIndex = current.layerIndex(current.activeLayerId);
+    if (activeIndex >= 0)
+    {
+        candidate.layers.insert(activeIndex + 1, std::move(layer));
+    }
+    else
+    {
+        candidate.layers.append(std::move(layer));
+    }
+    candidate.activeLayerId = layerId;
+    if (distinctClipMaskBytes(candidate)
+        > DocumentLimits::maximumDistinctClipMaskBytes)
+    {
+        return reject(PasteLayerResult::RejectedMaskLimit);
+    }
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
+    if (!tryCommitCandidate(tr("Paste"),
+            std::move(candidate),
+            std::move(effects),
+            ActiveLayerPolicy::UsePrepared))
+    {
+        return PasteLayerResult::RejectedCommit;
+    }
+    return PasteLayerResult::Pasted;
+}
+
 void DocumentController::removeLayer(const QUuid &id)
 {
     const Document &current = document();

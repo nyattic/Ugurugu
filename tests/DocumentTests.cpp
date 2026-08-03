@@ -13,6 +13,7 @@ int runDocumentTests(int argc, char **argv)
     result |= runDocumentSchemaTests(argc, argv);
     result |= runDocumentResizeTests(argc, argv);
     result |= runStrokeCommandTests(argc, argv);
+    result |= runSelectionClipboardTests(argc, argv);
     result |= runSerializationBudgetTests(argc, argv);
     return result;
 }

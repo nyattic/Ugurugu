@@ -17,6 +17,7 @@ enum class IconGlyph
     Pause,
     Add,
     Duplicate,
+    CopyPaste,
     Remove,
     MoveUp,
     MoveDown,

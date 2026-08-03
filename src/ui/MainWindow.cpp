@@ -8,6 +8,7 @@
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/RenderExportPolicy.hpp"
+#include "io/SelectionClipboardCodec.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/CanvasSizeDialog.hpp"
@@ -35,6 +36,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QDialog>
@@ -50,6 +52,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QMetaType>
 #include <QProgressDialog>
 #include <QPushButton>
@@ -507,7 +510,37 @@ void MainWindow::showEvent(QShowEvent *event)
     {
         m_initialFitApplied = true;
         QTimer::singleShot(0, m_canvas, &CanvasWidget::fitToWindow);
+        showShortcutChangeNoticeOnce();
     }
+}
+
+void MainWindow::showShortcutChangeNoticeOnce()
+{
+    QSettings settings;
+    const QString noticeKey = QStringLiteral("notices/ctrlDDeselects");
+    if (settings.value(noticeKey, false).toBool())
+    {
+        return;
+    }
+    settings.setValue(noticeKey, true);
+    // window/geometry is written on every close, so its presence separates
+    // an upgrade from a fresh install. New users never used the old Ctrl+D
+    // and should not see the notice.
+    if (!settings.contains(QStringLiteral("window/geometry")))
+    {
+        return;
+    }
+    auto *dialog = new QMessageBox(QMessageBox::Information,
+        tr("Shortcut change"),
+        tr("Ctrl+D now deselects, matching the convention of other drawing "
+           "tools. Duplicate selection is still in the Selection menu and "
+           "the action bar, and you can give it a shortcut in the Shortcuts "
+           "tab of the settings."),
+        QMessageBox::Ok,
+        this);
+    dialog->setObjectName(QStringLiteral("shortcutChangeNotice"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -901,6 +934,79 @@ void MainWindow::chooseBackgroundColor()
         return;
     }
     m_controller.setBackground(chosen);
+}
+
+void MainWindow::pasteFromClipboard()
+{
+    const auto showNotice = [this](const QString &message)
+    {
+        statusBar()->showMessage(message, 4000);
+    };
+    const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+    if (!mimeData)
+    {
+        showNotice(tr("There is nothing to paste."));
+        return;
+    }
+    if (!mimeData->hasFormat(SelectionClipboardCodec::mimeType()))
+    {
+        if (mimeData->hasImage())
+        {
+            showNotice(
+                tr("Pasting images from other apps is not supported yet."));
+        }
+        else
+        {
+            showNotice(tr("There is nothing to paste."));
+        }
+        return;
+    }
+    QString error;
+    const std::optional<SelectionClipboardCodec::Pasted> pasted =
+        SelectionClipboardCodec::decode(
+            mimeData->data(SelectionClipboardCodec::mimeType()), &error);
+    if (!pasted)
+    {
+        showNotice(error.isEmpty()
+                ? tr("The clipboard content could not be pasted.")
+                : error);
+        return;
+    }
+    switch (m_controller.pasteLayer(pasted->layer, pasted->canvasSize))
+    {
+    case DocumentController::PasteLayerResult::Pasted:
+        showNotice(tr("Pasted as a new layer."));
+        break;
+    case DocumentController::PasteLayerResult::RejectedLayerLimit:
+        showNotice(tr("The paste was rejected because the document "
+                      "already has the maximum number of layers."));
+        break;
+    case DocumentController::PasteLayerResult::RejectedStrokeLimit:
+        showNotice(tr("The paste was rejected because it would exceed "
+                      "the stroke limit."));
+        break;
+    case DocumentController::PasteLayerResult::RejectedPointLimit:
+        showNotice(tr("The paste was rejected because it would exceed "
+                      "the point limit."));
+        break;
+    case DocumentController::PasteLayerResult::RejectedMaskLimit:
+        showNotice(tr("The paste was rejected because it would exceed "
+                      "the mask budget."));
+        break;
+    case DocumentController::PasteLayerResult::RejectedInvalidLayer:
+    case DocumentController::PasteLayerResult::RejectedCommit:
+        showNotice(tr("The clipboard content could not be pasted."));
+        break;
+    }
+}
+
+void MainWindow::copyAndPasteSelection()
+{
+    if (!m_canvas->copySelection())
+    {
+        return;
+    }
+    pasteFromClipboard();
 }
 
 void MainWindow::scaleSelection()

@@ -150,6 +150,17 @@ Glyph duplicateGlyph()
     return glyph;
 }
 
+Glyph copyPasteGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{8.6, 5.4}, {18.4, 5.4}, {18.4, 12.6}}));
+    glyph.lines.append(polyline(
+        {{4.8, 8.0}, {14.4, 8.0}, {14.4, 17.6}, {4.8, 17.6}, {4.8, 8.0}}));
+    glyph.lines.append(polyline({{16.2, 18.0}, {20.6, 18.0}}));
+    glyph.lines.append(polyline({{18.4, 15.8}, {18.4, 20.2}}));
+    return glyph;
+}
+
 Glyph removeGlyph()
 {
     Glyph glyph;
@@ -381,6 +392,8 @@ Glyph glyphFor(IconGlyph glyph)
         return addGlyph();
     case IconGlyph::Duplicate:
         return duplicateGlyph();
+    case IconGlyph::CopyPaste:
+        return copyPasteGlyph();
     case IconGlyph::Remove:
         return removeGlyph();
     case IconGlyph::MoveUp:

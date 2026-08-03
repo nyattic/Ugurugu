@@ -23,6 +23,41 @@ namespace wobble
 
 using namespace canvas_detail;
 
+namespace
+{
+
+// Combines with the same >= 128 threshold every other selection consumer
+// uses, so a combined mask never disagrees with hit testing or packing.
+QImage combinedSelectionMask(
+    const QImage &base, const QImage &addition, CanvasSelectionCombine combine)
+{
+    if (base.isNull() || base.size() != addition.size()
+        || base.format() != addition.format())
+    {
+        return combine == CanvasSelectionCombine::Add ? addition : QImage();
+    }
+    QImage combined = base;
+    for (int y = 0; y < combined.height(); ++y)
+    {
+        uchar *line = combined.scanLine(y);
+        const uchar *additionLine = addition.constScanLine(y);
+        for (int x = 0; x < combined.width(); ++x)
+        {
+            if (combine == CanvasSelectionCombine::Add)
+            {
+                line[x] = std::max(line[x], additionLine[x]);
+            }
+            else if (additionLine[x] >= 128)
+            {
+                line[x] = 0;
+            }
+        }
+    }
+    return combined;
+}
+
+}
+
 bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
 {
     const QImage &sourceMask = m_selectionTransformSession.active
@@ -57,13 +92,18 @@ bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
     return sourceMask.constScanLine(pixel.y())[pixel.x()] >= 128;
 }
 
-void CanvasWidget::beginAreaSelection(const QPointF &documentPosition)
+void CanvasWidget::beginAreaSelection(
+    const QPointF &documentPosition, SelectionCombine combine)
 {
     cancelSelectionTransformForBoundary(
         tr("The pending selection transform was canceled before selecting."));
     m_selectionBeforeArea = currentSelectionState();
     m_hasSelectionBeforeArea = true;
-    clearSelection();
+    if (combine == SelectionCombine::Replace)
+    {
+        clearSelection();
+    }
+    m_areaSelectionCombine = combine;
     m_areaSelectionActive = true;
     m_areaSelectionAnchor = clampedDocumentPosition(documentPosition);
     m_areaSelectionCurrent = m_areaSelectionAnchor;
@@ -101,6 +141,8 @@ void CanvasWidget::finishAreaSelection()
     const QPainterPath path = areaSelectionPath();
     const SelectionState previousSelection =
         m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+    const SelectionCombine combine = m_areaSelectionCombine;
+    m_areaSelectionCombine = SelectionCombine::Replace;
     m_areaSelectionActive = false;
     m_areaSelectionPoints.clear();
     m_areaSelectionAnchor = {};
@@ -109,7 +151,15 @@ void CanvasWidget::finishAreaSelection()
     m_hasSelectionBeforeArea = false;
     if (!valid)
     {
-        pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        if (combine == SelectionCombine::Replace)
+        {
+            pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        }
+        else
+        {
+            updateSelectionAnimation();
+            update();
+        }
         return;
     }
 
@@ -121,7 +171,16 @@ void CanvasWidget::finishAreaSelection()
     painter.setBrush(Qt::white);
     painter.drawPath(path);
     painter.end();
-    applySelectionMask(std::move(mask), previousSelection);
+    if (combine == SelectionCombine::Replace)
+    {
+        applySelectionMask(std::move(mask), previousSelection);
+        return;
+    }
+    pushSelectionChange(previousSelection,
+        selectionStateForMask(combinedSelectionMask(
+            previousSelection.mask, mask, combine)),
+        combine == SelectionCombine::Add ? tr("Add to selection")
+                                         : tr("Subtract from selection"));
 }
 
 void CanvasWidget::cancelAreaSelection()
@@ -322,17 +381,24 @@ void CanvasWidget::pushSelectionChange(const SelectionState &previousSelection,
         nextSelection.mask);
 }
 
-void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
+void CanvasWidget::computeWandSelection(
+    const QPointF &documentPosition, SelectionCombine combine)
 {
     cancelSelectionTransformForBoundary(
         tr("The pending selection transform was canceled before selecting."));
     const SelectionState previousSelection = currentSelectionState();
-    clearSelection();
+    if (combine == SelectionCombine::Replace)
+    {
+        clearSelection();
+    }
     const QSize size = m_controller->document().size;
     const QRectF bounds(QPointF(0.0, 0.0), QSizeF(size));
     if (!bounds.contains(documentPosition))
     {
-        pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        if (combine == SelectionCombine::Replace)
+        {
+            pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        }
         return;
     }
     const QPoint seed(
@@ -355,7 +421,10 @@ void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
     }
     if (referenceImage.isNull())
     {
-        pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        if (combine == SelectionCombine::Replace)
+        {
+            pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        }
         if (m_wandReference == WandReference::ReferenceLayers)
         {
             emit interactionMessage(
@@ -366,12 +435,24 @@ void CanvasWidget::computeWandSelection(const QPointF &documentPosition)
     const QImage mask = RenderEngine::fillRegionMask(referenceImage, seed);
     if (mask.isNull())
     {
-        pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        if (combine == SelectionCombine::Replace)
+        {
+            pushSelectionChange(previousSelection, {}, tr("Deselect"));
+        }
         emit interactionMessage(
             tr("Click an empty area surrounded by lines to select it."));
         return;
     }
-    applySelectionMask(mask, previousSelection);
+    if (combine == SelectionCombine::Replace)
+    {
+        applySelectionMask(mask, previousSelection);
+        return;
+    }
+    pushSelectionChange(previousSelection,
+        selectionStateForMask(
+            combinedSelectionMask(previousSelection.mask, mask, combine)),
+        combine == SelectionCombine::Add ? tr("Add to selection")
+                                         : tr("Subtract from selection"));
 }
 
 void CanvasWidget::applyBucketFill(const QPointF &documentPosition)

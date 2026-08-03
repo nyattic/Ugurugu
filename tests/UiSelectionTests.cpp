@@ -1,8 +1,51 @@
+#include "io/SelectionClipboardCodec.hpp"
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QClipboard>
+#include <QMessageBox>
+#include <QMimeData>
+
 namespace wobble
 {
+
+namespace
+{
+
+bool selectionMaskContainsWidgetPoint(
+    const CanvasWidget &canvas, const QPoint &widgetPoint)
+{
+    const QImage mask = CanvasWidgetTestAccess::selectionMask(canvas);
+    if (mask.isNull())
+    {
+        return false;
+    }
+    const QPointF documentPosition =
+        CanvasWidgetTestAccess::mapToDocument(canvas, widgetPoint);
+    const int x = static_cast<int>(documentPosition.x());
+    const int y = static_cast<int>(documentPosition.y());
+    if (x < 0 || y < 0 || x >= mask.width() || y >= mask.height())
+    {
+        return false;
+    }
+    return mask.constScanLine(y)[x] >= 128;
+}
+
+void dragFreehandQuad(CanvasWidget *canvas,
+    const QPoint &topLeft,
+    const QPoint &bottomRight,
+    Qt::KeyboardModifiers modifiers)
+{
+    const QPoint topRight(bottomRight.x(), topLeft.y());
+    const QPoint bottomLeft(topLeft.x(), bottomRight.y());
+    QTest::mousePress(canvas, Qt::LeftButton, modifiers, topLeft);
+    QTest::mouseMove(canvas, topRight, 5);
+    QTest::mouseMove(canvas, bottomRight, 5);
+    QTest::mouseMove(canvas, bottomLeft, 5);
+    QTest::mouseRelease(canvas, Qt::LeftButton, modifiers, topLeft);
+}
+
+}
 
 class UiSelectionTests final : public QObject
 {
@@ -79,6 +122,395 @@ private slots:
         redoAction->trigger();
         QTRY_VERIFY(canvas->hasSelection());
         QVERIFY(!window.isWindowModified());
+    }
+
+    void copyPasteCreatesNewLayerWithoutTouchingTheActiveLayer()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *cutAction =
+            window.findChild<QAction *>(QStringLiteral("cutSelectionAction"));
+        QAction *copyAction =
+            window.findChild<QAction *>(QStringLiteral("copySelectionAction"));
+        QAction *pasteAction =
+            window.findChild<QAction *>(QStringLiteral("pasteAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(cutAction);
+        QVERIFY(copyAction);
+        QVERIFY(pasteAction);
+        QCOMPARE(cutAction->shortcut(), QKeySequence(QKeySequence::Cut));
+        QCOMPARE(copyAction->shortcut(), QKeySequence(QKeySequence::Copy));
+        QCOMPARE(pasteAction->shortcut(), QKeySequence(QKeySequence::Paste));
+        QVERIFY(!cutAction->isEnabled());
+        QVERIFY(!copyAction->isEnabled());
+        QVERIFY(pasteAction->isEnabled());
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const int initialLayerCount = controller.document().layers.size();
+        const QUuid originalLayerId = controller.document().activeLayerId;
+
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 0));
+        QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 0));
+        QTRY_COMPARE(
+            controller.document().layer(originalLayerId)->strokes.size(), 1);
+
+        lassoAction->trigger();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 40));
+        QTest::mouseMove(canvas, center + QPoint(60, -40), 5);
+        QTest::mouseMove(canvas, center + QPoint(60, 40), 5);
+        QTest::mouseMove(canvas, center + QPoint(-60, 40), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 40));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(copyAction->isEnabled());
+        QVERIFY(cutAction->isEnabled());
+
+        copyAction->trigger();
+        const QMimeData *mimeData =
+            QGuiApplication::clipboard()->mimeData();
+        QVERIFY(mimeData);
+        QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
+        QVERIFY(mimeData->hasImage());
+
+        const QByteArray originalStrokes = DocumentSerializer::toJson(
+            [&]
+            {
+                Document single = controller.document();
+                single.layers = {*single.layer(originalLayerId)};
+                single.activeLayerId = originalLayerId;
+                return single;
+            }());
+        pasteAction->trigger();
+        QTRY_COMPARE(
+            controller.document().layers.size(), initialLayerCount + 1);
+        QVERIFY(controller.document().activeLayerId != originalLayerId);
+        QCOMPARE(DocumentSerializer::toJson(
+                     [&]
+                     {
+                         Document single = controller.document();
+                         single.layers = {*single.layer(originalLayerId)};
+                         single.activeLayerId = originalLayerId;
+                         return single;
+                     }()),
+            originalStrokes);
+    }
+
+    void showsShortcutChangeNoticeOnceForUpgradedProfiles()
+    {
+        const QString noticeKey = QStringLiteral("notices/ctrlDDeselects");
+        const QString geometryKey = QStringLiteral("window/geometry");
+        {
+            QSettings settings;
+            settings.remove(noticeKey);
+            settings.remove(geometryKey);
+            settings.sync();
+        }
+        {
+            MainWindow window;
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            QTest::qWait(50);
+            QVERIFY(!window.findChild<QMessageBox *>(
+                QStringLiteral("shortcutChangeNotice")));
+            QSettings settings;
+            QVERIFY(settings.value(noticeKey).toBool());
+        }
+        {
+            QSettings settings;
+            settings.remove(noticeKey);
+            settings.setValue(geometryKey, QByteArray("upgraded"));
+            settings.sync();
+        }
+        {
+            MainWindow window;
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            QTRY_VERIFY(window.findChild<QMessageBox *>(
+                QStringLiteral("shortcutChangeNotice")));
+            QSettings settings;
+            QVERIFY(settings.value(noticeKey).toBool());
+        }
+        {
+            MainWindow window;
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            QTest::qWait(50);
+            QVERIFY(!window.findChild<QMessageBox *>(
+                QStringLiteral("shortcutChangeNotice")));
+        }
+    }
+
+    void copyPasteButtonPastesAsNewLayerInOneStep()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *copyPasteAction = window.findChild<QAction *>(
+            QStringLiteral("copyPasteSelectionAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(copyPasteAction);
+        QVERIFY(!copyPasteAction->isEnabled());
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const int initialLayerCount = controller.document().layers.size();
+        const QUuid originalLayerId = controller.document().activeLayerId;
+
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 0));
+        QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 0));
+        QTRY_COMPARE(
+            controller.document().layer(originalLayerId)->strokes.size(), 1);
+
+        lassoAction->trigger();
+        dragFreehandQuad(canvas,
+            center - QPoint(60, 40),
+            center + QPoint(60, 40),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(copyPasteAction->isEnabled());
+
+        copyPasteAction->trigger();
+        QTRY_COMPARE(
+            controller.document().layers.size(), initialLayerCount + 1);
+        QVERIFY(controller.document().activeLayerId != originalLayerId);
+        QCOMPARE(
+            controller.document().layer(originalLayerId)->strokes.size(), 1);
+    }
+
+    void ctrlDDeselectsAndDuplicateHasNoDefaultShortcut()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *deselectAction = window.findChild<QAction *>(
+            QStringLiteral("deselectSelectionAction"));
+        QAction *duplicateAction = window.findChild<QAction *>(
+            QStringLiteral("duplicateSelectionAction"));
+        QAction *selectAllAction =
+            window.findChild<QAction *>(QStringLiteral("selectAllAction"));
+        QAction *invertAction = window.findChild<QAction *>(
+            QStringLiteral("invertSelectionAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(deselectAction);
+        QVERIFY(duplicateAction);
+        QVERIFY(selectAllAction);
+        QVERIFY(invertAction);
+        QCOMPARE(deselectAction->shortcut(),
+            QKeySequence(QStringLiteral("Ctrl+D")));
+        QVERIFY(duplicateAction->shortcut().isEmpty());
+        QCOMPARE(
+            selectAllAction->shortcut(), QKeySequence(QKeySequence::SelectAll));
+        QCOMPARE(invertAction->shortcut(),
+            QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        dragFreehandQuad(canvas,
+            center - QPoint(60, 40),
+            center + QPoint(60, 40),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas->hasSelection());
+
+        QTest::keyClick(canvas, Qt::Key_D, Qt::ControlModifier);
+        QTRY_VERIFY(!canvas->hasSelection());
+    }
+
+    void selectAllAndInvertFollowConventions()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *selectAllAction =
+            window.findChild<QAction *>(QStringLiteral("selectAllAction"));
+        QAction *invertAction = window.findChild<QAction *>(
+            QStringLiteral("invertSelectionAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(selectAllAction);
+        QVERIFY(invertAction);
+        QVERIFY(undoAction);
+        QVERIFY(!invertAction->isEnabled());
+
+        selectAllAction->trigger();
+        QTRY_VERIFY(canvas->hasSelection());
+        const QImage fullMask = CanvasWidgetTestAccess::selectionMask(*canvas);
+        QVERIFY(!fullMask.isNull());
+        QVERIFY(fullMask.constScanLine(0)[0] >= 128);
+        QVERIFY(fullMask.constScanLine(fullMask.height() - 1)
+                    [fullMask.width() - 1]
+                >= 128);
+        QTRY_VERIFY(invertAction->isEnabled());
+
+        invertAction->trigger();
+        QTRY_VERIFY(!canvas->hasSelection());
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        dragFreehandQuad(canvas,
+            center - QPoint(60, 40),
+            center + QPoint(60, 40),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas->hasSelection());
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, center));
+
+        invertAction->trigger();
+        QTRY_VERIFY(canvas->hasSelection());
+        QVERIFY(!selectionMaskContainsWidgetPoint(*canvas, center));
+        const QImage invertedMask =
+            CanvasWidgetTestAccess::selectionMask(*canvas);
+        QVERIFY(invertedMask.constScanLine(0)[0] >= 128);
+
+        undoAction->trigger();
+        QTRY_VERIFY(selectionMaskContainsWidgetPoint(*canvas, center));
+    }
+
+    void shiftAddsAndAltSubtractsFromTheSelection()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(undoAction);
+
+        lassoAction->trigger();
+        const QPoint center = canvas->rect().center();
+        const QPoint leftCenter = center - QPoint(105, 0);
+        const QPoint rightCenter = center + QPoint(105, 0);
+
+        dragFreehandQuad(canvas,
+            center - QPoint(150, 50),
+            center + QPoint(-60, 50),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas->hasSelection());
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, leftCenter));
+        QVERIFY(!selectionMaskContainsWidgetPoint(*canvas, rightCenter));
+
+        dragFreehandQuad(canvas,
+            center + QPoint(60, -50),
+            center + QPoint(150, 50),
+            Qt::ShiftModifier);
+        QTRY_VERIFY(selectionMaskContainsWidgetPoint(*canvas, rightCenter));
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, leftCenter));
+
+        dragFreehandQuad(canvas,
+            center - QPoint(160, 60),
+            center + QPoint(-50, 60),
+            Qt::AltModifier);
+        QTRY_VERIFY(!selectionMaskContainsWidgetPoint(*canvas, leftCenter));
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, rightCenter));
+        QVERIFY(canvas->hasSelection());
+
+        undoAction->trigger();
+        QTRY_VERIFY(selectionMaskContainsWidgetPoint(*canvas, leftCenter));
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, rightCenter));
+        undoAction->trigger();
+        QTRY_VERIFY(!selectionMaskContainsWidgetPoint(*canvas, rightCenter));
+        QVERIFY(selectionMaskContainsWidgetPoint(*canvas, leftCenter));
+    }
+
+    void cutRemovesSelectionAndUndoRestoresIt()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *lassoAction =
+            window.findChild<QAction *>(QStringLiteral("lassoAction"));
+        QAction *cutAction =
+            window.findChild<QAction *>(QStringLiteral("cutSelectionAction"));
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QVERIFY(canvas);
+        QVERIFY(lassoAction);
+        QVERIFY(cutAction);
+        QVERIFY(undoAction);
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const QUuid layerId = controller.document().activeLayerId;
+
+        const QPoint center = canvas->rect().center();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(120, 0));
+        QTest::mouseMove(canvas, center + QPoint(120, 0), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(120, 0));
+        QTRY_COMPARE(controller.document().layer(layerId)->strokes.size(), 1);
+
+        lassoAction->trigger();
+        QTest::mousePress(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 40));
+        QTest::mouseMove(canvas, center + QPoint(60, -40), 5);
+        QTest::mouseMove(canvas, center + QPoint(60, 40), 5);
+        QTest::mouseMove(canvas, center + QPoint(-60, 40), 5);
+        QTest::mouseRelease(
+            canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(60, 40));
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QTRY_VERIFY(cutAction->isEnabled());
+
+        const QByteArray beforeCut =
+            DocumentSerializer::toJson(controller.document());
+        cutAction->trigger();
+        QTRY_VERIFY(!canvas->hasSelection());
+        const Layer *layer = controller.document().layer(layerId);
+        QVERIFY(layer);
+        QCOMPARE(layer->strokes.size(), 2);
+        QCOMPARE(layer->strokes.last().mode, StrokeMode::PixelSelection);
+        const QMimeData *mimeData =
+            QGuiApplication::clipboard()->mimeData();
+        QVERIFY(mimeData);
+        QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
+
+        undoAction->trigger();
+        QCOMPARE(
+            DocumentSerializer::toJson(controller.document()), beforeCut);
+        QTRY_VERIFY(canvas->hasSelection());
     }
 
     void selectsAStrokeCrossingTheLasso()

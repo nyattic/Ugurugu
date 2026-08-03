@@ -35,6 +35,7 @@ public:
     using Tool = CanvasTool;
     using WandReference = CanvasWandReference;
     using SelectionShape = CanvasSelectionShape;
+    using SelectionCombine = CanvasSelectionCombine;
 
     explicit CanvasWidget(
         DocumentController *controller, QWidget *parent = nullptr);
@@ -80,7 +81,11 @@ public:
     bool applySelectionTransform();
     void cancelSelectionTransform();
     bool duplicateSelection();
+    bool copySelection();
+    bool cutSelection();
     bool deleteSelection();
+    void selectAll();
+    void invertSelection();
     void deselectSelection();
     void setSelectionActionBar(SelectionActionBar *actionBar);
     void releaseTransientRenderCaches();
@@ -229,7 +234,8 @@ private:
     void notifyZoomChanged();
     QRect pointerUpdateRect() const;
     bool selectionContains(const QPointF &documentPosition) const;
-    void beginAreaSelection(const QPointF &documentPosition);
+    void beginAreaSelection(const QPointF &documentPosition,
+        SelectionCombine combine = SelectionCombine::Replace);
     void continueAreaSelection(const QPointF &documentPosition);
     void finishAreaSelection();
     void cancelAreaSelection();
@@ -244,7 +250,8 @@ private:
     void pushSelectionChange(const SelectionState &previousSelection,
         const SelectionState &nextSelection,
         const QString &text);
-    void computeWandSelection(const QPointF &documentPosition);
+    void computeWandSelection(const QPointF &documentPosition,
+        SelectionCombine combine = SelectionCombine::Replace);
     void applyBucketFill(const QPointF &documentPosition);
     void beginSelectionMove(const QPointF &documentPosition);
     void continueSelectionMove(const QPointF &documentPosition);
@@ -355,6 +362,7 @@ private:
     QPointF m_areaSelectionAnchor;
     QPointF m_areaSelectionCurrent;
     bool m_areaSelectionActive = false;
+    SelectionCombine m_areaSelectionCombine = SelectionCombine::Replace;
     SelectionState m_selectionBeforeArea;
     bool m_hasSelectionBeforeArea = false;
     QSet<QUuid> m_selectedStrokes;

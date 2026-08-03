@@ -50,6 +50,8 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/AnimationExportPolicy.hpp
     src/io/DocumentSerializer.cpp
     src/io/DocumentSerializer.hpp
+    src/io/SelectionClipboardCodec.cpp
+    src/io/SelectionClipboardCodec.hpp
     src/io/serializer/DocumentJsonCodec.cpp
     src/io/serializer/DocumentJsonCodec.hpp
     src/io/serializer/DocumentValidation.cpp
@@ -191,6 +193,7 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/MaskRegressionTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp
+    tests/SelectionClipboardTests.cpp
     tests/RenderPreviewTests.cpp
     tests/SelectionPreviewTests.cpp
     tests/SerializationBudgetTests.cpp

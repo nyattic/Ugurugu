@@ -111,6 +111,17 @@ public:
         RejectedCommit
     };
 
+    enum class PasteLayerResult
+    {
+        Pasted,
+        RejectedInvalidLayer,
+        RejectedLayerLimit,
+        RejectedStrokeLimit,
+        RejectedPointLimit,
+        RejectedMaskLimit,
+        RejectedCommit
+    };
+
     explicit DocumentController(QObject *parent = nullptr);
     ~DocumentController() override;
 
@@ -184,6 +195,10 @@ public:
     void addLayer(const QUuid &parentGroupId = {});
     void addLayerGroup(const QUuid &childId = {});
     void duplicateLayer(const QUuid &id);
+    // Inserts the pasted layer above the active layer in the same group
+    // scope without touching the active layer's content. A rejected paste
+    // leaves the document unchanged.
+    PasteLayerResult pasteLayer(Layer layer, const QSize &sourceCanvasSize);
     void removeLayer(const QUuid &id);
     void clearLayer(const QUuid &id);
     RenameLayerResult renameLayer(const QUuid &id, const QString &name);

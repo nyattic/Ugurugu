@@ -34,6 +34,17 @@ public:
     {
         return canvas.previewSurfaceUsage();
     }
+
+    static QImage selectionMask(const CanvasWidget &canvas)
+    {
+        return canvas.m_selectionMask;
+    }
+
+    static QPointF mapToDocument(
+        const CanvasWidget &canvas, const QPointF &widgetPosition)
+    {
+        return canvas.mapToDocument(widgetPosition);
+    }
 };
 
 }
