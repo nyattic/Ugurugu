@@ -125,8 +125,13 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/LayerThumbnailRenderer.hpp
     src/ui/LassoPopoverPanel.cpp
     src/ui/LassoPopoverPanel.hpp
+    src/ui/DrawingToolSettings.cpp
+    src/ui/DrawingToolSettings.hpp
     src/ui/MainWindow.cpp
     src/ui/MainWindow.hpp
+    src/ui/MainWindowActions.cpp
+    src/ui/MainWindowExport.cpp
+    src/ui/MainWindowSettings.cpp
     src/ui/PopoverToolButton.cpp
     src/ui/PopoverToolButton.hpp
     src/ui/PopoverOptionButton.cpp
