@@ -1,6 +1,7 @@
 #include "document/DocumentController.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "document/history/HistoryMemory.hpp"
 #include "document/LayerHierarchy.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
@@ -29,102 +30,14 @@
 namespace wobble
 {
 
+using history::accountByteStorage;
+using history::accountImageStorage;
+using history::accountPackedMask;
+using history::accountVectorStorage;
+using history::MemoryFootprint;
+
 namespace
 {
-
-struct HistoryMemoryFootprint
-{
-    qint64 ownedBytes = 0;
-    QHash<QString, qint64> sharedBackings;
-
-    void addOwned(qint64 bytes)
-    {
-        if (bytes <= 0)
-        {
-            return;
-        }
-        if (ownedBytes > std::numeric_limits<qint64>::max() - bytes)
-        {
-            ownedBytes = std::numeric_limits<qint64>::max();
-            return;
-        }
-        ownedBytes += bytes;
-    }
-
-    void addShared(const QString &kind, quint64 identity, qint64 bytes)
-    {
-        if (identity == 0 || bytes <= 0)
-        {
-            return;
-        }
-        const QString key =
-            QStringLiteral("%1:%2").arg(kind).arg(identity, 0, 16);
-        const auto existing = sharedBackings.constFind(key);
-        if (existing == sharedBackings.cend() || *existing < bytes)
-        {
-            sharedBackings.insert(key, bytes);
-        }
-    }
-
-    qint64 totalBytes() const
-    {
-        qint64 total = ownedBytes;
-        for (const qint64 bytes : sharedBackings)
-        {
-            if (total > std::numeric_limits<qint64>::max() - bytes)
-            {
-                return std::numeric_limits<qint64>::max();
-            }
-            total += bytes;
-        }
-        return total;
-    }
-};
-
-template <typename T>
-void accountVectorStorage(HistoryMemoryFootprint &footprint,
-    const QVector<T> &items,
-    const QString &kind)
-{
-    if (items.capacity() <= 0 || !items.constData())
-    {
-        return;
-    }
-    footprint.addShared(kind,
-        reinterpret_cast<quintptr>(items.constData()),
-        static_cast<qint64>(items.capacity()) * static_cast<qint64>(sizeof(T)));
-}
-
-void accountByteStorage(
-    HistoryMemoryFootprint &footprint, const QByteArray &bytes)
-{
-    if (bytes.capacity() <= 0 || !bytes.constData())
-    {
-        return;
-    }
-    footprint.addShared(QStringLiteral("bytes"),
-        reinterpret_cast<quintptr>(bytes.constData()),
-        bytes.capacity());
-}
-
-void accountImageStorage(HistoryMemoryFootprint &footprint, const QImage &image)
-{
-    if (!image.isNull())
-    {
-        footprint.addShared(QStringLiteral("image"),
-            static_cast<quint64>(image.cacheKey()),
-            image.sizeInBytes());
-    }
-}
-
-void accountPackedMask(HistoryMemoryFootprint &footprint,
-    const std::optional<PackedMaskRegion> &mask)
-{
-    if (mask)
-    {
-        accountByteStorage(footprint, mask->packedMask);
-    }
-}
 
 constexpr int wobbleAmountMergeId = 1;
 constexpr int animationFramesMergeId = 2;
@@ -523,7 +436,7 @@ struct DocumentController::HistoryEffects
         afterDocumentChanged.clear();
     }
 
-    void accountStorage(HistoryMemoryFootprint &footprint) const
+    void accountStorage(MemoryFootprint &footprint) const
     {
         footprint.addOwned(
             static_cast<qint64>(beforeDocumentChanged.capacity())
@@ -1407,7 +1320,7 @@ struct DocumentController::DocumentDelta
     }
 
     static void accountStroke(
-        HistoryMemoryFootprint &footprint, const Stroke &stroke)
+        MemoryFootprint &footprint, const Stroke &stroke)
     {
         accountVectorStorage(
             footprint, stroke.points, QStringLiteral("stroke-points"));
@@ -1420,7 +1333,7 @@ struct DocumentController::DocumentDelta
     }
 
     static void accountLayer(
-        HistoryMemoryFootprint &footprint, const Layer &layer)
+        MemoryFootprint &footprint, const Layer &layer)
     {
         accountVectorStorage(
             footprint, layer.strokes, QStringLiteral("layer-strokes"));
@@ -1432,7 +1345,7 @@ struct DocumentController::DocumentDelta
                            * static_cast<qint64>(sizeof(QChar)));
     }
 
-    void accountStorage(HistoryMemoryFootprint &footprint) const
+    void accountStorage(MemoryFootprint &footprint) const
     {
         footprint.addOwned(sizeof(DocumentDelta));
         footprint.addOwned(static_cast<qint64>(removedLayers.capacity())
@@ -1517,7 +1430,7 @@ public:
     virtual bool preflight(bool forward) = 0;
     virtual void clearPreflight() = 0;
     virtual DocumentUndoStack::StorageStats storageStats() const = 0;
-    virtual void accountStorage(HistoryMemoryFootprint &footprint) const = 0;
+    virtual void accountStorage(MemoryFootprint &footprint) const = 0;
 };
 
 class DocumentController::DocumentCommand final : public LogicalHistoryCommand
@@ -1683,7 +1596,7 @@ public:
         return stats;
     }
 
-    void accountStorage(HistoryMemoryFootprint &footprint) const override
+    void accountStorage(MemoryFootprint &footprint) const override
     {
         m_delta.accountStorage(footprint);
         if (m_effects)
@@ -1771,7 +1684,7 @@ public:
         return {};
     }
 
-    void accountStorage(HistoryMemoryFootprint &footprint) const override
+    void accountStorage(MemoryFootprint &footprint) const override
     {
         if (m_effects)
         {
@@ -2082,7 +1995,7 @@ DocumentUndoStack::StorageStats DocumentUndoStack::storageStats() const
     {
         return total;
     }
-    HistoryMemoryFootprint footprint;
+    MemoryFootprint footprint;
     total.entryCount = static_cast<qsizetype>(m_impl->entries.size());
     total.peakTransientPreparedDocuments =
         m_impl->peakTransientPreparedDocuments;
