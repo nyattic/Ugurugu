@@ -1,0 +1,456 @@
+#include "render/engine/LayerOperationReplay.hpp"
+
+#include "document/DocumentOperations.hpp"
+#include "document/SelectionOperation.hpp"
+#include "document/StrokeMask.hpp"
+#include "render/ImageAffineTransformer.hpp"
+#include "render/ImageResampler.hpp"
+#include "render/RenderEngine.hpp"
+#include "render/StrokeRenderer.hpp"
+
+#include <QPainter>
+#include <QRadialGradient>
+#include <QtMath>
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace wobble
+{
+namespace render_detail
+{
+
+QPainterPath maskPath(const QImage &mask)
+{
+    QPainterPath path;
+    if (mask.isNull() || mask.format() != QImage::Format_Grayscale8)
+    {
+        return path;
+    }
+    for (int y = 0; y < mask.height(); ++y)
+    {
+        const uchar *line = mask.constScanLine(y);
+        int x = 0;
+        while (x < mask.width())
+        {
+            while (x < mask.width() && line[x] < 128)
+            {
+                ++x;
+            }
+            const int left = x;
+            while (x < mask.width() && line[x] >= 128)
+            {
+                ++x;
+            }
+            if (left < x)
+            {
+                path.addRect(left, y, x - left, 1);
+            }
+        }
+    }
+    return path;
+}
+
+QImage scaledMask(
+    const QImage &mask, const QSize &outputSize, QHash<qint64, QImage> &cache)
+{
+    if (mask.isNull())
+    {
+        return {};
+    }
+    const qint64 key = mask.cacheKey();
+    const auto cached = cache.constFind(key);
+    if (cached != cache.cend())
+    {
+        return cached.value();
+    }
+    QImage scaled = mask.size() == outputSize ? mask
+                                              : mask.scaled(outputSize,
+                                                    Qt::IgnoreAspectRatio,
+                                                    Qt::FastTransformation);
+    if (!scaled.isNull())
+    {
+        cache.insert(key, scaled);
+    }
+    return scaled;
+}
+
+std::optional<QRect> scaledVisibilityClip(const Stroke &stroke,
+    const QSize &outputSize,
+    qreal horizontalScale,
+    qreal verticalScale)
+{
+    if (!stroke.visibilityClip)
+    {
+        return std::nullopt;
+    }
+    const QRectF source(*stroke.visibilityClip);
+    QRect scaled = QRectF(source.x() * horizontalScale,
+        source.y() * verticalScale,
+        source.width() * horizontalScale,
+        source.height() * verticalScale)
+                       .toAlignedRect()
+                       .intersected(QRect(QPoint(), outputSize));
+    return scaled;
+}
+
+void applyFillStroke(QImage &layerImage,
+    const Stroke &stroke,
+    const QImage &coverageMask,
+    const QImage &clipMask,
+    const std::optional<QRect> &visibilityClip,
+    qreal horizontalScale,
+    qreal verticalScale)
+{
+    QImage proceduralMask;
+    if (coverageMask.isNull())
+    {
+        const QPointF seedPosition = stroke.points.first().position;
+        const QPoint seed(
+            std::clamp(static_cast<int>(seedPosition.x() * horizontalScale),
+                0,
+                layerImage.width() - 1),
+            std::clamp(static_cast<int>(seedPosition.y() * verticalScale),
+                0,
+                layerImage.height() - 1));
+        proceduralMask = RenderEngine::fillRegionMask(layerImage, seed);
+    }
+    const QImage &mask = coverageMask.isNull() ? proceduralMask : coverageMask;
+    if (mask.isNull())
+    {
+        return;
+    }
+    const QRgb fill = qPremultiply(stroke.color.rgba());
+    const int fillRed = qRed(fill);
+    const int fillGreen = qGreen(fill);
+    const int fillBlue = qBlue(fill);
+    const int fillAlpha = qAlpha(fill);
+    const int width = layerImage.width();
+    const int height = layerImage.height();
+
+    for (int y = 0; y < height; ++y)
+    {
+        QRgb *line = reinterpret_cast<QRgb *>(layerImage.scanLine(y));
+        const uchar *maskLine = mask.constScanLine(y);
+        const uchar *maskAbove = y > 0 ? mask.constScanLine(y - 1) : nullptr;
+        const uchar *maskBelow =
+            y < height - 1 ? mask.constScanLine(y + 1) : nullptr;
+        const uchar *clipLine =
+            clipMask.isNull() ? nullptr : clipMask.constScanLine(y);
+        for (int x = 0; x < width; ++x)
+        {
+            if ((visibilityClip && !visibilityClip->contains(x, y))
+                || (clipLine && clipLine[x] < 128))
+            {
+                continue;
+            }
+            if (maskLine[x] >= 128)
+            {
+                line[x] = fill;
+                continue;
+            }
+            const bool touchesRegion =
+                (x > 0 && maskLine[x - 1] >= 128)
+                || (x < width - 1 && maskLine[x + 1] >= 128)
+                || (maskAbove && maskAbove[x] >= 128)
+                || (maskBelow && maskBelow[x] >= 128);
+            if (!touchesRegion)
+            {
+                continue;
+            }
+            const QRgb existing = line[x];
+            const int inverse = 255 - qAlpha(existing);
+            line[x] = qRgba(qRed(existing) + fillRed * inverse / 255,
+                qGreen(existing) + fillGreen * inverse / 255,
+                qBlue(existing) + fillBlue * inverse / 255,
+                qAlpha(existing) + fillAlpha * inverse / 255);
+        }
+    }
+}
+
+void renderLayerStrokes(QImage &layerImage,
+    const Document &document,
+    const QVector<Stroke> &strokes,
+    int normalizedFrame,
+    int frameCount,
+    qreal horizontalScale,
+    qreal verticalScale,
+    QHash<qint64, QPainterPath> &clipPaths,
+    QHash<qint64, QImage> &scaledClipMasks,
+    const QPointF &logicalOrigin)
+{
+    const QSize outputSize = layerImage.size();
+    QPainter painter(&layerImage);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.scale(horizontalScale, verticalScale);
+    painter.translate(-logicalOrigin);
+
+    for (const Stroke &stroke : strokes)
+    {
+        if (stroke.points.isEmpty() || !isValidBrushSettings(stroke.brush))
+        {
+            continue;
+        }
+
+        if (stroke.mode == StrokeMode::Fill)
+        {
+            const QImage scaledClipMask =
+                scaledMask(stroke.clipMask, outputSize, scaledClipMasks);
+            if (!stroke.clipMask.isNull() && scaledClipMask.isNull())
+            {
+                continue;
+            }
+            const QImage scaledCoverageMask =
+                scaledMask(stroke.fillMask, outputSize, scaledClipMasks);
+            if (!stroke.fillMask.isNull() && scaledCoverageMask.isNull())
+            {
+                continue;
+            }
+            const std::optional<QRect> visibility = scaledVisibilityClip(
+                stroke, outputSize, horizontalScale, verticalScale);
+            if (visibility && visibility->isEmpty())
+            {
+                continue;
+            }
+            painter.end();
+            applyFillStroke(layerImage,
+                stroke,
+                scaledCoverageMask,
+                scaledClipMask,
+                visibility,
+                horizontalScale,
+                verticalScale);
+            painter.begin(&layerImage);
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            painter.scale(horizontalScale, verticalScale);
+            painter.translate(-logicalOrigin);
+            continue;
+        }
+
+        painter.save();
+        painter.setRenderHint(
+            QPainter::Antialiasing, stroke.brush.antialiasing);
+        if (stroke.visibilityClip)
+        {
+            painter.setClipRect(
+                QRectF(*stroke.visibilityClip), Qt::IntersectClip);
+        }
+        if (!stroke.clipMask.isNull())
+        {
+            const qint64 key = stroke.clipMask.cacheKey();
+            auto cached = clipPaths.constFind(key);
+            if (cached == clipPaths.cend())
+            {
+                cached = clipPaths.insert(key, maskPath(stroke.clipMask));
+            }
+            painter.setClipPath(cached.value(), Qt::IntersectClip);
+        }
+        painter.setCompositionMode(
+            stroke.mode == StrokeMode::Erase
+                ? QPainter::CompositionMode_DestinationOut
+                : QPainter::CompositionMode_SourceOver);
+
+        painter.setBrush(Qt::NoBrush);
+        const StrokeRenderer::PreparedStroke prepared = StrokeRenderer::prepare(
+            stroke, normalizedFrame, frameCount, document.wobbleAmount);
+        if (!prepared.valid)
+        {
+            painter.restore();
+            continue;
+        }
+        StrokeRenderer::paint(painter, stroke, prepared);
+        painter.restore();
+    }
+
+    painter.end();
+}
+
+bool applyPixelSelectionOperation(
+    QImage &layerImage, const PixelSelectionOp &operation)
+{
+    if (!isValidPixelSelectionOp(operation)
+        || layerImage.size() != operation.canvasSize
+        || layerImage.format() != QImage::Format_ARGB32_Premultiplied)
+    {
+        return false;
+    }
+    if (!operation.drawDestination)
+    {
+        if (!operation.clearSource)
+        {
+            return false;
+        }
+        for (int y = operation.sourceBounds.top();
+            y <= operation.sourceBounds.bottom();
+            ++y)
+        {
+            QRgb *layerLine = reinterpret_cast<QRgb *>(layerImage.scanLine(y));
+            for (int x = operation.sourceBounds.left();
+                x <= operation.sourceBounds.right();
+                ++x)
+            {
+                if (pixelSelectionContains(operation, x, y))
+                {
+                    layerLine[x] = 0;
+                }
+            }
+        }
+        return true;
+    }
+    QImage payload(
+        operation.sourceBounds.size(), QImage::Format_ARGB32_Premultiplied);
+    if (payload.isNull())
+    {
+        return false;
+    }
+    payload.fill(Qt::transparent);
+    bool hasPixels = false;
+    for (int y = operation.sourceBounds.top();
+        y <= operation.sourceBounds.bottom();
+        ++y)
+    {
+        QRgb *layerLine = reinterpret_cast<QRgb *>(layerImage.scanLine(y));
+        QRgb *payloadLine = reinterpret_cast<QRgb *>(
+            payload.scanLine(y - operation.sourceBounds.top()));
+        for (int x = operation.sourceBounds.left();
+            x <= operation.sourceBounds.right();
+            ++x)
+        {
+            if (!pixelSelectionContains(operation, x, y))
+            {
+                continue;
+            }
+            const QRgb pixel = layerLine[x];
+            payloadLine[x - operation.sourceBounds.left()] = pixel;
+            hasPixels = hasPixels || qAlpha(pixel) != 0;
+            if (operation.clearSource)
+            {
+                layerLine[x] = 0;
+            }
+        }
+    }
+    if (!hasPixels)
+    {
+        return true;
+    }
+    return ImageAffineTransformer::compositeSourceOver(layerImage,
+        QRect(QPoint(), layerImage.size()),
+        payload,
+        operation.sourceBounds,
+        operation.transform,
+        operation.sampling);
+}
+
+bool applyReframeOperation(QImage &layerImage, const ReframeOp &operation)
+{
+    if (!isValidReframeOp(operation)
+        || layerImage.size() != operation.sourceSize
+        || layerImage.format() != QImage::Format_ARGB32_Premultiplied)
+    {
+        return false;
+    }
+    if (operation.mode == ReframeMode::Image)
+    {
+        QImage target = ImageResampler::resample(
+            layerImage, operation.targetSize, operation.sampling);
+        if (target.isNull())
+        {
+            return false;
+        }
+        layerImage = std::move(target);
+        return true;
+    }
+    QImage target(operation.targetSize, QImage::Format_ARGB32_Premultiplied);
+    if (target.isNull())
+    {
+        return false;
+    }
+    target.fill(Qt::transparent);
+    QPainter painter(&target);
+    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform,
+        operation.sampling == SamplingMode::Smooth);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(operation.contentOffset, layerImage);
+    painter.end();
+    layerImage = std::move(target);
+    return true;
+}
+
+bool renderLayerOperations(QImage &layerImage,
+    const Document &document,
+    const QVector<Stroke> &operations,
+    int normalizedFrame,
+    int frameCount,
+    const QSize &initialCanvasSize)
+{
+    if (!initialCanvasSize.isValid())
+    {
+        return false;
+    }
+    layerImage = QImage(initialCanvasSize, QImage::Format_ARGB32_Premultiplied);
+    if (layerImage.isNull())
+    {
+        return false;
+    }
+    layerImage.fill(Qt::transparent);
+
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
+    QVector<Stroke> primitiveRun;
+    const auto flush = [&]()
+    {
+        if (primitiveRun.isEmpty())
+        {
+            return;
+        }
+        renderLayerStrokes(layerImage,
+            document,
+            primitiveRun,
+            normalizedFrame,
+            frameCount,
+            1.0,
+            1.0,
+            clipPaths,
+            scaledClipMasks);
+        primitiveRun.clear();
+    };
+
+    for (const Stroke &operation : operations)
+    {
+        if (operation.mode == StrokeMode::PixelSelection)
+        {
+            flush();
+            if (!operation.pixelSelectionOp || operation.reframeOp
+                || !applyPixelSelectionOperation(
+                    layerImage, *operation.pixelSelectionOp))
+            {
+                return false;
+            }
+        }
+        else if (operation.mode == StrokeMode::Reframe)
+        {
+            flush();
+            if (!operation.reframeOp || operation.pixelSelectionOp
+                || !applyReframeOperation(layerImage, *operation.reframeOp))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (operation.pixelSelectionOp || operation.reframeOp)
+            {
+                return false;
+            }
+            primitiveRun.append(operation);
+        }
+    }
+    flush();
+    return layerImage.size() == document.size;
+}
+
+}
+
+}

@@ -73,8 +73,17 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/IncrementalStrokeRenderer.hpp
     src/render/LayerCompositionPlan.cpp
     src/render/LayerCompositionPlan.hpp
+    src/render/engine/DisplayScaleReplay.cpp
+    src/render/engine/DisplayScaleReplay.hpp
+    src/render/engine/LayerHierarchyCompositor.cpp
+    src/render/engine/LayerHierarchyCompositor.hpp
+    src/render/engine/LayerOperationReplay.cpp
+    src/render/engine/LayerOperationReplay.hpp
+    src/render/engine/PreviewScale.cpp
+    src/render/engine/PreviewScale.hpp
     src/render/RenderEngine.cpp
     src/render/RenderEngine.hpp
+    src/render/RenderEngineStrokes.cpp
     src/render/PreviewRenderPolicy.cpp
     src/render/PreviewRenderPolicy.hpp
     src/render/StrokeCoverageRenderer.cpp
