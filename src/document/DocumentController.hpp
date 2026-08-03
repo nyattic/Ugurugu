@@ -20,6 +20,11 @@ class DocumentController;
 class DocumentControllerTestAccess;
 class MainWindowTestAccess;
 
+namespace history
+{
+struct HistoryEffects;
+}
+
 // Logical history prepares a complete target state before moving its cursor,
 // so a failed restore cannot partially apply a document transaction or its
 // UI side effects. Entries are bounded independently by count and resident
@@ -219,7 +224,8 @@ signals:
         const QUuid &layerId, const QImage &mask);
 
 private:
-    struct HistoryEffects;
+    using HistoryEffects = history::HistoryEffects;
+
     struct MacroTransaction;
     class DocumentCommand;
     class TransientCommand;
