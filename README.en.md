@@ -63,16 +63,24 @@ necessary.
 
 - Pressure-sensitive brush and eraser with 17 pen, marker, airbrush,
   and spray presets
+- Stabilization that keeps lines smooth through a shaky hand, adjustable
+  from 0 to 100% for the brush and the eraser separately
 - Loopable boiling-line wobble, redrawn every frame — or turn it off and
   draw like a regular paint app
-- Crisp pixel-edged strokes with per-stroke anti-aliasing and roughness
+- Per-stroke control over whether edges stay crisp pixels or go soft, and
+  how rough the line looks
+- Change a finished stroke's color, width, or roughness later, without
+  drawing it again
 - Responsive drawing, panning, and zooming on high-resolution canvases,
   even with very long strokes
 - Lasso and auto selection with previews for moving, scaling, rotating,
   and flipping; deleting selected content can be undone and redone
 - Canvas resizing that crops or expands without scaling the artwork, and
   image resizing that scales it
-- Layers with thumbnails, visibility, opacity, and drag reordering
+- Layers with thumbnails, visibility, opacity, and drag reordering, plus
+  groups that hold layers together like folders
+- Normal, multiply, screen, and overlay blend modes, and clipping that
+  paints only where the layer below already has color
 - A timeline with a live preview and adjustable wobble strength, frame
   count, and FPS
 - 1–1600% zoom, true 100% actual-pixel view, and fit-to-window
