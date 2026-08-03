@@ -286,6 +286,7 @@ private:
         CommitDirection direction,
         quint64 historyNode,
         quint64 contentRevision);
+    qsizetype macroPreparedDocumentCount() const;
     bool preflightHistoryMovement(const QUndoCommand *command, bool forward);
     void applyHistoryMovement(QUndoCommand *command, bool forward);
     void clearHistoryPreflight(const QUndoCommand *command);

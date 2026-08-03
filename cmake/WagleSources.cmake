@@ -23,11 +23,13 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/document/DocumentLimits.hpp
     src/document/history/DocumentDelta.cpp
     src/document/history/DocumentDelta.hpp
+    src/document/history/DocumentUndoStack.cpp
     src/document/history/HistoryEffects.cpp
     src/document/history/HistoryEffects.hpp
     src/document/history/HistoryMemory.cpp
     src/document/history/HistoryMemory.hpp
     src/document/history/HistoryTypes.hpp
+    src/document/history/LogicalHistoryCommand.hpp
     src/document/LayerHierarchy.cpp
     src/document/LayerHierarchy.hpp
     src/document/DocumentOperations.cpp
