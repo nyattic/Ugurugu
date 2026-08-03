@@ -16,4 +16,8 @@ compile_commands.json
 *.user
 /*.gif
 artifacts/
-PROJECT_AUDIT.md
+docs/
+
+# AI
+.codex/
+.claude/
