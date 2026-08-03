@@ -120,6 +120,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/FileOpenEventRouter.hpp
     src/ui/FrameScrubber.cpp
     src/ui/FrameScrubber.hpp
+    src/ui/GifExportDialog.cpp
+    src/ui/GifExportDialog.hpp
     src/ui/Icons.cpp
     src/ui/Icons.hpp
     src/ui/ImageSizeDialog.cpp

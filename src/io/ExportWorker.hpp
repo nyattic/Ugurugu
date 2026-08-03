@@ -4,6 +4,7 @@
 
 #include <QMutex>
 #include <QObject>
+#include <QSize>
 #include <QString>
 #include <QThread>
 #include <QWaitCondition>
@@ -28,9 +29,19 @@ public:
     explicit ExportWorker(QObject *parent = nullptr);
     ~ExportWorker() override;
 
+    // Output size and transparency for one GIF export. `outputSize` is the
+    // encoded frame size, which is what the memory budget is checked against,
+    // so a scaled-down export can succeed where the native size cannot.
+    struct GifOptions
+    {
+        QSize outputSize;
+        bool preserveTransparency = true;
+    };
+
     bool startImage(
         Document document, int frame, const QString &filePath, bool jpeg);
-    bool startGif(Document document, const QString &filePath);
+    bool startGif(
+        Document document, const QString &filePath, const GifOptions &options);
     void cancel();
     bool isBusy() const;
     bool waitForIdle(int timeoutMilliseconds = -1);
@@ -51,6 +62,7 @@ private:
         int frame = 0;
         QString filePath;
         bool jpeg = false;
+        GifOptions gif;
     };
 
     bool start(Request request);

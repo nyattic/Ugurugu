@@ -1,6 +1,7 @@
 #include "io/AnimationExportPolicy.hpp"
 #include "io/RenderExportPolicy.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/GifExportDialog.hpp"
 #include "ui/MainWindow.hpp"
 
 #include <QFileDialog>
@@ -10,6 +11,8 @@
 #include <QStatusBar>
 
 #include <spdlog/spdlog.h>
+
+#include <algorithm>
 
 namespace wobble
 {
@@ -21,20 +24,35 @@ void MainWindow::exportGif()
         return;
     }
     const Document document = m_canvas->documentWithPendingSelectionTransform();
-    const long double workingBytes =
-        AnimationExportPolicy::estimatedWorkingBytes(document);
     if (document.size.width() <= 0 || document.size.height() <= 0
-        || document.animationFrames <= 0
-        || !AnimationExportPolicy::fitsMemoryBudget(document))
+        || document.animationFrames <= 0)
     {
-        const long double mebibytes = workingBytes / (1024.0L * 1024.0L);
+        return;
+    }
+    // The smallest offered scale is the only thing that can still be over
+    // budget; anything above that is the user's choice inside the dialog.
+    if (!AnimationExportPolicy::fitsMemoryBudget(
+            QSize(std::max(1, document.size.width() / 4),
+                std::max(1, document.size.height() / 4)),
+            document.animationFrames))
+    {
+        const long double mebibytes =
+            AnimationExportPolicy::estimatedWorkingBytes(document)
+            / (1024.0L * 1024.0L);
         QMessageBox::warning(this,
             tr("Animation is too large"),
-            tr("This GIF would need about %1 MiB of working memory. "
-               "Reduce the canvas size or frame count before exporting.")
+            tr("This GIF would need about %1 MiB of working memory even when "
+               "scaled down. Reduce the frame count before exporting.")
                 .arg(static_cast<double>(mebibytes), 0, 'f', 0));
         return;
     }
+
+    GifExportDialog optionsDialog(document, this);
+    if (optionsDialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+    const GifExportDialog::Result options = optionsDialog.result();
 
     const QString selected = QFileDialog::getSaveFileName(this,
         tr("Export animated GIF"),
@@ -47,7 +65,9 @@ void MainWindow::exportGif()
     const QString filePath = normalizedPath(selected, QStringLiteral("gif"));
     m_canvas->releaseTransientRenderCaches();
     m_controller.releaseTransientCaches();
-    if (m_exportWorker.startGif(document, filePath))
+    if (m_exportWorker.startGif(document,
+            filePath,
+            {options.outputSize, options.preserveTransparency}))
     {
         beginExportProgress(
             ExportWorker::Kind::Gif, filePath, document.animationFrames);

@@ -59,12 +59,13 @@ ExportWorker::~ExportWorker()
 bool ExportWorker::startImage(
     Document document, int frame, const QString &filePath, bool jpeg)
 {
-    return start({Kind::Image, std::move(document), frame, filePath, jpeg});
+    return start({Kind::Image, std::move(document), frame, filePath, jpeg, {}});
 }
 
-bool ExportWorker::startGif(Document document, const QString &filePath)
+bool ExportWorker::startGif(
+    Document document, const QString &filePath, const GifOptions &options)
 {
-    return start({Kind::Gif, std::move(document), 0, filePath, false});
+    return start({Kind::Gif, std::move(document), 0, filePath, false, options});
 }
 
 bool ExportWorker::start(Request request)
@@ -243,6 +244,12 @@ bool ExportWorker::writeImage(const Request &request, QString *error)
 
 bool ExportWorker::writeGif(const Request &request, QString *error)
 {
+    const QSize outputSize =
+        request.gif.outputSize.isValid() && !request.gif.outputSize.isEmpty()
+            ? request.gif.outputSize
+            : request.document.size;
+    const bool nativeSize = outputSize == request.document.size;
+
     QVector<QImage> frames;
     frames.reserve(request.document.animationFrames);
     postProgress(Kind::Gif, 0, request.document.animationFrames);
@@ -252,11 +259,36 @@ bool ExportWorker::writeGif(const Request &request, QString *error)
         {
             return false;
         }
-        QImage image = RenderEngine::render(request.document, frame);
+        // Exported pixels must not come from the preview replay path, which
+        // trades exactness for speed; NativeExact renders natively and only
+        // then scales.
+        QImage image = nativeSize
+                           ? RenderEngine::render(request.document, frame)
+                           : RenderEngine::renderScaled(request.document,
+                                 frame,
+                                 outputSize,
+                                 RenderEngine::ScaledRenderMode::NativeExact);
         if (image.isNull())
         {
             *error = tr("An animation frame could not be rendered.");
             return false;
+        }
+        if (!request.gif.preserveTransparency && image.hasAlphaChannel())
+        {
+            // Flattening onto white here rather than in the encoder keeps the
+            // decision with the user's choice; the encoder only ever sees
+            // frames that already mean what was asked for.
+            QImage opaque(image.size(), QImage::Format_ARGB32);
+            if (opaque.isNull())
+            {
+                *error = tr("An animation frame could not be rendered.");
+                return false;
+            }
+            opaque.fill(Qt::white);
+            QPainter painter(&opaque);
+            painter.drawImage(0, 0, image);
+            painter.end();
+            image = std::move(opaque);
         }
         frames.append(std::move(image));
         postProgress(Kind::Gif, frame + 1, request.document.animationFrames);

@@ -1,6 +1,8 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QImageReader>
+
 namespace wobble
 {
 
@@ -867,6 +869,51 @@ private slots:
         QVERIFY(warningAccepted);
     }
 
+    void exportsScaledGifAtRequestedSize()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Document document = Document::createDefault(QSize(64, 48));
+        document.animationFrames = 2;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {{QPointF(8.0, 8.0), 1.0}, {QPointF(56.0, 40.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        ExportWorker worker;
+        QSignalSpy finished(&worker, &ExportWorker::finished);
+        const QString path = directory.filePath(QStringLiteral("scaled.gif"));
+        QVERIFY(worker.startGif(document, path, {QSize(32, 24), true}));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(finished.at(0).at(1).toBool(),
+            qPrintable(finished.at(0).at(4).toString()));
+
+        QImageReader reader(path, QByteArrayLiteral("gif"));
+        QCOMPARE(reader.size(), QSize(32, 24));
+    }
+
+    void flattensGifTransparencyWhenNotPreserved()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Document document = Document::createDefault(QSize(32, 24));
+        document.background = Qt::transparent;
+        document.animationFrames = 2;
+
+        ExportWorker worker;
+        QSignalSpy finished(&worker, &ExportWorker::finished);
+        const QString path = directory.filePath(QStringLiteral("opaque.gif"));
+        QVERIFY(worker.startGif(document, path, {QSize(), false}));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(finished.at(0).at(1).toBool(),
+            qPrintable(finished.at(0).at(4).toString()));
+
+        QImageReader reader(path, QByteArrayLiteral("gif"));
+        const QImage decoded = reader.read();
+        QVERIFY2(!decoded.isNull(), qPrintable(reader.errorString()));
+        QCOMPARE(decoded.pixelColor(0, 0).alpha(), 255);
+    }
+
     void exportsSnapshotsOffThreadAndCancelsWithoutPartialFiles()
     {
         QTemporaryDir directory;
@@ -900,7 +947,7 @@ private slots:
         document.animationFrames = 60;
         const QString gifPath =
             directory.filePath(QStringLiteral("canceled.gif"));
-        QVERIFY(worker.startGif(document, gifPath));
+        QVERIFY(worker.startGif(document, gifPath, {}));
         worker.cancel();
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 5000);
         const QList<QVariant> canceledResult = finished.at(1);

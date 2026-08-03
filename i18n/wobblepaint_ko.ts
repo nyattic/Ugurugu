@@ -1228,13 +1228,14 @@
 <context>
     <name>wobble::ExportWorker</name>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="189"/>
-        <location filename="../src/io/ExportWorker.cpp" line="200"/>
+        <location filename="../src/io/ExportWorker.cpp" line="190"/>
+        <location filename="../src/io/ExportWorker.cpp" line="201"/>
         <source>The image could not be rendered.</source>
         <translation>이미지를 렌더링하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="258"/>
+        <location filename="../src/io/ExportWorker.cpp" line="273"/>
+        <location filename="../src/io/ExportWorker.cpp" line="284"/>
         <source>An animation frame could not be rendered.</source>
         <translation>애니메이션 프레임을 렌더링하지 못했습니다.</translation>
     </message>
@@ -1250,6 +1251,44 @@
         <location filename="../src/ui/FrameScrubber.cpp" line="108"/>
         <source>Frame %1 of %2</source>
         <translation>총 %2개 중 %1번째 프레임</translation>
+    </message>
+</context>
+<context>
+    <name>wobble::GifExportDialog</name>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="49"/>
+        <source>Export animated GIF</source>
+        <translation>움직이는 GIF 내보내기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="59"/>
+        <source>%1%  (%2 × %3)</source>
+        <translation>%1%  (%2 × %3)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="65"/>
+        <source>Size</source>
+        <translation>크기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="67"/>
+        <source>Keep transparent areas</source>
+        <translation>투명한 부분 유지</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="73"/>
+        <source>The canvas background is opaque, so there is nothing to keep transparent.</source>
+        <translation>캔버스 배경이 불투명해서 유지할 투명한 부분이 없습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="126"/>
+        <source>%1 frames, about %2 MiB while encoding.</source>
+        <translation>%1프레임, 인코딩 중 약 %2 MiB를 사용합니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/GifExportDialog.cpp" line="133"/>
+        <source>This size needs about %1 MiB while encoding, which is more than the export budget. Choose a smaller size.</source>
+        <translation>이 크기는 인코딩 중 약 %1 MiB가 필요해 내보내기 한도를 넘습니다. 더 작은 크기를 선택하세요.</translation>
     </message>
 </context>
 <context>
@@ -1670,17 +1709,17 @@ The recovery file was not deleted. You can find it at:
         <translation>저장하지 않은 작업을 복구했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="896"/>
+        <location filename="../src/ui/MainWindow.cpp" line="897"/>
         <source>Canvas background</source>
         <translation>캔버스 배경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1100"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1101"/>
         <source>Recovery could not be discarded</source>
         <translation>복구 파일을 폐기할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1101"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1102"/>
         <source>The recovery file was not deleted.
 
 %1</source>
@@ -1689,12 +1728,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1127"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
         <source>Recovery could not be preserved</source>
         <translation>복구 파일을 보존할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
         <source>The recovery file was left unchanged.
 
 %1</source>
@@ -2015,22 +2054,22 @@ The recovery file was not deleted. You can find it at:
         <translation>복구 파일 위치는 예약되어 있습니다. 다른 프로젝트 경로를 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1157"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1158"/>
         <source>Layer group nesting limit</source>
         <translation>레이어 그룹 중첩 제한</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1158"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1159"/>
         <source>Some layers in this project are nested %1 levels deep inside layer groups. The structure will be preserved, but edits cannot increase the document&apos;s maximum nesting depth. New documents allow up to %2 levels.</source>
         <translation>이 프로젝트의 일부 레이어는 그룹 안에 %1단계 깊이로 중첩되어 있습니다. 현재 구조는 그대로 보존되지만, 편집으로 문서의 최대 중첩 단계를 더 늘릴 수는 없습니다. 새 문서는 최대 %2단계까지 사용할 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="77"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="97"/>
         <source>Image is too large</source>
         <translation>이미지가 너무 큽니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="78"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="98"/>
         <source>This image would need about %1 MiB of working memory. Reduce the canvas size or layer group nesting before exporting.</source>
         <translation>이 이미지를 렌더링하려면 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 캔버스 크기나 레이어 그룹의 중첩 단계를 줄이세요.</translation>
     </message>
@@ -2087,12 +2126,12 @@ The recovery file was not deleted. You can find it at:
         <translation>이미지 크기를 변경할 수 없습니다. 더 작은 크기로 시도하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="183"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="203"/>
         <source>Could not export the file.</source>
         <translation>파일을 내보내지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="184"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="204"/>
         <source>Could not export the file.
 
 %1</source>
@@ -2101,7 +2140,7 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1209"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1210"/>
         <source>Export &amp;image…</source>
         <translation>이미지로 내보내기(&amp;I)…</translation>
     </message>
@@ -2151,7 +2190,7 @@ The recovery file was not deleted. You can find it at:
         <translation>저장 안 함(N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="127"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="147"/>
         <source>Cancel</source>
         <translation>취소</translation>
     </message>
@@ -2217,103 +2256,103 @@ The recovery file was not deleted. You can find it at:
         <translation>새 문서</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="909"/>
+        <location filename="../src/ui/MainWindow.cpp" line="910"/>
         <source>Scale selection</source>
         <translation>선택 영역 크기 조절</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="910"/>
+        <location filename="../src/ui/MainWindow.cpp" line="911"/>
         <source>Scale (%)</source>
         <translation>배율 (%)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="926"/>
+        <location filename="../src/ui/MainWindow.cpp" line="927"/>
         <source>Rotate selection</source>
         <translation>선택 영역 회전</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="927"/>
+        <location filename="../src/ui/MainWindow.cpp" line="928"/>
         <source>Angle (degrees)</source>
         <translation>각도 (도)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1186"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1187"/>
         <source>Open project</source>
         <translation>프로젝트 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1188"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1189"/>
         <source>WagleWaglePaint projects (*.wagle *.wobble);;All files (*)</source>
         <translation>WagleWaglePaint 프로젝트 (*.wagle *.wobble);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="32"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="43"/>
         <source>Animation is too large</source>
         <translation>애니메이션이 너무 큽니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="33"/>
-        <source>This GIF would need about %1 MiB of working memory. Reduce the canvas size or frame count before exporting.</source>
-        <translation>이 GIF는 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 캔버스 크기나 프레임 수를 줄여 주세요.</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="40"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="58"/>
         <source>Export animated GIF</source>
         <translation>움직이는 GIF 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="42"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="60"/>
         <source>GIF images (*.gif)</source>
         <translation>GIF 이미지 (*.gif)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="125"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="145"/>
         <source>Rendering animation…</source>
         <translation>애니메이션 렌더링 중…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="126"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="146"/>
         <source>Rendering image…</source>
         <translation>이미지 렌더링 중…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="132"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="152"/>
         <source>Export</source>
         <translation>내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="171"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="191"/>
         <source>Export canceled</source>
         <translation>내보내기를 취소했습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="181"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="201"/>
         <source>Export failed</source>
         <translation>내보내기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="187"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="207"/>
         <source>Exported %1</source>
         <translation>%1 내보냄</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="91"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="111"/>
         <source>Export current frame</source>
         <translation>현재 프레임 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="87"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="44"/>
+        <source>This GIF would need about %1 MiB of working memory even when scaled down. Reduce the frame count before exporting.</source>
+        <translation>이 GIF는 크기를 줄여도 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 프레임 수를 줄이세요.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowExport.cpp" line="107"/>
         <source>PNG images (*.png)</source>
         <translation>PNG 이미지 (*.png)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1208"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1209"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="116"/>
         <source>Export current frame as &amp;image…</source>
         <translation>현재 프레임을 이미지로 내보내기(&amp;I)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowExport.cpp" line="88"/>
+        <location filename="../src/ui/MainWindowExport.cpp" line="108"/>
         <source>JPEG images (*.jpg *.jpeg)</source>
         <translation>JPEG 이미지 (*.jpg *.jpeg)</translation>
     </message>
