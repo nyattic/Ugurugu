@@ -301,7 +301,7 @@ ImageSizeDialog::ImageSizeDialog(const QSize &currentSize, QWidget *parent)
     resize(700, 440);
 }
 
-ImageSizeDialog::Result ImageSizeDialog::result() const
+ImageSizeDialog::Result ImageSizeDialog::currentResult() const
 {
     return {imageSize(), horizontalScale(), verticalScale()};
 }

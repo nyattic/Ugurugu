@@ -289,8 +289,8 @@ void MainWindow::createActions()
         QStringLiteral("invertSelectionAction"));
     m_invertSelectionAction->setToolTip(tr("Invert the selected area"));
     m_invertSelectionAction->setEnabled(false);
-    registerShortcut(m_invertSelectionAction,
-        QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+    registerShortcut(
+        m_invertSelectionAction, QKeySequence(QStringLiteral("Ctrl+Shift+I")));
     connect(m_invertSelectionAction,
         &QAction::triggered,
         m_canvas,
@@ -472,21 +472,21 @@ void MainWindow::createActions()
         m_canvas->hasPendingSelectionTransform());
 
     auto *selectionBar = new SelectionActionBar(m_canvas);
-    selectionBar->addAction(m_moveSelectionAction);
-    selectionBar->addAction(m_scaleSelectionAction);
-    selectionBar->addAction(m_rotateSelectionAction);
+    selectionBar->addActionButton(m_moveSelectionAction);
+    selectionBar->addActionButton(m_scaleSelectionAction);
+    selectionBar->addActionButton(m_rotateSelectionAction);
     selectionBar->addSeparator();
-    selectionBar->addAction(m_flipSelectionHorizontalAction);
-    selectionBar->addAction(m_flipSelectionVerticalAction);
+    selectionBar->addActionButton(m_flipSelectionHorizontalAction);
+    selectionBar->addActionButton(m_flipSelectionVerticalAction);
     selectionBar->addSeparator();
-    selectionBar->addAction(m_applySelectionTransformAction);
-    selectionBar->addAction(m_cancelSelectionTransformAction);
+    selectionBar->addActionButton(m_applySelectionTransformAction);
+    selectionBar->addActionButton(m_cancelSelectionTransformAction);
     selectionBar->addSeparator();
-    selectionBar->addAction(m_copySelectionAction);
-    selectionBar->addAction(m_editStrokePropertiesAction);
-    selectionBar->addAction(m_deleteSelectionAction);
+    selectionBar->addActionButton(m_copySelectionAction);
+    selectionBar->addActionButton(m_editStrokePropertiesAction);
+    selectionBar->addActionButton(m_deleteSelectionAction);
     selectionBar->addSeparator();
-    selectionBar->addAction(m_deselectSelectionAction);
+    selectionBar->addActionButton(m_deselectSelectionAction);
     m_canvas->setSelectionActionBar(selectionBar);
 
     auto *clearLayerAction = new QAction(tr("Clear active layer"), this);

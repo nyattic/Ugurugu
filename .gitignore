@@ -16,7 +16,7 @@ compile_commands.json
 *.user
 /*.gif
 artifacts/
-docs/
+docs/.DS_Store
 
 # AI
 .codex/

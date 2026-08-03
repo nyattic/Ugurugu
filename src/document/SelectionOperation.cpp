@@ -238,7 +238,7 @@ struct RenderedMaskRegion
     bool usedArgbTarget = false;
 };
 
-RenderedMaskRegion renderBinarySource(QImage source,
+RenderedMaskRegion renderBinarySource(const QImage &source,
     const QRect &sourceBounds,
     const QRect &targetBounds,
     const QTransform &transform,
@@ -567,7 +567,7 @@ std::optional<PackedMaskRegion> transformedPackedMask(
     {
         return std::nullopt;
     }
-    const RenderedMaskRegion rendered = renderBinarySource(std::move(source),
+    const RenderedMaskRegion rendered = renderBinarySource(source,
         sourceBounds,
         targetBounds,
         transform,

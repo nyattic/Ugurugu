@@ -52,8 +52,8 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QMimeData>
 #include <QMetaType>
+#include <QMimeData>
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSet>
@@ -236,7 +236,7 @@ std::optional<Document> MainWindow::readProject(const QString &filePath)
     }
 
     QString error;
-    const std::optional<Document> document =
+    std::optional<Document> document =
         DocumentSerializer::load(filePath, &error);
     if (!document)
     {
@@ -836,7 +836,7 @@ void MainWindow::resizeCanvas()
     {
         return;
     }
-    const CanvasSizeDialog::Result requested = dialog.result();
+    const CanvasSizeDialog::Result requested = dialog.currentResult();
     if (requested.size == m_controller.document().size
         && requested.contentOffset.isNull())
     {
@@ -967,8 +967,8 @@ void MainWindow::pasteFromClipboard()
     if (!pasted)
     {
         showNotice(error.isEmpty()
-                ? tr("The clipboard content could not be pasted.")
-                : error);
+                       ? tr("The clipboard content could not be pasted.")
+                       : error);
         return;
     }
     switch (m_controller.pasteLayer(pasted->layer, pasted->canvasSize))
@@ -1116,8 +1116,11 @@ void MainWindow::editSelectedStrokeProperties()
     {
         return;
     }
-    m_controller.updateStrokeAttributes(
-        layerId, strokeIds, dialog.color(), dialog.width(), dialog.roughness());
+    m_controller.updateStrokeAttributes(layerId,
+        strokeIds,
+        dialog.color(),
+        dialog.selectedWidth(),
+        dialog.roughness());
 }
 
 void MainWindow::writeAutosave()

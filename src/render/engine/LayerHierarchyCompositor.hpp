@@ -183,24 +183,24 @@ QImage renderLayerHierarchy(const Document &document,
             clipper.end();
         }
 
-        QImage *source = &layerImage;
-        if (!layer.clipToLayerBelow)
+        if (layer.clipToLayerBelow)
         {
-            frame.clippingBase = std::move(layerImage);
-            frame.clippingBaseOpacity = std::clamp(layer.opacity, 0.0, 1.0);
-            source = &frame.clippingBase;
+            QPainter compositor(&frame.result);
+            compositor.setRenderHint(QPainter::Antialiasing, false);
+            prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
+            compositor.drawImage(QPoint(0, 0), layerImage);
+            compositor.end();
+            surfacePool.recycle(std::move(layerImage));
+            return;
         }
 
+        frame.clippingBase = std::move(layerImage);
+        frame.clippingBaseOpacity = std::clamp(layer.opacity, 0.0, 1.0);
         QPainter compositor(&frame.result);
         compositor.setRenderHint(QPainter::Antialiasing, false);
         prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
-        compositor.drawImage(QPoint(0, 0), *source);
+        compositor.drawImage(QPoint(0, 0), frame.clippingBase);
         compositor.end();
-
-        if (layer.clipToLayerBelow)
-        {
-            surfacePool.recycle(std::move(layerImage));
-        }
     };
 
     const QVector<LayerCompositionPlan::Operation> &operations =

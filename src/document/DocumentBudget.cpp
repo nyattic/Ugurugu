@@ -84,8 +84,10 @@ quint64 distinctClipMaskBytes(const Document &document)
                 bytes += packedBytes;
                 return true;
             };
-            if ((stroke.pixelSelectionOp
-                    && !registerPacked(stroke.pixelSelectionOp->packedMask)))
+            const std::optional<PixelSelectionOp> &operation =
+                stroke.pixelSelectionOp;
+            if (operation.has_value()
+                && !registerPacked(operation.value().packedMask))
             {
                 return DocumentLimits::maximumDistinctClipMaskBytes + 1;
             }

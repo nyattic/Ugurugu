@@ -19,7 +19,7 @@ public:
         Failed
     };
 
-    explicit ApplicationInstanceLock(QString filePath = {});
+    explicit ApplicationInstanceLock(const QString &filePath = {});
     ~ApplicationInstanceLock();
 
     ApplicationInstanceLock(const ApplicationInstanceLock &) = delete;

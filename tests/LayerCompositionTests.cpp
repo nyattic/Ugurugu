@@ -321,9 +321,10 @@ private slots:
         QVERIFY(preview.isValid());
         QVERIFY(preview.width() < fourK.width());
         QCOMPARE(preview.width(), preview.height());
-        const quint64 concurrentSurfaceCount = static_cast<quint64>(
-            estimate.peakSurfaceCount
-            + LayerCompositionPlan::paintOperationScratchSurfaceCount);
+        const quint64 concurrentSurfaceCount =
+            static_cast<quint64>(estimate.peakSurfaceCount)
+            + static_cast<quint64>(
+                LayerCompositionPlan::paintOperationScratchSurfaceCount);
         const quint64 previewBytes = static_cast<quint64>(preview.width())
                                      * static_cast<quint64>(preview.height())
                                      * sizeof(quint32) * concurrentSurfaceCount;
@@ -477,7 +478,7 @@ private slots:
             RenderEngine::renderLayerRasterFrame(document,
                 0,
                 document.size,
-                4 * 1024 * 1024,
+                4LL * 1024 * 1024,
                 RenderEngine::ScaledRenderMode::DisplayPreview,
                 &stats);
         QVERIFY(frame.valid);
@@ -502,7 +503,7 @@ private slots:
             RenderEngine::renderLayerRasterFrame(document,
                 0,
                 previewSize,
-                4 * 1024 * 1024,
+                4LL * 1024 * 1024,
                 RenderEngine::ScaledRenderMode::DisplayPreview);
         QVERIFY(previewFrame.valid);
         QImage fullPreviewLayer = previewFrame.paintLayers.value(clippedId);

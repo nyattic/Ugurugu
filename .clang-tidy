@@ -9,7 +9,7 @@ Checks: >
   -portability-avoid-pragma-once,
   modernize-use-nullptr,
   modernize-use-override
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
 HeaderFilterRegex: '^.*/(src|tests|tools)/'
 ExcludeHeaderFilterRegex: '^.*/(out|cmake-build-[^/]*|_deps|[^/]*_autogen)/'
 FormatStyle: file

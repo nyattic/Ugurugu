@@ -430,7 +430,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
     resize(700, 470);
 }
 
-CanvasSizeDialog::Result CanvasSizeDialog::result() const
+CanvasSizeDialog::Result CanvasSizeDialog::currentResult() const
 {
     return {canvasSize(), contentOffset()};
 }

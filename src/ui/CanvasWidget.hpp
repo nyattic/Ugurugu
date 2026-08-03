@@ -1,8 +1,8 @@
 #pragma once
 
 #include "document/DocumentController.hpp"
-#include "io/SelectionClipboardCodec.hpp"
 #include "input/StrokeStabilizer.hpp"
+#include "io/SelectionClipboardCodec.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
 #include "render/PreviewMemoryUsage.hpp"
 #include "render/RenderEngine.hpp"

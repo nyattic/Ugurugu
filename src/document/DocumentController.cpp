@@ -100,7 +100,7 @@ public:
         , m_beforeLease(std::move(beforeLease))
         , m_afterLease(std::move(afterLease))
         , m_mergeId(mergeId)
-        , m_mergeScope(std::move(mergeScope))
+        , m_mergeScope(mergeScope)
         , m_beforeNode(beforeNode)
         , m_afterNode(afterNode)
         , m_beforeRevision(beforeRevision)
@@ -980,7 +980,7 @@ bool DocumentController::tryCommitPreparedCandidate(QString text,
 
     if (m_macroTransaction)
     {
-        m_macroTransaction->workingState = after;
+        m_macroTransaction->workingState = std::move(after);
         m_macroTransaction->effects.append(*effects);
         return true;
     }
@@ -1000,12 +1000,13 @@ bool DocumentController::tryCommitPreparedCandidate(QString text,
     }
     const quint64 afterNode = m_nextHistoryNode + 1;
     const quint64 afterRevision = m_nextContentRevision + 1;
+    const qint64 afterCompactSize = after->compactSize();
     m_nextHistoryNode = afterNode;
     m_nextContentRevision = afterRevision;
     m_undoStack.push(new DocumentCommand(this,
         std::move(text),
         std::move(delta),
-        after,
+        std::move(after),
         activeLayerPolicy,
         std::move(effects),
         std::move(beforeLease),
@@ -1017,7 +1018,7 @@ bool DocumentController::tryCommitPreparedCandidate(QString text,
         beforeRevision,
         afterRevision,
         before->compactSize(),
-        after->compactSize()));
+        afterCompactSize));
     return true;
 }
 
@@ -1427,7 +1428,7 @@ void DocumentController::ensureActiveLayer(Document &document)
 QString DocumentController::nextLayerName() const
 {
     const Document &current = document();
-    int number = current.layers.size() + 1;
+    int number = static_cast<int>(current.layers.size()) + 1;
     while (true)
     {
         const QString candidate = tr("Layer %1").arg(number);

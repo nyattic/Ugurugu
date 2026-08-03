@@ -532,7 +532,9 @@ void LayerDock::rebuild()
         std::function<void(const QUuid &, int)> collectChildren;
         collectChildren = [&](const QUuid &parentId, int depth)
         {
-            for (int index = document.layers.size() - 1; index >= 0; --index)
+            for (int index = static_cast<int>(document.layers.size()) - 1;
+                index >= 0;
+                --index)
             {
                 const Layer &layer = document.layers[index];
                 if (layer.parentGroupId != parentId)
@@ -684,15 +686,15 @@ void LayerDock::updateControls()
             }
         }
     }
-    const int siblingPosition = layer
-                                    ? std::find_if(siblings.cbegin(),
-                                          siblings.cend(),
-                                          [layer](const Layer *candidate)
-                                          {
-                                              return candidate->id == layer->id;
-                                          })
-                                          - siblings.cbegin()
-                                    : -1;
+    const int siblingPosition =
+        layer ? static_cast<int>(std::find_if(siblings.cbegin(),
+                                     siblings.cend(),
+                                     [layer](const Layer *candidate)
+                                     {
+                                         return candidate->id == layer->id;
+                                     })
+                                 - siblings.cbegin())
+              : -1;
 
     m_addButton->setEnabled(
         m_controller && hasCapacity && canAddInsideSelectedGroup);
@@ -830,6 +832,9 @@ void LayerDock::regenerateThumbnails()
     const quint64 revision = m_thumbnailRevisions.value(nextId);
     const Document snapshot = document;
     m_thumbnailRendering = true;
+    // QObject parenting retains the watcher until its finished callback queues
+    // deleteLater(); the analyzer does not model either Qt ownership mechanism.
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
     auto *watcher = new QFutureWatcher<QImage>(this);
     connect(watcher,
         &QFutureWatcher<QImage>::finished,
@@ -874,6 +879,7 @@ void LayerDock::regenerateThumbnails()
                                  : QImage();
         }));
 }
+// NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 void LayerDock::scheduleAllThumbnails()
 {
@@ -1016,10 +1022,12 @@ void LayerDock::handleLayerDrop(
             orderedSiblings.append(rowId);
         }
     }
-    int insertPosition = intoGroup ? 0 : orderedSiblings.size();
+    int insertPosition =
+        intoGroup ? 0 : static_cast<int>(orderedSiblings.size());
     if (!anchorId.isNull())
     {
-        const int anchorPosition = orderedSiblings.indexOf(anchorId);
+        const int anchorPosition =
+            static_cast<int>(orderedSiblings.indexOf(anchorId));
         if (anchorPosition < 0)
         {
             return;
@@ -1046,7 +1054,8 @@ void LayerDock::handleLayerDrop(
         }
         return -1;
     };
-    const int desiredVectorPosition = orderedSiblings.size() - insertPosition;
+    const int desiredVectorPosition =
+        static_cast<int>(orderedSiblings.size()) - insertPosition;
 
     if (!reparent)
     {

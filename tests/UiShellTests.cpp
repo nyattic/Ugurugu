@@ -950,7 +950,7 @@ private slots:
         QVERIFY(worker.startGif(document, gifPath, {}));
         worker.cancel();
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 5000);
-        const QList<QVariant> canceledResult = finished.at(1);
+        const QList<QVariant> &canceledResult = finished.at(1);
         QVERIFY(!canceledResult.at(1).toBool());
         QVERIFY(canceledResult.at(2).toBool());
         QVERIFY(!QFileInfo::exists(gifPath));
@@ -975,10 +975,10 @@ private slots:
         QVERIFY(roughness);
         width->setValue(18.0);
         roughness->setValue(140.0);
-        QVERIFY(dialog.width().has_value());
+        QVERIFY(dialog.selectedWidth().has_value());
         QVERIFY(dialog.roughness().has_value());
         QVERIFY(dialog.color().has_value());
-        QCOMPARE(*dialog.width(), 18.0);
+        QCOMPARE(*dialog.selectedWidth(), 18.0);
         QCOMPARE(*dialog.roughness(), 1.4);
         QCOMPARE(*dialog.color(), *values.color);
     }
@@ -1256,7 +1256,7 @@ private slots:
         relativeCheck->setChecked(false);
         QCOMPARE(widthSpin->value(), 540);
         QCOMPARE(heightSpin->value(), 500);
-        const CanvasSizeDialog::Result result = dialog.result();
+        const CanvasSizeDialog::Result result = dialog.currentResult();
         QCOMPARE(result.size, QSize(540, 500));
         QCOMPARE(result.contentOffset, QPoint(37, -12));
     }
@@ -1291,7 +1291,7 @@ private slots:
         keepAspectCheck->setChecked(false);
         widthSpin->setValue(800);
         heightSpin->setValue(900);
-        const ImageSizeDialog::Result distorted = dialog.result();
+        const ImageSizeDialog::Result distorted = dialog.currentResult();
         QCOMPARE(distorted.size, QSize(800, 900));
         QVERIFY(qAbs(distorted.horizontalScale - 1.25) < 0.0001);
         QVERIFY(qAbs(distorted.verticalScale - 1.875) < 0.0001);
@@ -1301,7 +1301,7 @@ private slots:
         QCOMPARE(dialog.imageSize(), QSize(800, 600));
         percentageSpin->setValue(200.0);
         QCOMPARE(dialog.imageSize(), QSize(1280, 960));
-        const ImageSizeDialog::Result uniform = dialog.result();
+        const ImageSizeDialog::Result uniform = dialog.currentResult();
         QVERIFY(qAbs(uniform.horizontalScale - 2.0) < 0.0001);
         QVERIFY(qAbs(uniform.verticalScale - 2.0) < 0.0001);
     }

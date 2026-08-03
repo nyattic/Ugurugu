@@ -103,7 +103,7 @@ std::optional<QColor> StrokePropertiesDialog::color() const
                                      : std::nullopt;
 }
 
-std::optional<qreal> StrokePropertiesDialog::width() const
+std::optional<qreal> StrokePropertiesDialog::selectedWidth() const
 {
     return m_widthCheck->isChecked()
                ? std::optional<qreal>(m_widthSpin->value())

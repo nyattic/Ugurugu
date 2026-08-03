@@ -178,8 +178,8 @@ void CanvasWidget::finishAreaSelection()
         return;
     }
     pushSelectionChange(previousSelection,
-        selectionStateForMask(combinedSelectionMask(
-            previousSelection.mask, mask, combine)),
+        selectionStateForMask(
+            combinedSelectionMask(previousSelection.mask, mask, combine)),
         combine == SelectionCombine::Add ? tr("Add to selection")
                                          : tr("Subtract from selection"));
 }
@@ -314,6 +314,9 @@ void CanvasWidget::evaluateSelectionVisibility()
         return;
     }
 
+    // QObject parenting retains the watcher until its finished callback queues
+    // deleteLater(); the analyzer does not model either Qt ownership mechanism.
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
     auto *watcher = new QFutureWatcher<SelectionVisibility::Result>(this);
     connect(watcher,
         &QFutureWatcher<SelectionVisibility::Result>::finished,
@@ -368,6 +371,7 @@ void CanvasWidget::evaluateSelectionVisibility()
                                  : SelectionVisibility::Result();
         }));
 }
+// NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 void CanvasWidget::pushSelectionChange(const SelectionState &previousSelection,
     const SelectionState &nextSelection,

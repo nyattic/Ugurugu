@@ -18,6 +18,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 
@@ -65,9 +66,7 @@ void migrateLegacySettings()
     currentSettings.sync();
 }
 
-}
-
-int main(int argc, char *argv[])
+int runApplication(int argc, char *argv[])
 {
     wobble::UpdateController::initialize();
     QApplication application(argc, argv);
@@ -195,4 +194,23 @@ int main(int argc, char *argv[])
 
     wobble::Logging::shutdown();
     return result;
+}
+
+}
+
+int main(int argc, char *argv[]) noexcept
+{
+    try
+    {
+        return runApplication(argc, argv);
+    }
+    catch (const std::exception &error)
+    {
+        std::fprintf(stderr, "Fatal startup exception: %s\n", error.what());
+    }
+    catch (...)
+    {
+        std::fputs("Fatal unknown startup exception.\n", stderr);
+    }
+    return EXIT_FAILURE;
 }

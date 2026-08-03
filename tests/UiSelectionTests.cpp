@@ -154,7 +154,8 @@ private slots:
 
         DocumentController &controller =
             MainWindowTestAccess::controller(window);
-        const int initialLayerCount = controller.document().layers.size();
+        const int initialLayerCount =
+            static_cast<int>(controller.document().layers.size());
         const QUuid originalLayerId = controller.document().activeLayerId;
 
         const QPoint center = canvas->rect().center();
@@ -187,8 +188,7 @@ private slots:
                 return single;
             }());
         copyAction->trigger();
-        const QMimeData *mimeData =
-            QGuiApplication::clipboard()->mimeData();
+        const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
         QVERIFY(mimeData);
         QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
         QVERIFY(mimeData->hasImage());
@@ -284,8 +284,8 @@ private slots:
         QVERIFY(deselectAction);
         QVERIFY(selectAllAction);
         QVERIFY(invertAction);
-        QCOMPARE(deselectAction->shortcut(),
-            QKeySequence(QStringLiteral("Ctrl+D")));
+        QCOMPARE(
+            deselectAction->shortcut(), QKeySequence(QStringLiteral("Ctrl+D")));
         QVERIFY(!window.findChild<QAction *>(
             QStringLiteral("duplicateSelectionAction")));
         QCOMPARE(
@@ -333,9 +333,9 @@ private slots:
         const QImage fullMask = CanvasWidgetTestAccess::selectionMask(*canvas);
         QVERIFY(!fullMask.isNull());
         QVERIFY(fullMask.constScanLine(0)[0] >= 128);
-        QVERIFY(fullMask.constScanLine(fullMask.height() - 1)
-                    [fullMask.width() - 1]
-                >= 128);
+        QVERIFY(
+            fullMask.constScanLine(fullMask.height() - 1)[fullMask.width() - 1]
+            >= 128);
         QTRY_VERIFY(invertAction->isEnabled());
 
         invertAction->trigger();
@@ -457,7 +457,8 @@ private slots:
 
         const QByteArray beforeCut =
             DocumentSerializer::toJson(controller.document());
-        const int layerCountBeforeCut = controller.document().layers.size();
+        const int layerCountBeforeCut =
+            static_cast<int>(controller.document().layers.size());
         cutAction->trigger();
         QTRY_VERIFY(!canvas->hasSelection());
         QCOMPARE(controller.document().layers.size(), layerCountBeforeCut);
@@ -465,14 +466,12 @@ private slots:
         QVERIFY(layer);
         QCOMPARE(layer->strokes.size(), 2);
         QCOMPARE(layer->strokes.last().mode, StrokeMode::PixelSelection);
-        const QMimeData *mimeData =
-            QGuiApplication::clipboard()->mimeData();
+        const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
         QVERIFY(mimeData);
         QVERIFY(mimeData->hasFormat(SelectionClipboardCodec::mimeType()));
 
         undoAction->trigger();
-        QCOMPARE(
-            DocumentSerializer::toJson(controller.document()), beforeCut);
+        QCOMPARE(DocumentSerializer::toJson(controller.document()), beforeCut);
         QTRY_VERIFY(canvas->hasSelection());
     }
 
@@ -1707,7 +1706,7 @@ private slots:
         {
             auto *action = new QAction(actionNames[index], &canvas);
             action->setObjectName(actionNames[index]);
-            bar->addAction(action);
+            bar->addActionButton(action);
             if (index == 2 || index == 4 || index == 6 || index == 8)
             {
                 bar->addSeparator();
@@ -2059,7 +2058,7 @@ private slots:
             &QAction::setChecked);
 
         auto *actionBar = new SelectionActionBar(&canvas);
-        QToolButton *moveButton = actionBar->addAction(&moveAction);
+        QToolButton *moveButton = actionBar->addActionButton(&moveAction);
         canvas.setSelectionActionBar(actionBar);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));

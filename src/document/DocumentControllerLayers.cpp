@@ -59,11 +59,7 @@ void DocumentController::addLayer(const QUuid &parentGroupId)
     const QUuid layerId = layer.id;
     Document candidate = current;
     const int activeIndex = current.layerIndex(current.activeLayerId);
-    if (requestedGroup)
-    {
-        candidate.layers.append(std::move(layer));
-    }
-    else if (activeIndex >= 0)
+    if (!requestedGroup && activeIndex >= 0)
     {
         candidate.layers.insert(activeIndex + 1, std::move(layer));
     }
@@ -182,8 +178,7 @@ void DocumentController::duplicateLayer(const QUuid &id)
         ActiveLayerPolicy::UsePrepared);
 }
 
-DocumentController::PasteLayerResult DocumentController::pasteLayer(
-    Layer layer,
+DocumentController::PasteLayerResult DocumentController::pasteLayer(Layer layer,
     const QSize &sourceCanvasSize,
     const QPointF &contentDelta,
     const QImage &selectionMask)
@@ -212,10 +207,11 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
         return reject(PasteLayerResult::RejectedLayerLimit);
     }
     const bool needsReframe = sourceCanvasSize != current.size;
-    const bool shiftsContent = followsSelection
+    const bool shiftsContent =
+        followsSelection
         && !(qFuzzyIsNull(contentDelta.x()) && qFuzzyIsNull(contentDelta.y()));
-    const qsizetype pastedStrokeCount = layer.strokes.size()
-        + (needsReframe ? 1 : 0) + (shiftsContent ? 1 : 0);
+    const qsizetype pastedStrokeCount =
+        layer.strokes.size() + (needsReframe ? 1 : 0) + (shiftsContent ? 1 : 0);
     const qsizetype existingStrokeCount = totalStrokeCount(current);
     if (pastedStrokeCount > DocumentLimits::maximumStrokesPerLayer
         || existingStrokeCount > DocumentLimits::maximumTotalStrokes
@@ -252,10 +248,8 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
         move.points.clear();
         move.pixelSelectionOp = *moveOperation;
         layer.strokes.append(std::move(move));
-        nextSelectionMask = transformedSelectionSupport(selectionMask,
-            current.size,
-            shift,
-            moveOperation->sampling);
+        nextSelectionMask = transformedSelectionSupport(
+            selectionMask, current.size, shift, moveOperation->sampling);
         if (nextSelectionMask.isNull())
         {
             return reject(PasteLayerResult::RejectedInvalidLayer);
@@ -318,16 +312,17 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(
     effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
     if (followsSelection)
     {
-        const std::optional<PackedMaskRegion> packedBefore =
+        std::optional<PackedMaskRegion> packedBefore =
             packBinaryMask(selectionMask);
-        const std::optional<PackedMaskRegion> packedAfter =
+        std::optional<PackedMaskRegion> packedAfter =
             packBinaryMask(nextSelectionMask);
         if (!packedBefore || !packedAfter)
         {
             return reject(PasteLayerResult::RejectedMaskLimit);
         }
         effects->selectionState = HistoryEffects::SelectionStateTransition{
-            {current.activeLayerId, *packedBefore}, {layerId, *packedAfter}};
+            {current.activeLayerId, std::move(packedBefore)},
+            {layerId, std::move(packedAfter)}};
     }
     if (!tryCommitCandidate(
             followsSelection ? tr("Copy selection") : tr("Paste"),
@@ -387,7 +382,7 @@ void DocumentController::removeLayer(const QUuid &id)
         };
         if (!choosePaint(index - 1, -1, -1))
         {
-            choosePaint(index + 1, current.layers.size(), 1);
+            choosePaint(index + 1, static_cast<int>(current.layers.size()), 1);
         }
     }
     candidate.layers.removeIf(
@@ -602,7 +597,7 @@ void DocumentController::moveLayer(const QUuid &id, int offset)
             siblingIndexes.append(index);
         }
     }
-    const int siblingPosition = siblingIndexes.indexOf(from);
+    const int siblingPosition = static_cast<int>(siblingIndexes.indexOf(from));
     const int targetPosition = siblingPosition + offset;
     if (siblingPosition < 0 || targetPosition < 0
         || targetPosition >= siblingIndexes.size())

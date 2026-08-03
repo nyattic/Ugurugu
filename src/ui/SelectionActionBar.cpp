@@ -80,7 +80,7 @@ SelectionActionBar::SelectionActionBar(QWidget *parent)
     m_layout->setSpacing(3);
 }
 
-QToolButton *SelectionActionBar::addAction(QAction *action)
+QToolButton *SelectionActionBar::addActionButton(QAction *action)
 {
     if (!action)
     {
@@ -156,8 +156,8 @@ void SelectionActionBar::paintEvent(QPaintEvent *event)
     for (int step = shadowMargin - 2; step > 0; --step)
     {
         QColor shadow(Qt::black);
-        shadow.setAlphaF(
-            0.035 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 2)));
+        shadow.setAlphaF(static_cast<float>(
+            0.035 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 2))));
         QPainterPath blur;
         blur.addRoundedRect(
             frame.adjusted(-step, -step + 2.0, step, step + 2.0),

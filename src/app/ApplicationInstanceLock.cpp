@@ -34,7 +34,7 @@ void setError(QString *error, const QString &message)
 
 }
 
-ApplicationInstanceLock::ApplicationInstanceLock(QString filePath)
+ApplicationInstanceLock::ApplicationInstanceLock(const QString &filePath)
     : m_filePath(filePath.isEmpty() ? defaultLockPath()
                                     : QFileInfo(filePath).absoluteFilePath())
 {

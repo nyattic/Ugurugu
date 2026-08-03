@@ -417,10 +417,11 @@ bool DocumentController::duplicateStrokes(const QUuid &layerId,
         transform.translate(delta.x(), delta.y());
         const std::optional<Stroke> operation =
             selectionOperationStroke(selectionMask, transform, false, true);
-        if (!operation)
+        if (!operation || !operation->pixelSelectionOp)
         {
             return rejectHistoryMutation();
         }
+        const PixelSelectionOp &pixelOperation = *operation->pixelSelectionOp;
         const QVector<Stroke> before = layer->strokes;
         QVector<Stroke> after = before;
         after.append(*operation);
@@ -431,34 +432,29 @@ bool DocumentController::duplicateStrokes(const QUuid &layerId,
         {
             return rejectHistoryMutation();
         }
-        const QImage nextSelectionMask =
-            transformedSelectionSupport(selectionMask,
-                current.size,
-                transform,
-                operation->pixelSelectionOp->sampling);
+        const QImage nextSelectionMask = transformedSelectionSupport(
+            selectionMask, current.size, transform, pixelOperation.sampling);
         if (!maskHasContent(nextSelectionMask))
         {
             return rejectHistoryMutation();
         }
-        const PackedMaskRegion sourceMaskSnapshot{
-            operation->pixelSelectionOp->canvasSize,
-            operation->pixelSelectionOp->sourceBounds,
-            operation->pixelSelectionOp->packedMask};
-        const std::optional<PackedMaskRegion> nextMaskSnapshot =
+        const PackedMaskRegion sourceMaskSnapshot{pixelOperation.canvasSize,
+            pixelOperation.sourceBounds,
+            pixelOperation.packedMask};
+        std::optional<PackedMaskRegion> nextMaskSnapshot =
             packBinaryMask(nextSelectionMask);
         if (!nextMaskSnapshot)
         {
             return rejectHistoryMutation();
         }
-        const QVector<QUuid> sourceIds = strokeIds;
         const QVector<QUuid> resultIds{operation->id};
         auto effects = std::make_shared<HistoryEffects>();
         effects->beforeDocumentChanged.append(
             HistoryEffects::SelectionOverlay{layerId,
-                sourceIds,
+                strokeIds,
                 resultIds,
                 sourceMaskSnapshot,
-                *nextMaskSnapshot});
+                std::move(nextMaskSnapshot)});
         effects->afterDocumentChanged.append(
             HistoryEffects::LayerThumbnail{layerId});
         return tryCommitCandidate(
@@ -768,10 +764,11 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
         }
         const std::optional<Stroke> operation =
             selectionOperationStroke(selectionMask, transform, true, true);
-        if (!operation)
+        if (!operation || !operation->pixelSelectionOp)
         {
             return rejectHistoryMutation();
         }
+        const PixelSelectionOp &pixelOperation = *operation->pixelSelectionOp;
         Document transformedDocument = current;
         transformedDocument.layer(layerId)->strokes.append(*operation);
         if (distinctClipMaskBytes(transformedDocument)
@@ -779,34 +776,29 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
         {
             return rejectHistoryMutation();
         }
-        const QImage nextSelectionMask =
-            transformedSelectionSupport(selectionMask,
-                current.size,
-                transform,
-                operation->pixelSelectionOp->sampling);
+        const QImage nextSelectionMask = transformedSelectionSupport(
+            selectionMask, current.size, transform, pixelOperation.sampling);
         if (!maskHasContent(nextSelectionMask))
         {
             return rejectHistoryMutation();
         }
-        const PackedMaskRegion sourceMaskSnapshot{
-            operation->pixelSelectionOp->canvasSize,
-            operation->pixelSelectionOp->sourceBounds,
-            operation->pixelSelectionOp->packedMask};
-        const std::optional<PackedMaskRegion> nextMaskSnapshot =
+        const PackedMaskRegion sourceMaskSnapshot{pixelOperation.canvasSize,
+            pixelOperation.sourceBounds,
+            pixelOperation.packedMask};
+        std::optional<PackedMaskRegion> nextMaskSnapshot =
             packBinaryMask(nextSelectionMask);
         if (!nextMaskSnapshot)
         {
             return rejectHistoryMutation();
         }
-        const QVector<QUuid> sourceIds = strokeIds;
         const QVector<QUuid> resultIds{operation->id};
         auto effects = std::make_shared<HistoryEffects>();
         effects->beforeDocumentChanged.append(
             HistoryEffects::SelectionOverlay{layerId,
-                sourceIds,
+                strokeIds,
                 resultIds,
                 sourceMaskSnapshot,
-                *nextMaskSnapshot});
+                std::move(nextMaskSnapshot)});
         effects->afterDocumentChanged.append(
             HistoryEffects::LayerThumbnail{layerId});
         return tryCommitCandidate(

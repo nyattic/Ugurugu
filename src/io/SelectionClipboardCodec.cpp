@@ -73,8 +73,7 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     {
         if (copy.strokes.size() >= DocumentLimits::maximumStrokesPerLayer)
         {
-            setCodecError(
-                error, tr("The layer is too complex to copy."));
+            setCodecError(error, tr("The layer is too complex to copy."));
             return std::nullopt;
         }
         Stroke clip;

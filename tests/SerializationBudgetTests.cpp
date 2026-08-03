@@ -1125,7 +1125,8 @@ private slots:
         }
         full.activeLayerId = full.layers.constLast().id;
         controller.loadDocument(std::move(full));
-        const int layerCount = controller.document().layers.size();
+        const int layerCount =
+            static_cast<int>(controller.document().layers.size());
         controller.addLayer();
         QCOMPARE(controller.document().layers.size(), layerCount);
         controller.duplicateLayer(controller.document().activeLayerId);

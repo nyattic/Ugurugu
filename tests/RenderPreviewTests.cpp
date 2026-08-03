@@ -119,7 +119,8 @@ private slots:
         const int retainedCost =
             PreviewRenderPolicy::cacheCostKiB(
                 static_cast<qsizetype>(animatedPreview.width())
-                * animatedPreview.height() * sizeof(quint32))
+                * static_cast<qsizetype>(animatedPreview.height())
+                * static_cast<qsizetype>(sizeof(quint32)))
             * 30;
         QVERIFY(retainedCost <= PreviewRenderPolicy::maximumCacheKiB);
         QCOMPARE(PreviewRenderPolicy::renderSize(documentSize, 16.0, 0),
@@ -424,7 +425,7 @@ private slots:
         QVERIFY(difference.comparedChannels > 0);
         const qreal meanChannelDifference =
             static_cast<qreal>(difference.channelDifference)
-            / difference.comparedChannels;
+            / static_cast<qreal>(difference.comparedChannels);
         QVERIFY2(meanChannelDifference < 8.0,
             qPrintable(QStringLiteral("mean channel difference: %1")
                     .arg(meanChannelDifference)));
@@ -497,7 +498,7 @@ private slots:
                 imageDifference(preview, exact, 36);
             const qreal meanChannelDifference =
                 static_cast<qreal>(difference.channelDifference)
-                / difference.comparedChannels;
+                / static_cast<qreal>(difference.comparedChannels);
             QVERIFY2(meanChannelDifference < 12.0,
                 qPrintable(
                     QStringLiteral("frame %1 mean channel difference: %2")
@@ -788,7 +789,7 @@ private slots:
             Stroke dot = makeStroke(StrokeMode::Paint,
                 QColor(35, 95, 225, 24),
                 1.0,
-                static_cast<quint64>(index + 1),
+                static_cast<quint64>(index) + 1,
                 {QPointF(32.0 + index % 64, 32.0 + (index / 64) % 64)});
             dot.brush.antialiasing = false;
             dot.brush.sizeDynamics = 0.0;

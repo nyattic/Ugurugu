@@ -1,3 +1,4 @@
+#include "document/history/DocumentDelta.hpp"
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
@@ -279,7 +280,7 @@ private slots:
         for (int index = 0; index < 4; ++index)
         {
             Stroke stroke;
-            stroke.seed = static_cast<quint64>(index + 1);
+            stroke.seed = static_cast<quint64>(index) + 1;
             stroke.points = {{QPointF(8.0 + index, 12.0 + index), 1.0},
                 {QPointF(48.0 + index, 52.0 + index), 0.75}};
             strokeIds.append(stroke.id);
@@ -887,7 +888,8 @@ private slots:
         for (int index = 0; index < 64; ++index)
         {
             Stroke stroke;
-            stroke.seed = static_cast<quint64>(strokeLimit + index);
+            stroke.seed =
+                static_cast<quint64>(strokeLimit) + static_cast<quint64>(index);
             stroke.points = {
                 {QPointF(1.0 + static_cast<qreal>(index % 62), 32.0), 1.0}};
             QCOMPARE(controller.addStroke(addLayerId, std::move(stroke)),
@@ -1337,6 +1339,92 @@ private slots:
         QCOMPARE(controller.document().framesPerSecond, 20.0);
         controller.undoStack()->redo();
         QCOMPARE(controller.document().layer(layerId)->opacity, 0.7);
+    }
+
+    void mergesOnlyTheSelectedScalarField()
+    {
+        Document base = Document::createDefault(QSize(96, 96));
+        Document wobbleTwo = base;
+        wobbleTwo.wobbleAmount = 2.0;
+        Document wobbleThree = wobbleTwo;
+        wobbleThree.wobbleAmount = 3.0;
+
+        history::DocumentDelta wobbleDelta =
+            history::DocumentDelta::between(base, wobbleTwo);
+        const history::DocumentDelta nextWobbleDelta =
+            history::DocumentDelta::between(wobbleTwo, wobbleThree);
+        QVERIFY(wobbleDelta.mergeScalar(
+            nextWobbleDelta, history::wobbleAmountMergeId, QUuid()));
+        QVERIFY(wobbleDelta.wobbleAmount.has_value());
+        QCOMPARE(wobbleDelta.wobbleAmount->before, base.wobbleAmount);
+        QCOMPARE(wobbleDelta.wobbleAmount->after, 3.0);
+
+        const QUuid layerId = base.activeLayerId;
+        Document opacityPointFour = base;
+        opacityPointFour.layer(layerId)->opacity = 0.4;
+        Document opacityPointSeven = opacityPointFour;
+        opacityPointSeven.layer(layerId)->opacity = 0.7;
+        history::DocumentDelta opacityDelta =
+            history::DocumentDelta::between(base, opacityPointFour);
+        const history::DocumentDelta nextOpacityDelta =
+            history::DocumentDelta::between(
+                opacityPointFour, opacityPointSeven);
+        QVERIFY(opacityDelta.mergeScalar(
+            nextOpacityDelta, history::layerOpacityMergeId, layerId));
+        QCOMPARE(opacityDelta.changedLayers.size(), 1);
+        QVERIFY(opacityDelta.changedLayers.first().opacity.has_value());
+        QCOMPARE(opacityDelta.changedLayers.first().opacity->before, 1.0);
+        QCOMPARE(opacityDelta.changedLayers.first().opacity->after, 0.7);
+    }
+
+    void rejectsMixedOrMismatchedScalarMerges()
+    {
+        Document base = Document::createDefault(QSize(96, 96));
+        Document wobbleTwo = base;
+        wobbleTwo.wobbleAmount = 2.0;
+        history::DocumentDelta wobbleDelta =
+            history::DocumentDelta::between(base, wobbleTwo);
+
+        Document mixedDocument = wobbleTwo;
+        mixedDocument.wobbleAmount = 3.0;
+        mixedDocument.background = QColor(30, 40, 50);
+        const history::DocumentDelta mixedDelta =
+            history::DocumentDelta::between(wobbleTwo, mixedDocument);
+        QVERIFY(!wobbleDelta.mergeScalar(
+            mixedDelta, history::wobbleAmountMergeId, QUuid()));
+        QCOMPARE(wobbleDelta.wobbleAmount->after, 2.0);
+
+        Document frameDocument = wobbleTwo;
+        frameDocument.animationFrames = 12;
+        const history::DocumentDelta frameDelta =
+            history::DocumentDelta::between(wobbleTwo, frameDocument);
+        QVERIFY(!wobbleDelta.mergeScalar(
+            frameDelta, history::wobbleAmountMergeId, QUuid()));
+        QCOMPARE(wobbleDelta.wobbleAmount->after, 2.0);
+
+        const QUuid layerId = base.activeLayerId;
+        Document opacityPointFour = base;
+        opacityPointFour.layer(layerId)->opacity = 0.4;
+        Document opacityAndName = opacityPointFour;
+        opacityAndName.layer(layerId)->opacity = 0.7;
+        opacityAndName.layer(layerId)->name = QStringLiteral("Renamed");
+        history::DocumentDelta opacityDelta =
+            history::DocumentDelta::between(base, opacityPointFour);
+        const history::DocumentDelta mixedLayerDelta =
+            history::DocumentDelta::between(opacityPointFour, opacityAndName);
+        QVERIFY(!opacityDelta.mergeScalar(
+            mixedLayerDelta, history::layerOpacityMergeId, layerId));
+        QCOMPARE(opacityDelta.changedLayers.first().opacity->after, 0.4);
+
+        Document opacityPointSeven = opacityPointFour;
+        opacityPointSeven.layer(layerId)->opacity = 0.7;
+        const history::DocumentDelta nextOpacityDelta =
+            history::DocumentDelta::between(
+                opacityPointFour, opacityPointSeven);
+        QVERIFY(!opacityDelta.mergeScalar(nextOpacityDelta,
+            history::layerOpacityMergeId,
+            QUuid::createUuid()));
+        QCOMPARE(opacityDelta.changedLayers.first().opacity->after, 0.4);
     }
 };
 

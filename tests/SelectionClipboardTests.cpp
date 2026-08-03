@@ -255,7 +255,8 @@ private slots:
         QVERIFY(pasted.has_value());
 
         DocumentController controller;
-        QVERIFY(controller.loadDocument(Document::createDefault(QSize(64, 64))));
+        QVERIFY(
+            controller.loadDocument(Document::createDefault(QSize(64, 64))));
         QCOMPARE(controller.pasteLayer(pasted->layer, pasted->canvasSize),
             DocumentController::PasteLayerResult::Pasted);
 
@@ -287,8 +288,8 @@ private slots:
 
         DocumentController controller;
         QVERIFY(controller.loadDocument(source));
-        QSignalSpy selectionSpy(&controller,
-            &DocumentController::selectionHistoryStateRequested);
+        QSignalSpy selectionSpy(
+            &controller, &DocumentController::selectionHistoryStateRequested);
         const QByteArray before =
             DocumentSerializer::toJson(controller.document());
         QCOMPARE(controller.pasteLayer(
@@ -317,8 +318,8 @@ private slots:
         controller.undoStack()->undo();
         QCOMPARE(DocumentSerializer::toJson(controller.document()), before);
         QCOMPARE(selectionSpy.count(), 2);
-        QCOMPARE(selectionSpy.last().at(0).value<QUuid>(),
-            source.layers.first().id);
+        QCOMPARE(
+            selectionSpy.last().at(0).value<QUuid>(), source.layers.first().id);
     }
 
     void undoAfterPasteRestoresTheDocument()

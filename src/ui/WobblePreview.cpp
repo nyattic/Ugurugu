@@ -81,8 +81,9 @@ void WobblePreview::paintEvent(QPaintEvent *)
 
     QPainterPath line;
     bool started = false;
-    for (qreal x = 5.0; x <= width() - 5.0; x += 2.0)
+    for (int sampleX = 5; sampleX <= width() - 5; sampleX += 2)
     {
+        const qreal x = sampleX;
         const qreal y =
             centerY
             + amplitude

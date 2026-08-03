@@ -68,7 +68,7 @@ bool LayerHierarchyAnalysis::isDescendantOf(
 LayerHierarchyAnalysis analyzeLayerHierarchy(const Document &document)
 {
     LayerHierarchyAnalysis analysis;
-    const int layerCount = document.layers.size();
+    const int layerCount = static_cast<int>(document.layers.size());
     analysis.m_layerIndexes.reserve(layerCount);
     analysis.m_depths.fill(-1, layerCount);
     analysis.m_subtreeHeights.fill(0, layerCount);

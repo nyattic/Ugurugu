@@ -72,8 +72,8 @@ void ToolPopover::paintEvent(QPaintEvent *event)
     for (int step = shadowMargin - 3; step > 0; --step)
     {
         QColor shadow(Qt::black);
-        shadow.setAlphaF(
-            0.030 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 3)));
+        shadow.setAlphaF(static_cast<float>(
+            0.030 * (1.0 - static_cast<qreal>(step) / (shadowMargin - 3))));
         QPainterPath blur;
         blur.addRoundedRect(
             frame.adjusted(-step, -step + 2.0, step, step + 2.0),

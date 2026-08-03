@@ -119,7 +119,8 @@ qreal StrokeStabilizer::sampleInterval(quint64 timestamp) const
     {
         return defaultSampleInterval;
     }
-    return std::clamp((timestamp - m_previousTimestamp) / 1000.0,
+    return std::clamp(
+        static_cast<qreal>(timestamp - m_previousTimestamp) / 1000.0,
         minimumSampleInterval,
         maximumSampleInterval);
 }

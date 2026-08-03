@@ -842,7 +842,7 @@ std::optional<Document> DocumentSerializer::fromJson(
     QHash<QByteArray, QImage> maskCache;
     quint64 distinctMaskBytes = 0;
 
-    for (const QJsonValue &layerValue : layers)
+    for (const auto &layerValue : layers)
     {
         const std::optional<Layer> layer = layerFromJson(layerValue,
             *fileSchemaVersion,

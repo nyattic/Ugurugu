@@ -29,7 +29,7 @@ public:
     explicit CanvasSizeDialog(
         const QSize &currentSize, QWidget *parent = nullptr);
 
-    Result result() const;
+    Result currentResult() const;
     QSize canvasSize() const;
     QPoint contentOffset() const;
 

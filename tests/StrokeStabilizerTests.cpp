@@ -35,7 +35,7 @@ private slots:
         {
             const qreal y = sample % 2 == 0 ? 3.0 : -3.0;
             const QPointF filtered = stabilizer.update(
-                QPointF(sample, y), static_cast<quint64>(sample * 8));
+                QPointF(sample, y), static_cast<quint64>(sample) * 8);
             if (sample > 20)
             {
                 rawDeviation += std::abs(y);

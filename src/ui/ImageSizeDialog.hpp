@@ -29,7 +29,7 @@ public:
     explicit ImageSizeDialog(
         const QSize &currentSize, QWidget *parent = nullptr);
 
-    Result result() const;
+    Result currentResult() const;
     QSize imageSize() const;
     qreal horizontalScale() const;
     qreal verticalScale() const;

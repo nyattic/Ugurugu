@@ -456,7 +456,7 @@ std::optional<QHash<QString, QImage>> clipMaskTableFromJson(
 
     QHash<QString, QImage> masks;
     masks.reserve(entries.size());
-    for (const QJsonValue &entryValue : entries)
+    for (const auto &entryValue : entries)
     {
         if (!entryValue.isObject())
         {
@@ -574,7 +574,7 @@ std::optional<QHash<QString, PackedMaskRegion>> binaryMaskTableFromJson(
     }
     QHash<QString, PackedMaskRegion> masks;
     masks.reserve(entries.size());
-    for (const QJsonValue &entryValue : entries)
+    for (const auto &entryValue : entries)
     {
         if (!entryValue.isObject())
         {
@@ -913,7 +913,7 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
     }
     stroke.points.reserve(points.size());
 
-    for (const QJsonValue &pointValue : points)
+    for (const auto &pointValue : points)
     {
         const std::optional<StrokePoint> point = pointFromJson(pointValue);
         if (!point)
@@ -1057,7 +1057,7 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
 
                 if (stroke.mode == StrokeMode::PixelSelection)
                 {
-                    const QJsonValue payloadValue = pixelSelectionPayload;
+                    const QJsonValue &payloadValue = pixelSelectionPayload;
                     if (!payloadValue.isObject())
                     {
                         setError(error,
@@ -1111,7 +1111,7 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
 
                 if (stroke.mode == StrokeMode::Reframe)
                 {
-                    const QJsonValue payloadValue = reframePayload;
+                    const QJsonValue &payloadValue = reframePayload;
                     if (!payloadValue.isObject())
                     {
                         setError(error,
@@ -1408,7 +1408,7 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
     }
     layer.strokes.reserve(strokes.size());
 
-    for (const QJsonValue &strokeValue : strokes)
+    for (const auto &strokeValue : strokes)
     {
         const std::optional<Stroke> stroke = strokeFromJson(strokeValue,
             fileSchemaVersion,

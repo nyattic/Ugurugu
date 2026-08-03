@@ -187,7 +187,7 @@ QString registerClipMask(const QImage &mask,
         }
         table.serializedEntryBytes += entry.serializedBytes;
         table.idByCacheKey.insert(cacheKey, entry.id);
-        table.entries.insert(entry.id, std::move(entry));
+        table.entries.insert(entry.id, entry);
         return baseAsset->id;
     }
 
@@ -198,7 +198,7 @@ QString registerClipMask(const QImage &mask,
         return {};
     }
     ++cache.statistics.clipMaskContentHashes;
-    const QString id = maskContentId(mask.width(), mask.height(), bytes);
+    QString id = maskContentId(mask.width(), mask.height(), bytes);
     const auto existing = table.entries.constFind(id);
     if (existing != table.entries.cend())
     {
@@ -235,7 +235,7 @@ QString registerClipMask(const QImage &mask,
     }
     table.serializedEntryBytes += entryBytes;
     table.idByCacheKey.insert(cacheKey, id);
-    table.entries.insert(id, std::move(entry));
+    table.entries.insert(id, entry);
     return id;
 }
 
@@ -332,12 +332,12 @@ QString registerBinaryMask(const PackedMaskRegion &region,
         }
         table.serializedEntryBytes += entry.serializedBytes;
         table.idByIdentity.insert(identity, entry.id);
-        table.entries.insert(entry.id, std::move(entry));
+        table.entries.insert(entry.id, entry);
         return baseAsset->id;
     }
 
     ++cache.statistics.binaryMaskContentHashes;
-    const QString id = binaryMaskContentId(region);
+    QString id = binaryMaskContentId(region);
     const auto existing = table.entries.constFind(id);
     if (existing != table.entries.cend())
     {
@@ -375,7 +375,7 @@ QString registerBinaryMask(const PackedMaskRegion &region,
     }
     table.serializedEntryBytes += entryBytes;
     table.idByIdentity.insert(identity, id);
-    table.entries.insert(id, std::move(entry));
+    table.entries.insert(id, entry);
     return id;
 }
 

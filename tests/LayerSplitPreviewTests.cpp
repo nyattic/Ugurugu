@@ -253,10 +253,10 @@ private slots:
             static_cast<quint64>(regionalLayer.sizeInBytes());
         QVERIFY(regionalBytes * 10 < fullBytes);
         qInfo().nospace() << "4K active-stroke layer replay: full "
-                          << fullNanoseconds / 1000000.0 << " ms / "
-                          << fullBytes << " bytes, region "
-                          << regionalNanoseconds / 1000000.0 << " ms / "
-                          << regionalBytes << " bytes";
+                          << static_cast<qreal>(fullNanoseconds) / 1000000.0
+                          << " ms / " << fullBytes << " bytes, region "
+                          << static_cast<qreal>(regionalNanoseconds) / 1000000.0
+                          << " ms / " << regionalBytes << " bytes";
     }
 
     void incrementallyRendersActiveStrokeTilesLikeFullReplay()
@@ -448,10 +448,12 @@ private slots:
                                            * sizeof(QRgb));
             std::sort(updateNanoseconds.begin(), updateNanoseconds.end());
             const qreal p50Milliseconds =
-                updateNanoseconds[updateNanoseconds.size() * 50 / 100]
+                static_cast<qreal>(
+                    updateNanoseconds[updateNanoseconds.size() * 50 / 100])
                 / 1000000.0;
             const qreal p95Milliseconds =
-                updateNanoseconds[updateNanoseconds.size() * 95 / 100]
+                static_cast<qreal>(
+                    updateNanoseconds[updateNanoseconds.size() * 95 / 100])
                 / 1000000.0;
             qInfo().nospace()
                 << "4K " << pointCount << "-point incremental tile replay took "

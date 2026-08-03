@@ -127,11 +127,11 @@ QImage renderAtSize(
         {
             return QImage();
         }
-        const QImage layerImage = nativeLayer.size() == outputSize
-                                      ? nativeLayer
-                                      : nativeLayer.scaled(outputSize,
-                                            Qt::IgnoreAspectRatio,
-                                            Qt::FastTransformation);
+        QImage layerImage = nativeLayer.size() == outputSize
+                                ? nativeLayer
+                                : nativeLayer.scaled(outputSize,
+                                      Qt::IgnoreAspectRatio,
+                                      Qt::FastTransformation);
         if (layerImage.isNull())
         {
             return QImage();

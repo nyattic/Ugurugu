@@ -4,6 +4,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <tuple>
 #include <utility>
 
 namespace wobble
@@ -19,6 +20,94 @@ using IndexedStroke = DocumentDelta::IndexedStroke;
 using LayerChange = DocumentDelta::LayerChange;
 using ReplacedStroke = DocumentDelta::ReplacedStroke;
 using StrokeSequenceDelta = DocumentDelta::StrokeSequenceDelta;
+
+constexpr auto documentScalarFields = std::tuple{&DocumentDelta::size,
+    &DocumentDelta::background,
+    &DocumentDelta::animationFrames,
+    &DocumentDelta::framesPerSecond,
+    &DocumentDelta::wobbleAmount,
+    &DocumentDelta::activeLayerId};
+
+constexpr auto layerScalarFields = std::tuple{&LayerChange::name,
+    &LayerChange::visible,
+    &LayerChange::reference,
+    &LayerChange::opacity,
+    &LayerChange::blendMode,
+    &LayerChange::parentGroupId,
+    &LayerChange::clipToLayerBelow,
+    &LayerChange::initialCanvasSize};
+
+template <typename Owner, typename Fields>
+int populatedFieldCount(const Owner &owner, const Fields &fields)
+{
+    return std::apply(
+        [&owner](auto... field)
+        {
+            return (
+                0 + ... + static_cast<int>(static_cast<bool>(owner.*field)));
+        },
+        fields);
+}
+
+bool hasNoDocumentStructure(const DocumentDelta &delta)
+{
+    return delta.removedLayers.isEmpty() && delta.addedLayers.isEmpty()
+           && delta.beforeLayerOrder.isEmpty()
+           && delta.afterLayerOrder.isEmpty();
+}
+
+template <typename T>
+bool mergeValue(std::optional<DocumentDelta::ValueChange<T>> &current,
+    const std::optional<DocumentDelta::ValueChange<T>> &later)
+{
+    if (!current || !later || current->after != later->before)
+    {
+        return false;
+    }
+    current->after = later->after;
+    return true;
+}
+
+template <typename T>
+bool mergeDocumentScalar(DocumentDelta &current,
+    const DocumentDelta &next,
+    std::optional<DocumentDelta::ValueChange<T>> DocumentDelta::*field)
+{
+    if (!hasNoDocumentStructure(current) || !hasNoDocumentStructure(next)
+        || !current.changedLayers.isEmpty() || !next.changedLayers.isEmpty()
+        || populatedFieldCount(current, documentScalarFields) != 1
+        || populatedFieldCount(next, documentScalarFields) != 1)
+    {
+        return false;
+    }
+    return mergeValue(current.*field, next.*field);
+}
+
+template <typename T>
+bool mergeLayerScalar(DocumentDelta &current,
+    const DocumentDelta &next,
+    const QUuid &scope,
+    std::optional<DocumentDelta::ValueChange<T>> LayerChange::*field)
+{
+    if (scope.isNull() || !hasNoDocumentStructure(current)
+        || !hasNoDocumentStructure(next)
+        || populatedFieldCount(current, documentScalarFields) != 0
+        || populatedFieldCount(next, documentScalarFields) != 0
+        || current.changedLayers.size() != 1 || next.changedLayers.size() != 1)
+    {
+        return false;
+    }
+    LayerChange &currentLayer = current.changedLayers[0];
+    const LayerChange &nextLayer = next.changedLayers[0];
+    if (currentLayer.id != scope || nextLayer.id != scope
+        || !currentLayer.strokes.isEmpty() || !nextLayer.strokes.isEmpty()
+        || populatedFieldCount(currentLayer, layerScalarFields) != 1
+        || populatedFieldCount(nextLayer, layerScalarFields) != 1)
+    {
+        return false;
+    }
+    return mergeValue(currentLayer.*field, nextLayer.*field);
+}
 
 // Payload equality is decided by backing address, not by content, because a
 // delta only has to detect whether the two states still share one allocation.
@@ -140,7 +229,8 @@ StrokeSequenceDelta betweenStrokes(
     // replacement covers transforms.  Avoid two large UUID hash tables
     // when the common prefix already proves that no sequence matching is
     // needed.
-    const int commonPrefixSize = std::min(before.size(), after.size());
+    const int commonPrefixSize =
+        static_cast<int>(std::min(before.size(), after.size()));
     StrokeSequenceDelta aligned;
     bool commonPrefixMatches = true;
     for (int index = 0; index < commonPrefixSize; ++index)
@@ -350,7 +440,7 @@ bool applyStrokeDelta(
 
     const QVector<IndexedStroke> &additions =
         forward ? delta.added : delta.removed;
-    const int targetSize = retained.size() + additions.size();
+    const int targetSize = static_cast<int>(retained.size() + additions.size());
     QSet<QUuid> targetIds;
     targetIds.reserve(targetSize);
     for (const Stroke &stroke : std::as_const(retained))
@@ -638,65 +728,25 @@ bool DocumentDelta::apply(Document &document, bool forward) const
 bool DocumentDelta::mergeScalar(
     const DocumentDelta &next, int mergeId, const QUuid &scope)
 {
-    const auto hasNoStructure = [](const DocumentDelta &delta)
+    if (mergeId == wobbleAmountMergeId)
     {
-        return !delta.size && !delta.background && !delta.activeLayerId
-               && delta.removedLayers.isEmpty() && delta.addedLayers.isEmpty()
-               && delta.beforeLayerOrder.isEmpty();
-    };
-    if (!hasNoStructure(*this) || !hasNoStructure(next))
-    {
-        return false;
+        return mergeDocumentScalar(*this, next, &DocumentDelta::wobbleAmount);
     }
-
-    const auto merge = []<typename T>(std::optional<ValueChange<T>> &current,
-                           const std::optional<ValueChange<T>> &later)
+    if (mergeId == animationFramesMergeId)
     {
-        if (!current || !later || current->after != later->before)
-        {
-            return false;
-        }
-        current->after = later->after;
-        return true;
-    };
-    const bool noLayerChanges =
-        changedLayers.isEmpty() && next.changedLayers.isEmpty();
-    if (mergeId == wobbleAmountMergeId && noLayerChanges && !animationFrames
-        && !next.animationFrames && !framesPerSecond && !next.framesPerSecond
-        && !size && !next.size)
-    {
-        return merge(wobbleAmount, next.wobbleAmount);
+        return mergeDocumentScalar(
+            *this, next, &DocumentDelta::animationFrames);
     }
-    if (mergeId == animationFramesMergeId && noLayerChanges && !wobbleAmount
-        && !next.wobbleAmount && !framesPerSecond && !next.framesPerSecond)
+    if (mergeId == framesPerSecondMergeId)
     {
-        return merge(animationFrames, next.animationFrames);
+        return mergeDocumentScalar(
+            *this, next, &DocumentDelta::framesPerSecond);
     }
-    if (mergeId == framesPerSecondMergeId && noLayerChanges && !wobbleAmount
-        && !next.wobbleAmount && !animationFrames && !next.animationFrames)
+    if (mergeId == layerOpacityMergeId)
     {
-        return merge(framesPerSecond, next.framesPerSecond);
+        return mergeLayerScalar(*this, next, scope, &LayerChange::opacity);
     }
-    if (mergeId != layerOpacityMergeId || scope.isNull() || wobbleAmount
-        || next.wobbleAmount || animationFrames || next.animationFrames
-        || framesPerSecond || next.framesPerSecond || changedLayers.size() != 1
-        || next.changedLayers.size() != 1)
-    {
-        return false;
-    }
-    LayerChange &current = changedLayers[0];
-    const LayerChange &later = next.changedLayers[0];
-    if (current.id != scope || later.id != scope || current.name || later.name
-        || current.visible || later.visible || current.reference
-        || later.reference || current.blendMode || later.blendMode
-        || current.parentGroupId || later.parentGroupId
-        || current.clipToLayerBelow || later.clipToLayerBelow
-        || current.initialCanvasSize || later.initialCanvasSize
-        || !current.strokes.isEmpty() || !later.strokes.isEmpty())
-    {
-        return false;
-    }
-    return merge(current.opacity, later.opacity);
+    return false;
 }
 
 void DocumentDelta::normalizeMergedChanges()

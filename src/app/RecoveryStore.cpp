@@ -343,7 +343,7 @@ QString RecoveryStore::preserve(QString *error)
             QStringLiteral("Recovery file does not exist: %1").arg(source));
         return {};
     }
-    const QString destination =
+    QString destination =
         uniqueSiblingPath(source, QStringLiteral("preserved"));
     if (QFile::rename(source, destination))
     {

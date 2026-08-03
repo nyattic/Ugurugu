@@ -190,6 +190,7 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/LayerCommandTests.cpp
     tests/LayerCompositionTests.cpp
     tests/LayerSplitPreviewTests.cpp
+    tests/LegacyRenderGoldenTests.cpp
     tests/MaskRegressionTests.cpp
     tests/ReleaseNotesTests.cpp
     tests/RenderEngineTests.cpp

@@ -299,6 +299,11 @@ QVector<QRgb> buildPalette(
             blue += entry.blue;
         }
 
+        if (population == 0)
+        {
+            continue;
+        }
+
         palette.append(qRgb(static_cast<int>(red / population),
             static_cast<int>(green / population),
             static_cast<int>(blue / population)));

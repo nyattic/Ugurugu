@@ -18,7 +18,7 @@ class SelectionActionBar final : public QWidget
 public:
     explicit SelectionActionBar(QWidget *parent = nullptr);
 
-    QToolButton *addAction(QAction *action);
+    QToolButton *addActionButton(QAction *action);
     void addSeparator();
 
     QSize sizeHint() const override;

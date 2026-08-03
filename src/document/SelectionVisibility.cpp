@@ -279,15 +279,17 @@ QVector<QUuid> SelectionVisibility::editableStrokeIds(const Document &document,
     if (canRejectByBounds)
     {
         QRect required = bounds;
-        for (int index = layer.strokes.size() - 1; index >= 0; --index)
+        for (int index = static_cast<int>(layer.strokes.size()) - 1; index >= 0;
+            --index)
         {
             const Stroke &stroke = layer.strokes[index];
-            if (stroke.mode == StrokeMode::PixelSelection)
+            if (stroke.mode == StrokeMode::PixelSelection
+                && stroke.pixelSelectionOp)
             {
                 required =
                     pixelSelectionPreimage(required, *stroke.pixelSelectionOp);
             }
-            else if (stroke.mode == StrokeMode::Reframe)
+            else if (stroke.mode == StrokeMode::Reframe && stroke.reframeOp)
             {
                 required = reframePreimage(required, *stroke.reframeOp);
             }

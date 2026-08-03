@@ -424,6 +424,8 @@ private slots:
                 transform.scale(1.21, 0.83);
                 transform.translate(-center.x(), -center.y());
                 break;
+            default:
+                Q_UNREACHABLE();
             }
             QVERIFY(transform.isInvertible());
             const SamplingMode sampling = caseIndex % 3 == 0
@@ -578,7 +580,8 @@ private slots:
             totalDifference += difference.channelDifference;
             comparedChannels += difference.comparedChannels;
             differentPixels += difference.visiblyDifferentPixels;
-            comparedPixels += canvasSize.width() * canvasSize.height();
+            comparedPixels += static_cast<qsizetype>(canvasSize.width())
+                              * static_cast<qsizetype>(canvasSize.height());
             maximumDifference = std::max(
                 maximumDifference, difference.maximumChannelDifference);
         }
@@ -608,7 +611,7 @@ private slots:
             layer.strokes.append(makeStroke(StrokeMode::Paint,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(index + 1),
+                static_cast<quint64>(index) + 1,
                 {QPointF(32.0 + index % 128, 32.0 + index / 128 % 128)}));
         }
         const Stroke target = makeStroke(StrokeMode::Paint,
@@ -631,8 +634,12 @@ private slots:
         QVERIFY2(elapsed < 5000,
             qPrintable(QStringLiteral("editable stroke lookup took %1 ms")
                     .arg(elapsed)));
-        const QImage coverage = RenderEngine::renderStrokeCoverageRegion(
-            document, layer, layer.strokes.size() - 1, 0, selectionBounds);
+        const QImage coverage =
+            RenderEngine::renderStrokeCoverageRegion(document,
+                layer,
+                static_cast<int>(layer.strokes.size()) - 1,
+                0,
+                selectionBounds);
         QCOMPARE(coverage.size(), selectionBounds.size());
     }
 
@@ -649,11 +656,13 @@ private slots:
         expectedIds.reserve(strokeCount);
         for (int index = 0; index < strokeCount; ++index)
         {
+            const int row = index / 32;
             Stroke stroke = makeStroke(StrokeMode::Paint,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(index + 1),
-                {QPointF(32.0 + index % 32 * 24, 32.0 + index / 32 * 24)});
+                static_cast<quint64>(index) + 1,
+                {QPointF(32.0 + index % 32 * 24,
+                    32.0 + static_cast<qreal>(row) * 24)});
             expectedIds.append(stroke.id);
             layer.strokes.append(std::move(stroke));
         }
@@ -714,7 +723,8 @@ private slots:
         PixelSelectionOp copy;
         copy.canvasSize = document.size;
         copy.sourceBounds = QRect(0, 0, 64, 64);
-        copy.packedMask = QByteArray(8 * 64, std::bit_cast<char>(quint8{0xff}));
+        copy.packedMask = QByteArray(
+            static_cast<qsizetype>(8) * 64, std::bit_cast<char>(quint8{0xff}));
         copy.transform = QTransform::fromTranslate(3960.0, 3960.0);
         copy.sampling = SamplingMode::Nearest;
         copy.clearSource = false;
@@ -767,9 +777,9 @@ private slots:
             Stroke stroke = makeStroke(StrokeMode::Paint,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(index + 1),
-                {QPointF(
-                    32.0 + index % 128 * 31, 32.0 + index / 128 % 128 * 31)});
+                static_cast<quint64>(index) + 1,
+                {QPointF(32.0 + index % 128 * 31,
+                    32.0 + static_cast<qreal>(index / 128 % 128) * 31)});
             expectedIds.append(stroke.id);
             layer.strokes.append(std::move(stroke));
         }
@@ -858,19 +868,24 @@ private slots:
         layer.strokes.reserve(paintCount + eraseCount);
         for (int index = 0; index < paintCount; ++index)
         {
+            const int row = index / 100;
             layer.strokes.append(makeStroke(StrokeMode::Paint,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(index + 1),
-                {QPointF(32.0 + index % 100 * 16, 32.0 + index / 100 * 16)}));
+                static_cast<quint64>(index) + 1,
+                {QPointF(32.0 + index % 100 * 16,
+                    32.0 + static_cast<qreal>(row) * 16)}));
         }
         for (int index = 0; index < eraseCount; ++index)
         {
+            const int row = index / 100;
             layer.strokes.append(makeStroke(StrokeMode::Erase,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(paintCount + index + 1),
-                {QPointF(2400.0 + index % 100 * 16, 32.0 + index / 100 * 16)}));
+                static_cast<quint64>(paintCount) + static_cast<quint64>(index)
+                    + 1,
+                {QPointF(2400.0 + index % 100 * 16,
+                    32.0 + static_cast<qreal>(row) * 16)}));
         }
         QImage selection(document.size, QImage::Format_Grayscale8);
         selection.fill(255);
@@ -898,16 +913,18 @@ private slots:
         pixelDocument.background = Qt::transparent;
         pixelDocument.wobbleAmount = 0.0;
         Layer &pixelLayer = pixelDocument.layers.first();
-        pixelLayer.strokes.reserve(paintCount * 2);
+        pixelLayer.strokes.reserve(static_cast<qsizetype>(paintCount) * 2);
         QVector<QUuid> expectedIds;
         expectedIds.reserve(paintCount);
         for (int index = 0; index < paintCount; ++index)
         {
+            const int row = index / 100;
             Stroke paint = makeStroke(StrokeMode::Paint,
                 Qt::black,
                 2.0,
-                static_cast<quint64>(index + 1),
-                {QPointF(32.0 + index % 100 * 16, 32.0 + index / 100 * 16)});
+                static_cast<quint64>(index) + 1,
+                {QPointF(32.0 + index % 100 * 16,
+                    32.0 + static_cast<qreal>(row) * 16)});
             expectedIds.append(paint.id);
             pixelLayer.strokes.append(std::move(paint));
             PixelSelectionOp pixelOperation;

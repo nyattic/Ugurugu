@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QKeySequenceEdit>
 #include <QLabel>
+#include <QLatin1StringView>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -33,11 +34,11 @@ namespace wobble
 namespace
 {
 
-const QString animateWhileDrawingKey =
-    QStringLiteral("canvas/animateWhileDrawing");
-const QString wobbleAnimationKey = QStringLiteral("canvas/wobbleAnimation");
-const QString defaultSaveFolderKey = QStringLiteral("files/defaultSaveFolder");
-const QString uiLanguageKey = QStringLiteral("appearance/language");
+constexpr QLatin1StringView animateWhileDrawingKey(
+    "canvas/animateWhileDrawing");
+constexpr QLatin1StringView wobbleAnimationKey("canvas/wobbleAnimation");
+constexpr QLatin1StringView defaultSaveFolderKey("files/defaultSaveFolder");
+constexpr QLatin1StringView uiLanguageKey("appearance/language");
 
 QString systemDefaultSaveFolder()
 {
@@ -91,7 +92,7 @@ QString SettingsDialog::defaultSaveFolder()
 
 QString SettingsDialog::uiLanguage()
 {
-    const QString language =
+    QString language =
         QSettings().value(uiLanguageKey, QStringLiteral("system")).toString();
     if (language == QStringLiteral("en") || language == QStringLiteral("ko")
         || language == QStringLiteral("ja"))

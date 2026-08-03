@@ -33,7 +33,7 @@ public:
     explicit GifExportDialog(
         const Document &document, QWidget *parent = nullptr);
 
-    Result result() const;
+    Result currentResult() const;
 
 private:
     void updatePresentation();

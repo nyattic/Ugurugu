@@ -32,7 +32,7 @@ public:
         const Values &values, QWidget *parent = nullptr);
 
     std::optional<QColor> color() const;
-    std::optional<qreal> width() const;
+    std::optional<qreal> selectedWidth() const;
     std::optional<qreal> roughness() const;
 
 private:

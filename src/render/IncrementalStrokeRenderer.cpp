@@ -220,7 +220,8 @@ QVector<QPoint> IncrementalStrokeRenderer::tilesForBounds(
     const int lastColumn = outputBounds.right() / tileEdge;
     const int firstRow = outputBounds.top() / tileEdge;
     const int lastRow = outputBounds.bottom() / tileEdge;
-    result.reserve((lastColumn - firstColumn + 1) * (lastRow - firstRow + 1));
+    result.reserve(static_cast<qsizetype>(lastColumn - firstColumn + 1)
+                   * static_cast<qsizetype>(lastRow - firstRow + 1));
     for (int row = firstRow; row <= lastRow; ++row)
     {
         for (int column = firstColumn; column <= lastColumn; ++column)

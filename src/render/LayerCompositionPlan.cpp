@@ -170,7 +170,7 @@ LayerCompositionPlan LayerCompositionPlan::build(const Document &document)
         return plan;
     }
 
-    const int layerCount = document.layers.size();
+    const int layerCount = static_cast<int>(document.layers.size());
     QHash<QUuid, int> layerIndexes;
     layerIndexes.reserve(layerCount);
     for (int index = 0; index < layerCount; ++index)
@@ -200,7 +200,7 @@ LayerCompositionPlan LayerCompositionPlan::build(const Document &document)
         children[parentIndex].append(index);
     }
 
-    plan.m_operations.reserve(layerCount * 2);
+    plan.m_operations.reserve(static_cast<qsizetype>(layerCount) * 2);
     QVector<PlanBuildFrame> stack;
     stack.append(PlanBuildFrame{rootIndex, 0, -1});
     int visitedLayers = 0;
@@ -212,7 +212,7 @@ LayerCompositionPlan LayerCompositionPlan::build(const Document &document)
         {
             if (frame.beginOperationIndex >= 0)
             {
-                const int endIndex = plan.m_operations.size();
+                const int endIndex = static_cast<int>(plan.m_operations.size());
                 const int layerIndex =
                     plan.m_operations[frame.beginOperationIndex].layerIndex;
                 plan.m_operations.append(Operation{OperationType::EndGroup,
@@ -229,7 +229,7 @@ LayerCompositionPlan LayerCompositionPlan::build(const Document &document)
         ++visitedLayers;
         if (document.layers[layerIndex].kind == LayerKind::Group)
         {
-            const int beginIndex = plan.m_operations.size();
+            const int beginIndex = static_cast<int>(plan.m_operations.size());
             plan.m_operations.append(
                 Operation{OperationType::BeginGroup, layerIndex, -1});
             stack.append(PlanBuildFrame{layerIndex, 0, beginIndex});

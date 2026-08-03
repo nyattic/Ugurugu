@@ -140,7 +140,7 @@ void GifExportDialog::updatePresentation()
     }
 }
 
-GifExportDialog::Result GifExportDialog::result() const
+GifExportDialog::Result GifExportDialog::currentResult() const
 {
     Result result;
     result.outputSize = sizeForCurrentScale();

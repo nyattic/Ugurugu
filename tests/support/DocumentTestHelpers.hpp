@@ -195,7 +195,7 @@ inline Document documentWithStrokeCount(int count)
     for (int index = 0; index < count; ++index)
     {
         Stroke stroke;
-        stroke.seed = static_cast<quint64>(index + 1);
+        stroke.seed = static_cast<quint64>(index) + 1;
         stroke.points = {{QPointF(1.0 + static_cast<qreal>(index % 62),
                               1.0 + static_cast<qreal>((index / 62) % 62)),
             1.0}};

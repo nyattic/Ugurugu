@@ -27,7 +27,7 @@ bool validateCollectionBudgets(const QJsonArray &layers, QString *error)
     qsizetype remainingStrokes = DocumentLimits::maximumTotalStrokes;
     qsizetype remainingPoints = DocumentLimits::maximumTotalPoints;
 
-    for (const QJsonValue &layerValue : layers)
+    for (const auto &layerValue : layers)
     {
         if (!layerValue.isObject())
         {
@@ -50,7 +50,7 @@ bool validateCollectionBudgets(const QJsonArray &layers, QString *error)
         }
         remainingStrokes -= strokes.size();
 
-        for (const QJsonValue &strokeValue : strokes)
+        for (const auto &strokeValue : strokes)
         {
             if (!strokeValue.isObject())
             {

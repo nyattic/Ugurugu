@@ -238,7 +238,8 @@ private slots:
         QTest::mouseRelease(
             &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(80, 20));
         QApplication::processEvents();
-        const qreal penUpMilliseconds = timer.nsecsElapsed() / 1000000.0;
+        const qreal penUpMilliseconds =
+            static_cast<qreal>(timer.nsecsElapsed()) / 1000000.0;
 
         QCOMPARE(controller.document().layers.first().strokes.size(), 1);
         QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
@@ -320,15 +321,22 @@ private slots:
         constexpr qint64 budgetBytes =
             static_cast<qint64>(MemoryBudget::previewCacheKiB) * 1024;
         constexpr qreal mib = 1024.0 * 1024.0;
-        qInfo().nospace() << "4K preview peak " << peak.totalBytes() / mib
-                          << " MiB of " << budgetBytes / mib
+        qInfo().nospace() << "4K preview peak "
+                          << static_cast<qreal>(peak.totalBytes()) / mib
+                          << " MiB of " << static_cast<qreal>(budgetBytes) / mib
                           << " MiB budget (frames "
-                          << peak.frameCacheBytes / mib << ", split "
-                          << peak.layerSplitBytes / mib << ", rasters "
-                          << peak.layerRasterBytes / mib << ", composed "
-                          << peak.composedPreviewBytes / mib << ", colour pick "
-                          << peak.colorPickBytes / mib << ", tiles "
-                          << peak.strokeTileBytes / mib << ")";
+                          << static_cast<qreal>(peak.frameCacheBytes) / mib
+                          << ", split "
+                          << static_cast<qreal>(peak.layerSplitBytes) / mib
+                          << ", rasters "
+                          << static_cast<qreal>(peak.layerRasterBytes) / mib
+                          << ", composed "
+                          << static_cast<qreal>(peak.composedPreviewBytes) / mib
+                          << ", colour pick "
+                          << static_cast<qreal>(peak.colorPickBytes) / mib
+                          << ", tiles "
+                          << static_cast<qreal>(peak.strokeTileBytes) / mib
+                          << ")";
         QVERIFY(peak.totalBytes() <= budgetBytes);
     }
 

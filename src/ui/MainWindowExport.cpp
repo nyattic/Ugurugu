@@ -52,7 +52,7 @@ void MainWindow::exportGif()
     {
         return;
     }
-    const GifExportDialog::Result options = optionsDialog.result();
+    const GifExportDialog::Result options = optionsDialog.currentResult();
 
     const QString selected = QFileDialog::getSaveFileName(this,
         tr("Export animated GIF"),

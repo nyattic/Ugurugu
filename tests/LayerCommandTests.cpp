@@ -398,7 +398,8 @@ private slots:
                 controller.addLayerGroup(legacyPaint);
             });
 
-        const int originalLayerCount = controller.document().layers.size();
+        const int originalLayerCount =
+            static_cast<int>(controller.document().layers.size());
         controller.addLayer();
         QCOMPARE(controller.document().layers.size(), originalLayerCount + 1);
         QCOMPARE(analyzeLayerHierarchy(controller.document()).maximumDepth(),

@@ -97,6 +97,44 @@ jobs:
             exit 1
           fi
 
+  tidy:
+    name: Clang-Tidy
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          aqtsource: '${{ env.AQT_SOURCE }}'
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+
+      - name: Install LLVM 22
+        run: brew install llvm@22
+
+      - name: Configure
+        run: |
+          llvm_prefix="$(brew --prefix llvm@22)"
+          cmake --preset macos-debug \
+            -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON \
+            -DWOBBLEPAINT_CLANG_TIDY="$llvm_prefix/bin/clang-tidy" \
+            -DWOBBLEPAINT_RUN_CLANG_TIDY="$llvm_prefix/bin/run-clang-tidy"
+
+      - name: Build analysis inputs
+        run: >-
+          cmake --build --preset macos-debug
+          --target wobblepaint_tests --parallel
+
+      - name: Run Clang-Tidy
+        run: >-
+          cmake --build --preset macos-debug
+          --target wobblepaint_tidy
+
   build:
     name: ${{ matrix.name }}
     strategy:
@@ -284,7 +322,7 @@ jobs:
   quality:
     name: Quality gate
     if: always()
-    needs: [static, translations, build, package]
+    needs: [static, translations, tidy, build, package]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -292,11 +330,12 @@ jobs:
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TRANSLATIONS_RESULT: ${{ needs.translations.result }}
+          TIDY_RESULT: ${{ needs.tidy.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
           failed=0
-          for check in STATIC TRANSLATIONS BUILD PACKAGE; do
+          for check in STATIC TRANSLATIONS TIDY BUILD PACKAGE; do
             result_variable="${check}_RESULT"
             result="${!result_variable}"
             if [[ "$result" != "success" ]]; then

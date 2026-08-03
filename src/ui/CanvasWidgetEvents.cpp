@@ -39,8 +39,7 @@ CanvasSelectionCombine selectionCombineForModifiers(
     {
         return CanvasSelectionCombine::Replace;
     }
-    return add ? CanvasSelectionCombine::Add
-               : CanvasSelectionCombine::Subtract;
+    return add ? CanvasSelectionCombine::Add : CanvasSelectionCombine::Subtract;
 }
 
 }
@@ -94,7 +93,7 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
         for (int step = 14; step > 0; --step)
         {
             QColor shadow(Qt::black);
-            shadow.setAlphaF(0.020 * (1.0 - step / 14.0));
+            shadow.setAlphaF(static_cast<float>(0.020 * (1.0 - step / 14.0)));
             painter.setBrush(shadow);
             painter.drawRoundedRect(
                 canvasRect.adjusted(-step, -step + 2.0, step, step + 2.0),
