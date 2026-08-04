@@ -262,6 +262,27 @@ Glyph bucketGlyph()
     return glyph;
 }
 
+// A stroke caught mid-wobble. The two summed sines mirror the shape
+// WobblePreview animates, so the rail button shows what the tool does rather
+// than a generic settings mark.
+Glyph wobbleGlyph()
+{
+    Glyph glyph;
+    QPolygonF wave;
+    constexpr int steps = 40;
+    constexpr qreal amplitude = 5.9;
+    for (int step = 0; step <= steps; ++step)
+    {
+        const qreal position = static_cast<qreal>(step) / steps;
+        const qreal turn = 2.0 * std::numbers::pi_v<qreal> * position;
+        const qreal offset =
+            0.62 * std::sin(1.25 * turn) + 0.38 * std::sin(2.75 * turn + 0.9);
+        wave.append(QPointF(3.6 + 16.8 * position, 12.0 - amplitude * offset));
+    }
+    glyph.lines.append(wave);
+    return glyph;
+}
+
 Glyph settingsGlyph()
 {
     Glyph glyph;
@@ -414,6 +435,8 @@ Glyph glyphFor(IconGlyph glyph)
         return wandGlyph();
     case IconGlyph::Bucket:
         return bucketGlyph();
+    case IconGlyph::Wobble:
+        return wobbleGlyph();
     case IconGlyph::Settings:
         return settingsGlyph();
     case IconGlyph::Move:

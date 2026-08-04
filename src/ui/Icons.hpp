@@ -28,6 +28,7 @@ enum class IconGlyph
     Lasso,
     Wand,
     Bucket,
+    Wobble,
     Settings,
     Move,
     Scale,

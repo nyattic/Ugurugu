@@ -913,7 +913,7 @@ void MainWindow::createToolBars()
     rail->addSeparator();
     auto *wobbleButton = new QToolButton(rail);
     wobbleButton->setObjectName(QStringLiteral("wobbleSettingsButton"));
-    wobbleButton->setIcon(Icons::icon(IconGlyph::Settings));
+    wobbleButton->setIcon(Icons::icon(IconGlyph::Wobble));
     wobbleButton->setIconSize(rail->iconSize());
     wobbleButton->setToolTip(tr("Wobble settings"));
     wobbleButton->setAccessibleName(tr("Wobble settings"));
