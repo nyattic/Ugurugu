@@ -12,8 +12,6 @@
 <p align="center"><b>KR</b> · <a href="README.en.md">EN</a> · <a href="README.ja.md">JP</a></p>
 
 그림이 우글우글 움직이는 드로잉 앱입니다.
-복잡한 애니메이션 작업을 배우지 않아도 그림을 그리고 재생 버튼만 누르면
-살아 움직이는 듯한 결과를 바로 볼 수 있습니다.
 
 완성한 그림은 반복 재생되는 GIF나 WebP, 배경이 투명한 이미지로 저장할 수
 있습니다. WiggleWiggleTool에서 만들던 `.wawa` 그림도 이어서 작업할 수

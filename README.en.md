@@ -11,9 +11,7 @@
 
 <p align="center"><a href="README.md">KR</a> · <b>EN</b> · <a href="README.ja.md">JP</a></p>
 
-Ugurugu is a drawing app where your pictures wiggle and move.
-You do not need to learn traditional animation: draw a picture, press Play,
-and watch it move.
+A drawing app where your pictures wiggle and move.
 
 Save your work as a looping GIF or WebP, or create a still image with a
 transparent background. You can also continue working on `.wawa` drawings
