@@ -35,7 +35,7 @@ public:
         return canvas.m_frameCacheWarmupActive;
     }
 
-    static int cachedFrameCount(const CanvasWidget &canvas)
+    static qsizetype cachedFrameCount(const CanvasWidget &canvas)
     {
         return canvas.m_frameCache.size();
     }

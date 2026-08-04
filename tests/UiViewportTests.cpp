@@ -277,7 +277,9 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(
             !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
         QTRY_COMPARE_WITH_TIMEOUT(
-            CanvasWidgetTestAccess::cachedFrameCount(canvas), 30, 10000);
+            CanvasWidgetTestAccess::cachedFrameCount(canvas),
+            qsizetype{30},
+            10000);
 
         const QPoint center = canvas.rect().center();
         QTest::mousePress(
@@ -302,7 +304,8 @@ private slots:
         QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
             canvas, canvas.currentFrame()));
         QVERIFY(CanvasWidgetTestAccess::frameCacheWarmupActive(canvas)
-                || CanvasWidgetTestAccess::cachedFrameCount(canvas) == 30);
+                || CanvasWidgetTestAccess::cachedFrameCount(canvas)
+                       == qsizetype{30});
 #ifdef NDEBUG
         QVERIFY2(penUpMilliseconds < 500.0,
             qPrintable(QStringLiteral("4K animated pen-up blocked for %1 ms")
@@ -311,7 +314,9 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(
             !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
         QTRY_COMPARE_WITH_TIMEOUT(
-            CanvasWidgetTestAccess::cachedFrameCount(canvas), 30, 10000);
+            CanvasWidgetTestAccess::cachedFrameCount(canvas),
+            qsizetype{30},
+            10000);
         qInfo().nospace() << "4K 100px animated eraser pen-up returned in "
                           << penUpMilliseconds
                           << " ms; remaining frames were warmed asynchronously";
