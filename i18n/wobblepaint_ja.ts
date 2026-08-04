@@ -2799,6 +2799,11 @@ The recovery file was not deleted. You can find it at:
         <translation>WagleWaglePaint のアップデート</translation>
     </message>
     <message>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="226"/>
+        <source>The update download failed unexpectedly.</source>
+        <translation>アップデートのダウンロード中に予期しないエラーが発生しました。</translation>
+    </message>
+    <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="227"/>
         <source>Could not download the update.
 
