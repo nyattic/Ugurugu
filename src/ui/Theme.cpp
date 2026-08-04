@@ -4,11 +4,32 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QPalette>
+#include <QSettings>
 #include <QStringList>
 #include <QStyleFactory>
+#include <QWidget>
 
 namespace wobble
 {
+
+namespace
+{
+
+constexpr auto accentColorKey = "appearance/accentColor";
+
+QColor &activeAccent()
+{
+    static QColor color = Theme::defaultAccent();
+    return color;
+}
+
+QColor storedAccent()
+{
+    const QColor color(QSettings().value(accentColorKey).toString());
+    return color.isValid() ? color : Theme::defaultAccent();
+}
+
+}
 
 QColor Theme::chromeBackground()
 {
@@ -67,21 +88,31 @@ QColor Theme::textDisabled()
 
 QColor Theme::accent()
 {
-    return QColor(0xFF, 0xC9, 0x4A);
+    return activeAccent();
 }
 
 QColor Theme::accentPressed()
 {
-    return QColor(0xE8, 0xB5, 0x3B);
+    return accent().darker(112);
 }
 
 QColor Theme::accentText()
 {
-    return QColor(0x26, 0x1E, 0x0A);
+    const QColor color = accent();
+    const qreal luminance = 0.2126 * color.redF() + 0.7152 * color.greenF()
+                            + 0.0722 * color.blueF();
+    return luminance >= 0.52 ? QColor(0x18, 0x18, 0x1A)
+                             : QColor(0xFA, 0xFA, 0xFB);
+}
+
+QColor Theme::defaultAccent()
+{
+    return QColor(0xFF, 0xC9, 0x4A);
 }
 
 void Theme::apply(QApplication &application)
 {
+    activeAccent() = storedAccent();
     application.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
     const int fontId = QFontDatabase::addApplicationFont(
@@ -355,6 +386,29 @@ QWidget#LayerDockBody {
     resolved.replace(QStringLiteral("%ACCENTPRESSED%"), accentPressed().name());
     resolved.replace(QStringLiteral("%ACCENTTEXT%"), accentText().name());
     application.setStyleSheet(resolved);
+}
+
+void Theme::setAccent(QApplication &application, const QColor &color)
+{
+    if (!color.isValid())
+    {
+        return;
+    }
+    QSettings settings;
+    if (color == defaultAccent())
+    {
+        settings.remove(accentColorKey);
+    }
+    else
+    {
+        settings.setValue(accentColorKey, color.name(QColor::HexRgb));
+    }
+    settings.sync();
+    apply(application);
+    for (QWidget *widget : application.allWidgets())
+    {
+        widget->update();
+    }
 }
 
 }

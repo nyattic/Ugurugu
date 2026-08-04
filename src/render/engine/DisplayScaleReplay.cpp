@@ -4,6 +4,7 @@
 #include "document/SelectionOperation.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
+#include "render/RasterAssetCache.hpp"
 #include "render/engine/LayerOperationReplay.hpp"
 
 #include <QHash>
@@ -201,6 +202,40 @@ bool applyReframeOperationAtDisplayScale(QImage &layerImage,
     return true;
 }
 
+bool applyImageOperationAtDisplayScale(QImage &layerImage,
+    const Document &document,
+    const ImageOp &operation,
+    const PreviewScaleMapping &mapping,
+    RenderEngine::ScaledRenderStats *stats)
+{
+    const QTransform displayTransform(
+        operation.transform.m11() * mapping.horizontalScale,
+        operation.transform.m12() * mapping.verticalScale,
+        0.0,
+        operation.transform.m21() * mapping.horizontalScale,
+        operation.transform.m22() * mapping.verticalScale,
+        0.0,
+        operation.transform.dx() * mapping.horizontalScale,
+        operation.transform.dy() * mapping.verticalScale,
+        1.0);
+    const QImage transformed = RasterAssetCache::transformedImage(document,
+        operation.assetId,
+        layerImage.size(),
+        displayTransform,
+        operation.sampling);
+    if (transformed.isNull())
+    {
+        return false;
+    }
+    notePreviewImage(stats, transformed);
+    notePreviewWorkingSet(stats, layerImage, transformed);
+    QPainter painter(&layerImage);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.drawImage(QPoint(), transformed);
+    painter.end();
+    return true;
+}
+
 bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
     const Document &document,
     const QVector<Stroke> &operations,
@@ -285,9 +320,21 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
             clipPaths.clear();
             scaledClipMasks.clear();
         }
+        else if (operation.mode == StrokeMode::Image)
+        {
+            flush();
+            if (!operation.imageOp || operation.pixelSelectionOp
+                || operation.reframeOp
+                || !applyImageOperationAtDisplayScale(
+                    layerImage, document, *operation.imageOp, mapping, stats))
+            {
+                return false;
+            }
+        }
         else
         {
-            if (operation.pixelSelectionOp || operation.reframeOp)
+            if (operation.pixelSelectionOp || operation.reframeOp
+                || operation.imageOp)
             {
                 return false;
             }

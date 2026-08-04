@@ -85,6 +85,36 @@ private slots:
         QVERIFY(stats.usedNativeExactFallback);
     }
 
+    void replaysImageOperationsAtNativeAndDisplayScale()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(80, 60));
+        controller.setBackground(Qt::transparent);
+        QImage image(QSize(24, 16), QImage::Format_RGBA8888);
+        image.fill(QColor(40, 120, 220, 200));
+        image.setPixelColor(4, 3, QColor(250, 40, 20, 255));
+        QCOMPARE(controller.insertImage(image, QStringLiteral("photo.png")),
+            DocumentController::InsertImageResult::Inserted);
+        const Document &document = controller.document();
+
+        const QImage frameZero = RenderEngine::render(document, 0);
+        QVERIFY(!frameZero.isNull());
+        QCOMPARE(RenderEngine::render(document, 11), frameZero);
+        QVERIFY(frameZero.pixelColor(30, 25).alpha() > 0);
+
+        RenderEngine::ScaledRenderStats stats;
+        const QImage preview = RenderEngine::renderScaled(document,
+            5,
+            QSize(40, 30),
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            &stats);
+        QVERIFY(!preview.isNull());
+        QCOMPARE(preview.size(), QSize(40, 30));
+        QVERIFY(stats.usedDisplayScaleReplay);
+        QVERIFY(!stats.usedNativeExactFallback);
+        QVERIFY(preview.pixelColor(15, 12).alpha() > 0);
+    }
+
     void roundsPreviewCacheCostUpToWholeKibibytes()
     {
         QCOMPARE(PreviewRenderPolicy::cacheCostKiB(-1), 1);

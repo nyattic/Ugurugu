@@ -58,6 +58,9 @@ bool applyPixelSelectionOperation(
 
 bool applyReframeOperation(QImage &layerImage, const ReframeOp &operation);
 
+bool applyImageOperation(
+    QImage &layerImage, const Document &document, const ImageOp &operation);
+
 // Returns false when the framebuffer no longer matches the document size the
 // remaining operations were recorded against; the caller must discard it.
 bool renderLayerOperations(QImage &layerImage,

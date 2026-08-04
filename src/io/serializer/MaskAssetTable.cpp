@@ -194,6 +194,15 @@ PackedMaskRegion pixelSelectionMaskRegion(const PixelSelectionOp &operation)
         operation.canvasSize, operation.sourceBounds, operation.packedMask};
 }
 
+std::optional<PackedMaskRegion> strokeBinaryMaskRegion(const Stroke &stroke)
+{
+    if (stroke.pixelSelectionOp)
+    {
+        return pixelSelectionMaskRegion(*stroke.pixelSelectionOp);
+    }
+    return stroke.fillCoverage;
+}
+
 }
 
 }

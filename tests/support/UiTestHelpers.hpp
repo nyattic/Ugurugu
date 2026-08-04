@@ -21,6 +21,7 @@
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/EraserPresetButton.hpp"
 #include "ui/FrameScrubber.hpp"
+#include "ui/HelpDialog.hpp"
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
@@ -33,10 +34,13 @@
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
+#include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/WandPopoverPanel.hpp"
 #include "ui/WandReferenceButton.hpp"
+#include "ui/WobblePopoverPanel.hpp"
 #include "ui/WobblePreview.hpp"
+#include "ui/WwpPresetCodec.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -68,6 +72,7 @@
 #include <QTabWidget>
 #include <QTabletEvent>
 #include <QTemporaryDir>
+#include <QTextBrowser>
 #include <QTimer>
 #include <QToolButton>
 #include <QVariant>

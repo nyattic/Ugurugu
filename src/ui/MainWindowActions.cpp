@@ -1,9 +1,11 @@
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
 #include "ui/BrushPopoverPanel.hpp"
+#include "ui/BucketPopoverPanel.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorSwatchRow.hpp"
 #include "ui/EraserPopoverPanel.hpp"
+#include "ui/HelpDialog.hpp"
 #include "ui/Icons.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
@@ -16,6 +18,7 @@
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolPopover.hpp"
 #include "ui/WandPopoverPanel.hpp"
+#include "ui/WobblePopoverPanel.hpp"
 
 #include <QActionGroup>
 #include <QColorDialog>
@@ -85,6 +88,14 @@ void MainWindow::createActions()
     registerShortcut(openAction, QKeySequence(QKeySequence::Open));
     connect(openAction, &QAction::triggered, this, &MainWindow::chooseOpenFile);
 
+    auto *insertImageAction = new QAction(tr("Insert &image…"), this);
+    insertImageAction->setObjectName(QStringLiteral("insertImageAction"));
+    registerShortcut(insertImageAction, {});
+    connect(insertImageAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::chooseInsertImage);
+
     m_saveAction = new QAction(tr("&Save"), this);
     m_saveAction->setObjectName(QStringLiteral("saveAction"));
     registerShortcut(m_saveAction, QKeySequence(QKeySequence::Save));
@@ -111,6 +122,12 @@ void MainWindow::createActions()
     exportGifAction->setObjectName(QStringLiteral("exportGifAction"));
     registerShortcut(exportGifAction, QKeySequence(QStringLiteral("Ctrl+E")));
     connect(exportGifAction, &QAction::triggered, this, &MainWindow::exportGif);
+
+    auto *exportWebPAction = new QAction(tr("Export animated &WebP…"), this);
+    exportWebPAction->setObjectName(QStringLiteral("exportWebPAction"));
+    registerShortcut(exportWebPAction, {});
+    connect(
+        exportWebPAction, &QAction::triggered, this, &MainWindow::exportWebP);
 
     auto *exportPngAction =
         new QAction(tr("Export current frame as &image…"), this);
@@ -147,9 +164,30 @@ void MainWindow::createActions()
             dialog.exec();
         });
 
+    auto *importPresetAction = new QAction(tr("&Import WWP preset…"), this);
+    importPresetAction->setObjectName(QStringLiteral("importWwpPresetAction"));
+    registerShortcut(importPresetAction, {});
+    connect(importPresetAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::importWwpPreset);
+
+    auto *exportPresetAction = new QAction(tr("&Export WWP preset…"), this);
+    exportPresetAction->setObjectName(QStringLiteral("exportWwpPresetAction"));
+    registerShortcut(exportPresetAction, {});
+    connect(exportPresetAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::exportWwpPreset);
+
     auto *checkForUpdatesAction = new QAction(tr("Check for &Updates…"), this);
     checkForUpdatesAction->setObjectName(
         QStringLiteral("checkForUpdatesAction"));
+
+    auto *helpAction = new QAction(tr("WagleWaglePaint &Help"), this);
+    helpAction->setObjectName(QStringLiteral("helpAction"));
+    registerShortcut(helpAction, QKeySequence(Qt::Key_F1));
+    connect(helpAction, &QAction::triggered, this, &MainWindow::showHelp);
 
     QAction *undoAction = new QAction(tr("&Undo"), this);
     undoAction->setObjectName(QStringLiteral("undoAction"));
@@ -671,6 +709,7 @@ void MainWindow::createActions()
     addAction(m_saveAction);
     addAction(saveAsAction);
     addAction(exportGifAction);
+    addAction(exportWebPAction);
     addAction(exportPngAction);
     addAction(quitAction);
     addAction(undoAction);
@@ -701,6 +740,9 @@ void MainWindow::createActions()
     addAction(m_mirrorCanvasAction);
     addAction(m_playAction);
     addAction(checkForUpdatesAction);
+    addAction(helpAction);
+    addAction(importPresetAction);
+    addAction(exportPresetAction);
 }
 
 void MainWindow::createMenus()
@@ -708,12 +750,16 @@ void MainWindow::createMenus()
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(findChild<QAction *>(QStringLiteral("newAction")));
     fileMenu->addAction(findChild<QAction *>(QStringLiteral("openAction")));
+    fileMenu->addAction(
+        findChild<QAction *>(QStringLiteral("insertImageAction")));
     fileMenu->addSeparator();
     fileMenu->addAction(m_saveAction);
     fileMenu->addAction(findChild<QAction *>(QStringLiteral("saveAsAction")));
     fileMenu->addSeparator();
     fileMenu->addAction(
         findChild<QAction *>(QStringLiteral("exportGifAction")));
+    fileMenu->addAction(
+        findChild<QAction *>(QStringLiteral("exportWebPAction")));
     fileMenu->addAction(
         findChild<QAction *>(QStringLiteral("exportPngAction")));
     fileMenu->addSeparator();
@@ -774,10 +820,30 @@ void MainWindow::createMenus()
     toolMenu->addAction(m_lassoAction);
     toolMenu->addAction(m_wandAction);
     toolMenu->addAction(m_bucketAction);
+    toolMenu->addSeparator();
+    toolMenu->addAction(
+        findChild<QAction *>(QStringLiteral("importWwpPresetAction")));
+    toolMenu->addAction(
+        findChild<QAction *>(QStringLiteral("exportWwpPresetAction")));
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
+    helpMenu->addAction(findChild<QAction *>(QStringLiteral("helpAction")));
+    helpMenu->addSeparator();
     helpMenu->addAction(
         findChild<QAction *>(QStringLiteral("checkForUpdatesAction")));
+}
+
+void MainWindow::showHelp()
+{
+    if (auto *existing = findChild<HelpDialog *>())
+    {
+        existing->show();
+        existing->raise();
+        existing->activateWindow();
+        return;
+    }
+    auto *dialog = new HelpDialog(this);
+    dialog->show();
 }
 
 void MainWindow::createToolBars()
@@ -806,7 +872,8 @@ void MainWindow::createToolBars()
         addRailButton(m_lassoAction, IconGlyph::Lasso);
     PopoverToolButton *wandButton =
         addRailButton(m_wandAction, IconGlyph::Wand);
-    addRailButton(m_bucketAction, IconGlyph::Bucket);
+    PopoverToolButton *bucketButton =
+        addRailButton(m_bucketAction, IconGlyph::Bucket);
 
     auto *brushPopover = new ToolPopover(this);
     auto *brushPanel = new BrushPopoverPanel(m_canvas);
@@ -838,6 +905,28 @@ void MainWindow::createToolBars()
     auto *wandPopover = new ToolPopover(this);
     wandPopover->setContentWidget(new WandPopoverPanel(m_canvas));
     wandButton->setPopover(wandPopover);
+
+    auto *bucketPopover = new ToolPopover(this);
+    bucketPopover->setContentWidget(new BucketPopoverPanel(m_canvas));
+    bucketButton->setPopover(bucketPopover);
+
+    rail->addSeparator();
+    auto *wobbleButton = new QToolButton(rail);
+    wobbleButton->setObjectName(QStringLiteral("wobbleSettingsButton"));
+    wobbleButton->setIcon(Icons::icon(IconGlyph::Settings));
+    wobbleButton->setIconSize(rail->iconSize());
+    wobbleButton->setToolTip(tr("Wobble settings"));
+    wobbleButton->setAccessibleName(tr("Wobble settings"));
+    rail->addWidget(wobbleButton);
+    auto *wobblePopover = new ToolPopover(this);
+    wobblePopover->setContentWidget(new WobblePopoverPanel(&m_controller));
+    connect(wobbleButton,
+        &QToolButton::clicked,
+        wobblePopover,
+        [wobblePopover, wobbleButton]()
+        {
+            wobblePopover->popupBeside(wobbleButton);
+        });
 
     connect(m_canvas,
         &CanvasWidget::brushPresetChanged,

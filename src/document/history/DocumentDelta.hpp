@@ -96,6 +96,8 @@ struct DocumentDelta
     std::optional<ValueChange<int>> animationFrames;
     std::optional<ValueChange<qreal>> framesPerSecond;
     std::optional<ValueChange<qreal>> wobbleAmount;
+    std::optional<ValueChange<MotionSettings>> motionSettings;
+    std::optional<ValueChange<QMap<QString, RasterAsset>>> rasterAssets;
     std::optional<ValueChange<QUuid>> activeLayerId;
     QVector<IndexedLayer> removedLayers;
     QVector<IndexedLayer> addedLayers;

@@ -40,9 +40,13 @@ private slots:
         LayerDock *layerDock = window.findChild<LayerDock *>();
         QAction *undoAction =
             window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *insertImageAction =
+            window.findChild<QAction *>(QStringLiteral("insertImageAction"));
         QVERIFY(canvas);
         QVERIFY(layerDock);
         QVERIFY(undoAction);
+        QVERIFY(insertImageAction);
+        QCOMPARE(insertImageAction->text(), QStringLiteral("Insert &image…"));
         QVERIFY(!undoAction->isEnabled());
         const QList<BrushPresetButton *> presetButtons =
             window.findChildren<BrushPresetButton *>();
@@ -331,8 +335,8 @@ private slots:
         DocumentController controller;
         controller.newDocument(QSize(100, 100));
         CanvasWidget canvas(&controller);
-        TimelineBar timeline(&controller, &canvas);
-        WobblePreview *preview = timeline.findChild<WobblePreview *>();
+        WobblePopoverPanel panel(&controller);
+        WobblePreview *preview = panel.findChild<WobblePreview *>();
         QVERIFY(preview);
         QShowEvent showEvent;
         QApplication::sendEvent(preview, &showEvent);
@@ -341,9 +345,9 @@ private slots:
         controller.setWobbleAmount(controller.document().wobbleAmount + 1.0);
         QVERIFY(preview->isAnimationActive());
 
-        timeline.setEnabled(false);
+        panel.setEnabled(false);
         QVERIFY(!preview->isAnimationActive());
-        timeline.setEnabled(true);
+        panel.setEnabled(true);
         QVERIFY(preview->isAnimationActive());
 
         QTRY_VERIFY_WITH_TIMEOUT(!preview->isAnimationActive(), 3000);
@@ -351,6 +355,60 @@ private slots:
         QHideEvent hideEvent;
         QApplication::sendEvent(preview, &hideEvent);
         QVERIFY(!preview->isAnimationActive());
+    }
+
+    void editsMotionSettingsFromPopover()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        WobblePopoverPanel panel(&controller);
+        auto *style =
+            panel.findChild<QComboBox *>(QStringLiteral("motionStyleCombo"));
+        auto *poseCount =
+            panel.findChild<QSpinBox *>(QStringLiteral("motionPoseCountSpin"));
+        auto *detail =
+            panel.findChild<QSpinBox *>(QStringLiteral("motionDetailSpin"));
+        auto *linked =
+            panel.findChild<QSpinBox *>(QStringLiteral("motionLinkedSpin"));
+        auto *randomness =
+            panel.findChild<QSpinBox *>(QStringLiteral("motionRandomnessSpin"));
+        auto *broken =
+            panel.findChild<QCheckBox *>(QStringLiteral("brokenLineCheckBox"));
+        auto *breakAmount =
+            panel.findChild<QSpinBox *>(QStringLiteral("breakAmountSpin"));
+        auto *breakRange =
+            panel.findChild<QDoubleSpinBox *>(QStringLiteral("breakRangeSpin"));
+        QVERIFY(style);
+        QVERIFY(poseCount);
+        QVERIFY(detail);
+        QVERIFY(linked);
+        QVERIFY(randomness);
+        QVERIFY(broken);
+        QVERIFY(breakAmount);
+        QVERIFY(breakRange);
+        QVERIFY(!poseCount->isEnabled());
+
+        style->setCurrentIndex(
+            style->findData(static_cast<int>(MotionStyle::Smooth)));
+        poseCount->setValue(5);
+        detail->setValue(18);
+        linked->setValue(45);
+        randomness->setValue(70);
+        broken->setChecked(true);
+        breakAmount->setValue(60);
+        breakRange->setValue(48.0);
+
+        QCOMPARE(controller.document().motion.style, MotionStyle::Smooth);
+        QCOMPARE(controller.document().motion.poseCount, 5);
+        QCOMPARE(controller.document().motion.detail, 18);
+        QCOMPARE(controller.document().motion.linked, 0.45);
+        QCOMPARE(controller.document().motion.randomness, 0.7);
+        QVERIFY(controller.document().motion.brokenLine);
+        QCOMPARE(controller.document().motion.breakAmount, 0.6);
+        QCOMPARE(controller.document().motion.breakRange, 48.0);
+        QVERIFY(poseCount->isEnabled());
+        QVERIFY(breakAmount->isEnabled());
+        QVERIFY(breakRange->isEnabled());
     }
 
     void debouncesRecentColorPersistence()
@@ -371,6 +429,64 @@ private slots:
         QVERIFY(!QSettings().contains(key));
         QTRY_COMPARE(QSettings().value(key).toStringList().value(0),
             finalColor.name(QColor::HexArgb));
+    }
+
+    void roundTripsWwpPresetAndAppliesMotionAsOneUndoEntry()
+    {
+        QSettings settings;
+        settings.setValue(QStringLiteral("drawingTools/activeTool"),
+            QStringLiteral("bucket"));
+        settings.setValue(QStringLiteral("drawingTools/brush/color"),
+            QStringLiteral("#80406080"));
+        settings.setValue(QStringLiteral("drawingTools/fill/tolerance"), 72);
+
+        Document document = Document::createDefault(QSize(80, 60));
+        document.animationFrames = 20;
+        document.wobbleAmount = 4.25;
+        document.motion.style = MotionStyle::Smooth;
+        document.motion.poseCount = 9;
+        document.motion.detail = 18;
+        document.motion.linked = 0.4;
+        document.motion.randomness = 0.3;
+        document.motion.brokenLine = true;
+        document.motion.breakAmount = 0.45;
+        document.motion.breakRange = 36.0;
+
+        const WwpPreset captured = WwpPresetCodec::capture(settings, document);
+        const QByteArray encoded = WwpPresetCodec::encode(captured);
+        QVERIFY(!encoded.isEmpty());
+        QString error;
+        const std::optional<WwpPreset> decoded =
+            WwpPresetCodec::decode(encoded, &error);
+        QVERIFY2(decoded.has_value(), qPrintable(error));
+        QCOMPARE(decoded->wobbleAmount, captured.wobbleAmount);
+        QCOMPARE(decoded->motion, captured.motion);
+        QCOMPARE(decoded->drawingTools, captured.drawingTools);
+
+        settings.remove(QStringLiteral("drawingTools"));
+        WwpPresetCodec::applyDrawingTools(*decoded, settings);
+        QCOMPARE(settings.value(QStringLiteral("drawingTools/activeTool"))
+                     .toString(),
+            QStringLiteral("bucket"));
+        QCOMPARE(settings.value(QStringLiteral("drawingTools/fill/tolerance"))
+                     .toInt(),
+            72);
+
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(80, 60)));
+        controller.setAnimationFrames(20);
+        controller.undoStack()->clear();
+        QVERIFY(controller.applyMotionPreset(
+            decoded->wobbleAmount, decoded->motion));
+        QCOMPARE(controller.undoStack()->count(), 1);
+        QCOMPARE(controller.document().wobbleAmount, 4.25);
+        QCOMPARE(controller.document().motion, decoded->motion);
+        controller.undoStack()->undo();
+        QVERIFY(controller.document().motion != decoded->motion);
+
+        QVERIFY(!WwpPresetCodec::decode(
+            QByteArrayLiteral("WIGGLEWIGGLETOOL_PRESET=1\nSize=12"), &error));
+        QVERIFY(error.contains(QStringLiteral("WiggleWiggleTool")));
     }
 
     void changesLayerBlendModeFromDock()
@@ -892,6 +1008,27 @@ private slots:
         QCOMPARE(reader.size(), QSize(32, 24));
     }
 
+    void exportsScaledWebPAtRequestedSize()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        Document document = Document::createDefault(QSize(64, 48));
+        document.animationFrames = 2;
+
+        ExportWorker worker;
+        QSignalSpy finished(&worker, &ExportWorker::finished);
+        const QString path = directory.filePath(QStringLiteral("scaled.webp"));
+        QVERIFY(worker.startWebP(document, path, {QSize(32, 24), true}));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(finished.at(0).at(1).toBool(),
+            qPrintable(finished.at(0).at(4).toString()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QVERIFY(bytes.startsWith("RIFF"));
+        QCOMPARE(bytes.mid(8, 4), QByteArrayLiteral("WEBP"));
+    }
+
     void flattensGifTransparencyWhenNotPreserved()
     {
         QTemporaryDir directory;
@@ -1150,14 +1287,60 @@ private slots:
         QTabWidget *tabs = dialog.findChild<QTabWidget *>();
         QLabel *versionLabel = dialog.findChild<QLabel *>(
             QStringLiteral("applicationVersionLabel"));
+        QLabel *developmentCreditLabel = dialog.findChild<QLabel *>(
+            QStringLiteral("developmentCreditLabel"));
+        QLabel *iconCreditLabel =
+            dialog.findChild<QLabel *>(QStringLiteral("iconCreditLabel"));
         QWidget *aboutTab =
             dialog.findChild<QWidget *>(QStringLiteral("aboutTab"));
         QVERIFY(tabs);
         QVERIFY(versionLabel);
+        QVERIFY(developmentCreditLabel);
+        QVERIFY(iconCreditLabel);
         QVERIFY(aboutTab);
         QCOMPARE(versionLabel->text(), QStringLiteral("Version 9.8.7-test"));
+        QCOMPARE(developmentCreditLabel->text(),
+            QStringLiteral("Development support by seuppi"));
+        QCOMPARE(iconCreditLabel->text(),
+            QStringLiteral("App icon artwork by seuppi"));
         QCOMPARE(
             tabs->tabText(tabs->indexOf(aboutTab)), QStringLiteral("About"));
+    }
+
+    void appliesThemeColorAndShowsInAppHelp()
+    {
+        const QString accentKey = QStringLiteral("appearance/accentColor");
+        SettingValueGuard accentGuard(accentKey);
+        Theme::setAccent(*qApp, Theme::defaultAccent());
+        const QColor custom(82, 116, 236);
+        Theme::setAccent(*qApp, custom);
+        QCOMPARE(Theme::accent(), custom);
+        QCOMPARE(QSettings().value(accentKey).toString(),
+            custom.name(QColor::HexRgb));
+
+        SettingsDialog settingsDialog;
+        QPushButton *themeButton = settingsDialog.findChild<QPushButton *>(
+            QStringLiteral("themeColorButton"));
+        QVERIFY(themeButton);
+        QCOMPARE(themeButton->text(), custom.name(QColor::HexRgb));
+
+        MainWindow window;
+        QAction *webPAction =
+            window.findChild<QAction *>(QStringLiteral("exportWebPAction"));
+        QAction *helpAction =
+            window.findChild<QAction *>(QStringLiteral("helpAction"));
+        QVERIFY(webPAction);
+        QVERIFY(helpAction);
+        QCOMPARE(helpAction->shortcut(), QKeySequence(Qt::Key_F1));
+        helpAction->trigger();
+        HelpDialog *help = window.findChild<HelpDialog *>();
+        QTRY_VERIFY(help);
+        QTextBrowser *browser =
+            help->findChild<QTextBrowser *>(QStringLiteral("helpBrowser"));
+        QVERIFY(browser);
+        QVERIFY(browser->toPlainText().contains(QStringLiteral("WebP")));
+        help->close();
+        Theme::setAccent(*qApp, Theme::defaultAccent());
     }
 
     void migratesGlobalStrokeStabilizationToDrawingTools()

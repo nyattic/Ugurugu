@@ -258,9 +258,29 @@ CanvasWidget::WandReference CanvasWidget::wandReference() const
     return m_wandReference;
 }
 
+CanvasWidget::FillComparison CanvasWidget::fillComparison() const
+{
+    return m_fillComparison;
+}
+
+int CanvasWidget::fillTolerance() const
+{
+    return m_fillTolerance;
+}
+
+bool CanvasWidget::bucketAntialiasing() const
+{
+    return m_bucketAntialiasing;
+}
+
 CanvasWidget::SelectionShape CanvasWidget::selectionShape() const
 {
     return m_selectionShape;
+}
+
+CanvasWidget::LassoMode CanvasWidget::lassoMode() const
+{
+    return m_lassoMode;
 }
 
 bool CanvasWidget::isAnimating() const
@@ -982,6 +1002,42 @@ void CanvasWidget::setWandReference(WandReference reference)
     emit wandReferenceChanged(reference);
 }
 
+void CanvasWidget::setFillComparison(FillComparison comparison)
+{
+    if (comparison != FillComparison::AlphaBoundary
+        && comparison != FillComparison::Color)
+    {
+        return;
+    }
+    if (m_fillComparison == comparison)
+    {
+        return;
+    }
+    m_fillComparison = comparison;
+    emit fillComparisonChanged(comparison);
+}
+
+void CanvasWidget::setFillTolerance(int tolerance)
+{
+    const int normalized = std::clamp(tolerance, 0, 255);
+    if (m_fillTolerance == normalized)
+    {
+        return;
+    }
+    m_fillTolerance = normalized;
+    emit fillToleranceChanged(normalized);
+}
+
+void CanvasWidget::setBucketAntialiasing(bool antialiasing)
+{
+    if (m_bucketAntialiasing == antialiasing)
+    {
+        return;
+    }
+    m_bucketAntialiasing = antialiasing;
+    emit bucketAntialiasingChanged(antialiasing);
+}
+
 void CanvasWidget::setSelectionShape(SelectionShape shape)
 {
     switch (shape)
@@ -1007,6 +1063,21 @@ void CanvasWidget::setSelectionShape(SelectionShape shape)
     m_selectionShape = shape;
     emit selectionShapeChanged(shape);
     update();
+}
+
+void CanvasWidget::setLassoMode(LassoMode mode)
+{
+    if (mode != LassoMode::Select && mode != LassoMode::Paint)
+    {
+        return;
+    }
+    if (m_lassoMode == mode)
+    {
+        return;
+    }
+    cancelAreaSelection();
+    m_lassoMode = mode;
+    emit lassoModeChanged(mode);
 }
 
 void CanvasWidget::setAnimating(bool animating)

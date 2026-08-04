@@ -17,6 +17,9 @@ target_link_libraries(
     Qt6::Core
     Qt6::Gui
     spdlog::spdlog
+    PRIVATE
+    webp
+    libwebpmux
 )
 wobblepaint_target_defaults(wobblepaint_core)
 

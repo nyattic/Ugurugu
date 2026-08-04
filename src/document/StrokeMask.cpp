@@ -1,5 +1,7 @@
 #include "document/StrokeMask.hpp"
 
+#include "document/SelectionOperation.hpp"
+
 #include <QPainter>
 
 #include <algorithm>
@@ -311,19 +313,27 @@ bool canonicalizeStrokeVisibility(Stroke &stroke, const QSize &canvasSize)
 
     if (stroke.mode != StrokeMode::Fill)
     {
-        return true;
+        return !stroke.fillCoverage;
     }
-    if (stroke.fillMask.isNull())
-    {
-        return true;
-    }
-    if (stroke.fillMask.size() != canvasSize
-        || stroke.fillMask.format() != QImage::Format_Grayscale8)
+    if (!stroke.fillMask.isNull() && stroke.fillCoverage)
     {
         return false;
     }
-    return visibility->isNull() ? maskHasContent(stroke.fillMask)
-                                : masksIntersect(stroke.fillMask, *visibility);
+    const QImage packedCoverage =
+        stroke.fillCoverage ? unpackBinaryMask(*stroke.fillCoverage) : QImage();
+    const QImage &fillMask =
+        stroke.fillCoverage ? packedCoverage : stroke.fillMask;
+    if (fillMask.isNull())
+    {
+        return !stroke.fillCoverage;
+    }
+    if (fillMask.size() != canvasSize
+        || fillMask.format() != QImage::Format_Grayscale8)
+    {
+        return false;
+    }
+    return visibility->isNull() ? maskHasContent(fillMask)
+                                : masksIntersect(fillMask, *visibility);
 }
 
 }

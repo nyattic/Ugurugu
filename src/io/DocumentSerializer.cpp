@@ -8,6 +8,7 @@
 #include "io/serializer/DocumentValidation.hpp"
 #include "io/serializer/MaskAssetTable.hpp"
 #include "io/serializer/PreparedPlanBuilder.hpp"
+#include "io/serializer/RasterAssetTable.hpp"
 #include "io/serializer/SerializerSchema.hpp"
 
 #include <QCryptographicHash>
@@ -273,6 +274,11 @@ DocumentSerializer::retainImmutableBackings(
         rememberImmutablePoints(impl->backings, trusted->snapshot.points);
         rememberImmutableImage(impl->backings, trusted->snapshot.clipMask);
         rememberImmutableImage(impl->backings, trusted->snapshot.fillMask);
+        if (trusted->snapshot.fillCoverage)
+        {
+            rememberImmutableBytes(
+                impl->backings, trusted->snapshot.fillCoverage->packedMask);
+        }
         if (trusted->snapshot.pixelSelectionOp)
         {
             rememberImmutableBytes(
@@ -390,7 +396,7 @@ DocumentSerializer::AppendStrokeResult DocumentSerializer::appendStroke(
         return result;
     }
     if (stroke.mode == StrokeMode::PixelSelection
-        || stroke.mode == StrokeMode::Reframe)
+        || stroke.mode == StrokeMode::Reframe || stroke.fillCoverage)
     {
         return result;
     }
@@ -730,7 +736,9 @@ std::optional<Document> DocumentSerializer::fromJson(
         || (*fileSchemaVersion >= 4
             && !root.value(QStringLiteral("clipMasks")).isArray())
         || (*fileSchemaVersion >= 6
-            && !root.value(QStringLiteral("binaryMasks")).isArray()))
+            && !root.value(QStringLiteral("binaryMasks")).isArray())
+        || (*fileSchemaVersion >= 11
+            && !root.value(QStringLiteral("rasterAssets")).isArray()))
     {
         setError(error,
             DocumentSerializer::tr("The project contains invalid fields."));
@@ -799,6 +807,48 @@ std::optional<Document> DocumentSerializer::fromJson(
         }
         referencedBinaryMasks = *parsedMasks;
     }
+    QMap<QString, RasterAsset> rasterAssets;
+    if (*fileSchemaVersion >= 11)
+    {
+        RasterAssetTable table;
+        const QJsonArray entries =
+            root.value(QStringLiteral("rasterAssets")).toArray();
+        for (const auto &entryValue : entries)
+        {
+            if (!entryValue.isObject())
+            {
+                setError(error,
+                    DocumentSerializer::tr(
+                        "The project contains an invalid raster asset table."));
+                return std::nullopt;
+            }
+            const QJsonObject entry = entryValue.toObject();
+            const QString id = entry.value(QStringLiteral("id")).toString();
+            const std::optional<QSize> size =
+                sizeFromJsonArray(entry.value(QStringLiteral("size")));
+            if (!entry.value(QStringLiteral("id")).isString() || !size
+                || !entry.value(QStringLiteral("data")).isString()
+                || rasterAssets.contains(id))
+            {
+                setError(error,
+                    DocumentSerializer::tr(
+                        "The project contains an invalid raster asset table."));
+                return std::nullopt;
+            }
+            const QByteArray compressed = QByteArray::fromBase64(
+                entry.value(QStringLiteral("data")).toString().toLatin1());
+            const RasterAssetRegistrationResult result =
+                table.registerPayload(id, *size, compressed);
+            if (result.status != RasterAssetRegistrationStatus::Registered)
+            {
+                setError(error,
+                    DocumentSerializer::tr(
+                        "The project contains an invalid raster asset."));
+                return std::nullopt;
+            }
+            rasterAssets.insert(id, RasterAsset{id, *size, compressed});
+        }
+    }
 
     const QJsonObject animation =
         root.value(QStringLiteral("animation")).toObject();
@@ -815,6 +865,22 @@ std::optional<Document> DocumentSerializer::fromJson(
         animation.value(QStringLiteral("fps")).toDouble();
     const qreal wobbleAmount =
         animation.value(QStringLiteral("wobble")).toDouble();
+    MotionSettings motion;
+    if (*fileSchemaVersion >= 10)
+    {
+        const std::optional<MotionSettings> parsedMotion =
+            motionSettingsFromJson(
+                animation.value(QStringLiteral("motion")), error);
+        if (!parsedMotion)
+        {
+            return std::nullopt;
+        }
+        motion = *parsedMotion;
+    }
+    else
+    {
+        motion.poseCount = std::min(motion.poseCount, *frames);
+    }
     if (*frames < DocumentLimits::minimumAnimationFrames
         || *frames > DocumentLimits::maximumAnimationFrames
         || !std::isfinite(framesPerSecond)
@@ -822,7 +888,8 @@ std::optional<Document> DocumentSerializer::fromJson(
         || framesPerSecond > DocumentLimits::maximumFramesPerSecond
         || !std::isfinite(wobbleAmount)
         || wobbleAmount < DocumentLimits::minimumWobbleAmount
-        || wobbleAmount > DocumentLimits::maximumWobbleAmount)
+        || wobbleAmount > DocumentLimits::maximumWobbleAmount
+        || !isValidMotionSettings(motion, *frames))
     {
         setError(error,
             DocumentSerializer::tr("The animation settings are invalid."));
@@ -835,6 +902,8 @@ std::optional<Document> DocumentSerializer::fromJson(
     document.animationFrames = *frames;
     document.framesPerSecond = framesPerSecond;
     document.wobbleAmount = wobbleAmount;
+    document.motion = motion;
+    document.rasterAssets = std::move(rasterAssets);
     document.layers.reserve(layers.size());
     QSet<QUuid> layerIds;
     QSet<QUuid> strokeIds;

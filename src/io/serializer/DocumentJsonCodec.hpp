@@ -47,6 +47,11 @@ QString layerBlendModeName(LayerBlendMode mode);
 
 QString layerKindName(LayerKind kind);
 
+QJsonObject motionSettingsToJson(const MotionSettings &settings);
+
+std::optional<MotionSettings> motionSettingsFromJson(
+    const QJsonValue &value, QString *error);
+
 QJsonArray transformToJson(const QTransform &transform);
 
 QJsonObject strokeToJson(const Stroke &stroke,

@@ -16,6 +16,7 @@ int runDocumentTests(int argc, char **argv)
     result |= runSelectionClipboardTests(argc, argv);
     result |= runSerializationBudgetTests(argc, argv);
     result |= runRasterAssetTableTests(argc, argv);
+    result |= runWawaV10ReaderTests(argc, argv);
     return result;
 }
 

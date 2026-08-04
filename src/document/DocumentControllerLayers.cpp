@@ -4,7 +4,11 @@
 #include "document/LayerHierarchy.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/history/HistoryEffects.hpp"
+#include "io/serializer/RasterAssetTable.hpp"
 
+#include <QFileInfo>
+
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -31,6 +35,30 @@ qsizetype layerPointCount(const Layer &layer)
         count += stroke.points.size();
     }
     return count;
+}
+
+QSize finalCanvasSize(const Layer &layer)
+{
+    QSize size = layer.initialCanvasSize;
+    for (const Stroke &stroke : layer.strokes)
+    {
+        if (stroke.reframeOp)
+        {
+            size = stroke.reframeOp->targetSize;
+        }
+    }
+    return size;
+}
+
+bool imageTransformWithinStoredBounds(
+    const QTransform &transform, const QSize &sourceSize)
+{
+    const QRectF bounds = transform.mapRect(QRectF(QPointF(), sourceSize));
+    const qreal limit = DocumentLimits::maximumStoredCoordinateMagnitude;
+    return std::isfinite(bounds.left()) && std::isfinite(bounds.top())
+           && std::isfinite(bounds.right()) && std::isfinite(bounds.bottom())
+           && bounds.left() >= -limit && bounds.top() >= -limit
+           && bounds.right() <= limit && bounds.bottom() <= limit;
 }
 }
 
@@ -120,6 +148,174 @@ void DocumentController::addLayerGroup(const QUuid &childId)
         tr("Add layer group"), std::move(candidate), std::move(effects));
 }
 
+DocumentController::InsertImageResult DocumentController::insertImage(
+    const QImage &image, const QString &sourceFileName)
+{
+    const auto reject = [this](InsertImageResult result)
+    {
+        failHistoryMacro();
+        return result;
+    };
+    const Document &current = document();
+    if (current.layers.size() >= DocumentLimits::maximumLayers)
+    {
+        return reject(InsertImageResult::RejectedLayerLimit);
+    }
+
+    serializer_detail::RasterAssetRegistrationStatus registrationStatus;
+    std::optional<RasterAsset> asset =
+        serializer_detail::rasterAssetFromImage(image, &registrationStatus);
+    if (!asset)
+    {
+        using Status = serializer_detail::RasterAssetRegistrationStatus;
+        return reject(registrationStatus == Status::Invalid
+                              || registrationStatus == Status::PixelLimit
+                          ? InsertImageResult::RejectedInvalidImage
+                          : InsertImageResult::RejectedAssetLimit);
+    }
+    if (!current.rasterAssets.contains(asset->id))
+    {
+        quint64 decodedBytes = 0;
+        qint64 payloadBytes = 0;
+        for (const RasterAsset &currentAsset : current.rasterAssets)
+        {
+            const std::optional<quint64> decoded =
+                serializer_detail::rasterDecodedByteCount(currentAsset.size);
+            if (!decoded
+                || *decoded > DocumentLimits::maximumDistinctRasterDecodedBytes
+                                  - decodedBytes
+                || currentAsset.compressedRgba.size()
+                       > DocumentLimits::maximumDistinctRasterPayloadBytes
+                             - payloadBytes)
+            {
+                return reject(InsertImageResult::RejectedAssetLimit);
+            }
+            decodedBytes += *decoded;
+            payloadBytes += currentAsset.compressedRgba.size();
+        }
+        const std::optional<quint64> addedDecoded =
+            serializer_detail::rasterDecodedByteCount(asset->size);
+        if (!addedDecoded
+            || *addedDecoded > DocumentLimits::maximumDistinctRasterDecodedBytes
+                                   - decodedBytes
+            || asset->compressedRgba.size()
+                   > DocumentLimits::maximumDistinctRasterPayloadBytes
+                         - payloadBytes)
+        {
+            return reject(InsertImageResult::RejectedAssetLimit);
+        }
+    }
+
+    const qreal scale = std::min({1.0,
+        qreal(current.size.width()) / asset->size.width(),
+        qreal(current.size.height()) / asset->size.height()});
+    const qreal translatedX =
+        (current.size.width() - asset->size.width() * scale) / 2.0;
+    const qreal translatedY =
+        (current.size.height() - asset->size.height() * scale) / 2.0;
+    const QTransform transform(
+        scale, 0.0, 0.0, scale, translatedX, translatedY);
+    if (!imageTransformWithinStoredBounds(transform, asset->size))
+    {
+        return reject(InsertImageResult::RejectedInvalidImage);
+    }
+
+    QString layerName = QFileInfo(sourceFileName).completeBaseName().trimmed();
+    layerName = layerName.left(DocumentLimits::maximumLayerNameLength);
+    if (layerName.isEmpty())
+    {
+        layerName = nextLayerName();
+    }
+
+    Stroke operation;
+    operation.mode = StrokeMode::Image;
+    operation.points.clear();
+    operation.imageOp = ImageOp{asset->id, transform, SamplingMode::Smooth};
+
+    Layer layer;
+    layer.name = std::move(layerName);
+    layer.initialCanvasSize = current.size;
+    layer.strokes.append(std::move(operation));
+    if (const Layer *active = current.layer(current.activeLayerId))
+    {
+        layer.parentGroupId = active->parentGroupId;
+    }
+    const QUuid layerId = layer.id;
+
+    Document candidate = current;
+    candidate.rasterAssets.insert(asset->id, *asset);
+    const int activeIndex = current.layerIndex(current.activeLayerId);
+    if (activeIndex >= 0)
+    {
+        candidate.layers.insert(activeIndex + 1, std::move(layer));
+    }
+    else
+    {
+        candidate.layers.append(std::move(layer));
+    }
+    candidate.activeLayerId = layerId;
+
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
+    if (!tryCommitCandidate(tr("Insert image"),
+            std::move(candidate),
+            std::move(effects),
+            ActiveLayerPolicy::UsePrepared))
+    {
+        return InsertImageResult::RejectedCommit;
+    }
+    return InsertImageResult::Inserted;
+}
+
+bool DocumentController::setImageTransform(const QUuid &layerId,
+    const QUuid &strokeId,
+    const QTransform &transform,
+    SamplingMode sampling)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(layerId);
+    if (!layer || layer->kind != LayerKind::Paint)
+    {
+        return rejectHistoryMutation();
+    }
+    const auto stroke = std::find_if(layer->strokes.cbegin(),
+        layer->strokes.cend(),
+        [&strokeId](const Stroke &candidate)
+        {
+            return candidate.id == strokeId;
+        });
+    if (stroke == layer->strokes.cend() || stroke->mode != StrokeMode::Image
+        || !stroke->imageOp)
+    {
+        return rejectHistoryMutation();
+    }
+    const auto asset = current.rasterAssets.constFind(stroke->imageOp->assetId);
+    const ImageOp replacement{stroke->imageOp->assetId, transform, sampling};
+    if (asset == current.rasterAssets.cend() || !isValidImageOp(replacement)
+        || !imageTransformWithinStoredBounds(transform, asset->size)
+        || replacement == *stroke->imageOp)
+    {
+        return rejectHistoryMutation();
+    }
+
+    Document candidate = current;
+    Layer *targetLayer = candidate.layer(layerId);
+    auto targetStroke = std::find_if(targetLayer->strokes.begin(),
+        targetLayer->strokes.end(),
+        [&strokeId](const Stroke &candidateStroke)
+        {
+            return candidateStroke.id == strokeId;
+        });
+    targetStroke->imageOp = replacement;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnail{layerId});
+    return tryCommitCandidate(
+        tr("Transform image"), std::move(candidate), std::move(effects));
+}
+
 void DocumentController::duplicateLayer(const QUuid &id)
 {
     const Document &current = document();
@@ -174,6 +370,85 @@ void DocumentController::duplicateLayer(const QUuid &id)
     effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
     tryCommitCandidate(tr("Duplicate layer"),
         std::move(withCopy),
+        std::move(effects),
+        ActiveLayerPolicy::UsePrepared);
+}
+
+DocumentController::MergeLayerDownStatus
+DocumentController::mergeLayerDownStatus(const QUuid &id) const
+{
+    const Document &current = document();
+    const int sourceIndex = current.layerIndex(id);
+    const Layer *source = current.layer(id);
+    if (sourceIndex < 0 || !source || source->kind != LayerKind::Paint)
+    {
+        return MergeLayerDownStatus::MissingLayer;
+    }
+    int targetIndex = -1;
+    for (int index = sourceIndex - 1; index >= 0; --index)
+    {
+        if (current.layers[index].parentGroupId == source->parentGroupId)
+        {
+            targetIndex = index;
+            break;
+        }
+    }
+    if (targetIndex < 0 || current.layers[targetIndex].kind != LayerKind::Paint)
+    {
+        return MergeLayerDownStatus::NoPaintLayerBelow;
+    }
+    const Layer &target = current.layers[targetIndex];
+    const bool supportedProperties =
+        source->blendMode == LayerBlendMode::Normal
+        && target.blendMode == LayerBlendMode::Normal
+        && qFuzzyCompare(source->opacity, 1.0)
+        && qFuzzyCompare(target.opacity, 1.0) && !source->clipToLayerBelow
+        && !target.clipToLayerBelow && source->reference == target.reference
+        && source->visible == target.visible;
+    if (!supportedProperties)
+    {
+        return MergeLayerDownStatus::UnsupportedProperties;
+    }
+    if (finalCanvasSize(target) != source->initialCanvasSize)
+    {
+        return MergeLayerDownStatus::IncompatibleCanvasEpoch;
+    }
+    if (source->strokes.size()
+        > DocumentLimits::maximumStrokesPerLayer - target.strokes.size())
+    {
+        return MergeLayerDownStatus::StrokeLimit;
+    }
+    return MergeLayerDownStatus::Available;
+}
+
+bool DocumentController::mergeLayerDown(const QUuid &id)
+{
+    if (mergeLayerDownStatus(id) != MergeLayerDownStatus::Available)
+    {
+        failHistoryMacro();
+        return false;
+    }
+    const Document &current = document();
+    const int sourceIndex = current.layerIndex(id);
+    const Layer &source = current.layers[sourceIndex];
+    int targetIndex = sourceIndex - 1;
+    while (current.layers[targetIndex].parentGroupId != source.parentGroupId)
+    {
+        --targetIndex;
+    }
+    const QUuid targetId = current.layers[targetIndex].id;
+    Document candidate = current;
+    Layer &target = candidate.layers[targetIndex];
+    target.strokes.reserve(target.strokes.size() + source.strokes.size());
+    target.strokes.append(source.strokes);
+    candidate.layers.removeAt(sourceIndex);
+    candidate.activeLayerId = targetId;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    effects->afterDocumentChanged.append(HistoryEffects::ActiveLayer{});
+    return tryCommitCandidate(tr("Merge layer down"),
+        std::move(candidate),
         std::move(effects),
         ActiveLayerPolicy::UsePrepared);
 }

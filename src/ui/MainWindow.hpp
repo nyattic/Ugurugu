@@ -3,6 +3,7 @@
 #include "app/RecoveryWriter.hpp"
 #include "document/DocumentController.hpp"
 #include "io/ExportWorker.hpp"
+#include "io/WawaV10Importer.hpp"
 
 #include <QList>
 #include <QMainWindow>
@@ -94,7 +95,13 @@ private:
     void rotateSelection();
     void editSelectedStrokeProperties();
     void chooseOpenFile();
+    void chooseInsertImage();
+    void importWwpPreset();
+    void exportWwpPreset();
+    void showHelp();
     void exportGif();
+    void exportWebP();
+    void exportAnimation(ExportWorker::Kind kind);
     void exportImage();
     void beginExportProgress(
         ExportWorker::Kind kind, const QString &filePath, int maximum);
@@ -114,6 +121,8 @@ private:
     TimelineBar *m_timeline = nullptr;
     LayerDock *m_layerDock = nullptr;
     QString m_currentFilePath;
+    QString m_suggestedSavePath;
+    std::optional<WawaImportSummary> m_pendingWawaImportSummary;
     QAction *m_saveAction = nullptr;
     QAction *m_playAction = nullptr;
     QAction *m_brushAction = nullptr;

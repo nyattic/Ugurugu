@@ -28,6 +28,14 @@ constexpr int wobbleAmountMergeId = 1;
 constexpr int animationFramesMergeId = 2;
 constexpr int framesPerSecondMergeId = 3;
 constexpr int layerOpacityMergeId = 4;
+constexpr int motionStyleMergeId = 5;
+constexpr int motionPoseCountMergeId = 6;
+constexpr int motionDetailMergeId = 7;
+constexpr int motionLinkedMergeId = 8;
+constexpr int motionRandomnessMergeId = 9;
+constexpr int brokenLineMergeId = 10;
+constexpr int breakAmountMergeId = 11;
+constexpr int breakRangeMergeId = 12;
 
 }
 

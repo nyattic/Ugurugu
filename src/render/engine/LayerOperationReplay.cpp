@@ -5,6 +5,7 @@
 #include "document/StrokeMask.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
+#include "render/RasterAssetCache.hpp"
 #include "render/RenderEngine.hpp"
 #include "render/StrokeRenderer.hpp"
 
@@ -150,6 +151,10 @@ void applyFillStroke(QImage &layerImage,
                 line[x] = fill;
                 continue;
             }
+            if (stroke.fillCoverage && !stroke.brush.antialiasing)
+            {
+                continue;
+            }
             const bool touchesRegion =
                 (x > 0 && maskLine[x - 1] >= 128)
                 || (x < width - 1 && maskLine[x + 1] >= 128)
@@ -180,6 +185,7 @@ void renderLayerStrokes(QImage &layerImage,
     QHash<qint64, QImage> &scaledClipMasks,
     const QPointF &logicalOrigin)
 {
+    static_cast<void>(frameCount);
     const QSize outputSize = layerImage.size();
     QPainter painter(&layerImage);
     painter.setRenderHint(QPainter::Antialiasing, false);
@@ -201,9 +207,15 @@ void renderLayerStrokes(QImage &layerImage,
             {
                 continue;
             }
+            const QImage packedCoverage =
+                stroke.fillCoverage ? unpackBinaryMask(*stroke.fillCoverage)
+                                    : QImage();
+            const QImage &coverage =
+                stroke.fillCoverage ? packedCoverage : stroke.fillMask;
             const QImage scaledCoverageMask =
-                scaledMask(stroke.fillMask, outputSize, scaledClipMasks);
-            if (!stroke.fillMask.isNull() && scaledCoverageMask.isNull())
+                scaledMask(coverage, outputSize, scaledClipMasks);
+            if ((!stroke.fillMask.isNull() || stroke.fillCoverage)
+                && scaledCoverageMask.isNull())
             {
                 continue;
             }
@@ -252,8 +264,8 @@ void renderLayerStrokes(QImage &layerImage,
                 : QPainter::CompositionMode_SourceOver);
 
         painter.setBrush(Qt::NoBrush);
-        const StrokeRenderer::PreparedStroke prepared = StrokeRenderer::prepare(
-            stroke, normalizedFrame, frameCount, document.wobbleAmount);
+        const StrokeRenderer::PreparedStroke prepared =
+            StrokeRenderer::prepare(stroke, normalizedFrame, document);
         if (!prepared.valid)
         {
             painter.restore();
@@ -378,6 +390,30 @@ bool applyReframeOperation(QImage &layerImage, const ReframeOp &operation)
     return true;
 }
 
+bool applyImageOperation(
+    QImage &layerImage, const Document &document, const ImageOp &operation)
+{
+    if (!isValidImageOp(operation)
+        || layerImage.format() != QImage::Format_ARGB32_Premultiplied)
+    {
+        return false;
+    }
+    const QImage transformed = RasterAssetCache::transformedImage(document,
+        operation.assetId,
+        layerImage.size(),
+        operation.transform,
+        operation.sampling);
+    if (transformed.isNull())
+    {
+        return false;
+    }
+    QPainter painter(&layerImage);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.drawImage(QPoint(), transformed);
+    painter.end();
+    return true;
+}
+
 bool renderLayerOperations(QImage &layerImage,
     const Document &document,
     const QVector<Stroke> &operations,
@@ -438,9 +474,21 @@ bool renderLayerOperations(QImage &layerImage,
                 return false;
             }
         }
+        else if (operation.mode == StrokeMode::Image)
+        {
+            flush();
+            if (!operation.imageOp || operation.pixelSelectionOp
+                || operation.reframeOp
+                || !applyImageOperation(
+                    layerImage, document, *operation.imageOp))
+            {
+                return false;
+            }
+        }
         else
         {
-            if (operation.pixelSelectionOp || operation.reframeOp)
+            if (operation.pixelSelectionOp || operation.reframeOp
+                || operation.imageOp)
             {
                 return false;
             }

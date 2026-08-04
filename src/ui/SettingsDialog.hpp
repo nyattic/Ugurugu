@@ -11,6 +11,7 @@ class QComboBox;
 class QKeySequenceEdit;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QRadioButton;
 
 namespace wobble
@@ -37,6 +38,8 @@ private:
     void setShortcut(QAction *action, const QKeySequence &shortcut);
     void chooseDefaultSaveFolder();
     void resetDefaultSaveFolder();
+    void chooseThemeColor();
+    void refreshThemeColorButton();
     void restoreDefaults();
 
     QCheckBox *m_wobbleAnimation = nullptr;
@@ -48,6 +51,7 @@ private:
     QHash<QAction *, QKeySequenceEdit *> m_shortcutEditors;
     QLabel *m_shortcutMessage = nullptr;
     QLineEdit *m_defaultSaveFolderEdit = nullptr;
+    QPushButton *m_themeColorButton = nullptr;
 };
 
 }

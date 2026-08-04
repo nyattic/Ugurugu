@@ -91,6 +91,13 @@ quint64 distinctClipMaskBytes(const Document &document)
             {
                 return DocumentLimits::maximumDistinctClipMaskBytes + 1;
             }
+            const std::optional<PackedMaskRegion> &fillCoverage =
+                stroke.fillCoverage;
+            if (fillCoverage.has_value()
+                && !registerPacked(fillCoverage.value().packedMask))
+            {
+                return DocumentLimits::maximumDistinctClipMaskBytes + 1;
+            }
         }
     }
     return bytes;

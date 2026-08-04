@@ -39,13 +39,14 @@ QSize scaledSize(const QSize &size, int percentage)
 
 }
 
-GifExportDialog::GifExportDialog(const Document &document, QWidget *parent)
+GifExportDialog::GifExportDialog(
+    const Document &document, const QString &windowTitle, QWidget *parent)
     : QDialog(parent)
     , m_documentSize(document.size)
     , m_frameCount(document.animationFrames)
     , m_documentHasTransparency(documentHasTransparentBackground(document))
 {
-    setWindowTitle(tr("Export animated GIF"));
+    setWindowTitle(windowTitle);
     setModal(true);
 
     auto *layout = new QVBoxLayout(this);

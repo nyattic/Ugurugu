@@ -39,7 +39,9 @@ class CanvasWidget final : public QWidget
 public:
     using Tool = CanvasTool;
     using WandReference = CanvasWandReference;
+    using FillComparison = CanvasFillComparison;
     using SelectionShape = CanvasSelectionShape;
+    using LassoMode = CanvasLassoMode;
     using SelectionCombine = CanvasSelectionCombine;
 
     explicit CanvasWidget(
@@ -60,7 +62,11 @@ public:
     QString brushPresetId() const;
     QString eraserPresetId() const;
     WandReference wandReference() const;
+    FillComparison fillComparison() const;
+    int fillTolerance() const;
+    bool bucketAntialiasing() const;
     SelectionShape selectionShape() const;
+    LassoMode lassoMode() const;
     bool isAnimating() const;
     bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
@@ -110,7 +116,11 @@ public slots:
     void setBrushPreset(const QString &presetId);
     void setEraserPreset(const QString &presetId);
     void setWandReference(WandReference reference);
+    void setFillComparison(FillComparison comparison);
+    void setFillTolerance(int tolerance);
+    void setBucketAntialiasing(bool antialiasing);
     void setSelectionShape(SelectionShape shape);
+    void setLassoMode(LassoMode mode);
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
@@ -139,7 +149,11 @@ signals:
     void brushPresetChanged(const QString &presetId);
     void eraserPresetChanged(const QString &presetId);
     void wandReferenceChanged(WandReference reference);
+    void fillComparisonChanged(FillComparison comparison);
+    void fillToleranceChanged(int tolerance);
+    void bucketAntialiasingChanged(bool antialiasing);
     void selectionShapeChanged(SelectionShape shape);
+    void lassoModeChanged(LassoMode mode);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
@@ -259,6 +273,7 @@ private:
     void computeWandSelection(const QPointF &documentPosition,
         SelectionCombine combine = SelectionCombine::Replace);
     void applyBucketFill(const QPointF &documentPosition);
+    void commitFrozenFill(const QImage &coverage);
     void beginSelectionMove(const QPointF &documentPosition);
     void continueSelectionMove(const QPointF &documentPosition);
     void commitSelectionMove();
@@ -318,7 +333,11 @@ private:
     QHash<QString, qreal> m_eraserPresetWidths;
     QHash<QString, qreal> m_eraserPresetStabilizations;
     WandReference m_wandReference = WandReference::ActiveLayer;
+    FillComparison m_fillComparison = FillComparison::AlphaBoundary;
+    int m_fillTolerance = 32;
+    bool m_bucketAntialiasing = true;
     SelectionShape m_selectionShape = SelectionShape::Freehand;
+    LassoMode m_lassoMode = LassoMode::Select;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
     bool m_groupSelectionActive = false;

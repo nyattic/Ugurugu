@@ -90,6 +90,8 @@ QHash<QString, BinaryAssetMeta> binaryAssetsByIdentity(
 
 PackedMaskRegion pixelSelectionMaskRegion(const PixelSelectionOp &operation);
 
+std::optional<PackedMaskRegion> strokeBinaryMaskRegion(const Stroke &stroke);
+
 // Templated on the cache so this header does not need the private
 // SerializationCache::Impl definition. `Cache` must provide payload(),
 // storePayload() and a `statistics` member.
@@ -393,9 +395,10 @@ BinaryMaskTable buildBinaryMaskTable(const Document &document,
     {
         for (const Stroke &stroke : layer.strokes)
         {
-            if (stroke.pixelSelectionOp
-                && registerBinaryMask(
-                    pixelSelectionMaskRegion(*stroke.pixelSelectionOp),
+            const std::optional<PackedMaskRegion> region =
+                strokeBinaryMaskRegion(stroke);
+            if (region
+                && registerBinaryMask(*region,
                     table,
                     baseAssets,
                     cache,

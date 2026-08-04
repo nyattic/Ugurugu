@@ -19,11 +19,23 @@ enum class CanvasWandReference
     AllVisibleLayers
 };
 
+enum class CanvasFillComparison
+{
+    AlphaBoundary,
+    Color
+};
+
 enum class CanvasSelectionShape
 {
     Freehand,
     Rectangle,
     Ellipse
+};
+
+enum class CanvasLassoMode
+{
+    Select,
+    Paint
 };
 
 enum class CanvasSelectionCombine

@@ -811,23 +811,30 @@ quint64 packedSelectionBytes(const Document &document)
     {
         for (const Stroke &operation : layer.strokes)
         {
-            if (operation.pixelSelectionOp)
+            const auto account = [&total, &seenBackings](
+                                     const QByteArray &packed)
             {
-                const QByteArray *packed =
-                    &operation.pixelSelectionOp->packedMask;
                 const quintptr backing =
-                    reinterpret_cast<quintptr>(packed->constData());
+                    reinterpret_cast<quintptr>(packed.constData());
                 if (seenBackings.contains(backing))
                 {
-                    continue;
+                    return true;
                 }
-                const quint64 bytes = static_cast<quint64>(packed->size());
+                const quint64 bytes = static_cast<quint64>(packed.size());
                 if (bytes > std::numeric_limits<quint64>::max() - total)
                 {
-                    return std::numeric_limits<quint64>::max();
+                    return false;
                 }
                 seenBackings.insert(backing);
                 total += bytes;
+                return true;
+            };
+            if ((operation.pixelSelectionOp
+                    && !account(operation.pixelSelectionOp->packedMask))
+                || (operation.fillCoverage
+                    && !account(operation.fillCoverage->packedMask)))
+            {
+                return std::numeric_limits<quint64>::max();
             }
         }
     }

@@ -102,6 +102,17 @@ public:
         frozen.animationFrames = source.animationFrames;
         frozen.framesPerSecond = source.framesPerSecond;
         frozen.wobbleAmount = source.wobbleAmount;
+        frozen.motion = source.motion;
+        for (auto asset = source.rasterAssets.cbegin();
+            asset != source.rasterAssets.cend();
+            ++asset)
+        {
+            RasterAsset frozenAsset;
+            frozenAsset.id = owningCopy(asset->id);
+            frozenAsset.size = asset->size;
+            frozenAsset.compressedRgba = freezeBytes(asset->compressedRgba);
+            frozen.rasterAssets.insert(owningCopy(asset.key()), frozenAsset);
+        }
         frozen.activeLayerId = source.activeLayerId;
         frozen.layers.reserve(source.layers.size());
         for (const Layer &layer : source.layers)
@@ -212,6 +223,16 @@ private:
         frozen.visibilityClip = source.visibilityClip;
         frozen.clipMask = freezeImage(source.clipMask);
         frozen.fillMask = freezeImage(source.fillMask);
+        if (source.fillCoverage)
+        {
+            frozen.fillCoverage = *source.fillCoverage;
+            frozen.fillCoverage->packedMask =
+                freezeBytes(source.fillCoverage->packedMask);
+        }
+        else
+        {
+            frozen.fillCoverage.reset();
+        }
         if (source.pixelSelectionOp)
         {
             PixelSelectionOp operation = *source.pixelSelectionOp;
@@ -223,6 +244,11 @@ private:
             frozen.pixelSelectionOp.reset();
         }
         frozen.reframeOp = source.reframeOp;
+        if (source.imageOp)
+        {
+            frozen.imageOp = *source.imageOp;
+            frozen.imageOp->assetId = owningCopy(source.imageOp->assetId);
+        }
         return frozen;
     }
 
@@ -397,6 +423,7 @@ bool serializedSizeWithinLimit(const Document &document,
                 entry->compressedBytes});
     }
     plan.binaryIdsByIdentity = binaryMasks.idByIdentity;
+    plan.rasterAssets = document.rasterAssets;
 
     qint64 serializedLayerBytes = 0;
     for (const Layer &layer : document.layers)

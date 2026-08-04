@@ -155,6 +155,11 @@ macOSではSparkle、WindowsではVelopackを通じてダウンロード・
 ソースからのビルドとテスト方法は[BUILDING.md](BUILDING.md)を参照
 してください。
 
+## クレジット
+
+- Development support by seuppi
+- App icon artwork by seuppi
+
 ## ライセンス
 
 WagleWaglePaintは[GNU General Public License v3.0](LICENSE)のもとで

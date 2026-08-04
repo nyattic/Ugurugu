@@ -22,7 +22,7 @@ WWT는 비개발자가 AI를 활용해 만든 실험적 구현이므로 호환 �
 - 허용치 기반 채색과 선택 개선
 - 이미지 삽입을 위한 RGBA 자산과 이미지 연산
 - Lasso Paint와 안전한 범위의 Merge Down
-- 팔레트와 WWP 자체 프리셋
+- WWP 자체 프리셋
 - 애니메이션 WebP 내보내기
 
 ### 조건부 범위
@@ -75,6 +75,12 @@ WWT는 C# / WinForms / GDI+, WWP는 C++23 / Qt 6 / QPainter다. 소스 병합은
 
 WWT 소스, 아이콘, 문구 또는 제3자 바이너리를 직접 반입해야 하는 기능은 권리와 라이선스를 먼저 확인한다. 단순 기능 아이디어만 참고하는 경우에도 구현은 WWP 코드 스타일과 테스트 기준으로 새로 작성한다.
 
+2026-08-04에 프로젝트 제공자가 seuppi가 직접 그린
+`WiggleWiggleTool.ico`의 사용을 요청했다. Windows에는 원본 ICO를 그대로
+사용하고 macOS에는 같은 그림에서 변환한 ICNS를 사용한다. README와 앱 정보
+탭에는 `Development support by seuppi`, `App icon artwork by seuppi`를
+표시한다.
+
 ### WWT 비교는 합격 기준이 아니다
 
 WWT 화면과의 시각 비교는 기능 탐색과 UX 참고에는 사용할 수 있지만 자동 테스트의 oracle로 사용하지 않는다. 새 기능의 합격 기준은 WWP 내부의 결정론, 회귀 보존, 사용성, 성능과 안전성이다.
@@ -115,7 +121,7 @@ WWT 기능 목록과 겹치지만 WWP에 이미 구현된 부분이 있다. 새 
 | Fill mask 동결 | schema 5의 full-canvas `Stroke::fillMask` replay와 `PackedMaskRegion`의 cropped 1-bit 저장·중복 제거 경로가 있다. 새 fill은 후자를 재사용한다 |
 | Fill 경계 페더링 | `applyFillStroke`가 이미 mask 바깥 1픽셀을 기존 알파에 비례해 blend한다 |
 | Antialias 플래그 | `BrushSettings::antialiasing`이 있고 bucket이 이미 실어 보내지만 Fill replay는 현재 이 값을 읽지 않는다 |
-| 최근 색 | `ColorSwatchRow`가 12칸 최근 색을 QSettings에 저장한다. 저장 팔레트는 없다 |
+| 최근 색 | `ColorSwatchRow`가 6칸 최근 색을 QSettings에 저장한다. 저장 팔레트는 없다 |
 
 따라서 Bucket Tolerance는 "참조 대상 고르기"가 아니라 "**비교 기준을 알파에서 색으로 넓히고 Bucket에도 참조 선택을 붙이는**" 작업이고, Bucket Antialias는 신규가 아니라 "기존 경계 페더링과 새 토글의 관계 정리"다.
 
@@ -330,7 +336,9 @@ WWP는 이 둘을 분리해서 노출한다. 묶어서 옮기면 "합성을 보�
 
 - 활성 레이어 + 알파 경계 + tolerance 0: 현재 동작 그대로, **절차적으로 유지한다**
 - 다른 레이어나 합성을 참조한 결과: replay 시 재계산하지 않고 저장된 mask로 **동결한다**
-- 활성 레이어 + 색 tolerance: **단계 1 spike에서 결정한다.** 색 비교는 프레임마다 결과가 달라질 수 있어 절차적으로 두면 채움 영역이 프레임 간에 튈 수 있고, 동결하면 선을 따라가지 않는다. 두 결과를 실제로 렌더해 보고 고른다
+- 활성 레이어 + 색 tolerance: 프레임 간 영역이 튀지 않도록 캡처 시점의
+  결과를 **동결한다.** tolerance 0은 legacy 알파 경계 경로로 보내 기존
+  결과와 동일하게 유지한다
 
 동결 의미는 신규 Fill과 Lasso Paint가 공유하지만 schema 5 보존용인
 full-canvas `Stroke::fillMask`를 새 문서에 그대로 쓰지는 않는다. 4K에서는
@@ -398,6 +406,11 @@ schema 5 `fillMask`는 legacy load와 기존 골든을 위해 그대로 유지�
 
 실제 사용자 파일이 확보되지 않으면 importer를 구현하지 않는다.
 
+2026-08-04에 native v10 사용자 파일과 WWT 저장 코드가 확보됐다. WWT 코드와
+자산은 반입하지 않고, 저장 필드 순서와 인코딩 계약만 외부 포맷 사양으로 삼아
+독립 구현한다. 따라서 importer 구현을 진행하되 완전 호환이 아닌 best-effort
+마이그레이션이라는 경계는 유지한다.
+
 ## 5. 기능 우선순위
 
 | 그룹 | 기능 | 우선순위 | 비고 |
@@ -414,7 +427,7 @@ schema 5 `fillMask`는 legacy load와 기존 골든을 위해 그대로 유지�
 | 자산 | Insert Image | 핵심 | 비파괴 삽입. 결정 D의 두 예산이 선결 조건 |
 | 도구 | Lasso Paint | 중요 | cropped 1-bit frozen coverage |
 | 레이어 | 제한된 Merge Down | 중요 | 안전 조건에서만 벡터 유지 |
-| 색상 | Palette | 중요 | 최근 색과 저장 팔레트 역할 분리 |
+| 색상 | Palette | 제외 | 기존 최근 색상 스와치와 역할이 겹쳐 UI에서 제외 |
 | 설정 | WWP Preset | 중요 | WWP 자체 포맷 우선 |
 | 입출력 | Animated WebP | 선택 | loop, alpha, frame timing 명시 |
 | 파일 | Native v10 `.wawa` import | 선택 | best-effort migration |
@@ -461,12 +474,12 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 
 - [x] v1.0.0 schema 9 렌더 골든 corpus 생성
 - [x] Clang-Tidy diagnostics를 warnings-as-errors로 올리고 macOS CI 게이트 연결
-- [ ] 기능별 포함·제외와 사용자 동작 계약 확정
+- [x] 기능별 포함·제외와 사용자 동작 계약 확정
 - [x] WWP식 Smooth / Stepped 시간 모델 후보 정의
 - [x] raster asset의 pixel format과 메모리 예산 정의
-- [ ] legacy Fill과 새 Bucket의 경계 확정
-- [ ] Merge Down 안전 조건 확정
-- [ ] WWT 코드나 자산을 직접 반입할 항목이 있으면 provenance 확인
+- [x] legacy Fill과 새 Bucket의 경계 확정
+- [x] Merge Down 안전 조건 확정
+- [x] WWT 코드나 자산을 직접 반입할 항목이 있으면 provenance 확인
 
 종료 조건:
 
@@ -480,14 +493,14 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 
 - [x] Smooth 시간 보간 prototype
 - [x] Stepped의 균등 hold와 루프 경계 검증
-- [ ] Broken Line의 visible run, coverage, incremental render prototype
-- [ ] `RasterAssetTable`과 image op prototype
+- [x] Broken Line의 visible run, coverage, incremental render prototype
+- [x] `RasterAssetTable`과 image op prototype
 - [x] `maximumProjectBytes`와 `MemoryBudget` 결정 (결정 D의 선결 조건)
-- [ ] 활성 레이어 + 색 tolerance를 절차적으로 둘지 동결할지 렌더 비교로 결정
+- [x] 활성 레이어 + 색 tolerance를 절차적으로 둘지 동결할지 렌더 비교로 결정
 - [x] `DocumentDelta::mergeScalar`를 필드 집합 기반으로 일반화
 - [x] frozen Fill mask와 PolygonFill 후보 비교
-- [ ] schema 10 motion/Fill 필드와 operation 확정
-- [ ] schema 11 raster asset/image op 경계 초안 확정
+- [x] schema 10 motion/Fill 필드와 operation 확정
+- [x] schema 11 raster asset/image op 경계 초안 확정
 
 `mergeScalar`는 document와 layer 스칼라 필드 집합을 각각 한 번만 선언하고, 선택된 필드 하나만 바뀐 delta인지 공통 검사한다. 새 필드는 해당 집합과 merge id 매핑에 한 번씩만 추가하며, 서로 다른 슬라이더가 한 undo 항목으로 합쳐지지 않는 회귀 테스트를 유지한다.
 
@@ -503,13 +516,13 @@ schema 11에는 raster asset의 저장·중복 제거·budget과 image op의 자
 
 예상 기간: 3~5주
 
-- [ ] Detail
-- [ ] Motion Style과 Motion Pose Count
-- [ ] Linked와 Randomness
-- [ ] Broken Line, Break Amount, Break Range
-- [ ] 지우개 wobble 입력 옵션
-- [ ] 흔들림 전용 UI와 기존 타임라인 컨트롤 이전
-- [ ] coverage, selection, incremental render 테스트
+- [x] Detail
+- [x] Motion Style과 Motion Pose Count
+- [x] Linked와 Randomness
+- [x] Broken Line, Break Amount, Break Range
+- [x] 지우개 wobble 입력 옵션
+- [x] 흔들림 전용 UI와 기존 타임라인 컨트롤 이전
+- [x] coverage, selection, incremental render 테스트
 
 Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스칼라와 순수 함수만 건드리는 반면, gap이 생기면 `StrokeCoverageRenderer`의 primitive 단위 bounds와 incremental redraw 경로를 함께 고쳐야 한다. 일정이 밀리면 Broken Line을 먼저 뒤로 미루고 나머지를 먼저 닫는다.
 
@@ -524,12 +537,12 @@ Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스
 
 예상 기간: 2~4주
 
-- [ ] Bucket 비교 기준: 알파 경계와 색 tolerance
-- [ ] Bucket에 `CanvasWandReference` 적용
-- [ ] Wand와 Bucket이 같은 비교 기준 구현을 공유
-- [ ] Bucket Antialias와 기존 경계 페더링의 관계 정리
-- [ ] Lasso Paint
-- [ ] 안전 조건의 Merge Down
+- [x] Bucket 비교 기준: 알파 경계와 색 tolerance
+- [x] Bucket에 `CanvasWandReference` 적용
+- [x] Wand와 Bucket이 같은 비교 기준 구현을 공유
+- [x] Bucket Antialias와 기존 경계 페더링의 관계 정리
+- [x] Lasso Paint
+- [x] 안전 조건의 Merge Down
 
 종료 조건:
 
@@ -546,19 +559,19 @@ Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스
 
 단계 1에서 두 예산이 확정되지 않았으면 시작하지 않는다.
 
-- [ ] schema 11 공개 형식 확정
-- [ ] raster asset 직렬화와 content hash dedup
-- [ ] image op의 전체 replay와 cache 경로 통합
-- [ ] 변환 행렬 저장과 **재편집** — 굽지 않는 변형
-- [ ] 프레임 간 샘플링 결과 재사용과 무효화 조건
-- [ ] 새 레이어 생성과 배치: 활성 레이어 바로 위, 같은 group scope
-- [ ] 파일 이름을 레이어 이름으로 사용 (확장자 제거, 길이 제한, 빈 이름 대체)
-- [ ] 삽입 기본 배치: 축소 + 중앙, 캔버스보다 작으면 원본 크기
-- [ ] 확대 허용과 상한
-- [ ] `maximumLayers`·`maximumLayerDepth` 도달 시 명확한 거부
-- [ ] 이미지 디코드 한도와 malformed input 테스트
-- [ ] EXIF orientation과 색 공간 처리
-- [ ] undo, autosave, recovery, copy/delete 자산 수명 테스트
+- [x] schema 11 공개 형식 확정
+- [x] raster asset 직렬화와 content hash dedup
+- [x] image op의 전체 replay와 cache 경로 통합
+- [x] 변환 행렬 저장과 **재편집** — 굽지 않는 변형
+- [x] 프레임 간 샘플링 결과 재사용과 무효화 조건
+- [x] 새 레이어 생성과 배치: 활성 레이어 바로 위, 같은 group scope
+- [x] 파일 이름을 레이어 이름으로 사용 (확장자 제거, 길이 제한, 빈 이름 대체)
+- [x] 삽입 기본 배치: 축소 + 중앙, 캔버스보다 작으면 원본 크기
+- [x] 확대 허용과 상한
+- [x] `maximumLayers`·`maximumLayerDepth` 도달 시 명확한 거부
+- [x] 이미지 디코드 한도와 malformed input 테스트
+- [x] EXIF orientation과 색 공간 처리
+- [x] undo, autosave, recovery, copy/delete 자산 수명 테스트
 
 종료 조건:
 
@@ -577,11 +590,13 @@ Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스
 
 각 기능은 독립적으로 산정하고 핵심 확장과 별도로 배포할 수 있다.
 
-- [ ] Palette와 WWP Preset
-- [ ] Animated WebP
-- [ ] Theme Color와 앱 내 Help
-- [ ] 실제 수요가 있을 때 native v10 `.wawa` importer
-- [ ] 실제 파일이 확보됐을 때 legacy palette/preset importer
+- [x] WWP Preset
+- [x] Palette — 기존 최근 색상 스와치와 역할이 겹쳐 제품 판단으로 제외
+- [x] Animated WebP
+- [x] Theme Color와 앱 내 Help
+- [x] 실제 수요가 확인된 native v10 `.wawa` importer
+- [ ] 실제 파일이 확보됐을 때 legacy palette/preset importer — 전달 소스와
+  프로젝트 루트에 실제 입력 파일이 없어 이번 범위에서 명시적으로 제외(no-go)
 
 `.ini` 번역 패치와 WAV 재생은 이 계획에서 구현하지 않는다. 필요성이 생기면 별도 제안서로 평가한다.
 
@@ -696,8 +711,8 @@ WWT의 좌측 슬라이더 패널을 재현하지 않는다. WWP의 기존 팝�
 6. [x] Smooth와 Stepped 시간 모델 prototype 비교
 7. [x] `RasterAssetTable`의 canonical format과 예산 prototype
 8. [x] frozen Fill mask와 PolygonFill 표현 비교
-9. [ ] 문서 필드와 operation 목록 확정
-10. [ ] schema 10/11 경계와 전체 integration checklist 작성
+9. [x] 문서 필드와 operation 목록 확정
+10. [x] schema 10/11 경계와 전체 integration checklist 작성
 
 3번과 4번은 다른 항목의 결과를 기다리지 않는다. 둘 다 미해결인 상태에서 단계 2 이후를 시작하면 나중에 되돌리는 비용이 커진다.
 

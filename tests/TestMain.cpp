@@ -25,6 +25,7 @@ constexpr std::array suites{
     Suite{"document", wobble::runDocumentTests},
     Suite{"render", wobble::runRenderEngineTests},
     Suite{"gif", wobble::runGifWriterTests},
+    Suite{"webp", wobble::runWebPWriterTests},
     Suite{"mask", wobble::runMaskRegressionTests},
     Suite{"release_notes", wobble::runReleaseNotesTests},
     Suite{"stabilizer", wobble::runStrokeStabilizerTests},

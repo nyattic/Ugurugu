@@ -22,7 +22,8 @@ public:
     enum class Kind
     {
         Image,
-        Gif
+        Gif,
+        WebP
     };
     Q_ENUM(Kind)
 
@@ -32,7 +33,7 @@ public:
     // Output size and transparency for one GIF export. `outputSize` is the
     // encoded frame size, which is what the memory budget is checked against,
     // so a scaled-down export can succeed where the native size cannot.
-    struct GifOptions
+    struct AnimationOptions
     {
         QSize outputSize;
         bool preserveTransparency = true;
@@ -40,8 +41,12 @@ public:
 
     bool startImage(
         Document document, int frame, const QString &filePath, bool jpeg);
-    bool startGif(
-        Document document, const QString &filePath, const GifOptions &options);
+    bool startGif(Document document,
+        const QString &filePath,
+        const AnimationOptions &options);
+    bool startWebP(Document document,
+        const QString &filePath,
+        const AnimationOptions &options);
     void cancel();
     bool isBusy() const;
     bool waitForIdle(int timeoutMilliseconds = -1);
@@ -62,7 +67,7 @@ private:
         int frame = 0;
         QString filePath;
         bool jpeg = false;
-        GifOptions gif;
+        AnimationOptions animation;
     };
 
     bool start(Request request);
@@ -74,7 +79,7 @@ private:
         bool wasCanceled,
         const QString &error);
     bool writeImage(const Request &request, QString *error);
-    bool writeGif(const Request &request, QString *error);
+    bool writeAnimation(const Request &request, QString *error);
 
     QThread m_thread;
     QObject m_workerContext;

@@ -11,6 +11,7 @@ namespace wobble::StrokeRenderer
 struct PreparedStroke
 {
     QVector<StrokePoint> points;
+    QVector<quint8> visibleSegments;
     qreal width = 0.0;
     int normalizedFrame = 0;
     bool variablePressure = false;
@@ -34,18 +35,28 @@ public:
         int frameIndex,
         int frameCount,
         qreal wobbleAmount);
+    GeometryUpdate update(
+        const Stroke &stroke, int frameIndex, const Document &document);
     void clear();
 
 private:
     bool matches(const Stroke &stroke,
         int normalizedFrame,
         int frameCount,
-        qreal wobbleAmount) const;
+        qreal wobbleAmount,
+        const MotionSettings &motion) const;
+    GeometryUpdate updateConfigured(const Stroke &stroke,
+        int frameIndex,
+        int frameCount,
+        qreal wobbleAmount,
+        const MotionSettings &motion);
     bool rebuildSamples(const Stroke &stroke, qreal spacing, qsizetype maximum);
     bool appendSamples(const Stroke &stroke);
     void displaceSamples(const Stroke &stroke,
         int normalizedFrame,
+        int frameCount,
         qreal wobbleAmount,
+        const MotionSettings &motion,
         qsizetype changedFrom);
 
     PreparedStroke m_prepared;
@@ -61,6 +72,7 @@ private:
     int m_frameCount = 0;
     int m_normalizedFrame = 0;
     qreal m_wobbleAmount = 0.0;
+    MotionSettings m_motion;
     qreal m_regularMinimumPressure = 1.0;
     qreal m_regularMaximumPressure = 0.0;
     bool m_capped = false;
@@ -68,8 +80,12 @@ private:
 
 PreparedStroke prepare(
     const Stroke &stroke, int frameIndex, int frameCount, qreal wobbleAmount);
+PreparedStroke prepare(
+    const Stroke &stroke, int frameIndex, const Document &document);
 QPainterPath path(
     const Stroke &stroke, int frameIndex, int frameCount, qreal wobbleAmount);
+QPainterPath path(
+    const Stroke &stroke, int frameIndex, const Document &document);
 void paint(
     QPainter &painter, const Stroke &stroke, const PreparedStroke &prepared);
 void paintPrimitives(QPainter &painter,

@@ -53,6 +53,7 @@ private:
     QToolButton *m_addButton = nullptr;
     QToolButton *m_addGroupButton = nullptr;
     QToolButton *m_duplicateButton = nullptr;
+    QToolButton *m_mergeDownButton = nullptr;
     QToolButton *m_deleteButton = nullptr;
     QToolButton *m_moveUpButton = nullptr;
     QToolButton *m_moveDownButton = nullptr;

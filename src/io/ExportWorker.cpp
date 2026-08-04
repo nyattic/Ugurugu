@@ -2,6 +2,7 @@
 
 #include "document/DocumentLimits.hpp"
 #include "io/GifWriter.hpp"
+#include "io/WebPWriter.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QDeadlineTimer>
@@ -18,22 +19,23 @@ namespace wobble
 namespace
 {
 
-QVector<int> frameDelays(int frameCount, qreal framesPerSecond)
+QVector<int> frameDurations(
+    int frameCount, qreal framesPerSecond, int unitsPerSecond)
 {
     const qreal fps = std::clamp(framesPerSecond,
         DocumentLimits::minimumFramesPerSecond,
         DocumentLimits::maximumFramesPerSecond);
     QVector<int> delays;
     delays.reserve(frameCount);
-    qint64 emittedCentiseconds = 0;
+    qint64 emittedUnits = 0;
     for (int frame = 1; frame <= frameCount; ++frame)
     {
-        const qint64 targetCentiseconds =
-            qRound64(static_cast<qreal>(frame) * 100.0 / fps);
-        const int delay = static_cast<int>(
-            std::max<qint64>(1, targetCentiseconds - emittedCentiseconds));
+        const qint64 targetUnits =
+            qRound64(static_cast<qreal>(frame) * unitsPerSecond / fps);
+        const int delay =
+            static_cast<int>(std::max<qint64>(1, targetUnits - emittedUnits));
         delays.append(delay);
-        emittedCentiseconds += delay;
+        emittedUnits += delay;
     }
     return delays;
 }
@@ -63,9 +65,16 @@ bool ExportWorker::startImage(
 }
 
 bool ExportWorker::startGif(
-    Document document, const QString &filePath, const GifOptions &options)
+    Document document, const QString &filePath, const AnimationOptions &options)
 {
     return start({Kind::Gif, std::move(document), 0, filePath, false, options});
+}
+
+bool ExportWorker::startWebP(
+    Document document, const QString &filePath, const AnimationOptions &options)
+{
+    return start(
+        {Kind::WebP, std::move(document), 0, filePath, false, options});
 }
 
 bool ExportWorker::start(Request request)
@@ -138,7 +147,7 @@ void ExportWorker::process()
     if (!canceled())
     {
         success = request.kind == Kind::Image ? writeImage(request, &error)
-                                              : writeGif(request, &error);
+                                              : writeAnimation(request, &error);
     }
     const bool wasCanceled = !success && canceled();
     complete(request, success, wasCanceled, error);
@@ -242,17 +251,17 @@ bool ExportWorker::writeImage(const Request &request, QString *error)
     return true;
 }
 
-bool ExportWorker::writeGif(const Request &request, QString *error)
+bool ExportWorker::writeAnimation(const Request &request, QString *error)
 {
-    const QSize outputSize =
-        request.gif.outputSize.isValid() && !request.gif.outputSize.isEmpty()
-            ? request.gif.outputSize
-            : request.document.size;
+    const QSize outputSize = request.animation.outputSize.isValid()
+                                     && !request.animation.outputSize.isEmpty()
+                                 ? request.animation.outputSize
+                                 : request.document.size;
     const bool nativeSize = outputSize == request.document.size;
 
     QVector<QImage> frames;
     frames.reserve(request.document.animationFrames);
-    postProgress(Kind::Gif, 0, request.document.animationFrames);
+    postProgress(request.kind, 0, request.document.animationFrames);
     for (int frame = 0; frame < request.document.animationFrames; ++frame)
     {
         if (canceled())
@@ -273,7 +282,7 @@ bool ExportWorker::writeGif(const Request &request, QString *error)
             *error = tr("An animation frame could not be rendered.");
             return false;
         }
-        if (!request.gif.preserveTransparency && image.hasAlphaChannel())
+        if (!request.animation.preserveTransparency && image.hasAlphaChannel())
         {
             // Flattening onto white here rather than in the encoder keeps the
             // decision with the user's choice; the encoder only ever sees
@@ -291,21 +300,33 @@ bool ExportWorker::writeGif(const Request &request, QString *error)
             image = std::move(opaque);
         }
         frames.append(std::move(image));
-        postProgress(Kind::Gif, frame + 1, request.document.animationFrames);
+        postProgress(request.kind, frame + 1, request.document.animationFrames);
     }
     if (canceled())
     {
         return false;
     }
+    const auto isCanceled = [this]()
+    {
+        return canceled();
+    };
+    if (request.kind == Kind::WebP)
+    {
+        return WebPWriter::write(request.filePath,
+            frames,
+            frameDurations(request.document.animationFrames,
+                request.document.framesPerSecond,
+                1000),
+            error,
+            isCanceled);
+    }
     return GifWriter::write(request.filePath,
         frames,
-        frameDelays(
-            request.document.animationFrames, request.document.framesPerSecond),
+        frameDurations(request.document.animationFrames,
+            request.document.framesPerSecond,
+            100),
         error,
-        [this]()
-        {
-            return canceled();
-        });
+        isCanceled);
 }
 
 }

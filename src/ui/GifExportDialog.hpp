@@ -13,7 +13,7 @@ class QLabel;
 namespace wobble
 {
 
-// Export options for one animated GIF.
+// Export options for one animated image.
 //
 // The scale choice exists because the encoder holds every frame at once, so a
 // large canvas can exceed the export memory budget at its native size. The
@@ -30,8 +30,9 @@ public:
         bool preserveTransparency = true;
     };
 
-    explicit GifExportDialog(
-        const Document &document, QWidget *parent = nullptr);
+    explicit GifExportDialog(const Document &document,
+        const QString &windowTitle,
+        QWidget *parent = nullptr);
 
     Result currentResult() const;
 

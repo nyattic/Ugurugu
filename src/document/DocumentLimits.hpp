@@ -16,6 +16,12 @@ struct DocumentLimits final
     static constexpr qreal maximumFramesPerSecond = 50.0;
     static constexpr qreal minimumWobbleAmount = 0.0;
     static constexpr qreal maximumWobbleAmount = 12.0;
+    static constexpr int minimumMotionPoseCount = 1;
+    static constexpr int maximumMotionPoseCount = maximumAnimationFrames;
+    static constexpr int minimumMotionDetail = 1;
+    static constexpr int maximumMotionDetail = 24;
+    static constexpr qreal minimumBreakRange = 2.0;
+    static constexpr qreal maximumBreakRange = 256.0;
     static constexpr qreal minimumStrokeWidth = 0.25;
     static constexpr qreal maximumStrokeWidth = 512.0;
     static constexpr qreal minimumBrushSpacing = 0.02;

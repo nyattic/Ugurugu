@@ -23,8 +23,10 @@ struct Theme final
     static QColor accent();
     static QColor accentPressed();
     static QColor accentText();
+    static QColor defaultAccent();
 
     static void apply(QApplication &application);
+    static void setAccent(QApplication &application, const QColor &color);
 };
 
 }

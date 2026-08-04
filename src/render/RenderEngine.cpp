@@ -4,6 +4,7 @@
 #include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/StrokeMask.hpp"
+#include "render/FloodFillMask.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
 #include "render/LayerCompositionPlan.hpp"
@@ -30,74 +31,8 @@ using namespace render_detail;
 
 QImage RenderEngine::fillRegionMask(const QImage &image, const QPoint &seed)
 {
-    if (image.isNull() || image.format() != QImage::Format_ARGB32_Premultiplied
-        || !image.rect().contains(seed))
-    {
-        return {};
-    }
-    const int width = image.width();
-    const int height = image.height();
-    auto blocked = [&image](int x, int y)
-    {
-        const QRgb *line =
-            reinterpret_cast<const QRgb *>(image.constScanLine(y));
-        return qAlpha(line[x]) >= 128;
-    };
-    if (blocked(seed.x(), seed.y()))
-    {
-        return {};
-    }
-
-    QImage mask(width, height, QImage::Format_Grayscale8);
-    mask.fill(0);
-    QVector<QPoint> pending;
-    pending.append(seed);
-    while (!pending.isEmpty())
-    {
-        const QPoint point = pending.takeLast();
-        const int y = point.y();
-        uchar *maskLine = mask.scanLine(y);
-        if (maskLine[point.x()] || blocked(point.x(), y))
-        {
-            continue;
-        }
-        int left = point.x();
-        while (left > 0 && !maskLine[left - 1] && !blocked(left - 1, y))
-        {
-            --left;
-        }
-        int right = point.x();
-        while (
-            right < width - 1 && !maskLine[right + 1] && !blocked(right + 1, y))
-        {
-            ++right;
-        }
-        for (int x = left; x <= right; ++x)
-        {
-            maskLine[x] = 255;
-        }
-        for (const int neighborY : {y - 1, y + 1})
-        {
-            if (neighborY < 0 || neighborY >= height)
-            {
-                continue;
-            }
-            const uchar *neighborMask = mask.constScanLine(neighborY);
-            for (int x = left; x <= right; ++x)
-            {
-                if (!neighborMask[x] && !blocked(x, neighborY))
-                {
-                    pending.append(QPoint(x, neighborY));
-                    while (x < right && !neighborMask[x + 1]
-                           && !blocked(x + 1, neighborY))
-                    {
-                        ++x;
-                    }
-                }
-            }
-        }
-    }
-    return mask;
+    return FloodFillMask::fromImage(
+        image, seed, FloodFillMask::Comparison::AlphaBoundary, 0);
 }
 
 QImage RenderEngine::render(const Document &document, int frameIndex)

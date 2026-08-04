@@ -197,7 +197,7 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
     }
     const Stroke &source = layer.strokes[strokeIndex];
     if (source.mode != StrokeMode::Paint && source.mode != StrokeMode::Erase
-        && source.mode != StrokeMode::Fill)
+        && source.mode != StrokeMode::Fill && source.mode != StrokeMode::Image)
     {
         return {};
     }
@@ -233,27 +233,38 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame =
         ((frameIndex % frameCount) + frameCount) % frameCount;
-    Stroke probe = source;
-    if (probe.mode == StrokeMode::Erase)
+    QHash<qint64, QPainterPath> clipPaths;
+    QHash<qint64, QImage> scaledClipMasks;
+    if (source.mode == StrokeMode::Image)
     {
-        probe.mode = StrokeMode::Paint;
-        probe.color = Qt::white;
+        if (!source.imageOp
+            || !applyImageOperation(coverage, document, *source.imageOp))
+        {
+            return {};
+        }
     }
     else
     {
-        probe.color = QColor(255, 255, 255, source.color.alpha());
+        Stroke probe = source;
+        if (probe.mode == StrokeMode::Erase)
+        {
+            probe.mode = StrokeMode::Paint;
+            probe.color = Qt::white;
+        }
+        else
+        {
+            probe.color = QColor(255, 255, 255, source.color.alpha());
+        }
+        renderLayerStrokes(coverage,
+            document,
+            {probe},
+            normalizedFrame,
+            frameCount,
+            1.0,
+            1.0,
+            clipPaths,
+            scaledClipMasks);
     }
-    QHash<qint64, QPainterPath> clipPaths;
-    QHash<qint64, QImage> scaledClipMasks;
-    renderLayerStrokes(coverage,
-        document,
-        {probe},
-        normalizedFrame,
-        frameCount,
-        1.0,
-        1.0,
-        clipPaths,
-        scaledClipMasks);
 
     for (int index = strokeIndex + 1; index < layer.strokes.size(); ++index)
     {

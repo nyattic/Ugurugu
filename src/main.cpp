@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
@@ -70,6 +71,7 @@ int runApplication(int argc, char *argv[])
 {
     wobble::UpdateController::initialize();
     QApplication application(argc, argv);
+    QImageReader::setAllocationLimit(64);
     configureApplicationMetadata();
     wobble::ApplicationInstanceLock instanceLock;
     QString instanceError;

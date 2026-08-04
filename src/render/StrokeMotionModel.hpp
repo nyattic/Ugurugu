@@ -1,0 +1,28 @@
+#pragma once
+
+#include "document/Document.hpp"
+
+namespace wobble::StrokeMotionModel
+{
+
+qreal maximumDisplacement(
+    qreal strokeWidth, qreal wobbleAmount, const MotionSettings &settings);
+qreal renderedWidth(qreal strokeWidth,
+    quint64 seed,
+    int frameIndex,
+    int frameCount,
+    qreal wobbleAmount,
+    const MotionSettings &settings);
+StrokePoint displacedSample(const StrokePoint &sample,
+    const QPointF &unitTangent,
+    qreal arcLength,
+    qsizetype sampleIndex,
+    qreal amplitude,
+    quint64 seed,
+    int frameIndex,
+    int frameCount,
+    const MotionSettings &settings);
+int visibilityPose(
+    int frameIndex, int frameCount, const MotionSettings &settings);
+
+}

@@ -2,6 +2,7 @@
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
+#include "render/FloodFillMask.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/CanvasViewport.hpp"
 #include "ui/CanvasWidget.hpp"
@@ -57,6 +58,13 @@ QImage combinedSelectionMask(
     return combined;
 }
 
+FloodFillMask::Comparison floodComparison(CanvasFillComparison comparison)
+{
+    return comparison == CanvasFillComparison::Color
+               ? FloodFillMask::Comparison::Color
+               : FloodFillMask::Comparison::AlphaBoundary;
+}
+
 }
 
 bool CanvasWidget::selectionContains(const QPointF &documentPosition) const
@@ -100,7 +108,8 @@ void CanvasWidget::beginAreaSelection(
         tr("The pending selection transform was canceled before selecting."));
     m_selectionBeforeArea = currentSelectionState();
     m_hasSelectionBeforeArea = true;
-    if (combine == SelectionCombine::Replace)
+    if (m_lassoMode == LassoMode::Select
+        && combine == SelectionCombine::Replace)
     {
         clearSelection();
     }
@@ -143,6 +152,7 @@ void CanvasWidget::finishAreaSelection()
     const SelectionState previousSelection =
         m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
     const SelectionCombine combine = m_areaSelectionCombine;
+    const bool paintMode = m_lassoMode == LassoMode::Paint;
     m_areaSelectionCombine = SelectionCombine::Replace;
     m_areaSelectionActive = false;
     m_areaSelectionPoints.clear();
@@ -152,7 +162,7 @@ void CanvasWidget::finishAreaSelection()
     m_hasSelectionBeforeArea = false;
     if (!valid)
     {
-        if (combine == SelectionCombine::Replace)
+        if (!paintMode && combine == SelectionCombine::Replace)
         {
             pushSelectionChange(previousSelection, {}, tr("Deselect"));
         }
@@ -172,6 +182,13 @@ void CanvasWidget::finishAreaSelection()
     painter.setBrush(Qt::white);
     painter.drawPath(path);
     painter.end();
+    if (paintMode)
+    {
+        commitFrozenFill(mask);
+        updateSelectionAnimation();
+        update();
+        return;
+    }
     if (combine == SelectionCombine::Replace)
     {
         applySelectionMask(std::move(mask), previousSelection);
@@ -443,7 +460,10 @@ void CanvasWidget::computeWandSelection(
         }
         return;
     }
-    const QImage mask = RenderEngine::fillRegionMask(referenceImage, seed);
+    const QImage mask = FloodFillMask::fromImage(referenceImage,
+        seed,
+        floodComparison(m_fillComparison),
+        m_fillTolerance);
     if (mask.isNull())
     {
         if (combine == SelectionCombine::Replace)
@@ -509,6 +529,66 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         return;
     }
 
+    const QPoint seed(std::clamp(static_cast<int>(documentPosition.x()),
+                          0,
+                          document.size.width() - 1),
+        std::clamp(static_cast<int>(documentPosition.y()),
+            0,
+            document.size.height() - 1));
+    QImage referenceImage;
+    switch (m_wandReference)
+    {
+    case WandReference::ActiveLayer:
+        referenceImage = renderActiveLayerImage();
+        break;
+    case WandReference::ReferenceLayers:
+        referenceImage = renderReferenceLayersImage();
+        break;
+    case WandReference::AllVisibleLayers:
+        referenceImage = renderAllVisibleLayersImage();
+        break;
+    }
+    if (referenceImage.isNull())
+    {
+        if (m_wandReference == WandReference::ReferenceLayers)
+        {
+            emit interactionMessage(
+                tr("Set a visible paint layer as a reference layer first."));
+        }
+        return;
+    }
+    const QImage coverage = FloodFillMask::fromImage(referenceImage,
+        seed,
+        floodComparison(m_fillComparison),
+        m_fillTolerance);
+    if (coverage.isNull())
+    {
+        emit interactionMessage(tr("No fillable area was found."));
+        return;
+    }
+
+    commitFrozenFill(coverage);
+}
+
+void CanvasWidget::commitFrozenFill(const QImage &coverage)
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(document.activeLayerId);
+    if (!layer || layer->kind != LayerKind::Paint || !layer->visible
+        || layer->opacity <= 0.0 || coverage.size() != document.size
+        || coverage.format() != QImage::Format_Grayscale8)
+    {
+        emit interactionMessage(tr("The fill could not be added."));
+        return;
+    }
+    const std::optional<PackedMaskRegion> packedCoverage =
+        packBinaryMask(coverage);
+    if (!packedCoverage)
+    {
+        emit interactionMessage(tr("No fillable area was found."));
+        return;
+    }
+
     Stroke fillStroke;
     fillStroke.seed = QRandomGenerator::global()->generate64();
     fillStroke.mode = StrokeMode::Fill;
@@ -517,12 +597,13 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
         DocumentLimits::minimumStrokeWidth,
         DocumentLimits::maximumStrokeWidth);
     fillStroke.brush = m_brushSettings;
-    fillStroke.brush.antialiasing = m_brushAntialiasing;
+    fillStroke.brush.antialiasing = m_bucketAntialiasing;
+    fillStroke.fillCoverage = *packedCoverage;
     if (!m_selectionMask.isNull())
     {
         fillStroke.clipMask = m_selectionMask;
     }
-    fillStroke.points.append({clampedDocumentPosition(documentPosition), 1.0});
+    fillStroke.points.append({QPointF(packedCoverage->bounds.center()), 1.0});
     commitStroke(document.activeLayerId, std::move(fillStroke));
 }
 

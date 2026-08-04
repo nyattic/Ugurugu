@@ -78,9 +78,17 @@ bool sameStrokeIdentity(const Stroke &left, const Stroke &right)
            && samePoints && left.visibilityClip == right.visibilityClip
            && sameImageIdentity(left.clipMask, right.clipMask)
            && sameImageIdentity(left.fillMask, right.fillMask)
+           && ((!left.fillCoverage && !right.fillCoverage)
+               || (left.fillCoverage && right.fillCoverage
+                   && left.fillCoverage->canvasSize
+                          == right.fillCoverage->canvasSize
+                   && left.fillCoverage->bounds == right.fillCoverage->bounds
+                   && samePackedIdentity(left.fillCoverage->packedMask,
+                       right.fillCoverage->packedMask)))
            && samePixelSelectionIdentity(
                left.pixelSelectionOp, right.pixelSelectionOp)
-           && left.reframeOp == right.reframeOp;
+           && left.reframeOp == right.reframeOp
+           && left.imageOp == right.imageOp;
 }
 
 QString backingIdentity(const void *data, qsizetype size)
@@ -137,11 +145,20 @@ ImmutableBackings immutableBackingsFromPlan(const PreparedPlan *base)
     {
         rememberImmutableBytes(backings, asset.region.packedMask);
     }
+    for (const RasterAsset &asset : base->rasterAssets)
+    {
+        rememberImmutableBytes(backings, asset.compressedRgba);
+    }
     for (const StrokeMeta &stroke : base->strokes)
     {
         rememberImmutablePoints(backings, stroke.snapshot.points);
         rememberImmutableImage(backings, stroke.snapshot.clipMask);
         rememberImmutableImage(backings, stroke.snapshot.fillMask);
+        if (stroke.snapshot.fillCoverage)
+        {
+            rememberImmutableBytes(
+                backings, stroke.snapshot.fillCoverage->packedMask);
+        }
         if (stroke.snapshot.pixelSelectionOp)
         {
             rememberImmutableBytes(
@@ -180,6 +197,7 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
 {
     MetadataReuseResult result;
     if (source.size != baseDocument.size
+        || source.rasterAssets != baseDocument.rasterAssets
         || source.layers.size() != baseDocument.layers.size())
     {
         return result;
@@ -219,7 +237,8 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
         || source.framesPerSecond > DocumentLimits::maximumFramesPerSecond
         || !std::isfinite(source.wobbleAmount)
         || source.wobbleAmount < DocumentLimits::minimumWobbleAmount
-        || source.wobbleAmount > DocumentLimits::maximumWobbleAmount)
+        || source.wobbleAmount > DocumentLimits::maximumWobbleAmount
+        || !isValidMotionSettings(source.motion, source.animationFrames))
     {
         setError(error,
             DocumentSerializer::tr("The animation settings are invalid."));
@@ -356,6 +375,8 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
     frozen.animationFrames = source.animationFrames;
     frozen.framesPerSecond = source.framesPerSecond;
     frozen.wobbleAmount = source.wobbleAmount;
+    frozen.motion = source.motion;
+    frozen.rasterAssets = baseDocument.rasterAssets;
     frozen.activeLayerId = source.activeLayerId;
     if (source.layers.constData() == baseDocument.layers.constData())
     {
@@ -411,7 +432,8 @@ bool isValidIncrementalStroke(const Stroke &stroke, const QSize &canvasSize)
         || (!stroke.fillMask.isNull()
             && (stroke.mode != StrokeMode::Fill
                 || stroke.fillMask.size() != canvasSize
-                || stroke.fillMask.format() != QImage::Format_Grayscale8)))
+                || stroke.fillMask.format() != QImage::Format_Grayscale8))
+        || stroke.fillCoverage)
     {
         return false;
     }
@@ -466,12 +488,13 @@ QString clipMaskId(const QImage &mask, const ClipMaskTable &table)
 
 QString binaryMaskId(const Stroke &stroke, const BinaryMaskTable &table)
 {
-    if (!stroke.pixelSelectionOp)
+    const std::optional<PackedMaskRegion> region =
+        strokeBinaryMaskRegion(stroke);
+    if (!region)
     {
         return {};
     }
-    return table.idByIdentity.value(
-        binaryMaskIdentity(pixelSelectionMaskRegion(*stroke.pixelSelectionOp)));
+    return table.idByIdentity.value(binaryMaskIdentity(*region));
 }
 
 }

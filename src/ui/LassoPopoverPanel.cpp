@@ -5,6 +5,7 @@
 
 #include <QButtonGroup>
 #include <QLabel>
+#include <QRadioButton>
 #include <QVBoxLayout>
 
 #include <array>
@@ -18,6 +19,43 @@ LassoPopoverPanel::LassoPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
+
+    auto *modeLabel = new QLabel(tr("MODE"), this);
+    modeLabel->setProperty("fieldLabel", true);
+    layout->addWidget(modeLabel);
+
+    auto *modeGroup = new QButtonGroup(this);
+    modeGroup->setExclusive(true);
+    auto *selectMode = new QRadioButton(tr("Select"), this);
+    selectMode->setObjectName(QStringLiteral("lassoSelectModeButton"));
+    auto *paintMode = new QRadioButton(tr("Paint"), this);
+    paintMode->setObjectName(QStringLiteral("lassoPaintModeButton"));
+    modeGroup->addButton(
+        selectMode, static_cast<int>(CanvasWidget::LassoMode::Select));
+    modeGroup->addButton(
+        paintMode, static_cast<int>(CanvasWidget::LassoMode::Paint));
+    modeGroup->button(static_cast<int>(canvas->lassoMode()))->setChecked(true);
+    layout->addWidget(selectMode);
+    layout->addWidget(paintMode);
+
+    connect(modeGroup,
+        &QButtonGroup::idClicked,
+        this,
+        [canvas](int id)
+        {
+            canvas->setLassoMode(static_cast<CanvasWidget::LassoMode>(id));
+        });
+    connect(canvas,
+        &CanvasWidget::lassoModeChanged,
+        this,
+        [modeGroup](CanvasWidget::LassoMode mode)
+        {
+            if (QAbstractButton *button =
+                    modeGroup->button(static_cast<int>(mode)))
+            {
+                button->setChecked(true);
+            }
+        });
 
     auto *label = new QLabel(tr("SHAPE"), this);
     label->setProperty("fieldLabel", true);

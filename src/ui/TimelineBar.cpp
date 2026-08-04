@@ -5,15 +5,12 @@
 #include "ui/CanvasWidget.hpp"
 #include "ui/FrameScrubber.hpp"
 #include "ui/WobblePlayButton.hpp"
-#include "ui/WobblePreview.hpp"
 
 #include <QApplication>
-#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
-#include <QSlider>
 #include <QSpinBox>
 
 #include <algorithm>
@@ -116,34 +113,6 @@ void TimelineBar::buildLayout()
 
     layout->addSpacing(12);
 
-    auto *wobbleLabel = new QLabel(tr("WOBBLE"), this);
-    wobbleLabel->setProperty("fieldLabel", true);
-    layout->addWidget(wobbleLabel);
-
-    m_wobblePreview = new WobblePreview(m_controller, this);
-    layout->addWidget(m_wobblePreview);
-
-    m_wobbleSlider = new QSlider(Qt::Horizontal, this);
-    m_wobbleSlider->setObjectName(QStringLiteral("wobbleSlider"));
-    m_wobbleSlider->setRange(qRound(DocumentLimits::minimumWobbleAmount * 10.0),
-        qRound(DocumentLimits::maximumWobbleAmount * 10.0));
-    m_wobbleSlider->setFixedWidth(96);
-    m_wobbleSlider->setToolTip(tr("Wobble strength"));
-    m_wobbleSlider->setAccessibleName(tr("Wobble strength"));
-    layout->addWidget(m_wobbleSlider);
-
-    m_wobbleSpin = new QDoubleSpinBox(this);
-    m_wobbleSpin->setObjectName(QStringLiteral("wobbleSpin"));
-    m_wobbleSpin->setRange(DocumentLimits::minimumWobbleAmount,
-        DocumentLimits::maximumWobbleAmount);
-    m_wobbleSpin->setDecimals(1);
-    m_wobbleSpin->setSingleStep(0.1);
-    m_wobbleSpin->setSuffix(tr(" px"));
-    wobbleLabel->setBuddy(m_wobbleSpin);
-    layout->addWidget(m_wobbleSpin);
-
-    layout->addSpacing(12);
-
     auto *fpsLabel = new QLabel(tr("FPS"), this);
     fpsLabel->setProperty("fieldLabel", true);
     layout->addWidget(fpsLabel);
@@ -206,26 +175,6 @@ void TimelineBar::connectControls()
             m_currentFrameSpin->setValue(m_canvas->currentFrame() + 1);
         });
 
-    connect(m_wobbleSlider,
-        &QSlider::valueChanged,
-        this,
-        [this](int value)
-        {
-            if (!m_syncing)
-            {
-                m_controller->setWobbleAmount(value / 10.0);
-            }
-        });
-    connect(m_wobbleSpin,
-        &QDoubleSpinBox::valueChanged,
-        this,
-        [this](double value)
-        {
-            if (!m_syncing)
-            {
-                m_controller->setWobbleAmount(value);
-            }
-        });
     connect(m_framesSpin,
         &QSpinBox::valueChanged,
         this,
@@ -265,8 +214,6 @@ void TimelineBar::syncFromDocument()
         m_currentFrameSpin->setValue(m_canvas->currentFrame() + 1);
     }
 
-    m_wobbleSlider->setValue(qRound(document.wobbleAmount * 10.0));
-    m_wobbleSpin->setValue(document.wobbleAmount);
     m_framesSpin->setValue(document.animationFrames);
     m_fpsSpin->setValue(qRound(document.framesPerSecond));
     m_syncing = false;

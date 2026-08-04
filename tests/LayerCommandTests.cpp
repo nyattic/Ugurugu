@@ -141,7 +141,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(document);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 9);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
         QString error;
         const std::optional<Document> decoded =
             DocumentSerializer::fromJson(json, &error);
@@ -618,6 +618,198 @@ private slots:
         controller.removeLayer(second);
         QCOMPARE(controller.document().layers.size(), 2);
         QCOMPARE(controller.document().activeLayerId, third);
+    }
+
+    void mergesSafePaintLayerDownWithoutChangingPixels()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.color = QColor(220, 40, 30);
+        lowerStroke.width = 8.0;
+        lowerStroke.points = {
+            {QPointF(8.0, 10.0), 1.0}, {QPointF(52.0, 10.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.color = QColor(30, 80, 220);
+        upperStroke.width = 8.0;
+        upperStroke.points = {
+            {QPointF(8.0, 40.0), 1.0}, {QPointF(52.0, 40.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
+        controller.undoStack()->setClean();
+        const QImage before = RenderEngine::render(controller.document(), 0);
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::Available);
+        QVERIFY(controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 1);
+        QCOMPARE(controller.document().activeLayerId, lowerId);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(controller.document().activeLayerId, upperId);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+    }
+
+    void insertsImagesAboveTheActiveLayerAndDeduplicatesAssets()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 80));
+        const QUuid originalLayerId = controller.document().activeLayerId;
+        controller.addLayerGroup(originalLayerId);
+        const QUuid groupId =
+            controller.document().layer(originalLayerId)->parentGroupId;
+        controller.undoStack()->setClean();
+
+        QImage image(QSize(20, 10), QImage::Format_RGBA8888);
+        image.fill(QColor(30, 90, 210, 180));
+        QCOMPARE(
+            controller.insertImage(image, QStringLiteral("/tmp/My.paint.png")),
+            DocumentController::InsertImageResult::Inserted);
+        const QUuid firstImageLayerId = controller.document().activeLayerId;
+        const Layer *firstImageLayer =
+            controller.document().layer(firstImageLayerId);
+        QVERIFY(firstImageLayer);
+        QCOMPARE(firstImageLayer->name, QStringLiteral("My.paint"));
+        QCOMPARE(firstImageLayer->parentGroupId, groupId);
+        QCOMPARE(controller.document().layerIndex(firstImageLayerId),
+            controller.document().layerIndex(originalLayerId) + 1);
+        QCOMPARE(firstImageLayer->strokes.size(), 1);
+        const Stroke &operation = firstImageLayer->strokes.first();
+        QCOMPARE(operation.mode, StrokeMode::Image);
+        QVERIFY(operation.points.isEmpty());
+        QVERIFY(operation.imageOp.has_value());
+        const QString firstAssetId = operation.imageOp->assetId;
+        QCOMPARE(operation.imageOp->transform,
+            QTransform(1.0, 0.0, 0.0, 1.0, 40.0, 35.0));
+        QCOMPARE(controller.document().rasterAssets.size(), 1);
+
+        QCOMPARE(controller.insertImage(
+                     image.copy(), QStringLiteral("/tmp/copy.png")),
+            DocumentController::InsertImageResult::Inserted);
+        QCOMPARE(controller.document().rasterAssets.size(), 1);
+        QCOMPARE(controller.document()
+                     .layer(controller.document().activeLayerId)
+                     ->strokes.first()
+                     .imageOp->assetId,
+            firstAssetId);
+    }
+
+    void preservesOriginalImageAcrossTransformSaveAndUndo()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 48));
+        QImage image(QSize(8, 6), QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+        image.setPixelColor(1, 1, QColor(240, 30, 20, 255));
+        image.setPixelColor(6, 4, QColor(20, 180, 70, 200));
+        QCOMPARE(controller.insertImage(image, QStringLiteral("image.png")),
+            DocumentController::InsertImageResult::Inserted);
+        const QUuid layerId = controller.document().activeLayerId;
+        const QUuid strokeId =
+            controller.document().layer(layerId)->strokes.first().id;
+        const QString assetId = controller.document()
+                                    .layer(layerId)
+                                    ->strokes.first()
+                                    .imageOp->assetId;
+        const char *payload = controller.document()
+                                  .rasterAssets.value(assetId)
+                                  .compressedRgba.constData();
+        const QImage inserted = RenderEngine::render(controller.document(), 0);
+        QCOMPARE(RenderEngine::render(controller.document(), 1), inserted);
+
+        const QTransform finalTransform(1.75, 0.25, -0.15, 1.4, 12.0, 9.0);
+        QVERIFY(controller.setImageTransform(
+            layerId, strokeId, finalTransform, SamplingMode::Smooth));
+        QCOMPARE(controller.document()
+                     .layer(layerId)
+                     ->strokes.first()
+                     .imageOp->transform,
+            finalTransform);
+        QCOMPARE(controller.document()
+                     .rasterAssets.value(assetId)
+                     .compressedRgba.constData(),
+            payload);
+        const QImage transformed =
+            RenderEngine::render(controller.document(), 0);
+        QVERIFY(transformed != inserted);
+        QCOMPARE(RenderEngine::render(controller.document(), 7), transformed);
+
+        QString error;
+        const QByteArray serialized =
+            DocumentSerializer::toJson(controller.document());
+        QVERIFY(!serialized.isEmpty());
+        const std::optional<Document> reloaded =
+            DocumentSerializer::fromJson(serialized, &error);
+        QVERIFY2(reloaded.has_value(), qPrintable(error));
+        QCOMPARE(RenderEngine::render(*reloaded, 0), transformed);
+        QCOMPARE(reloaded->layer(layerId)->strokes.first().imageOp->transform,
+            finalTransform);
+
+        controller.undoStack()->undo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), inserted);
+        controller.undoStack()->redo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), transformed);
+
+        controller.removeLayer(layerId);
+        QVERIFY(controller.document().rasterAssets.isEmpty());
+        controller.undoStack()->undo();
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+        QCOMPARE(RenderEngine::render(controller.document(), 0), transformed);
+    }
+
+    void rejectsInvalidImageAndLayerLimitAtomically()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(32, 32));
+        const DocumentTransitionSnapshot invalidBefore =
+            documentTransitionSnapshot(controller);
+        QCOMPARE(controller.insertImage({}, QStringLiteral("empty.png")),
+            DocumentController::InsertImageResult::RejectedInvalidImage);
+        compareDocumentTransitionSnapshot(controller, invalidBefore);
+
+        Document full = Document::createDefault(QSize(32, 32));
+        while (full.layers.size() < DocumentLimits::maximumLayers)
+        {
+            Layer layer;
+            layer.name = QStringLiteral("Layer %1").arg(full.layers.size());
+            layer.initialCanvasSize = full.size;
+            full.layers.append(std::move(layer));
+        }
+        QString error;
+        QVERIFY2(controller.loadDocument(std::move(full), &error),
+            qPrintable(error));
+        const DocumentTransitionSnapshot fullBefore =
+            documentTransitionSnapshot(controller);
+        QImage image(QSize(2, 2), QImage::Format_RGBA8888);
+        image.fill(Qt::red);
+        QCOMPARE(controller.insertImage(image, QStringLiteral("red.png")),
+            DocumentController::InsertImageResult::RejectedLayerLimit);
+        compareDocumentTransitionSnapshot(controller, fullBefore);
+    }
+
+    void rejectsUnsafeLayerMergeDown()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        const QUuid lowerId = controller.document().activeLayerId;
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        controller.setLayerReference(upperId, true);
+        controller.undoStack()->setClean();
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::UnsupportedProperties);
+        QVERIFY(!controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(controller.document().activeLayerId, upperId);
+        QVERIFY(controller.document().layer(lowerId));
+        QVERIFY(controller.undoStack()->isClean());
     }
 };
 

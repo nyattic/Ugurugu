@@ -9,6 +9,7 @@
 #include "io/DocumentSerializer.hpp"
 #include "io/RenderExportPolicy.hpp"
 #include "io/SelectionClipboardCodec.hpp"
+#include "io/WawaV10Importer.hpp"
 #include "render/RenderEngine.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/CanvasSizeDialog.hpp"
@@ -46,6 +47,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QImageReader>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
@@ -235,7 +237,42 @@ std::optional<Document> MainWindow::readProject(const QString &filePath)
         return std::nullopt;
     }
 
+    m_pendingWawaImportSummary.reset();
+    m_suggestedSavePath.clear();
     QString error;
+    if (QFileInfo(filePath).suffix().compare(
+            QStringLiteral("wawa"), Qt::CaseInsensitive)
+        == 0)
+    {
+        QFile file(filePath);
+        if (!file.open(QIODevice::ReadOnly)
+            || file.size() > DocumentLimits::maximumProjectBytes)
+        {
+            error = tr("The .wawa project could not be read or is too large.");
+        }
+        else
+        {
+            const std::optional<WawaImportResult> imported =
+                WawaV10Importer::import(file.readAll(), &error);
+            if (imported)
+            {
+                m_pendingWawaImportSummary = imported->summary;
+                const QFileInfo source(filePath);
+                m_suggestedSavePath = QDir(source.absolutePath())
+                                          .filePath(source.completeBaseName()
+                                                    + QStringLiteral(".wagle"));
+                return imported->document;
+            }
+        }
+        spdlog::error("Failed to import project {}: {}",
+            filePath.toUtf8().constData(),
+            error.toUtf8().constData());
+        QMessageBox::critical(this,
+            tr("Import failed"),
+            tr("Could not import the .wawa project.\n\n%1").arg(error));
+        return std::nullopt;
+    }
+
     std::optional<Document> document =
         DocumentSerializer::load(filePath, &error);
     if (!document)
@@ -258,8 +295,19 @@ bool MainWindow::activateProject(const QString &filePath, Document document)
         return false;
     }
     QString error;
-    if (!m_controller.loadDocument(std::move(document), &error))
+    const std::optional<WawaImportSummary> importSummary =
+        std::exchange(m_pendingWawaImportSummary, std::nullopt);
+    const bool importedWawa = importSummary.has_value();
+    const bool loaded =
+        importedWawa
+            ? m_controller.loadRecoveredDocument(std::move(document), &error)
+            : m_controller.loadDocument(std::move(document), &error);
+    if (!loaded)
     {
+        if (importedWawa)
+        {
+            m_suggestedSavePath.clear();
+        }
         spdlog::error("Failed to prepare project {}: {}",
             filePath.toUtf8().constData(),
             error.toUtf8().constData());
@@ -268,11 +316,44 @@ bool MainWindow::activateProject(const QString &filePath, Document document)
             tr("The project could not be prepared.\n\n%1").arg(error));
         return false;
     }
-    m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
+    m_currentFilePath =
+        importedWawa ? QString() : QFileInfo(filePath).absoluteFilePath();
     clearAutosave();
     m_canvas->fitToWindow();
     updateWindowTitle();
     warnLegacyLayerHierarchy();
+    if (importedWawa)
+    {
+        const WawaImportSummary summary =
+            importSummary.value_or(WawaImportSummary{});
+        QString details =
+            tr("Imported native .wawa version 10 as a new, unsaved "
+               "WagleWaglePaint document.\n\n"
+               "Layers: %1\nBase images: %2\nPaint strokes: %3\n"
+               "Eraser strokes: %4\nPolygon fills: %5")
+                .arg(summary.layers)
+                .arg(summary.baseImages)
+                .arg(summary.paintStrokes)
+                .arg(summary.eraserStrokes)
+                .arg(summary.polygonFills);
+        if (summary.skippedOperations > 0 || summary.clampedWidths > 0)
+        {
+            details += tr("\nSkipped operations: %1\nClamped widths: %2")
+                           .arg(summary.skippedOperations)
+                           .arg(summary.clampedWidths);
+        }
+        details += tr("\n\nWobble, airbrush, and polygon fills are "
+                      "best-effort conversions and may look different from "
+                      "WiggleWiggleTool.");
+        QMessageBox::information(this, tr(".wawa import complete"), details);
+        statusBar()->showMessage(tr("Imported %1 as a new document")
+                                     .arg(QFileInfo(filePath).fileName()),
+            5000);
+        spdlog::info(
+            "Imported .wawa project {}", filePath.toUtf8().constData());
+        return true;
+    }
+    m_suggestedSavePath.clear();
     statusBar()->showMessage(tr("Opened %1").arg(m_currentFilePath), 4000);
     spdlog::info("Opened project {}", m_currentFilePath.toUtf8().constData());
     return true;
@@ -479,6 +560,7 @@ bool MainWindow::recoverAutosave()
         return false;
     }
     m_currentFilePath.clear();
+    m_suggestedSavePath.clear();
     m_recoveryRevision = 0;
     clearRecoveryMetadata();
     m_canvas->fitToWindow();
@@ -778,6 +860,7 @@ bool MainWindow::saveToFile(const QString &filePath)
         return false;
     }
     m_currentFilePath = QFileInfo(filePath).absoluteFilePath();
+    m_suggestedSavePath.clear();
     m_controller.markSaved();
     clearAutosave();
     updateWindowTitle();
@@ -823,6 +906,7 @@ void MainWindow::newDocument()
         return;
     }
     m_currentFilePath.clear();
+    m_suggestedSavePath.clear();
     clearAutosave();
     m_canvas->fitToWindow();
     updateWindowTitle();
@@ -1270,11 +1354,67 @@ void MainWindow::chooseOpenFile()
     const QString filePath = QFileDialog::getOpenFileName(this,
         tr("Open project"),
         QString(),
-        tr("WagleWaglePaint projects (*.wagle *.wobble);;All files (*)"));
+        tr("Supported projects (*.wagle *.wobble *.wawa);;"
+           "WagleWaglePaint projects (*.wagle *.wobble);;"
+           "WiggleWiggleTool projects (*.wawa);;All files (*)"));
     if (!filePath.isEmpty())
     {
         openFile(filePath);
     }
+}
+
+void MainWindow::chooseInsertImage()
+{
+    const QString filePath = QFileDialog::getOpenFileName(this,
+        tr("Insert image"),
+        {},
+        tr("Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff);;"
+           "All files (*)"));
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    QImageReader reader(filePath);
+    reader.setAutoTransform(true);
+    const QImage image = reader.read();
+    if (image.isNull())
+    {
+        QMessageBox::warning(this,
+            tr("Could not insert image"),
+            tr("The image could not be decoded.\n\n%1")
+                .arg(reader.errorString()));
+        return;
+    }
+
+    using Result = DocumentController::InsertImageResult;
+    const Result result = m_controller.insertImage(image, filePath);
+    if (result == Result::Inserted)
+    {
+        statusBar()->showMessage(
+            tr("Inserted %1").arg(QFileInfo(filePath).fileName()), 4000);
+        return;
+    }
+
+    QString reason;
+    switch (result)
+    {
+    case Result::Inserted:
+        return;
+    case Result::RejectedInvalidImage:
+        reason = tr("The image dimensions or pixel data are not supported.");
+        break;
+    case Result::RejectedLayerLimit:
+        reason = tr("The document has reached its layer limit.");
+        break;
+    case Result::RejectedAssetLimit:
+        reason = tr("The document has reached its image asset limit.");
+        break;
+    case Result::RejectedCommit:
+        reason = tr("The image would exceed the project size limit.");
+        break;
+    }
+    QMessageBox::warning(this, tr("Could not insert image"), reason);
 }
 
 void MainWindow::applyWobbleAnimationEnabled(bool enabled)
@@ -1322,6 +1462,11 @@ QString MainWindow::saveDialogStartPath(const QString &extension) const
         return QDir(currentFile.absolutePath())
             .filePath(currentFile.completeBaseName() + QStringLiteral(".")
                       + extension);
+    }
+    if (!m_suggestedSavePath.isEmpty()
+        && extension.compare(QStringLiteral("wagle"), Qt::CaseInsensitive) == 0)
+    {
+        return m_suggestedSavePath;
     }
     return QDir(SettingsDialog::defaultSaveFolder())
         .filePath(QStringLiteral("Untitled.") + extension);

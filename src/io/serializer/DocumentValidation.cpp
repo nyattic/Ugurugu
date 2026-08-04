@@ -8,6 +8,7 @@
 #include "document/SelectionOperation.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/serializer/DocumentJsonCodec.hpp"
+#include "io/serializer/RasterAssetTable.hpp"
 
 #include <QHash>
 #include <QJsonObject>
@@ -103,7 +104,8 @@ bool validateDocument(const Document &document,
         || document.framesPerSecond > DocumentLimits::maximumFramesPerSecond
         || !std::isfinite(document.wobbleAmount)
         || document.wobbleAmount < DocumentLimits::minimumWobbleAmount
-        || document.wobbleAmount > DocumentLimits::maximumWobbleAmount)
+        || document.wobbleAmount > DocumentLimits::maximumWobbleAmount
+        || !isValidMotionSettings(document.motion, document.animationFrames))
     {
         setError(error,
             DocumentSerializer::tr("The animation settings are invalid."));
@@ -113,6 +115,30 @@ bool validateDocument(const Document &document,
     {
         setError(error, DocumentSerializer::tr("The layer count is invalid."));
         return false;
+    }
+    if (fileSchemaVersion < 11 && !document.rasterAssets.isEmpty())
+    {
+        setError(error,
+            DocumentSerializer::tr(
+                "Raster assets require a newer project version."));
+        return false;
+    }
+    RasterAssetTable rasterAssets;
+    for (auto asset = document.rasterAssets.cbegin();
+        asset != document.rasterAssets.cend();
+        ++asset)
+    {
+        const RasterAssetRegistrationResult result =
+            rasterAssets.registerPayload(
+                asset->id, asset->size, asset->compressedRgba);
+        if (asset.key() != asset->id
+            || result.status != RasterAssetRegistrationStatus::Registered)
+        {
+            setError(error,
+                DocumentSerializer::tr(
+                    "The project contains an invalid raster asset."));
+            return false;
+        }
     }
 
     QSet<QUuid> layerIds;
@@ -232,6 +258,11 @@ bool validateDocument(const Document &document,
             {
                 return false;
             }
+            if (stroke.fillCoverage
+                && !validatePackedBudget(stroke.fillCoverage->packedMask))
+            {
+                return false;
+            }
 
             const bool validCommonFields =
                 stroke.color.isValid() && std::isfinite(stroke.width)
@@ -248,9 +279,10 @@ bool validateDocument(const Document &document,
             if (stroke.mode == StrokeMode::PixelSelection)
             {
                 if (fileSchemaVersion < 6 || !stroke.pixelSelectionOp
-                    || stroke.reframeOp || !stroke.points.isEmpty()
-                    || stroke.visibilityClip || !stroke.clipMask.isNull()
-                    || !stroke.fillMask.isNull()
+                    || stroke.reframeOp || stroke.imageOp
+                    || !stroke.points.isEmpty() || stroke.visibilityClip
+                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.fillCoverage
                     || !isValidPixelSelectionOp(*stroke.pixelSelectionOp)
                     || stroke.pixelSelectionOp->canvasSize != epochSize)
                 {
@@ -264,9 +296,10 @@ bool validateDocument(const Document &document,
             if (stroke.mode == StrokeMode::Reframe)
             {
                 if (fileSchemaVersion < 6 || !stroke.reframeOp
-                    || stroke.pixelSelectionOp || !stroke.points.isEmpty()
-                    || stroke.visibilityClip || !stroke.clipMask.isNull()
-                    || !stroke.fillMask.isNull()
+                    || stroke.pixelSelectionOp || stroke.imageOp
+                    || !stroke.points.isEmpty() || stroke.visibilityClip
+                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.fillCoverage
                     || !isValidReframeOp(*stroke.reframeOp)
                     || stroke.reframeOp->sourceSize != epochSize)
                 {
@@ -276,6 +309,22 @@ bool validateDocument(const Document &document,
                     return false;
                 }
                 epochSize = stroke.reframeOp->targetSize;
+                continue;
+            }
+            if (stroke.mode == StrokeMode::Image)
+            {
+                if (fileSchemaVersion < 11 || !stroke.imageOp
+                    || stroke.pixelSelectionOp || stroke.reframeOp
+                    || !stroke.points.isEmpty() || stroke.visibilityClip
+                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.fillCoverage || !isValidImageOp(*stroke.imageOp)
+                    || !document.rasterAssets.contains(stroke.imageOp->assetId))
+                {
+                    setError(error,
+                        DocumentSerializer::tr(
+                            "An image operation is invalid."));
+                    return false;
+                }
                 continue;
             }
 
@@ -290,10 +339,16 @@ bool validateDocument(const Document &document,
                         || stroke.fillMask.size() != epochSize
                         || stroke.fillMask.format()
                                != QImage::Format_Grayscale8));
+            const bool invalidFillCoverage =
+                stroke.fillCoverage
+                && (fileSchemaVersion < 10 || stroke.mode != StrokeMode::Fill
+                    || !stroke.fillMask.isNull()
+                    || !isValidPackedMaskRegion(*stroke.fillCoverage)
+                    || stroke.fillCoverage->canvasSize != epochSize);
             if ((stroke.mode != StrokeMode::Paint
                     && stroke.mode != StrokeMode::Erase
                     && stroke.mode != StrokeMode::Fill)
-                || stroke.pixelSelectionOp || stroke.reframeOp
+                || stroke.pixelSelectionOp || stroke.reframeOp || stroke.imageOp
                 || stroke.points.isEmpty()
                 || stroke.points.size() > DocumentLimits::maximumPointsPerStroke
                 || (!stroke.clipMask.isNull()
@@ -301,6 +356,7 @@ bool validateDocument(const Document &document,
                         || stroke.clipMask.format()
                                != QImage::Format_Grayscale8))
                 || invalidVisibilityClip || invalidFillMask
+                || invalidFillCoverage
                 || stroke.points.size()
                        > DocumentLimits::maximumTotalPoints - totalPoints)
             {

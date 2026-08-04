@@ -10,7 +10,13 @@ target_include_directories(
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests"
 )
-target_link_libraries(wobblepaint_tests PRIVATE wobblepaint_ui Qt6::Test)
+target_link_libraries(
+    wobblepaint_tests
+    PRIVATE
+    wobblepaint_ui
+    Qt6::Test
+    webpdemux
+)
 target_compile_definitions(
     wobblepaint_tests
     PRIVATE
@@ -24,6 +30,7 @@ set(WOBBLEPAINT_TEST_SUITES
     document
     render
     gif
+    webp
     mask
     release_notes
     stabilizer

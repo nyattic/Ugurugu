@@ -7,6 +7,7 @@ namespace wobble
 int runRenderEngineTests(int argc, char **argv)
 {
     int result = 0;
+    result |= runBrokenLineModelTests(argc, argv);
     result |= runClassicStrokeMotionTests(argc, argv);
     result |= runRenderPreviewTests(argc, argv);
     result |= runWobbleAnimationTests(argc, argv);

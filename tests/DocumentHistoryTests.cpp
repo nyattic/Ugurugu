@@ -1377,6 +1377,43 @@ private slots:
         QCOMPARE(opacityDelta.changedLayers.first().opacity->after, 0.7);
     }
 
+    void keepsMotionFieldsInDistinctUndoCommands()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+
+        controller.setMotionStyle(MotionStyle::Smooth);
+        controller.setMotionPoseCount(4);
+        controller.setMotionPoseCount(5);
+        controller.setMotionDetail(14);
+        controller.setMotionDetail(18);
+        controller.setMotionLinked(0.8);
+        controller.setMotionLinked(0.6);
+        controller.setMotionRandomness(0.2);
+        controller.setMotionRandomness(0.5);
+        controller.setBrokenLineEnabled(true);
+        controller.setBreakAmount(0.5);
+        controller.setBreakAmount(0.7);
+        controller.setBreakRange(36.0);
+        controller.setBreakRange(48.0);
+
+        QCOMPARE(controller.undoStack()->count(), 8);
+        QCOMPARE(controller.undoStack()->storageStats().retainedStrokes,
+            qsizetype(0));
+        QCOMPARE(controller.document().motion.poseCount, 5);
+        QCOMPARE(controller.document().motion.detail, 18);
+        QCOMPARE(controller.document().motion.linked, 0.6);
+        QCOMPARE(controller.document().motion.randomness, 0.5);
+        QCOMPARE(controller.document().motion.breakAmount, 0.7);
+        QCOMPARE(controller.document().motion.breakRange, 48.0);
+
+        for (int index = 0; index < 8; ++index)
+        {
+            controller.undoStack()->undo();
+        }
+        QVERIFY(controller.document().motion == MotionSettings());
+    }
+
     void rejectsMixedOrMismatchedScalarMerges()
     {
         Document base = Document::createDefault(QSize(96, 96));

@@ -1,3 +1,4 @@
+#include "io/serializer/RasterAssetTable.hpp"
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
@@ -16,6 +17,14 @@ private slots:
         source.animationFrames = 17;
         source.framesPerSecond = 12.5;
         source.wobbleAmount = 4.25;
+        source.motion.style = MotionStyle::Smooth;
+        source.motion.poseCount = 7;
+        source.motion.detail = 19;
+        source.motion.linked = 0.4;
+        source.motion.randomness = 0.65;
+        source.motion.brokenLine = true;
+        source.motion.breakAmount = 0.55;
+        source.motion.breakRange = 42.0;
 
         Layer &firstLayer = source.layers.first();
         firstLayer.id =
@@ -74,6 +83,7 @@ private slots:
         QCOMPARE(loaded->animationFrames, source.animationFrames);
         QCOMPARE(loaded->framesPerSecond, source.framesPerSecond);
         QCOMPARE(loaded->wobbleAmount, source.wobbleAmount);
+        QVERIFY(loaded->motion == source.motion);
         QCOMPARE(loaded->activeLayerId, source.activeLayerId);
         QCOMPARE(loaded->layers.size(), source.layers.size());
 
@@ -118,6 +128,110 @@ private slots:
                 }
             }
         }
+    }
+
+    void roundTripsSchemaTenFrozenFillCoverage()
+    {
+        Document source = Document::createDefault(QSize(48, 36));
+        source.background = Qt::transparent;
+        QImage coverage(source.size, QImage::Format_Grayscale8);
+        coverage.fill(0);
+        for (int y = 8; y < 28; ++y)
+        {
+            std::fill(coverage.scanLine(y) + 12,
+                coverage.scanLine(y) + 38,
+                uchar(255));
+        }
+        const std::optional<PackedMaskRegion> packed = packBinaryMask(coverage);
+        QVERIFY(packed.has_value());
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = QColor(25, 110, 230, 180);
+        fill.brush.antialiasing = false;
+        fill.points = {{QPointF(20.0, 16.0), 1.0}};
+        fill.fillCoverage = packed;
+        source.layers.first().strokes = {fill};
+
+        const QByteArray json = DocumentSerializer::toJson(source);
+        QVERIFY(!json.isEmpty());
+        const QJsonObject root = QJsonDocument::fromJson(json).object();
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(root.value(QStringLiteral("binaryMasks")).toArray().size(), 1);
+        const QJsonObject serializedStroke =
+            root.value(QStringLiteral("layers"))
+                .toArray()
+                .first()
+                .toObject()
+                .value(QStringLiteral("strokes"))
+                .toArray()
+                .first()
+                .toObject();
+        QVERIFY(serializedStroke.contains(QStringLiteral("fillCoverageId")));
+
+        QString error;
+        const std::optional<Document> loaded =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        const Stroke &loadedFill = loaded->layers.first().strokes.first();
+        QVERIFY(loadedFill.fillCoverage.has_value());
+        QVERIFY(loadedFill.fillCoverage == fill.fillCoverage);
+        QCOMPARE(
+            RenderEngine::render(*loaded, 0), RenderEngine::render(source, 0));
+    }
+
+    void roundTripsSchemaElevenRasterAssetsAndRejectsCorruption()
+    {
+        Document source = Document::createDefault(QSize(40, 30));
+        source.background = Qt::transparent;
+        QImage image(QSize(6, 4), QImage::Format_RGBA8888);
+        image.fill(QColor(15, 80, 170, 210));
+        image.setPixelColor(2, 1, QColor(240, 120, 20, 255));
+        const std::optional<RasterAsset> asset =
+            serializer_detail::rasterAssetFromImage(image);
+        QVERIFY(asset.has_value());
+        source.rasterAssets.insert(asset->id, *asset);
+        Stroke operation;
+        operation.mode = StrokeMode::Image;
+        operation.points.clear();
+        operation.imageOp = ImageOp{asset->id,
+            QTransform(1.5, 0.2, -0.1, 1.25, 8.0, 6.0),
+            SamplingMode::Smooth};
+        source.layers.first().strokes = {operation};
+
+        const QByteArray json = DocumentSerializer::toJson(source);
+        QVERIFY(!json.isEmpty());
+        const QJsonObject root = QJsonDocument::fromJson(json).object();
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(
+            root.value(QStringLiteral("rasterAssets")).toArray().size(), 1);
+
+        QString error;
+        const std::optional<Document> loaded =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        QCOMPARE(loaded->rasterAssets, source.rasterAssets);
+        QCOMPARE(
+            loaded->layers.first().strokes.first().imageOp, operation.imageOp);
+        QCOMPARE(
+            RenderEngine::render(*loaded, 0), RenderEngine::render(source, 0));
+
+        QJsonObject corruptedRoot = root;
+        QJsonArray assets =
+            corruptedRoot.value(QStringLiteral("rasterAssets")).toArray();
+        QJsonObject corruptedAsset = assets.first().toObject();
+        corruptedAsset.insert(
+            QStringLiteral("id"), QString(64, QLatin1Char('0')));
+        assets[0] = corruptedAsset;
+        corruptedRoot.insert(QStringLiteral("rasterAssets"), assets);
+        QVERIFY(!DocumentSerializer::fromJson(
+            QJsonDocument(corruptedRoot).toJson(QJsonDocument::Compact),
+            &error));
+
+        QJsonObject schemaTenRoot = root;
+        schemaTenRoot.insert(QStringLiteral("schemaVersion"), 10);
+        QVERIFY(!DocumentSerializer::fromJson(
+            QJsonDocument(schemaTenRoot).toJson(QJsonDocument::Compact),
+            &error));
     }
 
     void loadsLegacyBrushAsInk()
@@ -182,9 +296,10 @@ private slots:
         QVERIFY(!currentJson.isEmpty());
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
-        QCOMPARE(currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 9);
         QCOMPARE(
-            currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 2);
+            currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(
+            currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 3);
         const std::optional<Document> reloaded =
             DocumentSerializer::fromJson(currentJson, &error);
         QVERIFY2(reloaded.has_value(), qPrintable(error));
@@ -264,7 +379,7 @@ private slots:
         const QJsonObject schemaSixRoot =
             QJsonDocument::fromJson(schemaSixJson).object();
         QCOMPARE(
-            schemaSixRoot.value(QStringLiteral("algorithmVersion")).toInt(), 2);
+            schemaSixRoot.value(QStringLiteral("algorithmVersion")).toInt(), 3);
         const QJsonObject schemaSixStroke =
             schemaSixRoot.value(QStringLiteral("layers"))
                 .toArray()

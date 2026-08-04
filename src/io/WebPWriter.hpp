@@ -1,0 +1,25 @@
+#pragma once
+
+#include <QCoreApplication>
+#include <QImage>
+#include <QString>
+#include <QVector>
+
+#include <functional>
+
+namespace wobble
+{
+
+class WebPWriter final
+{
+    Q_DECLARE_TR_FUNCTIONS(wobble::WebPWriter)
+
+public:
+    static bool write(const QString &filePath,
+        const QVector<QImage> &frames,
+        const QVector<int> &durationsMilliseconds,
+        QString *error = nullptr,
+        const std::function<bool()> &isCanceled = {});
+};
+
+}

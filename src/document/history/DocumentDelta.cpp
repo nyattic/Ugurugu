@@ -26,6 +26,8 @@ constexpr auto documentScalarFields = std::tuple{&DocumentDelta::size,
     &DocumentDelta::animationFrames,
     &DocumentDelta::framesPerSecond,
     &DocumentDelta::wobbleAmount,
+    &DocumentDelta::motionSettings,
+    &DocumentDelta::rasterAssets,
     &DocumentDelta::activeLayerId};
 
 constexpr auto layerScalarFields = std::tuple{&LayerChange::name,
@@ -168,9 +170,11 @@ bool sameStroke(const Stroke &left, const Stroke &right)
            && left.visibilityClip == right.visibilityClip
            && sameImageBacking(left.clipMask, right.clipMask)
            && sameImageBacking(left.fillMask, right.fillMask)
+           && left.fillCoverage == right.fillCoverage
            && samePixelSelectionOperation(
                left.pixelSelectionOp, right.pixelSelectionOp)
-           && left.reframeOp == right.reframeOp;
+           && left.reframeOp == right.reframeOp
+           && left.imageOp == right.imageOp;
 }
 
 template <typename T>
@@ -496,6 +500,7 @@ void accountStroke(MemoryFootprint &footprint, const Stroke &stroke)
         footprint, stroke.points, QStringLiteral("stroke-points"));
     accountImageStorage(footprint, stroke.clipMask);
     accountImageStorage(footprint, stroke.fillMask);
+    accountPackedMask(footprint, stroke.fillCoverage);
     if (stroke.pixelSelectionOp)
     {
         accountByteStorage(footprint, stroke.pixelSelectionOp->packedMask);
@@ -514,6 +519,17 @@ void accountLayer(MemoryFootprint &footprint, const Layer &layer)
                        * static_cast<qint64>(sizeof(QChar)));
 }
 
+void accountRasterAssets(
+    MemoryFootprint &footprint, const QMap<QString, RasterAsset> &assets)
+{
+    for (const RasterAsset &asset : assets)
+    {
+        accountByteStorage(footprint, asset.compressedRgba);
+        footprint.addOwned(static_cast<qint64>(asset.id.capacity())
+                           * static_cast<qint64>(sizeof(QChar)));
+    }
+}
+
 }
 
 DocumentDelta DocumentDelta::between(
@@ -527,6 +543,8 @@ DocumentDelta DocumentDelta::between(
     recordChange(
         before.framesPerSecond, after.framesPerSecond, delta.framesPerSecond);
     recordChange(before.wobbleAmount, after.wobbleAmount, delta.wobbleAmount);
+    recordChange(before.motion, after.motion, delta.motionSettings);
+    recordChange(before.rasterAssets, after.rasterAssets, delta.rasterAssets);
     recordChange(
         before.activeLayerId, after.activeLayerId, delta.activeLayerId);
 
@@ -611,6 +629,8 @@ DocumentDelta DocumentDelta::appendedStroke(
         || before.animationFrames != after.animationFrames
         || before.framesPerSecond != after.framesPerSecond
         || before.wobbleAmount != after.wobbleAmount
+        || before.motion != after.motion
+        || before.rasterAssets != after.rasterAssets
         || before.activeLayerId != after.activeLayerId
         || before.layers.size() != after.layers.size())
     {
@@ -658,9 +678,9 @@ DocumentDelta DocumentDelta::appendedStroke(
 bool DocumentDelta::isEmpty() const
 {
     return !size && !background && !animationFrames && !framesPerSecond
-           && !wobbleAmount && !activeLayerId && removedLayers.isEmpty()
-           && addedLayers.isEmpty() && changedLayers.isEmpty()
-           && beforeLayerOrder.isEmpty();
+           && !wobbleAmount && !motionSettings && !rasterAssets
+           && !activeLayerId && removedLayers.isEmpty() && addedLayers.isEmpty()
+           && changedLayers.isEmpty() && beforeLayerOrder.isEmpty();
 }
 
 bool DocumentDelta::apply(Document &document, bool forward) const
@@ -670,6 +690,8 @@ bool DocumentDelta::apply(Document &document, bool forward) const
     applyChange(document.animationFrames, animationFrames, forward);
     applyChange(document.framesPerSecond, framesPerSecond, forward);
     applyChange(document.wobbleAmount, wobbleAmount, forward);
+    applyChange(document.motion, motionSettings, forward);
+    applyChange(document.rasterAssets, rasterAssets, forward);
 
     for (const LayerChange &change : changedLayers)
     {
@@ -742,6 +764,13 @@ bool DocumentDelta::mergeScalar(
         return mergeDocumentScalar(
             *this, next, &DocumentDelta::framesPerSecond);
     }
+    if (mergeId == motionStyleMergeId || mergeId == motionPoseCountMergeId
+        || mergeId == motionDetailMergeId || mergeId == motionLinkedMergeId
+        || mergeId == motionRandomnessMergeId || mergeId == brokenLineMergeId
+        || mergeId == breakAmountMergeId || mergeId == breakRangeMergeId)
+    {
+        return mergeDocumentScalar(*this, next, &DocumentDelta::motionSettings);
+    }
     if (mergeId == layerOpacityMergeId)
     {
         return mergeLayerScalar(*this, next, scope, &LayerChange::opacity);
@@ -763,6 +792,7 @@ void DocumentDelta::normalizeMergedChanges()
     normalize(animationFrames);
     normalize(framesPerSecond);
     normalize(wobbleAmount);
+    normalize(motionSettings);
     normalize(activeLayerId);
     for (LayerChange &change : changedLayers)
     {
@@ -823,6 +853,11 @@ QVector<Stroke> DocumentDelta::payloadStrokes(bool targetAfter) const
 void DocumentDelta::accountStorage(MemoryFootprint &footprint) const
 {
     footprint.addOwned(sizeof(DocumentDelta));
+    if (rasterAssets)
+    {
+        accountRasterAssets(footprint, rasterAssets->before);
+        accountRasterAssets(footprint, rasterAssets->after);
+    }
     footprint.addOwned(static_cast<qint64>(removedLayers.capacity())
                            * static_cast<qint64>(sizeof(IndexedLayer))
                        + static_cast<qint64>(addedLayers.capacity())

@@ -50,6 +50,30 @@ bool normalizeAndValidate(Document &document)
     }
 
     Document candidate = document;
+    quint64 rasterDecodedBytes = 0;
+    qint64 rasterPayloadBytes = 0;
+    for (auto asset = candidate.rasterAssets.cbegin();
+        asset != candidate.rasterAssets.cend();
+        ++asset)
+    {
+        if (asset.key() != asset->id || !isValidRasterAssetMetadata(*asset))
+        {
+            return false;
+        }
+        const quint64 decoded = static_cast<quint64>(asset->size.width())
+                                * static_cast<quint64>(asset->size.height())
+                                * 4ULL;
+        if (decoded > DocumentLimits::maximumDistinctRasterDecodedBytes
+                          - rasterDecodedBytes
+            || asset->compressedRgba.size()
+                   > DocumentLimits::maximumDistinctRasterPayloadBytes
+                         - rasterPayloadBytes)
+        {
+            return false;
+        }
+        rasterDecodedBytes += decoded;
+        rasterPayloadBytes += asset->compressedRgba.size();
+    }
     QSet<qint64> maskKeys;
     quint64 distinctMaskBytes = 0;
     const auto registerMask = [&maskKeys, &distinctMaskBytes](
@@ -87,8 +111,9 @@ bool normalizeAndValidate(Document &document)
             if (stroke.mode == StrokeMode::PixelSelection)
             {
                 if (!stroke.pixelSelectionOp || stroke.reframeOp
-                    || !stroke.points.isEmpty() || stroke.visibilityClip
-                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.imageOp || !stroke.points.isEmpty()
+                    || stroke.visibilityClip || !stroke.clipMask.isNull()
+                    || !stroke.fillMask.isNull() || stroke.fillCoverage
                     || stroke.pixelSelectionOp->canvasSize != epochSize
                     || !isValidPixelSelectionOp(*stroke.pixelSelectionOp))
                 {
@@ -99,8 +124,9 @@ bool normalizeAndValidate(Document &document)
             if (stroke.mode == StrokeMode::Reframe)
             {
                 if (!stroke.reframeOp || stroke.pixelSelectionOp
-                    || !stroke.points.isEmpty() || stroke.visibilityClip
-                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.imageOp || !stroke.points.isEmpty()
+                    || stroke.visibilityClip || !stroke.clipMask.isNull()
+                    || !stroke.fillMask.isNull() || stroke.fillCoverage
                     || stroke.reframeOp->sourceSize != epochSize
                     || !isValidReframeOp(*stroke.reframeOp))
                 {
@@ -109,10 +135,24 @@ bool normalizeAndValidate(Document &document)
                 epochSize = stroke.reframeOp->targetSize;
                 continue;
             }
+            if (stroke.mode == StrokeMode::Image)
+            {
+                if (!stroke.imageOp || stroke.pixelSelectionOp
+                    || stroke.reframeOp || !stroke.points.isEmpty()
+                    || stroke.visibilityClip || !stroke.clipMask.isNull()
+                    || !stroke.fillMask.isNull() || stroke.fillCoverage
+                    || !isValidImageOp(*stroke.imageOp)
+                    || !candidate.rasterAssets.contains(
+                        stroke.imageOp->assetId))
+                {
+                    return false;
+                }
+                continue;
+            }
             if ((stroke.mode != StrokeMode::Paint
                     && stroke.mode != StrokeMode::Erase
                     && stroke.mode != StrokeMode::Fill)
-                || stroke.pixelSelectionOp || stroke.reframeOp
+                || stroke.pixelSelectionOp || stroke.reframeOp || stroke.imageOp
                 || stroke.points.isEmpty()
                 || (!stroke.clipMask.isNull()
                     && (stroke.clipMask.size() != epochSize
@@ -123,6 +163,11 @@ bool normalizeAndValidate(Document &document)
                         || stroke.fillMask.size() != epochSize
                         || stroke.fillMask.format()
                                != QImage::Format_Grayscale8))
+                || (stroke.fillCoverage
+                    && (stroke.mode != StrokeMode::Fill
+                        || !stroke.fillMask.isNull()
+                        || !isValidPackedMaskRegion(*stroke.fillCoverage)
+                        || stroke.fillCoverage->canvasSize != epochSize))
                 || !registerMask(stroke.clipMask)
                 || !registerMask(stroke.fillMask))
             {

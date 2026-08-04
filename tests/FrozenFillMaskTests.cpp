@@ -1,5 +1,6 @@
 #include "document/FrozenFillMask.hpp"
 #include "document/SelectionOperation.hpp"
+#include "render/FloodFillMask.hpp"
 #include "render/RenderEngine.hpp"
 #include "render/StrokeCoverageRenderer.hpp"
 #include "support/RenderTestSuites.hpp"
@@ -98,6 +99,50 @@ private slots:
             {{0.0, 0.0},
                 {std::numeric_limits<qreal>::infinity(), 0.0},
                 {0.0, 1.0}}));
+    }
+
+    void sharesAlphaBoundaryFloodFillWithLegacyRendering()
+    {
+        QImage image(QSize(24, 20), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.fillRect(QRect(6, 5, 12, 2), Qt::black);
+        painter.fillRect(QRect(6, 13, 12, 2), Qt::black);
+        painter.fillRect(QRect(6, 5, 2, 10), Qt::black);
+        painter.fillRect(QRect(16, 5, 2, 10), Qt::black);
+        painter.end();
+
+        const QPoint seed(10, 10);
+        const QImage legacy = RenderEngine::fillRegionMask(image, seed);
+        QCOMPARE(FloodFillMask::fromImage(
+                     image, seed, FloodFillMask::Comparison::AlphaBoundary, 0),
+            legacy);
+        QCOMPARE(FloodFillMask::fromImage(
+                     image, seed, FloodFillMask::Comparison::Color, 0),
+            legacy);
+    }
+
+    void appliesColorToleranceToAllRgbaChannels()
+    {
+        QImage image(QSize(4, 1), QImage::Format_ARGB32_Premultiplied);
+        image.setPixelColor(0, 0, QColor(100, 100, 100, 255));
+        image.setPixelColor(1, 0, QColor(105, 96, 103, 250));
+        image.setPixelColor(2, 0, QColor(112, 100, 100, 255));
+        image.setPixelColor(3, 0, QColor(100, 100, 100, 200));
+
+        const QImage tight = FloodFillMask::fromImage(
+            image, QPoint(0, 0), FloodFillMask::Comparison::Color, 5);
+        QCOMPARE(tight.constScanLine(0)[0], uchar(255));
+        QCOMPARE(tight.constScanLine(0)[1], uchar(255));
+        QCOMPARE(tight.constScanLine(0)[2], uchar(0));
+        QCOMPARE(tight.constScanLine(0)[3], uchar(0));
+
+        const QImage maximum = FloodFillMask::fromImage(
+            image, QPoint(0, 0), FloodFillMask::Comparison::Color, 255);
+        for (int x = 0; x < image.width(); ++x)
+        {
+            QCOMPARE(maximum.constScanLine(0)[x], uchar(255));
+        }
     }
 };
 

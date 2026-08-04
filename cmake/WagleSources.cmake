@@ -54,6 +54,10 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/DocumentSerializer.hpp
     src/io/SelectionClipboardCodec.cpp
     src/io/SelectionClipboardCodec.hpp
+    src/io/WawaV10Reader.cpp
+    src/io/WawaV10Reader.hpp
+    src/io/WawaV10Importer.cpp
+    src/io/WawaV10Importer.hpp
     src/io/serializer/DocumentJsonCodec.cpp
     src/io/serializer/DocumentJsonCodec.hpp
     src/io/serializer/DocumentValidation.cpp
@@ -69,12 +73,18 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/io/ExportWorker.hpp
     src/io/GifWriter.cpp
     src/io/GifWriter.hpp
+    src/io/WebPWriter.cpp
+    src/io/WebPWriter.hpp
     src/io/RenderExportPolicy.cpp
     src/io/RenderExportPolicy.hpp
+    src/render/BrokenLineModel.cpp
+    src/render/BrokenLineModel.hpp
     src/render/ClassicStrokeMotion.cpp
     src/render/ClassicStrokeMotion.hpp
     src/render/DeterministicNoise.cpp
     src/render/DeterministicNoise.hpp
+    src/render/FloodFillMask.cpp
+    src/render/FloodFillMask.hpp
     src/render/ImageAffineTransformer.cpp
     src/render/ImageAffineTransformer.hpp
     src/render/ImageResampler.cpp
@@ -99,10 +109,14 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/PreviewMemoryUsage.hpp
     src/render/PreviewRenderPolicy.cpp
     src/render/PreviewRenderPolicy.hpp
+    src/render/RasterAssetCache.cpp
+    src/render/RasterAssetCache.hpp
     src/render/StrokeCoverageRenderer.cpp
     src/render/StrokeCoverageRenderer.hpp
     src/render/StrokeRenderer.cpp
     src/render/StrokeRenderer.hpp
+    src/render/StrokeMotionModel.cpp
+    src/render/StrokeMotionModel.hpp
 )
 
 set(WOBBLEPAINT_UI_SOURCES
@@ -112,6 +126,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/BrushPresetButton.hpp
     src/ui/BrushSizeRow.cpp
     src/ui/BrushSizeRow.hpp
+    src/ui/BucketPopoverPanel.cpp
+    src/ui/BucketPopoverPanel.hpp
     src/ui/CanvasSizeDialog.cpp
     src/ui/CanvasSizeDialog.hpp
     src/ui/CanvasTypes.hpp
@@ -135,6 +151,8 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/FrameScrubber.hpp
     src/ui/GifExportDialog.cpp
     src/ui/GifExportDialog.hpp
+    src/ui/HelpDialog.cpp
+    src/ui/HelpDialog.hpp
     src/ui/Icons.cpp
     src/ui/Icons.hpp
     src/ui/ImageSizeDialog.cpp
@@ -180,8 +198,12 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/ToolPopover.hpp
     src/ui/WobblePlayButton.cpp
     src/ui/WobblePlayButton.hpp
+    src/ui/WobblePopoverPanel.cpp
+    src/ui/WobblePopoverPanel.hpp
     src/ui/WobblePreview.cpp
     src/ui/WobblePreview.hpp
+    src/ui/WwpPresetCodec.cpp
+    src/ui/WwpPresetCodec.hpp
     src/ui/WandPopoverPanel.cpp
     src/ui/WandPopoverPanel.hpp
     src/ui/WandReferenceButton.cpp
@@ -191,6 +213,7 @@ set(WOBBLEPAINT_UI_SOURCES
 set(WOBBLEPAINT_TEST_SOURCES
     tests/AppPolicyTests.cpp
     tests/BrushRenderingTests.cpp
+    tests/BrokenLineModelTests.cpp
     tests/ClassicStrokeMotionTests.cpp
     tests/DocumentHistoryTests.cpp
     tests/DocumentLifecycleTests.cpp
@@ -219,6 +242,8 @@ set(WOBBLEPAINT_TEST_SOURCES
     tests/TestMain.cpp
     tests/TestSuites.hpp
     tests/WobbleAnimationTests.cpp
+    tests/WawaV10ReaderTests.cpp
+    tests/WebPWriterTests.cpp
     tests/UiDrawingToolTests.cpp
     tests/UiSelectionTests.cpp
     tests/UiSessionTests.cpp

@@ -3,10 +3,74 @@
 #include "document/DocumentLimits.hpp"
 #include "document/LayerHierarchy.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace wobble
 {
+
+bool isValidMotionStyle(MotionStyle style)
+{
+    return style == MotionStyle::Classic || style == MotionStyle::Smooth
+           || style == MotionStyle::Stepped;
+}
+
+bool isValidMotionSettings(const MotionSettings &settings, int animationFrames)
+{
+    const bool validPoseCount =
+        settings.poseCount >= DocumentLimits::minimumMotionPoseCount
+        && settings.poseCount <= DocumentLimits::maximumMotionPoseCount
+        && (settings.style == MotionStyle::Classic
+            || settings.poseCount <= animationFrames);
+    return isValidMotionStyle(settings.style) && validPoseCount
+           && settings.detail >= DocumentLimits::minimumMotionDetail
+           && settings.detail <= DocumentLimits::maximumMotionDetail
+           && std::isfinite(settings.linked) && settings.linked >= 0.0
+           && settings.linked <= 1.0 && std::isfinite(settings.randomness)
+           && settings.randomness >= 0.0 && settings.randomness <= 1.0
+           && std::isfinite(settings.breakAmount) && settings.breakAmount >= 0.0
+           && settings.breakAmount <= 1.0 && std::isfinite(settings.breakRange)
+           && settings.breakRange >= DocumentLimits::minimumBreakRange
+           && settings.breakRange <= DocumentLimits::maximumBreakRange;
+}
+
+bool isValidImageOp(const ImageOp &operation)
+{
+    const QTransform &transform = operation.transform;
+    const bool finite =
+        std::isfinite(transform.m11()) && std::isfinite(transform.m12())
+        && std::isfinite(transform.m13()) && std::isfinite(transform.m21())
+        && std::isfinite(transform.m22()) && std::isfinite(transform.m23())
+        && std::isfinite(transform.m31()) && std::isfinite(transform.m32())
+        && std::isfinite(transform.m33());
+    return !operation.assetId.isEmpty() && finite && transform.isAffine()
+           && transform.isInvertible()
+           && (operation.sampling == SamplingMode::Nearest
+               || operation.sampling == SamplingMode::Smooth);
+}
+
+bool isValidRasterAssetMetadata(const RasterAsset &asset)
+{
+    const bool validId = asset.id.size() == 64
+                         && std::all_of(asset.id.cbegin(),
+                             asset.id.cend(),
+                             [](QChar character)
+                             {
+                                 return (character >= QLatin1Char('0')
+                                            && character <= QLatin1Char('9'))
+                                        || (character >= QLatin1Char('a')
+                                            && character <= QLatin1Char('f'));
+                             });
+    if (!validId || asset.size.width() <= 0 || asset.size.height() <= 0
+        || asset.compressedRgba.isEmpty())
+    {
+        return false;
+    }
+    const quint64 width = static_cast<quint64>(asset.size.width());
+    const quint64 height = static_cast<quint64>(asset.size.height());
+    return width <= DocumentLimits::maximumRasterAssetPixels / height
+           && width * height <= DocumentLimits::maximumRasterAssetPixels;
+}
 
 bool isValidBrushSettings(const BrushSettings &settings)
 {

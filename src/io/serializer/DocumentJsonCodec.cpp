@@ -207,6 +207,82 @@ QString layerKindName(LayerKind kind)
                                     : QStringLiteral("paint");
 }
 
+QJsonObject motionSettingsToJson(const MotionSettings &settings)
+{
+    QString style = QStringLiteral("classic");
+    if (settings.style == MotionStyle::Smooth)
+    {
+        style = QStringLiteral("smooth");
+    }
+    else if (settings.style == MotionStyle::Stepped)
+    {
+        style = QStringLiteral("stepped");
+    }
+    QJsonObject object;
+    object.insert(QStringLiteral("style"), style);
+    object.insert(QStringLiteral("poseCount"), settings.poseCount);
+    object.insert(QStringLiteral("detail"), settings.detail);
+    object.insert(QStringLiteral("linked"), settings.linked);
+    object.insert(QStringLiteral("randomness"), settings.randomness);
+    object.insert(QStringLiteral("brokenLine"), settings.brokenLine);
+    object.insert(QStringLiteral("breakAmount"), settings.breakAmount);
+    object.insert(QStringLiteral("breakRange"), settings.breakRange);
+    return object;
+}
+
+std::optional<MotionSettings> motionSettingsFromJson(
+    const QJsonValue &value, QString *error)
+{
+    if (!value.isObject())
+    {
+        setError(
+            error, DocumentSerializer::tr("The motion settings are invalid."));
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const std::optional<int> poseCount =
+        integerFromJson(object.value(QStringLiteral("poseCount")));
+    const std::optional<int> detail =
+        integerFromJson(object.value(QStringLiteral("detail")));
+    if (!object.value(QStringLiteral("style")).isString() || !poseCount
+        || !detail || !object.value(QStringLiteral("linked")).isDouble()
+        || !object.value(QStringLiteral("randomness")).isDouble()
+        || !object.value(QStringLiteral("brokenLine")).isBool()
+        || !object.value(QStringLiteral("breakAmount")).isDouble()
+        || !object.value(QStringLiteral("breakRange")).isDouble())
+    {
+        setError(
+            error, DocumentSerializer::tr("The motion settings are invalid."));
+        return std::nullopt;
+    }
+
+    MotionSettings settings;
+    const QString style = object.value(QStringLiteral("style")).toString();
+    if (style == QStringLiteral("smooth"))
+    {
+        settings.style = MotionStyle::Smooth;
+    }
+    else if (style == QStringLiteral("stepped"))
+    {
+        settings.style = MotionStyle::Stepped;
+    }
+    else if (style != QStringLiteral("classic"))
+    {
+        setError(
+            error, DocumentSerializer::tr("The motion settings are invalid."));
+        return std::nullopt;
+    }
+    settings.poseCount = *poseCount;
+    settings.detail = *detail;
+    settings.linked = object.value(QStringLiteral("linked")).toDouble();
+    settings.randomness = object.value(QStringLiteral("randomness")).toDouble();
+    settings.brokenLine = object.value(QStringLiteral("brokenLine")).toBool();
+    settings.breakAmount =
+        object.value(QStringLiteral("breakAmount")).toDouble();
+    settings.breakRange = object.value(QStringLiteral("breakRange")).toDouble();
+    return settings;
+}
+
 QJsonArray transformToJson(const QTransform &transform)
 {
     return {transform.m11(),
@@ -242,6 +318,10 @@ QJsonObject strokeToJson(const Stroke &stroke,
     else if (stroke.mode == StrokeMode::Fill)
     {
         modeName = QStringLiteral("fill");
+    }
+    else if (stroke.mode == StrokeMode::Image)
+    {
+        modeName = QStringLiteral("image");
     }
     else if (stroke.mode == StrokeMode::PixelSelection)
     {
@@ -282,6 +362,15 @@ QJsonObject strokeToJson(const Stroke &stroke,
             object.insert(QStringLiteral("fillMaskId"), id.value());
         }
     }
+    if (stroke.fillCoverage)
+    {
+        const auto id = binaryMasks.idByIdentity.constFind(
+            binaryMaskIdentity(*stroke.fillCoverage));
+        if (id != binaryMasks.idByIdentity.cend())
+        {
+            object.insert(QStringLiteral("fillCoverageId"), id.value());
+        }
+    }
     if (stroke.pixelSelectionOp)
     {
         const PixelSelectionOp &operation = *stroke.pixelSelectionOp;
@@ -320,6 +409,17 @@ QJsonObject strokeToJson(const Stroke &stroke,
             QJsonArray{
                 operation.contentOffset.x(), operation.contentOffset.y()});
         object.insert(QStringLiteral("reframe"), payload);
+    }
+    if (stroke.imageOp)
+    {
+        const ImageOp &operation = *stroke.imageOp;
+        QJsonObject payload;
+        payload.insert(QStringLiteral("assetId"), operation.assetId);
+        payload.insert(
+            QStringLiteral("transform"), transformToJson(operation.transform));
+        payload.insert(
+            QStringLiteral("sampling"), samplingModeName(operation.sampling));
+        object.insert(QStringLiteral("image"), payload);
     }
     return object;
 }
@@ -856,6 +956,7 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
     const QString mode = object.value(QStringLiteral("mode")).toString();
     if (mode != QStringLiteral("paint") && mode != QStringLiteral("erase")
         && mode != QStringLiteral("fill")
+        && (fileSchemaVersion < 11 || mode != QStringLiteral("image"))
         && (fileSchemaVersion < 6
             || (mode != QStringLiteral("pixelSelection")
                 && mode != QStringLiteral("reframe"))))
@@ -871,6 +972,10 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
     else if (mode == QStringLiteral("fill"))
     {
         stroke.mode = StrokeMode::Fill;
+    }
+    else if (mode == QStringLiteral("image"))
+    {
+        stroke.mode = StrokeMode::Image;
     }
     else if (mode == QStringLiteral("pixelSelection"))
     {
@@ -925,7 +1030,8 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
         stroke.points.append(*point);
     }
     const bool framebufferOperation = stroke.mode == StrokeMode::PixelSelection
-                                      || stroke.mode == StrokeMode::Reframe;
+                                      || stroke.mode == StrokeMode::Reframe
+                                      || stroke.mode == StrokeMode::Image;
     if (framebufferOperation != points.isEmpty())
     {
         setError(error,
@@ -1033,21 +1139,48 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
             }
             if (fileSchemaVersion >= 6)
             {
-                if (object.contains(QStringLiteral("fillCoverageId")))
+                const QJsonValue fillCoverageId =
+                    object.value(QStringLiteral("fillCoverageId"));
+                if (fileSchemaVersion < 10 && !fillCoverageId.isUndefined())
                 {
                     setError(error,
                         DocumentSerializer::tr(
                             "A stroke references unsupported fill coverage."));
                     return std::nullopt;
                 }
+                if (fileSchemaVersion >= 10 && !fillCoverageId.isUndefined())
+                {
+                    if (stroke.mode != StrokeMode::Fill
+                        || !fillCoverageId.isString())
+                    {
+                        setError(error,
+                            DocumentSerializer::tr("A stroke has an invalid "
+                                                   "fill coverage reference."));
+                        return std::nullopt;
+                    }
+                    const auto mask = referencedBinaryMasks.constFind(
+                        fillCoverageId.toString());
+                    if (mask == referencedBinaryMasks.cend())
+                    {
+                        setError(error,
+                            DocumentSerializer::tr(
+                                "A stroke references missing fill coverage."));
+                        return std::nullopt;
+                    }
+                    stroke.fillCoverage = mask.value();
+                }
                 const QJsonValue pixelSelectionPayload =
                     object.value(QStringLiteral("pixelSelection"));
                 const QJsonValue reframePayload =
                     object.value(QStringLiteral("reframe"));
+                const QJsonValue imagePayload =
+                    object.value(QStringLiteral("image"));
                 if ((stroke.mode != StrokeMode::PixelSelection
                         && !pixelSelectionPayload.isUndefined())
                     || (stroke.mode != StrokeMode::Reframe
-                        && !reframePayload.isUndefined()))
+                        && !reframePayload.isUndefined())
+                    || (stroke.mode != StrokeMode::Image
+                        && !imagePayload.isUndefined()))
                 {
                     setError(error,
                         DocumentSerializer::tr("A stroke contains an operation "
@@ -1166,6 +1299,45 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
                     }
                     stroke.reframeOp = operation;
                 }
+
+                if (stroke.mode == StrokeMode::Image)
+                {
+                    if (fileSchemaVersion < 11 || !imagePayload.isObject())
+                    {
+                        setError(error,
+                            DocumentSerializer::tr(
+                                "An image operation is invalid."));
+                        return std::nullopt;
+                    }
+                    const QJsonObject payload = imagePayload.toObject();
+                    const std::optional<QTransform> operationTransform =
+                        transformFromJson(
+                            payload.value(QStringLiteral("transform")));
+                    const std::optional<SamplingMode> sampling =
+                        samplingModeFromJson(
+                            payload.value(QStringLiteral("sampling")));
+                    ImageOp operation;
+                    operation.assetId =
+                        payload.value(QStringLiteral("assetId")).toString();
+                    if (!payload.value(QStringLiteral("assetId")).isString()
+                        || !operationTransform || !sampling)
+                    {
+                        setError(error,
+                            DocumentSerializer::tr(
+                                "An image operation is invalid."));
+                        return std::nullopt;
+                    }
+                    operation.transform = *operationTransform;
+                    operation.sampling = *sampling;
+                    if (!isValidImageOp(operation))
+                    {
+                        setError(error,
+                            DocumentSerializer::tr(
+                                "An image operation is invalid."));
+                        return std::nullopt;
+                    }
+                    stroke.imageOp = std::move(operation);
+                }
             }
         }
     }
@@ -1258,6 +1430,20 @@ QJsonObject rootToJson(const Document &document,
     animation.insert(QStringLiteral("frames"), document.animationFrames);
     animation.insert(QStringLiteral("fps"), document.framesPerSecond);
     animation.insert(QStringLiteral("wobble"), document.wobbleAmount);
+    animation.insert(
+        QStringLiteral("motion"), motionSettingsToJson(document.motion));
+
+    QJsonArray rasterAssets;
+    for (const RasterAsset &asset : document.rasterAssets)
+    {
+        QJsonObject entry;
+        entry.insert(QStringLiteral("id"), asset.id);
+        entry.insert(QStringLiteral("size"),
+            QJsonArray{asset.size.width(), asset.size.height()});
+        entry.insert(QStringLiteral("data"),
+            QString::fromLatin1(asset.compressedRgba.toBase64()));
+        rasterAssets.append(entry);
+    }
 
     QJsonObject root;
     root.insert(QStringLiteral("schemaVersion"), schemaVersion);
@@ -1272,6 +1458,7 @@ QJsonObject rootToJson(const Document &document,
     root.insert(QStringLiteral("layers"), layers);
     root.insert(QStringLiteral("clipMasks"), clipMasks);
     root.insert(QStringLiteral("binaryMasks"), binaryMasks);
+    root.insert(QStringLiteral("rasterAssets"), rasterAssets);
     for (auto field = additionalRootFields.constBegin();
         field != additionalRootFields.constEnd();
         ++field)

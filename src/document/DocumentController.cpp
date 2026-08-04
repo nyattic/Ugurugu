@@ -11,6 +11,7 @@
 #include "document/history/HistoryMemory.hpp"
 #include "document/history/LogicalHistoryCommand.hpp"
 #include "io/DocumentSerializer.hpp"
+#include "render/RasterAssetCache.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QHash>
@@ -39,15 +40,50 @@ using history::accountImageStorage;
 using history::accountPackedMask;
 using history::accountVectorStorage;
 using history::animationFramesMergeId;
+using history::breakAmountMergeId;
+using history::breakRangeMergeId;
+using history::brokenLineMergeId;
 using history::DocumentDelta;
 using history::framesPerSecondMergeId;
 using history::layerOpacityMergeId;
 using history::LogicalHistoryCommand;
 using history::MemoryFootprint;
+using history::motionDetailMergeId;
+using history::motionLinkedMergeId;
+using history::motionPoseCountMergeId;
+using history::motionRandomnessMergeId;
+using history::motionStyleMergeId;
 using history::wobbleAmountMergeId;
 
 namespace
 {
+
+void pruneUnreferencedRasterAssets(Document &document)
+{
+    QSet<QString> referenced;
+    for (const Layer &layer : std::as_const(document.layers))
+    {
+        for (const Stroke &stroke : layer.strokes)
+        {
+            if (stroke.imageOp)
+            {
+                referenced.insert(stroke.imageOp->assetId);
+            }
+        }
+    }
+    for (auto asset = document.rasterAssets.begin();
+        asset != document.rasterAssets.end();)
+    {
+        if (!referenced.contains(asset.key()))
+        {
+            asset = document.rasterAssets.erase(asset);
+        }
+        else
+        {
+            ++asset;
+        }
+    }
+}
 
 bool layerCanProducePixels(const Layer &layer)
 {
@@ -372,6 +408,7 @@ bool DocumentController::isModified() const
 void DocumentController::releaseTransientCaches()
 {
     m_serializationCache.clear();
+    RasterAssetCache::clear();
 }
 
 bool DocumentController::selectionHasVisibleLayerPixels(
@@ -860,6 +897,216 @@ void DocumentController::setWobbleAmount(qreal amount)
         wobbleAmountMergeId);
 }
 
+void DocumentController::setMotionStyle(MotionStyle style)
+{
+    if (!isValidMotionStyle(style))
+    {
+        failHistoryMacro();
+        return;
+    }
+    const Document &current = document();
+    if (current.motion.style == style)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.style = style;
+    if (style != MotionStyle::Classic)
+    {
+        candidate.motion.poseCount =
+            std::min(candidate.motion.poseCount, candidate.animationFrames);
+    }
+    tryCommitCandidate(tr("Change motion style"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        motionStyleMergeId);
+}
+
+void DocumentController::setMotionPoseCount(int count)
+{
+    const Document &current = document();
+    const int maximum = current.motion.style == MotionStyle::Classic
+                            ? DocumentLimits::maximumMotionPoseCount
+                            : current.animationFrames;
+    const int normalized =
+        std::clamp(count, DocumentLimits::minimumMotionPoseCount, maximum);
+    if (current.motion.poseCount == normalized)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.poseCount = normalized;
+    tryCommitCandidate(tr("Change motion pose count"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        motionPoseCountMergeId);
+}
+
+void DocumentController::setMotionDetail(int detail)
+{
+    const int normalized = std::clamp(detail,
+        DocumentLimits::minimumMotionDetail,
+        DocumentLimits::maximumMotionDetail);
+    const Document &current = document();
+    if (current.motion.detail == normalized)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.detail = normalized;
+    tryCommitCandidate(tr("Change motion detail"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        motionDetailMergeId);
+}
+
+void DocumentController::setMotionLinked(qreal linked)
+{
+    if (!std::isfinite(linked))
+    {
+        failHistoryMacro();
+        return;
+    }
+    const qreal normalized = std::clamp(linked, 0.0, 1.0);
+    const Document &current = document();
+    if (qFuzzyCompare(current.motion.linked, normalized))
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.linked = normalized;
+    tryCommitCandidate(tr("Change linked motion"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        motionLinkedMergeId);
+}
+
+void DocumentController::setMotionRandomness(qreal randomness)
+{
+    if (!std::isfinite(randomness))
+    {
+        failHistoryMacro();
+        return;
+    }
+    const qreal normalized = std::clamp(randomness, 0.0, 1.0);
+    const Document &current = document();
+    if (qFuzzyCompare(current.motion.randomness, normalized))
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.randomness = normalized;
+    tryCommitCandidate(tr("Change motion randomness"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        motionRandomnessMergeId);
+}
+
+void DocumentController::setBrokenLineEnabled(bool enabled)
+{
+    const Document &current = document();
+    if (current.motion.brokenLine == enabled)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.brokenLine = enabled;
+    tryCommitCandidate(tr("Toggle broken line"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        brokenLineMergeId);
+}
+
+void DocumentController::setBreakAmount(qreal amount)
+{
+    if (!std::isfinite(amount))
+    {
+        failHistoryMacro();
+        return;
+    }
+    const qreal normalized = std::clamp(amount, 0.0, 1.0);
+    const Document &current = document();
+    if (qFuzzyCompare(current.motion.breakAmount, normalized))
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.breakAmount = normalized;
+    tryCommitCandidate(tr("Change break amount"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        breakAmountMergeId);
+}
+
+void DocumentController::setBreakRange(qreal range)
+{
+    if (!std::isfinite(range))
+    {
+        failHistoryMacro();
+        return;
+    }
+    const qreal normalized = std::clamp(range,
+        DocumentLimits::minimumBreakRange,
+        DocumentLimits::maximumBreakRange);
+    const Document &current = document();
+    if (qFuzzyCompare(current.motion.breakRange, normalized))
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    candidate.motion.breakRange = normalized;
+    tryCommitCandidate(tr("Change break range"),
+        std::move(candidate),
+        {},
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        breakRangeMergeId);
+}
+
+bool DocumentController::applyMotionPreset(
+    qreal wobbleAmount, MotionSettings motion)
+{
+    if (!std::isfinite(wobbleAmount) || !isValidMotionStyle(motion.style))
+    {
+        return false;
+    }
+    const Document &current = document();
+    motion.poseCount = std::clamp(motion.poseCount,
+        DocumentLimits::minimumMotionPoseCount,
+        motion.style == MotionStyle::Classic
+            ? DocumentLimits::maximumMotionPoseCount
+            : current.animationFrames);
+    if (!isValidMotionSettings(motion, current.animationFrames))
+    {
+        return false;
+    }
+    Document candidate = current;
+    candidate.wobbleAmount = std::clamp(wobbleAmount,
+        DocumentLimits::minimumWobbleAmount,
+        DocumentLimits::maximumWobbleAmount);
+    candidate.motion = motion;
+    if (candidate.wobbleAmount == current.wobbleAmount
+        && candidate.motion == current.motion)
+    {
+        return true;
+    }
+    return tryCommitCandidate(tr("Apply WWP preset"), std::move(candidate));
+}
+
 void DocumentController::setAnimationFrames(int frames)
 {
     const int normalized = std::clamp(frames,
@@ -873,11 +1120,18 @@ void DocumentController::setAnimationFrames(int frames)
     }
     Document candidate = current;
     candidate.animationFrames = normalized;
+    int mergeId = animationFramesMergeId;
+    if (candidate.motion.style != MotionStyle::Classic
+        && candidate.motion.poseCount > normalized)
+    {
+        candidate.motion.poseCount = normalized;
+        mergeId = 0;
+    }
     tryCommitCandidate(tr("Change animation frames"),
         std::move(candidate),
         {},
         ActiveLayerPolicy::PreserveCurrentIfPresent,
-        animationFramesMergeId);
+        mergeId);
 }
 
 void DocumentController::setFramesPerSecond(qreal fps)
@@ -920,6 +1174,7 @@ bool DocumentController::tryCommitCandidate(QString text,
     }
     const LayerHierarchyAnalysis currentHierarchy =
         analyzeLayerHierarchy(before->document());
+    pruneUnreferencedRasterAssets(candidate);
     const LayerHierarchyAnalysis candidateHierarchy =
         analyzeLayerHierarchy(candidate);
     if (!isLayerHierarchyDepthChangeAllowed(

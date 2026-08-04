@@ -29,7 +29,11 @@ constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
 constexpr auto eraserStabilizationKey = "drawingTools/eraser/stabilization";
 constexpr auto selectionShapeKey = "drawingTools/selection/shape";
+constexpr auto lassoModeKey = "drawingTools/lasso/mode";
 constexpr auto wandReferenceKey = "drawingTools/wand/reference";
+constexpr auto fillComparisonKey = "drawingTools/fill/comparison";
+constexpr auto fillToleranceKey = "drawingTools/fill/tolerance";
+constexpr auto bucketAntialiasingKey = "drawingTools/fill/antialiasing";
 constexpr auto legacyStabilizationKey = "canvas/strokeStabilization";
 
 constexpr qreal minimumRememberedStrokeWidth = 1.0;
@@ -59,8 +63,16 @@ QString selectionShapeSettingsId(CanvasWidget::SelectionShape shape);
 std::optional<CanvasWidget::SelectionShape> selectionShapeFromSettingsId(
     const QString &id);
 
+QString lassoModeSettingsId(CanvasWidget::LassoMode mode);
+std::optional<CanvasWidget::LassoMode> lassoModeFromSettingsId(
+    const QString &id);
+
 QString wandReferenceSettingsId(CanvasWidget::WandReference reference);
 std::optional<CanvasWidget::WandReference> wandReferenceFromSettingsId(
+    const QString &id);
+
+QString fillComparisonSettingsId(CanvasWidget::FillComparison comparison);
+std::optional<CanvasWidget::FillComparison> fillComparisonFromSettingsId(
     const QString &id);
 
 }

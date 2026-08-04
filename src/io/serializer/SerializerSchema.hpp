@@ -16,8 +16,8 @@ namespace serializer_detail
 // Written into every saved document and checked on load. Raising either one
 // changes what older builds accept, so they may only move together with the
 // corresponding reader change.
-constexpr int schemaVersion = 9;
-constexpr int algorithmVersion = 2;
+constexpr int schemaVersion = 11;
+constexpr int algorithmVersion = 3;
 
 // Namespaces the process-local compressed payload cache keys. It is not
 // written to disk; bump it whenever the payload encoding changes so entries
@@ -55,6 +55,7 @@ struct PreparedPlan
     // PreparedDocument keeps the corresponding Qt COW backing alive.
     QMap<QString, ClipAssetMeta> clipAssets;
     QMap<QString, BinaryAssetMeta> binaryAssets;
+    QMap<QString, RasterAsset> rasterAssets;
     QHash<qint64, QString> clipIdsByIdentity;
     QHash<QString, QString> binaryIdsByIdentity;
     QHash<QUuid, StrokeMeta> strokes;

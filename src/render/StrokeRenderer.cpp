@@ -1,8 +1,10 @@
 #include "render/StrokeRenderer.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "render/BrokenLineModel.hpp"
 #include "render/ClassicStrokeMotion.hpp"
 #include "render/DeterministicNoise.hpp"
+#include "render/StrokeMotionModel.hpp"
 
 #include <QRadialGradient>
 
@@ -337,6 +339,39 @@ bool sameIdentity(const Stroke &left, const Stroke &right)
            && left.clipMask.cacheKey() == right.clipMask.cacheKey();
 }
 
+bool segmentVisible(const PreparedStroke &prepared, int index)
+{
+    return prepared.visibleSegments.isEmpty()
+           || (index >= 0 && index < prepared.visibleSegments.size()
+               && prepared.visibleSegments[index] != 0);
+}
+
+bool pointVisible(const PreparedStroke &prepared, int index)
+{
+    if (prepared.visibleSegments.isEmpty() || prepared.points.size() == 1)
+    {
+        return true;
+    }
+    return segmentVisible(prepared, index - 1)
+           || segmentVisible(prepared, index);
+}
+
+QPainterPath preparedPath(const PreparedStroke &prepared)
+{
+    if (prepared.visibleSegments.isEmpty())
+    {
+        return smoothedPath(prepared.points);
+    }
+    QPainterPath path;
+    for (const BrokenLineModel::VisibleRun &run :
+        BrokenLineModel::visibleRuns(prepared.visibleSegments))
+    {
+        path.addPath(smoothedPath(prepared.points.sliced(
+            run.firstPoint, run.lastPoint - run.firstPoint + 1)));
+    }
+    return path;
+}
+
 }
 
 const PreparedStroke &IncrementalGeometry::prepared() const
@@ -346,6 +381,26 @@ const PreparedStroke &IncrementalGeometry::prepared() const
 
 GeometryUpdate IncrementalGeometry::update(
     const Stroke &stroke, int frameIndex, int frameCount, qreal wobbleAmount)
+{
+    return updateConfigured(
+        stroke, frameIndex, frameCount, wobbleAmount, MotionSettings{});
+}
+
+GeometryUpdate IncrementalGeometry::update(
+    const Stroke &stroke, int frameIndex, const Document &document)
+{
+    return updateConfigured(stroke,
+        frameIndex,
+        document.animationFrames,
+        document.wobbleAmount,
+        document.motion);
+}
+
+GeometryUpdate IncrementalGeometry::updateConfigured(const Stroke &stroke,
+    int frameIndex,
+    int frameCount,
+    qreal wobbleAmount,
+    const MotionSettings &motion)
 {
     GeometryUpdate result;
     if (stroke.points.isEmpty() || !isValidBrushSettings(stroke.brush)
@@ -358,12 +413,16 @@ GeometryUpdate IncrementalGeometry::update(
     const int normalizedFrame =
         ((frameIndex % normalizedCount) + normalizedCount) % normalizedCount;
     const qreal strokeWobble = wobbleAmount * stroke.brush.wobbleScale;
-    const qreal width = ClassicStrokeMotion::renderedWidth(
-        stroke.width, stroke.seed, normalizedFrame, strokeWobble);
+    const qreal width = StrokeMotionModel::renderedWidth(stroke.width,
+        stroke.seed,
+        normalizedFrame,
+        normalizedCount,
+        strokeWobble,
+        motion);
     const qreal spacing = spacingFor(stroke, width);
     const qsizetype maximum = maximumPointsFor(stroke);
     const bool canAppend =
-        matches(stroke, normalizedFrame, normalizedCount, wobbleAmount)
+        matches(stroke, normalizedFrame, normalizedCount, wobbleAmount, motion)
         && !m_capped && stroke.points.size() > m_sourcePointCount
         && m_sourcePointCount > 0
         && stroke.points[m_sourcePointCount - 1]
@@ -421,7 +480,20 @@ GeometryUpdate IncrementalGeometry::update(
     }
     m_prepared.variablePressure = maximumPressure - minimumPressure >= 0.01;
     m_prepared.valid = true;
-    displaceSamples(stroke, normalizedFrame, strokeWobble, result.changedFrom);
+    displaceSamples(stroke,
+        normalizedFrame,
+        normalizedCount,
+        strokeWobble,
+        motion,
+        result.changedFrom);
+    m_prepared.visibleSegments =
+        motion.brokenLine ? BrokenLineModel::visibleSegments(m_prepared.points,
+                                stroke.seed,
+                                StrokeMotionModel::visibilityPose(
+                                    normalizedFrame, normalizedCount, motion),
+                                motion.breakAmount,
+                                motion.breakRange)
+                          : QVector<quint8>();
     result.renderingModeChanged =
         oldVariablePressure != m_prepared.variablePressure;
     if (result.renderingModeChanged)
@@ -433,6 +505,7 @@ GeometryUpdate IncrementalGeometry::update(
     m_frameCount = normalizedCount;
     m_normalizedFrame = normalizedFrame;
     m_wobbleAmount = wobbleAmount;
+    m_motion = motion;
     m_spacing = spacing;
     m_maximumPoints = maximum;
     m_sourcePointCount = stroke.points.size();
@@ -455,6 +528,7 @@ void IncrementalGeometry::clear()
     m_frameCount = 0;
     m_normalizedFrame = 0;
     m_wobbleAmount = 0.0;
+    m_motion = {};
     m_regularMinimumPressure = 1.0;
     m_regularMaximumPressure = 0.0;
     m_capped = false;
@@ -463,11 +537,12 @@ void IncrementalGeometry::clear()
 bool IncrementalGeometry::matches(const Stroke &stroke,
     int normalizedFrame,
     int frameCount,
-    qreal wobbleAmount) const
+    qreal wobbleAmount,
+    const MotionSettings &motion) const
 {
     return m_prepared.valid && sameIdentity(stroke, m_identity)
            && m_normalizedFrame == normalizedFrame && m_frameCount == frameCount
-           && m_wobbleAmount == wobbleAmount;
+           && m_wobbleAmount == wobbleAmount && m_motion == motion;
 }
 
 bool IncrementalGeometry::rebuildSamples(
@@ -636,7 +711,9 @@ bool IncrementalGeometry::appendSamples(const Stroke &stroke)
 
 void IncrementalGeometry::displaceSamples(const Stroke &stroke,
     int normalizedFrame,
+    int frameCount,
     qreal wobbleAmount,
+    const MotionSettings &motion,
     qsizetype changedFrom)
 {
     changedFrom = std::clamp<qsizetype>(changedFrom, 0, m_samples.size());
@@ -665,12 +742,15 @@ void IncrementalGeometry::displaceSamples(const Stroke &stroke,
             m_samples[std::min<qsizetype>(m_samples.size() - 1, index + 1)]
                 .position;
         const QPointF tangent = normalized(after - before);
-        m_prepared.points[index] = ClassicStrokeMotion::displacedSample(sample,
+        m_prepared.points[index] = StrokeMotionModel::displacedSample(sample,
             tangent,
             arcLength,
+            index,
             amplitude,
             stroke.seed,
-            normalizedFrame);
+            normalizedFrame,
+            frameCount,
+            motion);
     }
 }
 
@@ -682,11 +762,25 @@ PreparedStroke prepare(
     return geometry.prepared();
 }
 
+PreparedStroke prepare(
+    const Stroke &stroke, int frameIndex, const Document &document)
+{
+    IncrementalGeometry geometry;
+    geometry.update(stroke, frameIndex, document);
+    return geometry.prepared();
+}
+
 QPainterPath path(
     const Stroke &stroke, int frameIndex, int frameCount, qreal wobbleAmount)
 {
     return smoothedPath(
         prepare(stroke, frameIndex, frameCount, wobbleAmount).points);
+}
+
+QPainterPath path(
+    const Stroke &stroke, int frameIndex, const Document &document)
+{
+    return preparedPath(prepare(stroke, frameIndex, document));
 }
 
 void paint(
@@ -711,19 +805,42 @@ void paint(
         }
         else
         {
-            drawLineStroke(painter,
-                prepared.points,
-                color,
-                prepared.width,
-                stroke.brush,
-                prepared.variablePressure);
+            if (prepared.visibleSegments.isEmpty())
+            {
+                drawLineStroke(painter,
+                    prepared.points,
+                    color,
+                    prepared.width,
+                    stroke.brush,
+                    prepared.variablePressure);
+            }
+            else
+            {
+                for (const BrokenLineModel::VisibleRun &run :
+                    BrokenLineModel::visibleRuns(prepared.visibleSegments))
+                {
+                    drawLineStroke(painter,
+                        prepared.points.sliced(
+                            run.firstPoint, run.lastPoint - run.firstPoint + 1),
+                        color,
+                        prepared.width,
+                        stroke.brush,
+                        prepared.variablePressure);
+                }
+            }
         }
         break;
     case BrushEngine::Airbrush:
-        for (const StrokePoint &point : prepared.points)
+        for (int index = 0; index < prepared.points.size(); ++index)
         {
-            drawAirbrushDab(
-                painter, point, color, prepared.width, stroke.brush);
+            if (pointVisible(prepared, index))
+            {
+                drawAirbrushDab(painter,
+                    prepared.points[index],
+                    color,
+                    prepared.width,
+                    stroke.brush);
+            }
         }
         break;
     case BrushEngine::Spray:
@@ -731,6 +848,10 @@ void paint(
         painter.setPen(Qt::NoPen);
         for (int index = 0; index < prepared.points.size(); ++index)
         {
+            if (!pointVisible(prepared, index))
+            {
+                continue;
+            }
             drawSprayDab(painter,
                 prepared.points[index],
                 color,
@@ -773,7 +894,8 @@ void paintPrimitives(QPainter &painter,
     {
         for (const int index : *orderedIndexes)
         {
-            if (index >= 0 && index < prepared.points.size())
+            if (index >= 0 && index < prepared.points.size()
+                && pointVisible(prepared, index))
             {
                 drawAirbrushDab(painter,
                     prepared.points[index],
@@ -790,7 +912,8 @@ void paintPrimitives(QPainter &painter,
         painter.setPen(Qt::NoPen);
         for (const int index : *orderedIndexes)
         {
-            if (index >= 0 && index < prepared.points.size())
+            if (index >= 0 && index < prepared.points.size()
+                && pointVisible(prepared, index))
             {
                 drawSprayDab(painter,
                     prepared.points[index],
@@ -826,9 +949,24 @@ void paintPrimitives(QPainter &painter,
         {
             continue;
         }
-        const int first = std::max(0, primitive - 2);
-        const int last = std::min(
-            static_cast<int>(prepared.points.size()) - 2, primitive + 2);
+        if (!segmentVisible(prepared, primitive))
+        {
+            continue;
+        }
+        int first = primitive;
+        int last = primitive;
+        for (int offset = 0;
+            offset < 2 && first > 0 && segmentVisible(prepared, first - 1);
+            ++offset)
+        {
+            --first;
+        }
+        for (int offset = 0; offset < 2 && last < prepared.points.size() - 2
+                             && segmentVisible(prepared, last + 1);
+            ++offset)
+        {
+            ++last;
+        }
         if (!ranges.isEmpty() && first <= ranges.last().last + 1)
         {
             ranges.last().last = std::max(ranges.last().last, last);
@@ -877,8 +1015,16 @@ QRectF primitiveBounds(
     const QPointF first = prepared.points[primitiveIndex].position;
     if (stroke.brush.engine != BrushEngine::Line || prepared.points.size() == 1)
     {
+        if (!pointVisible(prepared, primitiveIndex))
+        {
+            return {};
+        }
         return QRectF(
             first.x() - reach, first.y() - reach, reach * 2.0, reach * 2.0);
+    }
+    if (!segmentVisible(prepared, primitiveIndex))
+    {
+        return {};
     }
     const QPointF second = prepared.points[primitiveIndex + 1].position;
     return QRectF(first, second)

@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QImage>
+#include <QMap>
 #include <QPointF>
 #include <QRect>
 #include <QSize>
@@ -21,6 +22,7 @@ enum class StrokeMode
     Paint,
     Erase,
     Fill,
+    Image,
     PixelSelection,
     Reframe
 };
@@ -30,6 +32,30 @@ enum class SamplingMode
     Nearest,
     Smooth
 };
+
+enum class MotionStyle
+{
+    Classic,
+    Smooth,
+    Stepped
+};
+
+struct MotionSettings
+{
+    MotionStyle style = MotionStyle::Classic;
+    int poseCount = 8;
+    int detail = 12;
+    qreal linked = 1.0;
+    qreal randomness = 0.0;
+    bool brokenLine = false;
+    qreal breakAmount = 0.35;
+    qreal breakRange = 24.0;
+
+    bool operator==(const MotionSettings &) const = default;
+};
+
+bool isValidMotionStyle(MotionStyle style);
+bool isValidMotionSettings(const MotionSettings &settings, int animationFrames);
 
 struct PackedMaskRegion
 {
@@ -72,6 +98,27 @@ struct ReframeOp
 
     bool operator==(const ReframeOp &) const = default;
 };
+
+struct ImageOp
+{
+    QString assetId;
+    QTransform transform;
+    SamplingMode sampling = SamplingMode::Smooth;
+
+    bool operator==(const ImageOp &) const = default;
+};
+
+struct RasterAsset
+{
+    QString id;
+    QSize size;
+    QByteArray compressedRgba;
+
+    bool operator==(const RasterAsset &) const = default;
+};
+
+bool isValidImageOp(const ImageOp &operation);
+bool isValidRasterAssetMetadata(const RasterAsset &asset);
 
 enum class BrushEngine
 {
@@ -134,10 +181,12 @@ struct Stroke
     // for normal procedural fills. A non-null image is retained only to
     // preserve explicitly frozen schema-5 projects.
     QImage fillMask;
+    std::optional<PackedMaskRegion> fillCoverage;
     // Ordered framebuffer operations are deliberately distinct from
     // primitive brush strokes and have strict validation invariants.
     std::optional<PixelSelectionOp> pixelSelectionOp;
     std::optional<ReframeOp> reframeOp;
+    std::optional<ImageOp> imageOp;
 };
 
 enum class LayerBlendMode
@@ -185,6 +234,8 @@ struct Document
     int animationFrames = 30;
     qreal framesPerSecond = 25.0;
     qreal wobbleAmount = 1.6;
+    MotionSettings motion;
+    QMap<QString, RasterAsset> rasterAssets;
     QVector<Layer> layers;
     QUuid activeLayerId;
 

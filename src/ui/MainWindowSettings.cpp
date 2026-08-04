@@ -5,8 +5,16 @@
 #include "ui/ColorSwatchRow.hpp"
 #include "ui/DrawingToolSettings.hpp"
 #include "ui/MainWindow.hpp"
+#include "ui/SettingsDialog.hpp"
+#include "ui/WwpPresetCodec.hpp"
 
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QMessageBox>
+#include <QSaveFile>
 #include <QSettings>
+#include <QStatusBar>
 
 #include <algorithm>
 #include <cmath>
@@ -132,6 +140,21 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setSelectionShape(
         storedSelectionShape.value_or(CanvasWidget::SelectionShape::Freehand));
 
+    const std::optional<CanvasWidget::LassoMode> storedLassoMode =
+        lassoModeFromSettingsId(settings.value(lassoModeKey).toString());
+    m_canvas->setLassoMode(
+        storedLassoMode.value_or(CanvasWidget::LassoMode::Select));
+
+    const std::optional<CanvasWidget::FillComparison> storedFillComparison =
+        fillComparisonFromSettingsId(
+            settings.value(fillComparisonKey).toString());
+    m_canvas->setFillComparison(storedFillComparison.value_or(
+        CanvasWidget::FillComparison::AlphaBoundary));
+    m_canvas->setFillTolerance(qRound(realSetting(
+        settings, QString::fromLatin1(fillToleranceKey), 32.0, 0.0, 255.0)));
+    m_canvas->setBucketAntialiasing(boolSetting(
+        settings, QString::fromLatin1(bucketAntialiasingKey), true));
+
     const std::optional<CanvasWidget::Tool> storedTool =
         toolFromSettingsId(settings.value(activeToolKey).toString());
     m_canvas->setTool(storedTool.value_or(CanvasWidget::Tool::Brush));
@@ -229,6 +252,34 @@ void MainWindow::connectDrawingToolSettings()
         {
             schedule();
         });
+    connect(m_canvas,
+        &CanvasWidget::lassoModeChanged,
+        this,
+        [schedule](CanvasWidget::LassoMode)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::fillComparisonChanged,
+        this,
+        [schedule](CanvasWidget::FillComparison)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::fillToleranceChanged,
+        this,
+        [schedule](int)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::bucketAntialiasingChanged,
+        this,
+        [schedule](bool)
+        {
+            schedule();
+        });
 }
 
 void MainWindow::scheduleDrawingToolSettingsSave()
@@ -250,6 +301,11 @@ void MainWindow::saveDrawingToolSettings()
         wandReferenceKey, wandReferenceSettingsId(m_canvas->wandReference()));
     settings.setValue(selectionShapeKey,
         selectionShapeSettingsId(m_canvas->selectionShape()));
+    settings.setValue(lassoModeKey, lassoModeSettingsId(m_canvas->lassoMode()));
+    settings.setValue(fillComparisonKey,
+        fillComparisonSettingsId(m_canvas->fillComparison()));
+    settings.setValue(fillToleranceKey, m_canvas->fillTolerance());
+    settings.setValue(bucketAntialiasingKey, m_canvas->bucketAntialiasing());
     for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
     {
         settings.setValue(
@@ -265,5 +321,81 @@ void MainWindow::saveDrawingToolSettings()
             m_canvas->eraserPresetStabilization(preset.id));
     }
     settings.sync();
+}
+
+void MainWindow::exportWwpPreset()
+{
+    saveDrawingToolSettings();
+    QSettings settings;
+    const QByteArray data = WwpPresetCodec::encode(
+        WwpPresetCodec::capture(settings, m_controller.document()));
+    if (data.isEmpty())
+    {
+        QMessageBox::critical(this,
+            tr("Preset export failed"),
+            tr("Could not prepare the preset."));
+        return;
+    }
+    const QString selected = QFileDialog::getSaveFileName(this,
+        tr("Export WWP preset"),
+        saveDialogStartPath(QStringLiteral("wwpreset")),
+        tr("WagleWaglePaint presets (*.wwpreset)"));
+    if (selected.isEmpty())
+    {
+        return;
+    }
+    const QString filePath =
+        normalizedPath(selected, QStringLiteral("wwpreset"));
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size()
+        || !file.commit())
+    {
+        QMessageBox::critical(this,
+            tr("Preset export failed"),
+            tr("Could not write the preset.\n\n%1").arg(file.errorString()));
+        return;
+    }
+    statusBar()->showMessage(tr("Exported preset %1").arg(filePath), 4000);
+}
+
+void MainWindow::importWwpPreset()
+{
+    const QString filePath = QFileDialog::getOpenFileName(this,
+        tr("Import WWP preset"),
+        SettingsDialog::defaultSaveFolder(),
+        tr("WagleWaglePaint presets (*.wwpreset)"));
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+    QFile file(filePath);
+    QString error;
+    std::optional<WwpPreset> preset;
+    if (!file.open(QIODevice::ReadOnly)
+        || file.size() > WwpPresetCodec::maximumBytes)
+    {
+        error = tr("The preset could not be read or is too large.");
+    }
+    else
+    {
+        preset = WwpPresetCodec::decode(file.readAll(), &error);
+    }
+    if (!preset
+        || !m_controller.applyMotionPreset(
+            preset->wobbleAmount, preset->motion))
+    {
+        QMessageBox::critical(this,
+            tr("Preset import failed"),
+            tr("Could not import the preset.\n\n%1")
+                .arg(error.isEmpty() ? tr("The preset settings are invalid.")
+                                     : error));
+        return;
+    }
+    QSettings settings;
+    WwpPresetCodec::applyDrawingTools(*preset, settings);
+    restoreDrawingToolSettings();
+    m_swatchRow->setActiveColor(m_canvas->brushColor());
+    statusBar()->showMessage(
+        tr("Imported preset %1").arg(QFileInfo(filePath).fileName()), 4000);
 }
 }

@@ -100,6 +100,12 @@ std::optional<Stroke> selectionOperationStroke(const QImage &selectionMask,
     stroke.pixelSelectionOp = *operation;
     return stroke;
 }
+
+QImage materializedFillCoverage(const Stroke &stroke)
+{
+    return stroke.fillCoverage ? unpackBinaryMask(*stroke.fillCoverage)
+                               : stroke.fillMask;
+}
 }
 
 DocumentController::AddStrokeResult DocumentController::addStroke(
@@ -143,7 +149,11 @@ DocumentController::AddStrokeResult DocumentController::addStroke(
         || (!stroke.fillMask.isNull()
             && (stroke.mode != StrokeMode::Fill
                 || stroke.fillMask.size() != current.size
-                || stroke.fillMask.format() != QImage::Format_Grayscale8)))
+                || stroke.fillMask.format() != QImage::Format_Grayscale8))
+        || (stroke.fillCoverage
+            && (stroke.mode != StrokeMode::Fill || !stroke.fillMask.isNull()
+                || !isValidPackedMaskRegion(*stroke.fillCoverage)
+                || stroke.fillCoverage->canvasSize != current.size)))
     {
         return reject(AddStrokeResult::RejectedInvalidStroke);
     }
@@ -492,7 +502,8 @@ bool DocumentController::duplicateStrokes(const QUuid &layerId,
             }
             if (!maskHasContent(selected.value())
                 || (stroke.mode == StrokeMode::Fill
-                    && !masksIntersect(stroke.fillMask, selected.value())))
+                    && !masksIntersect(
+                        materializedFillCoverage(stroke), selected.value())))
             {
                 continue;
             }
@@ -506,6 +517,14 @@ bool DocumentController::duplicateStrokes(const QUuid &layerId,
 
         Stroke copy = stroke;
         copy.id = QUuid::createUuid();
+        if (copy.imageOp)
+        {
+            copy.imageOp->transform = transform * copy.imageOp->transform;
+            if (!isValidImageOp(*copy.imageOp))
+            {
+                return rejectHistoryMutation();
+            }
+        }
         for (StrokePoint &point : copy.points)
         {
             point.position += delta;
@@ -543,6 +562,15 @@ bool DocumentController::duplicateStrokes(const QUuid &layerId,
                 copy.fillMask, current.size, transform, transformedMasks))
         {
             return rejectHistoryMutation();
+        }
+        if (copy.fillCoverage)
+        {
+            copy.fillCoverage = transformedPackedMask(
+                *copy.fillCoverage, current.size, transform);
+            if (!copy.fillCoverage)
+            {
+                return rejectHistoryMutation();
+            }
         }
         if (!canonicalizeStrokeVisibility(copy, current.size))
         {
@@ -807,6 +835,15 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
             return rejectHistoryMutation();
         }
         Stroke transformed = stroke;
+        if (transformed.imageOp)
+        {
+            transformed.imageOp->transform =
+                transform * transformed.imageOp->transform;
+            if (!isValidImageOp(*transformed.imageOp))
+            {
+                return rejectHistoryMutation();
+            }
+        }
         for (StrokePoint &point : transformed.points)
         {
             point.position = transform.map(point.position);
@@ -815,9 +852,12 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
                 return rejectHistoryMutation();
             }
         }
-        transformed.width = std::clamp(transformed.width * widthScale,
-            DocumentLimits::minimumStrokeWidth,
-            DocumentLimits::maximumStrokeWidth);
+        if (transformed.mode != StrokeMode::Image)
+        {
+            transformed.width = std::clamp(transformed.width * widthScale,
+                DocumentLimits::minimumStrokeWidth,
+                DocumentLimits::maximumStrokeWidth);
+        }
         if (!transformMask(transformed.clipMask,
                 current.size,
                 transform,
@@ -831,6 +871,15 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
                 transformedMasks))
         {
             return rejectHistoryMutation();
+        }
+        if (transformed.fillCoverage)
+        {
+            transformed.fillCoverage = transformedPackedMask(
+                *transformed.fillCoverage, current.size, transform);
+            if (!transformed.fillCoverage)
+            {
+                return rejectHistoryMutation();
+            }
         }
         if (!canonicalizeStrokeVisibility(transformed, current.size))
         {

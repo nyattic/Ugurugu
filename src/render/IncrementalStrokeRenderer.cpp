@@ -86,8 +86,8 @@ IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
     m_documentSize = document.size;
     m_outputSize = outputSize;
 
-    const StrokeRenderer::GeometryUpdate geometry = m_geometry.update(
-        stroke, frameIndex, document.animationFrames, document.wobbleAmount);
+    const StrokeRenderer::GeometryUpdate geometry =
+        m_geometry.update(stroke, frameIndex, document);
     if (!geometry.valid)
     {
         clear();

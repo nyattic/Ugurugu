@@ -3,9 +3,9 @@
 #include "document/DocumentLimits.hpp"
 #include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
-#include "render/ClassicStrokeMotion.hpp"
 #include "render/ImageAffineTransformer.hpp"
 #include "render/ImageResampler.hpp"
+#include "render/StrokeMotionModel.hpp"
 
 #include <QPainter>
 
@@ -220,15 +220,40 @@ QRect primitiveCoverageBounds(const Document &document,
     QHash<qint64, QRect> *maskBoundsCache)
 {
     const QRect canvasBounds(QPoint(), canvasSize);
-    if (!canvasSize.isValid() || stroke.points.isEmpty()
-        || !std::isfinite(stroke.width) || !isValidBrushSettings(stroke.brush))
+    if (!canvasSize.isValid())
+    {
+        return {};
+    }
+    if (stroke.mode == StrokeMode::Image)
+    {
+        if (!stroke.imageOp)
+        {
+            return {};
+        }
+        const auto asset =
+            document.rasterAssets.constFind(stroke.imageOp->assetId);
+        return asset == document.rasterAssets.cend()
+                   ? QRect()
+                   : ImageAffineTransformer::targetBounds(
+                         QRect(QPoint(), asset->size),
+                         canvasSize,
+                         stroke.imageOp->transform,
+                         stroke.imageOp->sampling);
+    }
+    if (stroke.points.isEmpty() || !std::isfinite(stroke.width)
+        || !isValidBrushSettings(stroke.brush))
     {
         return {};
     }
     QRect bounds;
     if (stroke.mode == StrokeMode::Fill)
     {
-        if (stroke.fillMask.isNull())
+        if (stroke.fillCoverage)
+        {
+            bounds = stroke.fillCoverage->bounds.adjusted(-1, -1, 1, 1)
+                         .intersected(canvasBounds);
+        }
+        else if (stroke.fillMask.isNull())
         {
             bounds = canvasBounds;
         }
@@ -274,8 +299,10 @@ QRect primitiveCoverageBounds(const Document &document,
             right = std::max(right, point.position.x());
             bottom = std::max(bottom, point.position.y());
         }
-        const qreal displacement = ClassicStrokeMotion::maximumDisplacement(
-            stroke.width, document.wobbleAmount * stroke.brush.wobbleScale);
+        const qreal displacement =
+            StrokeMotionModel::maximumDisplacement(stroke.width,
+                document.wobbleAmount * stroke.brush.wobbleScale,
+                document.motion);
         const qreal brushReach = std::max(0.5, stroke.width) * 1.025 * 2.1;
         const qreal margin = displacement + brushReach + 4.0;
         bounds = QRectF(QPointF(left, top), QPointF(right, bottom))
@@ -611,11 +638,15 @@ bool renderFillCoverage(CoverageFrame &frame,
     const Stroke &stroke,
     RenderEngine::StrokeCoverageStats *stats)
 {
+    const QImage packedCoverage =
+        stroke.fillCoverage ? unpackBinaryMask(*stroke.fillCoverage) : QImage();
+    const QImage &fillMask =
+        stroke.fillCoverage ? packedCoverage : stroke.fillMask;
     if (frame.bounds.isEmpty()
         || !QRect(QPoint(), frame.canvasSize).contains(frame.bounds)
-        || (!stroke.fillMask.isNull()
-            && (stroke.fillMask.size() != frame.canvasSize
-                || stroke.fillMask.format() != QImage::Format_Grayscale8))
+        || (!fillMask.isNull()
+            && (fillMask.size() != frame.canvasSize
+                || fillMask.format() != QImage::Format_Grayscale8))
         || (!stroke.clipMask.isNull()
             && (stroke.clipMask.size() != frame.canvasSize
                 || stroke.clipMask.format() != QImage::Format_Grayscale8)))
@@ -635,15 +666,13 @@ bool renderFillCoverage(CoverageFrame &frame,
     {
         auto *target = reinterpret_cast<QRgb *>(
             frame.pixels.scanLine(y - frame.bounds.top()));
-        const uchar *fillLine = stroke.fillMask.isNull()
-                                    ? nullptr
-                                    : stroke.fillMask.constScanLine(y);
-        const uchar *fillAbove = !fillLine || y == 0
-                                     ? nullptr
-                                     : stroke.fillMask.constScanLine(y - 1);
+        const uchar *fillLine =
+            fillMask.isNull() ? nullptr : fillMask.constScanLine(y);
+        const uchar *fillAbove =
+            !fillLine || y == 0 ? nullptr : fillMask.constScanLine(y - 1);
         const uchar *fillBelow = !fillLine || y == frame.canvasSize.height() - 1
                                      ? nullptr
-                                     : stroke.fillMask.constScanLine(y + 1);
+                                     : fillMask.constScanLine(y + 1);
         const uchar *clipLine = stroke.clipMask.isNull()
                                     ? nullptr
                                     : stroke.clipMask.constScanLine(y);
@@ -701,9 +730,12 @@ RenderEngine::StrokeCoveragePlan StrokeCoverageRenderer::prepare(
         plan.canvasBefore[index] = canvasSize;
         plan.epochBefore[index] = epochIndex;
         if (stroke.mode == StrokeMode::Paint || stroke.mode == StrokeMode::Erase
-            || stroke.mode == StrokeMode::Fill)
+            || stroke.mode == StrokeMode::Fill
+            || stroke.mode == StrokeMode::Image)
         {
-            if (stroke.pixelSelectionOp || stroke.reframeOp)
+            if (stroke.pixelSelectionOp || stroke.reframeOp
+                || (stroke.mode == StrokeMode::Image && !stroke.imageOp)
+                || (stroke.mode != StrokeMode::Image && stroke.imageOp))
             {
                 return {};
             }
@@ -854,7 +886,7 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
     }
     const Stroke &source = layer.strokes[strokeIndex];
     if (source.mode != StrokeMode::Paint && source.mode != StrokeMode::Erase
-        && source.mode != StrokeMode::Fill)
+        && source.mode != StrokeMode::Fill && source.mode != StrokeMode::Image)
     {
         return result;
     }
@@ -888,6 +920,11 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
         }
         return exact;
     };
+
+    if (source.mode == StrokeMode::Image)
+    {
+        return exactRegion();
+    }
 
     if (!plan.valid || plan.canvasBefore.size() != layer.strokes.size()
         || plan.primitiveBounds.size() != layer.strokes.size()

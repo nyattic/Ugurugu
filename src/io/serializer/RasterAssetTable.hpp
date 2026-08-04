@@ -1,5 +1,6 @@
 #pragma once
 
+#include "document/Document.hpp"
 #include "document/DocumentLimits.hpp"
 
 #include <QByteArray>
@@ -41,6 +42,9 @@ struct RasterAssetEntry
 std::optional<quint64> rasterDecodedByteCount(const QSize &size);
 QImage canonicalRasterImage(const QImage &source);
 QString rasterContentId(const QImage &canonical);
+std::optional<RasterAsset> rasterAssetFromImage(
+    const QImage &source, RasterAssetRegistrationStatus *status = nullptr);
+std::optional<QImage> decodeRasterAsset(const RasterAsset &asset);
 
 class RasterAssetTable final
 {

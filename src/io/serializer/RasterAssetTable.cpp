@@ -152,6 +152,37 @@ QString rasterContentId(const QImage &canonical)
     return QString::fromLatin1(hash.result().toHex());
 }
 
+std::optional<RasterAsset> rasterAssetFromImage(
+    const QImage &source, RasterAssetRegistrationStatus *status)
+{
+    RasterAssetTable table;
+    const RasterAssetRegistrationResult result = table.registerImage(source);
+    if (status)
+    {
+        *status = result.status;
+    }
+    if (result.status != RasterAssetRegistrationStatus::Registered
+        && result.status != RasterAssetRegistrationStatus::Reused)
+    {
+        return std::nullopt;
+    }
+    const RasterAssetEntry &entry = table.entries().value(result.id);
+    return RasterAsset{entry.id, entry.size, entry.compressedRgba};
+}
+
+std::optional<QImage> decodeRasterAsset(const RasterAsset &asset)
+{
+    RasterAssetTable table;
+    const RasterAssetRegistrationResult result =
+        table.registerPayload(asset.id, asset.size, asset.compressedRgba);
+    if (result.status != RasterAssetRegistrationStatus::Registered
+        && result.status != RasterAssetRegistrationStatus::Reused)
+    {
+        return std::nullopt;
+    }
+    return table.decode(asset.id);
+}
+
 RasterAssetTable::RasterAssetTable(
     quint64 maximumDecodedBytes, qint64 maximumPayloadBytes)
     : m_maximumDecodedBytes(std::min(maximumDecodedBytes,

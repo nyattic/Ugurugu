@@ -122,6 +122,25 @@ public:
         RejectedCommit
     };
 
+    enum class MergeLayerDownStatus
+    {
+        Available,
+        MissingLayer,
+        NoPaintLayerBelow,
+        UnsupportedProperties,
+        IncompatibleCanvasEpoch,
+        StrokeLimit
+    };
+
+    enum class InsertImageResult
+    {
+        Inserted,
+        RejectedInvalidImage,
+        RejectedLayerLimit,
+        RejectedAssetLimit,
+        RejectedCommit
+    };
+
     explicit DocumentController(QObject *parent = nullptr);
     ~DocumentController() override;
 
@@ -194,6 +213,14 @@ public:
     void addLayer(const QUuid &parentGroupId = {});
     void addLayerGroup(const QUuid &childId = {});
     void duplicateLayer(const QUuid &id);
+    InsertImageResult insertImage(
+        const QImage &image, const QString &sourceFileName);
+    bool setImageTransform(const QUuid &layerId,
+        const QUuid &strokeId,
+        const QTransform &transform,
+        SamplingMode sampling = SamplingMode::Smooth);
+    MergeLayerDownStatus mergeLayerDownStatus(const QUuid &id) const;
+    bool mergeLayerDown(const QUuid &id);
     // Inserts the pasted layer above the active layer in the same group
     // scope without touching the active layer's content. A rejected paste
     // leaves the document unchanged. When selectionMask is given the copy
@@ -219,6 +246,15 @@ public:
     // possible, so alpha is deliberately not clamped away here.
     void setBackground(const QColor &color);
     void setWobbleAmount(qreal amount);
+    void setMotionStyle(MotionStyle style);
+    void setMotionPoseCount(int count);
+    void setMotionDetail(int detail);
+    void setMotionLinked(qreal linked);
+    void setMotionRandomness(qreal randomness);
+    void setBrokenLineEnabled(bool enabled);
+    void setBreakAmount(qreal amount);
+    void setBreakRange(qreal range);
+    bool applyMotionPreset(qreal wobbleAmount, MotionSettings motion);
     void setAnimationFrames(int frames);
     void setFramesPerSecond(qreal fps);
 

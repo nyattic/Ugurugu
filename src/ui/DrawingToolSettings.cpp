@@ -145,6 +145,26 @@ std::optional<CanvasWidget::SelectionShape> selectionShapeFromSettingsId(
     return std::nullopt;
 }
 
+QString lassoModeSettingsId(CanvasWidget::LassoMode mode)
+{
+    return mode == CanvasWidget::LassoMode::Paint ? QStringLiteral("paint")
+                                                  : QStringLiteral("select");
+}
+
+std::optional<CanvasWidget::LassoMode> lassoModeFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("select"))
+    {
+        return CanvasWidget::LassoMode::Select;
+    }
+    if (id == QStringLiteral("paint"))
+    {
+        return CanvasWidget::LassoMode::Paint;
+    }
+    return std::nullopt;
+}
+
 QString wandReferenceSettingsId(CanvasWidget::WandReference reference)
 {
     switch (reference)
@@ -173,6 +193,27 @@ std::optional<CanvasWidget::WandReference> wandReferenceFromSettingsId(
     if (id == QStringLiteral("visible"))
     {
         return CanvasWidget::WandReference::AllVisibleLayers;
+    }
+    return std::nullopt;
+}
+
+QString fillComparisonSettingsId(CanvasWidget::FillComparison comparison)
+{
+    return comparison == CanvasWidget::FillComparison::Color
+               ? QStringLiteral("color")
+               : QStringLiteral("alpha");
+}
+
+std::optional<CanvasWidget::FillComparison> fillComparisonFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("alpha"))
+    {
+        return CanvasWidget::FillComparison::AlphaBoundary;
+    }
+    if (id == QStringLiteral("color"))
+    {
+        return CanvasWidget::FillComparison::Color;
     }
     return std::nullopt;
 }

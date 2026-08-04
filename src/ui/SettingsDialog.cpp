@@ -1,10 +1,12 @@
 #include "ui/SettingsDialog.hpp"
 
 #include "ui/ShortcutBinding.hpp"
+#include "ui/Theme.hpp"
 
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -133,6 +135,15 @@ SettingsDialog::SettingsDialog(
     const int languageIndex = m_languageCombo->findData(uiLanguage());
     m_languageCombo->setCurrentIndex(std::max(0, languageIndex));
     generalLayout->addRow(tr("Language"), m_languageCombo);
+
+    m_themeColorButton = new QPushButton(generalTab);
+    m_themeColorButton->setObjectName(QStringLiteral("themeColorButton"));
+    refreshThemeColorButton();
+    connect(m_themeColorButton,
+        &QPushButton::clicked,
+        this,
+        &SettingsDialog::chooseThemeColor);
+    generalLayout->addRow(tr("Theme color"), m_themeColorButton);
 
     auto *restartLabel = new QLabel(
         tr("Restart WagleWaglePaint to apply language changes."), generalTab);
@@ -289,6 +300,19 @@ SettingsDialog::SettingsDialog(
     versionLabel->setObjectName(QStringLiteral("applicationVersionLabel"));
     versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     aboutLayout->addWidget(versionLabel);
+
+    auto *developmentCreditLabel =
+        new QLabel(tr("Development support by seuppi"), aboutTab);
+    developmentCreditLabel->setObjectName(
+        QStringLiteral("developmentCreditLabel"));
+    developmentCreditLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    aboutLayout->addWidget(developmentCreditLabel);
+
+    auto *iconCreditLabel =
+        new QLabel(tr("App icon artwork by seuppi"), aboutTab);
+    iconCreditLabel->setObjectName(QStringLiteral("iconCreditLabel"));
+    iconCreditLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    aboutLayout->addWidget(iconCreditLabel);
     aboutLayout->addStretch(1);
     tabs->addTab(aboutTab, tr("About"));
 
@@ -390,6 +414,28 @@ void SettingsDialog::resetDefaultSaveFolder()
     m_defaultSaveFolderEdit->setText(defaultSaveFolder());
 }
 
+void SettingsDialog::chooseThemeColor()
+{
+    const QColor color =
+        QColorDialog::getColor(Theme::accent(), this, tr("Theme color"));
+    if (!color.isValid())
+    {
+        return;
+    }
+    Theme::setAccent(*qApp, color);
+    refreshThemeColorButton();
+}
+
+void SettingsDialog::refreshThemeColorButton()
+{
+    const QColor color = Theme::accent();
+    m_themeColorButton->setText(color.name(QColor::HexRgb));
+    m_themeColorButton->setStyleSheet(
+        QStringLiteral("background: %1; color: %2;")
+            .arg(color.name(QColor::HexRgb),
+                Theme::accentText().name(QColor::HexRgb)));
+}
+
 void SettingsDialog::updateDrawingOptionsEnabled()
 {
     const bool enabled = m_wobbleAnimation->isChecked();
@@ -436,6 +482,8 @@ void SettingsDialog::restoreDefaults()
             m_languageCombo->findData(QStringLiteral("system")));
     }
     settings.remove(uiLanguageKey);
+    Theme::setAccent(*qApp, Theme::defaultAccent());
+    refreshThemeColorButton();
     resetDefaultSaveFolder();
     m_shortcutMessage->clear();
 }

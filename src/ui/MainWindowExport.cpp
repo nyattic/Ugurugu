@@ -19,6 +19,16 @@ namespace wobble
 
 void MainWindow::exportGif()
 {
+    exportAnimation(ExportWorker::Kind::Gif);
+}
+
+void MainWindow::exportWebP()
+{
+    exportAnimation(ExportWorker::Kind::WebP);
+}
+
+void MainWindow::exportAnimation(ExportWorker::Kind kind)
+{
     if (m_exportWorker.isBusy())
     {
         return;
@@ -41,36 +51,44 @@ void MainWindow::exportGif()
             / (1024.0L * 1024.0L);
         QMessageBox::warning(this,
             tr("Animation is too large"),
-            tr("This GIF would need about %1 MiB of working memory even when "
+            tr("This animation would need about %1 MiB of working memory even "
+               "when "
                "scaled down. Reduce the frame count before exporting.")
                 .arg(static_cast<double>(mebibytes), 0, 'f', 0));
         return;
     }
 
-    GifExportDialog optionsDialog(document, this);
+    const bool webP = kind == ExportWorker::Kind::WebP;
+    const QString exportTitle =
+        webP ? tr("Export animated WebP") : tr("Export animated GIF");
+    GifExportDialog optionsDialog(document, exportTitle, this);
     if (optionsDialog.exec() != QDialog::Accepted)
     {
         return;
     }
     const GifExportDialog::Result options = optionsDialog.currentResult();
 
-    const QString selected = QFileDialog::getSaveFileName(this,
-        tr("Export animated GIF"),
-        saveDialogStartPath(QStringLiteral("gif")),
-        tr("GIF images (*.gif)"));
+    const QString extension =
+        webP ? QStringLiteral("webp") : QStringLiteral("gif");
+    const QString filter =
+        webP ? tr("WebP images (*.webp)") : tr("GIF images (*.gif)");
+    const QString selected = QFileDialog::getSaveFileName(
+        this, exportTitle, saveDialogStartPath(extension), filter);
     if (selected.isEmpty())
     {
         return;
     }
-    const QString filePath = normalizedPath(selected, QStringLiteral("gif"));
+    const QString filePath = normalizedPath(selected, extension);
     m_canvas->releaseTransientRenderCaches();
     m_controller.releaseTransientCaches();
-    if (m_exportWorker.startGif(document,
-            filePath,
-            {options.outputSize, options.preserveTransparency}))
+    const ExportWorker::AnimationOptions workerOptions{
+        options.outputSize, options.preserveTransparency};
+    const bool started =
+        webP ? m_exportWorker.startWebP(document, filePath, workerOptions)
+             : m_exportWorker.startGif(document, filePath, workerOptions);
+    if (started)
     {
-        beginExportProgress(
-            ExportWorker::Kind::Gif, filePath, document.animationFrames);
+        beginExportProgress(kind, filePath, document.animationFrames);
     }
 }
 
@@ -141,7 +159,7 @@ void MainWindow::beginExportProgress(
     {
         m_exportProgress->deleteLater();
     }
-    m_exportProgress = new QProgressDialog(kind == ExportWorker::Kind::Gif
+    m_exportProgress = new QProgressDialog(kind != ExportWorker::Kind::Image
                                                ? tr("Rendering animation…")
                                                : tr("Rendering image…"),
         tr("Cancel"),
@@ -209,6 +227,10 @@ void MainWindow::handleExportFinished(ExportWorker::Kind kind,
     {
         spdlog::info("Exported GIF {}", filePath.toUtf8().constData());
     }
+    else if (kind == ExportWorker::Kind::WebP)
+    {
+        spdlog::info("Exported WebP {}", filePath.toUtf8().constData());
+    }
     else
     {
         spdlog::info("Exported image {}", filePath.toUtf8().constData());
@@ -222,6 +244,12 @@ void MainWindow::updateExportActions()
             findChild<QAction *>(QStringLiteral("exportGifAction")))
     {
         exportGifAction->setEnabled(
+            idle && m_canvas->isWobbleAnimationEnabled());
+    }
+    if (auto *exportWebPAction =
+            findChild<QAction *>(QStringLiteral("exportWebPAction")))
+    {
+        exportWebPAction->setEnabled(
             idle && m_canvas->isWobbleAnimationEnabled());
     }
     if (auto *exportImageAction =

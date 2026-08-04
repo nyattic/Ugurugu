@@ -150,6 +150,11 @@ update alert shows the release notes for the new version.
 
 See [BUILDING.md](BUILDING.md) for source-build and test instructions.
 
+## Credits
+
+- Development support by seuppi
+- App icon artwork by seuppi
+
 ## License
 
 WagleWaglePaint is distributed under the

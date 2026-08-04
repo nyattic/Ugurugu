@@ -165,3 +165,15 @@ target_link_libraries(
     wobblepaint_core
 )
 wobblepaint_target_defaults(wobblepaint_fill_representation_probe)
+
+add_executable(
+    wobblepaint_wawa_v10_probe
+    EXCLUDE_FROM_ALL
+    tools/WawaV10Probe.cpp
+)
+target_link_libraries(
+    wobblepaint_wawa_v10_probe
+    PRIVATE
+    wobblepaint_core
+)
+wobblepaint_target_defaults(wobblepaint_wawa_v10_probe)

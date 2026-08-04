@@ -24,6 +24,13 @@ Copyright © 2016 Gabi Melman.
 Licensed under the MIT License. The bundled fmt dependency is also licensed
 under the MIT License. See `spdlog-LICENSE.txt`.
 
+## libwebp 1.6.0
+
+Copyright © 2010 Google Inc. and other contributors.
+
+Licensed under the BSD 3-Clause License with the additional patent grant
+reproduced in `libwebp-PATENTS.txt`. See `libwebp-LICENSE.txt`.
+
 ## Pretendard JP
 
 Copyright © 2021 Kil Hyung-jin.

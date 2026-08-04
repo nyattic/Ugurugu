@@ -112,6 +112,12 @@ void LayerDock::buildContent()
         tr("Duplicate layer"));
     buttonLayout->addWidget(m_duplicateButton);
 
+    m_mergeDownButton = makeLayerButton(content,
+        IconGlyph::MoveDown,
+        QStringLiteral("layerMergeDownButton"),
+        tr("Merge with layer below"));
+    buttonLayout->addWidget(m_mergeDownButton);
+
     m_deleteButton = makeLayerButton(content,
         IconGlyph::Remove,
         QStringLiteral("layerDeleteButton"),
@@ -339,6 +345,17 @@ void LayerDock::connectControls()
             if (m_controller && !id.isNull())
             {
                 m_controller->duplicateLayer(id);
+            }
+        });
+    connect(m_mergeDownButton,
+        &QToolButton::clicked,
+        this,
+        [this]()
+        {
+            const QUuid id = selectedLayerId();
+            if (m_controller && !id.isNull())
+            {
+                m_controller->mergeLayerDown(id);
             }
         });
     connect(m_deleteButton,
@@ -701,6 +718,34 @@ void LayerDock::updateControls()
     m_addGroupButton->setEnabled(
         m_controller && hasCapacity && canWrapSelectedLayer);
     m_duplicateButton->setEnabled(paintLayer && hasCapacity);
+    const DocumentController::MergeLayerDownStatus mergeStatus =
+        m_controller ? m_controller->mergeLayerDownStatus(id)
+                     : DocumentController::MergeLayerDownStatus::MissingLayer;
+    m_mergeDownButton->setEnabled(
+        mergeStatus == DocumentController::MergeLayerDownStatus::Available);
+    QString mergeToolTip = tr("Merge with layer below");
+    switch (mergeStatus)
+    {
+    case DocumentController::MergeLayerDownStatus::Available:
+        break;
+    case DocumentController::MergeLayerDownStatus::MissingLayer:
+        mergeToolTip = tr("Select a paint layer to merge");
+        break;
+    case DocumentController::MergeLayerDownStatus::NoPaintLayerBelow:
+        mergeToolTip = tr("No paint layer is directly below");
+        break;
+    case DocumentController::MergeLayerDownStatus::UnsupportedProperties:
+        mergeToolTip = tr("Both layers must use matching safe properties");
+        break;
+    case DocumentController::MergeLayerDownStatus::IncompatibleCanvasEpoch:
+        mergeToolTip = tr("The layers use incompatible canvas histories");
+        break;
+    case DocumentController::MergeLayerDownStatus::StrokeLimit:
+        mergeToolTip = tr("The merged layer would exceed the stroke limit");
+        break;
+    }
+    m_mergeDownButton->setToolTip(mergeToolTip);
+    m_mergeDownButton->setAccessibleName(mergeToolTip);
     m_deleteButton->setEnabled(hasLayer);
     m_moveUpButton->setEnabled(hasLayer && siblingPosition >= 0
                                && siblingPosition < siblings.size() - 1);
