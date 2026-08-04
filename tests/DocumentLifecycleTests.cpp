@@ -1,7 +1,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentLifecycleTests final : public QObject
@@ -11,7 +11,7 @@ class DocumentLifecycleTests final : public QObject
 private slots:
     void isolatesRecoveryFromUserData()
     {
-        const QByteArray configured = qgetenv("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray configured = qgetenv("UGURUGU_RECOVERY_PATH");
         QVERIFY(!configured.isEmpty());
         QCOMPARE(RecoveryStore::filePath(),
             QFileInfo(QString::fromUtf8(configured)).absoluteFilePath());
@@ -21,8 +21,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool existed = qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
         [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
@@ -38,7 +37,7 @@ private slots:
                 }
             });
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
         QFile recoveryFile(recoveryPath);
         QVERIFY(recoveryFile.open(QIODevice::WriteOnly));
@@ -47,26 +46,25 @@ private slots:
 
         QVERIFY(RecoveryStore::isRecoveryPath(recoveryPath));
         QVERIFY(RecoveryStore::isRecoveryPath(
-            directory.filePath(QStringLiteral("./recovery.wagle"))));
+            directory.filePath(QStringLiteral("./recovery.ugu"))));
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         QVERIFY(RecoveryStore::isRecoveryPath(recoveryPath.toUpper()));
 #endif
 #ifndef Q_OS_WIN
         const QString linkedPath =
-            directory.filePath(QStringLiteral("linked-recovery.wagle"));
+            directory.filePath(QStringLiteral("linked-recovery.ugu"));
         QVERIFY(QFile::link(recoveryPath, linkedPath));
         QVERIFY(RecoveryStore::isRecoveryPath(linkedPath));
 #endif
         QVERIFY(!RecoveryStore::isRecoveryPath(
-            directory.filePath(QStringLiteral("other.wagle"))));
+            directory.filePath(QStringLiteral("other.ugu"))));
     }
 
     void preservesRecoveryAsSeparateProject()
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool previouslySet =
             qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
@@ -83,7 +81,7 @@ private slots:
                 }
             });
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         qputenv(variable.constData(), recoveryPath.toUtf8());
 
         Document document = Document::createDefault(QSize(80, 60));
@@ -96,7 +94,7 @@ private slots:
         QVERIFY2(!preserved.isEmpty(), qPrintable(error));
         QVERIFY(!QFileInfo::exists(recoveryPath));
         QVERIFY(QFileInfo::exists(preserved));
-        QCOMPARE(QFileInfo(preserved).suffix(), QStringLiteral("wagle"));
+        QCOMPARE(QFileInfo(preserved).suffix(), QStringLiteral("ugu"));
         QVERIFY(QFileInfo(preserved).fileName().startsWith(
             QStringLiteral("recovery-preserved-")));
         const std::optional<Document> restored =
@@ -110,8 +108,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool existed = qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
         [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
@@ -128,7 +125,7 @@ private slots:
             });
 
         const QString source =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         QVERIFY(qputenv(variable.constData(), source.toUtf8()));
         QFile file(source);
         QVERIFY(file.open(QIODevice::WriteOnly));
@@ -150,8 +147,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool existed = qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
         [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
@@ -167,14 +163,14 @@ private slots:
                 }
             });
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
 
         Document document = Document::createDefault(QSize(91, 73));
         document.layers.first().name = QStringLiteral("복구 レイヤー");
         const RecoveryStore::Metadata metadata{
             QUuid(QStringLiteral("12345678-1234-4abc-8def-1234567890ab")),
-            QStringLiteral(R"(\\server\공유\制作\原本.wagle)"),
+            QStringLiteral(R"(\\server\공유\制作\原本.ugu)"),
             quint64(9007199254740993ULL),
             QDateTime(
                 QDate(2026, 8, 2), QTime(12, 34, 56, 789), QTimeZone::UTC)};
@@ -206,11 +202,12 @@ private slots:
         const QByteArray recoveryBytes = recoveryFile.readAll();
         const QJsonObject recoveryRoot =
             QJsonDocument::fromJson(recoveryBytes).object();
-        QVERIFY(recoveryRoot.value(QStringLiteral("wagleRecovery")).isObject());
+        QVERIFY(
+            recoveryRoot.value(QStringLiteral("uguruguRecovery")).isObject());
         recoveryFile.close();
 
         const QString normalPath =
-            directory.filePath(QStringLiteral("normal.wagle"));
+            directory.filePath(QStringLiteral("normal.ugu"));
         QVERIFY2(DocumentSerializer::save(normalPath, *openedNormally, &error),
             qPrintable(error));
         QFile normalFile(normalPath);
@@ -218,7 +215,7 @@ private slots:
         const QJsonObject normalRoot =
             QJsonDocument::fromJson(normalFile.readAll()).object();
         QVERIFY(
-            normalRoot.value(QStringLiteral("wagleRecovery")).isUndefined());
+            normalRoot.value(QStringLiteral("uguruguRecovery")).isUndefined());
 
         const QString preservedPath = RecoveryStore::preserve(&error);
         QVERIFY2(!preservedPath.isEmpty(), qPrintable(error));
@@ -228,7 +225,7 @@ private slots:
         const QJsonObject preservedRoot =
             QJsonDocument::fromJson(preservedBytes).object();
         QVERIFY(
-            preservedRoot.value(QStringLiteral("wagleRecovery")).isObject());
+            preservedRoot.value(QStringLiteral("uguruguRecovery")).isObject());
         QCOMPARE(preservedBytes, recoveryBytes);
     }
 
@@ -236,8 +233,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool existed = qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
         [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
@@ -253,12 +249,12 @@ private slots:
                 }
             });
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
 
         Document document = Document::createDefault(QSize(83, 67));
         const RecoveryStore::Metadata metadata{QUuid::createUuid(),
-            QStringLiteral("/tmp/source.wagle"),
+            QStringLiteral("/tmp/source.ugu"),
             7,
             QDateTime::currentDateTimeUtc()};
         QString error;
@@ -270,9 +266,9 @@ private slots:
         recoveryFile.close();
         QJsonObject root = json.object();
         QJsonObject invalidMetadata =
-            root.value(QStringLiteral("wagleRecovery")).toObject();
+            root.value(QStringLiteral("uguruguRecovery")).toObject();
         invalidMetadata.insert(QStringLiteral("formatVersion"), 99);
-        root.insert(QStringLiteral("wagleRecovery"), invalidMetadata);
+        root.insert(QStringLiteral("uguruguRecovery"), invalidMetadata);
         json.setObject(root);
         QSaveFile invalidFile(recoveryPath);
         QVERIFY(invalidFile.open(QIODevice::WriteOnly));
@@ -295,8 +291,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QByteArray variable =
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH");
+        const QByteArray variable = QByteArrayLiteral("UGURUGU_RECOVERY_PATH");
         const bool existed = qEnvironmentVariableIsSet(variable.constData());
         const QByteArray previous = qgetenv(variable.constData());
         [[maybe_unused]] const auto restoreEnvironment = qScopeGuard(
@@ -312,7 +307,7 @@ private slots:
                 }
             });
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         QVERIFY(qputenv(variable.constData(), recoveryPath.toUtf8()));
 
         const RecoveryStore::Metadata metadata{

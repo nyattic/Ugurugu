@@ -9,7 +9,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

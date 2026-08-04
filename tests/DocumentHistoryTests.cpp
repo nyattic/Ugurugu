@@ -2,7 +2,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentHistoryTests final : public QObject
@@ -1063,7 +1063,7 @@ private slots:
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
         const QString rejectedSavePath =
-            tempDir.filePath(QStringLiteral("rejected-save.wagle"));
+            tempDir.filePath(QStringLiteral("rejected-save.ugu"));
         int phase = 0;
         int transientState = 0;
         bool pushStateWasAtomic = false;

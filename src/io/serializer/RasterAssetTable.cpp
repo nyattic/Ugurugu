@@ -8,7 +8,7 @@
 #include <cstring>
 #include <limits>
 
-namespace wobble::serializer_detail
+namespace ugurugu::serializer_detail
 {
 
 namespace

@@ -10,7 +10,7 @@ class QDialogButtonBox;
 class QLabel;
 class QSpinBox;
 
-namespace wobble
+namespace ugurugu
 {
 
 class CanvasGeometryPreview;

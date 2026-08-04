@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 bool isValidMotionStyle(MotionStyle style)

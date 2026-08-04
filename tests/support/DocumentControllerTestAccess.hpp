@@ -5,7 +5,7 @@
 
 #include <QtGlobal>
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentControllerTestAccess final

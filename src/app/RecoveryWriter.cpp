@@ -9,7 +9,7 @@
 
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 RecoveryWriter::RecoveryWriter(QObject *parent)

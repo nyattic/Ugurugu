@@ -7,12 +7,12 @@
 
 #include <functional>
 
-namespace wobble
+namespace ugurugu
 {
 
 class GifWriter final
 {
-    Q_DECLARE_TR_FUNCTIONS(wobble::GifWriter)
+    Q_DECLARE_TR_FUNCTIONS(ugurugu::GifWriter)
 
 public:
     static bool write(const QString &path,

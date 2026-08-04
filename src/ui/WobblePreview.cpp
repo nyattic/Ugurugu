@@ -11,7 +11,7 @@
 #include <cmath>
 #include <numbers>
 
-namespace wobble
+namespace ugurugu
 {
 
 WobblePreview::WobblePreview(DocumentController *controller, QWidget *parent)

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 class StrokeStabilizerTests final : public QObject

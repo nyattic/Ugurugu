@@ -15,7 +15,7 @@
 
 #include <algorithm>
 
-namespace wobble
+namespace ugurugu
 {
 
 class AppPolicyTests final : public QObject
@@ -65,9 +65,9 @@ private slots:
         QProcessEnvironment environment =
             QProcessEnvironment::systemEnvironment();
         environment.insert(
-            QStringLiteral("WOBBLEPAINT_INSTANCE_LOCK_PROBE_PATH"), lockPath);
+            QStringLiteral("UGURUGU_INSTANCE_LOCK_PROBE_PATH"), lockPath);
         environment.insert(
-            QStringLiteral("WOBBLEPAINT_INSTANCE_LOCK_PROBE_READY_PATH"),
+            QStringLiteral("UGURUGU_INSTANCE_LOCK_PROBE_READY_PATH"),
             readyPath);
         child.setProcessEnvironment(environment);
         child.setProcessChannelMode(QProcess::MergedChannels);
@@ -104,11 +104,11 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString pendingPath =
-            directory.filePath(QStringLiteral("pending.wagle"));
+            directory.filePath(QStringLiteral("pending.ugu"));
         const QString deferredPath =
-            directory.filePath(QStringLiteral("deferred.wagle"));
+            directory.filePath(QStringLiteral("deferred.ugu"));
         const QString readyPath =
-            directory.filePath(QStringLiteral("ready.wagle"));
+            directory.filePath(QStringLiteral("ready.ugu"));
         QStringList opened;
         FileOpenEventRouter router(
             [&opened](const QString &filePath)
@@ -137,9 +137,9 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString startupPath =
-            directory.filePath(QStringLiteral("startup.wagle"));
+            directory.filePath(QStringLiteral("startup.ugu"));
         const QString otherPath =
-            directory.filePath(QStringLiteral("other.wagle"));
+            directory.filePath(QStringLiteral("other.ugu"));
         QStringList opened;
         FileOpenEventRouter router(
             [&opened](const QString &filePath)
@@ -167,9 +167,9 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString firstPath =
-            directory.filePath(QStringLiteral("first.wagle"));
+            directory.filePath(QStringLiteral("first.ugu"));
         const QString nestedPath =
-            directory.filePath(QStringLiteral("nested.wagle"));
+            directory.filePath(QStringLiteral("nested.ugu"));
         QObject target;
         QStringList opened;
         int callbackDepth = 0;
@@ -203,7 +203,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString filePath =
-            directory.filePath(QStringLiteral("deferred-modal.wagle"));
+            directory.filePath(QStringLiteral("deferred-modal.ugu"));
         QStringList opened;
         FileOpenEventRouter router(
             [&opened](const QString &openedPath)

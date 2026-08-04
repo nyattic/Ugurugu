@@ -25,13 +25,13 @@
 #include <string>
 #include <type_traits>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
 {
 
-constexpr auto repositoryUrl = "https://github.com/nyattic/WagleWaglePaint";
+constexpr auto repositoryUrl = "https://github.com/nyattic/Ugurugu";
 constexpr auto lastAutomaticCheckKey = "updates/lastAutomaticCheck";
 
 std::unique_ptr<Velopack::UpdateManager> createUpdateManager()
@@ -134,7 +134,7 @@ public:
                         QMessageBox::information(window,
                             UpdateController::tr("You're up to date"),
                             UpdateController::tr(
-                                "WagleWaglePaint %1 is the latest version.")
+                                "Ugurugu %1 is the latest version.")
                                 .arg(QApplication::applicationVersion()));
                     }
                     return;
@@ -164,7 +164,7 @@ public:
             QString::fromStdString(update.TargetFullRelease.Version);
         QMessageBox message(QMessageBox::Information,
             UpdateController::tr("Update available"),
-            UpdateController::tr("WagleWaglePaint %1 is available. "
+            UpdateController::tr("Ugurugu %1 is available. "
                                  "Download and install it now?")
                 .arg(version),
             QMessageBox::Yes | QMessageBox::No,
@@ -195,8 +195,7 @@ public:
                 0,
                 100,
                 window);
-        progress->setWindowTitle(
-            UpdateController::tr("WagleWaglePaint update"));
+        progress->setWindowTitle(UpdateController::tr("Ugurugu update"));
         progress->setCancelButton(nullptr);
         progress->setMinimumDuration(0);
         progress->setValue(0);

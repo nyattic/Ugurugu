@@ -19,8 +19,8 @@ int main(int argc, char **argv)
         return 3;
     }
     QString error;
-    const std::optional<wobble::WawaImportResult> imported =
-        wobble::WawaV10Importer::import(file.readAll(), &error);
+    const std::optional<ugurugu::WawaImportResult> imported =
+        ugurugu::WawaV10Importer::import(file.readAll(), &error);
     QTextStream output(stdout);
     if (!imported)
     {
@@ -28,9 +28,9 @@ int main(int argc, char **argv)
         return 1;
     }
     const QByteArray serialized =
-        wobble::DocumentSerializer::toJson(imported->document);
-    const std::optional<wobble::Document> reloaded =
-        wobble::DocumentSerializer::fromJson(serialized, &error);
+        ugurugu::DocumentSerializer::toJson(imported->document);
+    const std::optional<ugurugu::Document> reloaded =
+        ugurugu::DocumentSerializer::fromJson(serialized, &error);
     if (serialized.isEmpty() || !reloaded)
     {
         output << (error.isEmpty() ? QStringLiteral("Serialization failed")
@@ -41,16 +41,16 @@ int main(int argc, char **argv)
     for (int frame = 0; frame < imported->document.animationFrames; ++frame)
     {
         const QImage importedFrame =
-            wobble::RenderEngine::render(imported->document, frame);
+            ugurugu::RenderEngine::render(imported->document, frame);
         const QImage reloadedFrame =
-            wobble::RenderEngine::render(*reloaded, frame);
+            ugurugu::RenderEngine::render(*reloaded, frame);
         if (importedFrame.isNull() || importedFrame != reloadedFrame)
         {
             output << "Render verification failed at frame " << frame << '\n';
             return 1;
         }
     }
-    const wobble::WawaImportSummary &summary = imported->summary;
+    const ugurugu::WawaImportSummary &summary = imported->summary;
     output << "canvas=" << imported->document.size.width() << 'x'
            << imported->document.size.height() << '\n';
     output << "layers=" << summary.layers << '\n';

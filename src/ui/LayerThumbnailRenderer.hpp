@@ -5,7 +5,7 @@
 #include <QImage>
 #include <QPixmap>
 
-namespace wobble
+namespace ugurugu
 {
 
 class LayerThumbnailRenderer final

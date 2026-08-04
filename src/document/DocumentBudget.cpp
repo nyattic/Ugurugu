@@ -4,7 +4,7 @@
 
 #include <QSet>
 
-namespace wobble
+namespace ugurugu
 {
 namespace DocumentBudget
 {

@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace wobble
+namespace ugurugu
 {
 
 using history::LogicalHistoryCommand;

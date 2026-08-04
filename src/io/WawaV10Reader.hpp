@@ -10,7 +10,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 struct WawaStroke

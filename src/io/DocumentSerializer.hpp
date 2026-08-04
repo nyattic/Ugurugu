@@ -9,12 +9,12 @@
 #include <memory>
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentSerializer
 {
-    Q_DECLARE_TR_FUNCTIONS(wobble::DocumentSerializer)
+    Q_DECLARE_TR_FUNCTIONS(ugurugu::DocumentSerializer)
 
 public:
     // Process-local, thread-confined cache for compressed mask payloads.

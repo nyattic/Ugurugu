@@ -11,7 +11,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 namespace render_detail
 {

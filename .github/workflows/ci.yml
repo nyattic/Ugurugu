@@ -38,7 +38,7 @@ jobs:
       - name: Check release metadata
         shell: bash
         run: |
-          version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          version=$(sed -nE 's/project\(Ugurugu VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid project version: $version"
             exit 1
@@ -83,15 +83,15 @@ jobs:
         run: |
           translation_dir="$RUNNER_TEMP/translations"
           mkdir -p "$translation_dir"
-          cp i18n/wobblepaint_ko.ts i18n/wobblepaint_ja.ts "$translation_dir/"
+          cp i18n/ugurugu_ko.ts i18n/ugurugu_ja.ts "$translation_dir/"
           "$QT_ROOT_DIR/bin/lupdate" \
             src \
             -extensions cpp,hpp,mm \
             -no-obsolete \
             -warnings-are-errors \
             -ts \
-            "$translation_dir/wobblepaint_ko.ts" \
-            "$translation_dir/wobblepaint_ja.ts"
+            "$translation_dir/ugurugu_ko.ts" \
+            "$translation_dir/ugurugu_ja.ts"
           if grep -n 'type="unfinished"' "$translation_dir"/*.ts; then
             echo "Translations contain unfinished entries"
             exit 1
@@ -121,19 +121,19 @@ jobs:
         run: |
           llvm_prefix="$(brew --prefix llvm@22)"
           cmake --preset macos-debug \
-            -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON \
-            -DWOBBLEPAINT_CLANG_TIDY="$llvm_prefix/bin/clang-tidy" \
-            -DWOBBLEPAINT_RUN_CLANG_TIDY="$llvm_prefix/bin/run-clang-tidy"
+            -DUGURUGU_WARNINGS_AS_ERRORS=ON \
+            -DUGURUGU_CLANG_TIDY="$llvm_prefix/bin/clang-tidy" \
+            -DUGURUGU_RUN_CLANG_TIDY="$llvm_prefix/bin/run-clang-tidy"
 
       - name: Build analysis inputs
         run: >-
           cmake --build --preset macos-debug
-          --target wobblepaint_tests --parallel
+          --target ugurugu_tests --parallel
 
       - name: Run Clang-Tidy
         run: >-
           cmake --build --preset macos-debug
-          --target wobblepaint_tidy
+          --target ugurugu_tidy
 
   build:
     name: ${{ matrix.name }}
@@ -190,7 +190,7 @@ jobs:
       - name: Configure
         run: >-
           cmake --preset ${{ matrix.preset }}
-          -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON
+          -DUGURUGU_WARNINGS_AS_ERRORS=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
@@ -211,7 +211,7 @@ jobs:
             "out/build/${{ matrix.preset }}"/profiles/*.profraw \
             -o "$profile"
           coverage_report=$(xcrun llvm-cov report \
-            "out/build/${{ matrix.preset }}/wobblepaint_tests" \
+            "out/build/${{ matrix.preset }}/ugurugu_tests" \
             -instr-profile="$profile" \
             -ignore-filename-regex='(/tests/|/_deps/|/out/)')
           printf '%s\n' "$coverage_report"
@@ -228,7 +228,7 @@ jobs:
           $testExecutable = Get-ChildItem `
             "out/build/${{ matrix.preset }}" `
             -Recurse `
-            -Filter wobblepaint_tests.exe |
+            -Filter ugurugu_tests.exe |
             Select-Object -First 1
           if ($testExecutable) {
             & $testExecutable.FullName 2>&1
@@ -271,7 +271,7 @@ jobs:
       - name: Configure
         run: >-
           cmake --preset ${{ matrix.preset }}
-          -DWOBBLEPAINT_WARNINGS_AS_ERRORS=ON
+          -DUGURUGU_WARNINGS_AS_ERRORS=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
@@ -283,18 +283,18 @@ jobs:
         if: matrix.smoke == 'macos'
         run: >-
           cmake --build --preset ${{ matrix.preset }}
-          --target wobblepaint_package_smoke_test
+          --target ugurugu_package_smoke_test
 
       - name: Test installed Windows application
         if: matrix.smoke == 'windows'
         shell: pwsh
         run: |
-          $installRoot = Join-Path $env:RUNNER_TEMP "WagleWaglePaint"
+          $installRoot = Join-Path $env:RUNNER_TEMP "Ugurugu"
           cmake --install "out/build/${{ matrix.preset }}" `
             --config Release `
             --prefix $installRoot
           $env:QT_QPA_PLATFORM = "offscreen"
-          $application = Join-Path $installRoot "WagleWaglePaint.exe"
+          $application = Join-Path $installRoot "Ugurugu.exe"
           $process = Start-Process $application -PassThru
           Start-Sleep -Seconds 5
           if ($process.HasExited) {
@@ -312,7 +312,7 @@ jobs:
           $testExecutable = Get-ChildItem `
             "out/build/${{ matrix.preset }}" `
             -Recurse `
-            -Filter wobblepaint_tests.exe |
+            -Filter ugurugu_tests.exe |
             Select-Object -First 1
           if ($testExecutable) {
             & $testExecutable.FullName 2>&1

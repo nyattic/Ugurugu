@@ -10,7 +10,7 @@
 #include <initializer_list>
 #include <numbers>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

@@ -2,7 +2,7 @@
 
 #include <QListWidget>
 
-namespace wobble
+namespace ugurugu
 {
 
 class LayerListWidget final : public QListWidget

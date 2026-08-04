@@ -8,7 +8,7 @@
 #include <QSlider>
 #include <QSpinBox>
 
-namespace wobble
+namespace ugurugu
 {
 
 StrokeStabilizationRow::StrokeStabilizationRow(CanvasWidget *canvas,

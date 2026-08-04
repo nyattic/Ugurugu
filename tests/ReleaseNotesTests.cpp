@@ -2,7 +2,7 @@
 
 #include <QtTest>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

@@ -11,7 +11,7 @@
 
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 class FrozenFillMaskTests final : public QObject

@@ -7,7 +7,7 @@
 #include <QImage>
 #include <QPainterPath>
 
-namespace wobble
+namespace ugurugu
 {
 
 class RenderEngine

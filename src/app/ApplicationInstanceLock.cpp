@@ -5,7 +5,7 @@
 #include <QLockFile>
 #include <QStandardPaths>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -14,7 +14,7 @@ namespace
 QString defaultLockPath()
 {
     const QString configured =
-        qEnvironmentVariable("WAGLEWAGLEPAINT_INSTANCE_LOCK_PATH");
+        qEnvironmentVariable("UGURUGU_INSTANCE_LOCK_PATH");
     if (!configured.isEmpty())
     {
         return QFileInfo(configured).absoluteFilePath();

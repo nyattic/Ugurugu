@@ -2,7 +2,7 @@
 
 #include <QString>
 
-namespace wobble
+namespace ugurugu
 {
 
 class Logging final

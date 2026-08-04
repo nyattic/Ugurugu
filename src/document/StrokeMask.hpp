@@ -9,7 +9,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 QImage transformedMask(

@@ -3,7 +3,7 @@
 #include <QElapsedTimer>
 #include <QWidget>
 
-namespace wobble
+namespace ugurugu
 {
 
 class ToolPopover final : public QWidget

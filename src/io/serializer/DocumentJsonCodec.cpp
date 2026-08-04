@@ -1,7 +1,7 @@
 #include "io/serializer/DocumentJsonCodec.hpp"
 
 // Messages keep using DocumentSerializer::tr so their translation context
-// stays wobble::DocumentSerializer, matching the existing i18n catalogues.
+// stays ugurugu::DocumentSerializer, matching the existing i18n catalogues.
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "io/DocumentSerializer.hpp"
@@ -12,7 +12,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 namespace serializer_detail
 {

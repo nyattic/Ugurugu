@@ -1,7 +1,7 @@
 #include "TestSuites.hpp"
 #include "support/UiTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 int runUiTests(int argc, char **argv)

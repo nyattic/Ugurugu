@@ -7,7 +7,7 @@
 
 #include <optional>
 
-namespace wobble::FrozenFillMask
+namespace ugurugu::FrozenFillMask
 {
 
 // Odd-even fill and binary 0/255 coverage are persisted rendering invariants.

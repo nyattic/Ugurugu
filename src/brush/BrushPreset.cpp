@@ -2,7 +2,7 @@
 
 #include <QCoreApplication>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

@@ -16,7 +16,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

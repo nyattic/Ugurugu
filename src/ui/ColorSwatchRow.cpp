@@ -7,7 +7,7 @@
 #include <QStringList>
 #include <QToolButton>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

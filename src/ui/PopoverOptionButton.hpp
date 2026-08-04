@@ -4,7 +4,7 @@
 
 class QPainter;
 
-namespace wobble
+namespace ugurugu
 {
 
 class PopoverOptionButton : public QAbstractButton

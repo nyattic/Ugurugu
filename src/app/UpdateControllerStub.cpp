@@ -1,6 +1,6 @@
 #include "app/UpdateController.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class UpdateController::Impl

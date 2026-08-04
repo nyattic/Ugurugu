@@ -2,7 +2,7 @@
 
 #include <QToolButton>
 
-namespace wobble
+namespace ugurugu
 {
 
 class WobblePlayButton final : public QToolButton

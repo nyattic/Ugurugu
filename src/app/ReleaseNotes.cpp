@@ -4,7 +4,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 
-namespace wobble
+namespace ugurugu
 {
 
 QString localizedReleaseNotes(const QString &markdown, const QString &language)

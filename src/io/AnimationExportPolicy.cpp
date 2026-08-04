@@ -3,7 +3,7 @@
 #include "app/MemoryBudget.hpp"
 #include "io/RenderExportPolicy.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 long double AnimationExportPolicy::estimatedWorkingBytes(

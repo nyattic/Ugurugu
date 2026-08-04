@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace wobble::MotionTimeModel
+namespace ugurugu::MotionTimeModel
 {
 
 struct SmoothPoseSample

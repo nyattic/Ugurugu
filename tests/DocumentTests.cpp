@@ -1,7 +1,7 @@
 #include "TestSuites.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 int runDocumentTests(int argc, char **argv)

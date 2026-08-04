@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace wobble
+namespace ugurugu
 {
 
 QSize LayerThumbnailRenderer::renderSize(const QSize &documentSize)

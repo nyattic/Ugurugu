@@ -7,7 +7,7 @@
 #include <array>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 WandReferenceButton::WandReferenceButton(CanvasWandReference reference,

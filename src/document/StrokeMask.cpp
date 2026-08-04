@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace wobble
+namespace ugurugu
 {
 
 QImage transformedMask(

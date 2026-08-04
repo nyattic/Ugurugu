@@ -10,7 +10,7 @@
 
 #include <array>
 
-namespace wobble
+namespace ugurugu
 {
 
 LassoPopoverPanel::LassoPopoverPanel(CanvasWidget *canvas, QWidget *parent)

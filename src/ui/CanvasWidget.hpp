@@ -26,7 +26,7 @@ class QMouseEvent;
 class QTabletEvent;
 class QWheelEvent;
 
-namespace wobble
+namespace ugurugu
 {
 
 class SelectionActionBar;

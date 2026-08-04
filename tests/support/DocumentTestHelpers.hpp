@@ -28,7 +28,7 @@
 #include <memory>
 #include <new>
 
-namespace wobble
+namespace ugurugu
 {
 
 inline QByteArray pointArray(int count)

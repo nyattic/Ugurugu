@@ -5,7 +5,7 @@
 #include <QHash>
 #include <QVector>
 
-namespace wobble
+namespace ugurugu
 {
 
 enum class LayerHierarchyIssue

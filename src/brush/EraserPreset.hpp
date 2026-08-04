@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace wobble
+namespace ugurugu
 {
 
 struct EraserPreset

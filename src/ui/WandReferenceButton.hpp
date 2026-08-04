@@ -3,7 +3,7 @@
 #include "ui/CanvasTypes.hpp"
 #include "ui/PopoverOptionButton.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class WandReferenceButton final : public PopoverOptionButton

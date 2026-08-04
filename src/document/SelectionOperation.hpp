@@ -6,7 +6,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 // Explicit image surfaces owned by one selection transform. Input masks and

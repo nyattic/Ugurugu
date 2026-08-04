@@ -36,7 +36,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -184,7 +184,7 @@ void MainWindow::createActions()
     checkForUpdatesAction->setObjectName(
         QStringLiteral("checkForUpdatesAction"));
 
-    auto *helpAction = new QAction(tr("WagleWaglePaint &Help"), this);
+    auto *helpAction = new QAction(tr("Ugurugu &Help"), this);
     helpAction->setObjectName(QStringLiteral("helpAction"));
     registerShortcut(helpAction, QKeySequence(Qt::Key_F1));
     connect(helpAction, &QAction::triggered, this, &MainWindow::showHelp);

@@ -27,7 +27,7 @@
 #include <limits>
 #include <numbers>
 
-namespace wobble
+namespace ugurugu
 {
 
 inline Stroke makeStroke(StrokeMode mode,

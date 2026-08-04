@@ -11,7 +11,7 @@
 
 class QSettings;
 
-namespace wobble
+namespace ugurugu
 {
 
 struct WwpPreset

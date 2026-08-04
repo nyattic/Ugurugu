@@ -6,30 +6,30 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 option(
-    WOBBLEPAINT_ENABLE_SANITIZERS
+    UGURUGU_ENABLE_SANITIZERS
     "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
     OFF
 )
 option(
-    WOBBLEPAINT_ENABLE_COVERAGE
+    UGURUGU_ENABLE_COVERAGE
     "Enable Clang source coverage instrumentation"
     OFF
 )
 option(
-    WOBBLEPAINT_WARNINGS_AS_ERRORS
+    UGURUGU_WARNINGS_AS_ERRORS
     "Treat compiler warnings as errors"
     OFF
 )
 
-if(WOBBLEPAINT_ENABLE_SANITIZERS AND MSVC)
-    message(FATAL_ERROR "WOBBLEPAINT_ENABLE_SANITIZERS requires Clang or GCC")
+if(UGURUGU_ENABLE_SANITIZERS AND MSVC)
+    message(FATAL_ERROR "UGURUGU_ENABLE_SANITIZERS requires Clang or GCC")
 endif()
-if(WOBBLEPAINT_ENABLE_COVERAGE
+if(UGURUGU_ENABLE_COVERAGE
     AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang"
 )
-    message(FATAL_ERROR "WOBBLEPAINT_ENABLE_COVERAGE requires Clang")
+    message(FATAL_ERROR "UGURUGU_ENABLE_COVERAGE requires Clang")
 endif()
-if(WOBBLEPAINT_ENABLE_SANITIZERS AND WOBBLEPAINT_ENABLE_COVERAGE)
+if(UGURUGU_ENABLE_SANITIZERS AND UGURUGU_ENABLE_COVERAGE)
     message(FATAL_ERROR "Sanitizers and coverage cannot be enabled together")
 endif()
 
@@ -37,7 +37,7 @@ if(WIN32)
     set(CMAKE_INSTALL_BINDIR ".")
 endif()
 
-function(wobblepaint_target_defaults target)
+function(ugurugu_target_defaults target)
     target_compile_features(${target} PUBLIC cxx_std_23)
     if(MSVC)
         target_compile_options(
@@ -50,7 +50,7 @@ function(wobblepaint_target_defaults target)
             /external:anglebrackets
             /external:W0
         )
-        if(WOBBLEPAINT_WARNINGS_AS_ERRORS)
+        if(UGURUGU_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE /WX)
         endif()
     else()
@@ -61,10 +61,10 @@ function(wobblepaint_target_defaults target)
             -Wextra
             -Wpedantic
         )
-        if(WOBBLEPAINT_WARNINGS_AS_ERRORS)
+        if(UGURUGU_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()
-        if(WOBBLEPAINT_ENABLE_SANITIZERS)
+        if(UGURUGU_ENABLE_SANITIZERS)
             target_compile_options(
                 ${target}
                 PRIVATE
@@ -79,7 +79,7 @@ function(wobblepaint_target_defaults target)
                 -fno-sanitize-recover=all
             )
         endif()
-        if(WOBBLEPAINT_ENABLE_COVERAGE)
+        if(UGURUGU_ENABLE_COVERAGE)
             target_compile_options(
                 ${target}
                 PRIVATE

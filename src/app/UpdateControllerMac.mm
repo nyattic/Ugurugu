@@ -4,7 +4,7 @@
 
 #import <Sparkle/Sparkle.h>
 
-namespace wobble
+namespace ugurugu
 {
 
 class UpdateController::Impl

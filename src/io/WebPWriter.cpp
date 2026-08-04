@@ -10,7 +10,7 @@
 #include <webp/encode.h>
 #include <webp/mux.h>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

@@ -2,7 +2,7 @@
 
 ## 1. 목표
 
-WagleWaglePaint(이하 WWP)의 편집 동작을 Clip Studio Paint(이하 CSP) 관례에 맞춘다.
+Ugurugu(이하 WWP)의 편집 동작을 Clip Studio Paint(이하 CSP) 관례에 맞춘다.
 
 WWP 1.0.0은 그림 도구의 일반적인 관례와 다르게 동작하는 지점이 있다. 대표적으로 선택 영역 복제가 같은 레이어에 결과를 쌓고, 클립보드 복사·붙여넣기가 아예 없다. 이 계획은 그런 지점을 찾아 CSP 관례로 옮긴다.
 

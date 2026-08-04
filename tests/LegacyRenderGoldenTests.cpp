@@ -9,15 +9,14 @@
 #include <QJsonObject>
 #include <QtTest>
 
-namespace wobble
+namespace ugurugu
 {
 namespace
 {
 
 QString fixturePath(const QString &fileName)
 {
-    return QStringLiteral(
-               WOBBLEPAINT_SOURCE_DIR "/tests/fixtures/legacy-render/")
+    return QStringLiteral(UGURUGU_SOURCE_DIR "/tests/fixtures/legacy-render/")
            + fileName;
 }
 

@@ -8,7 +8,7 @@
 
 class QSettings;
 
-namespace wobble
+namespace ugurugu
 {
 namespace drawing_tool_settings
 {

@@ -9,7 +9,7 @@ class QDoubleSpinBox;
 class QLabel;
 class QSpinBox;
 
-namespace wobble
+namespace ugurugu
 {
 
 class ImageGeometryPreview;

@@ -2,7 +2,7 @@
 
 #include "document/Document.hpp"
 
-namespace wobble::StrokeMotionModel
+namespace ugurugu::StrokeMotionModel
 {
 
 qreal maximumDisplacement(

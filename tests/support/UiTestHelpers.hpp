@@ -82,7 +82,7 @@
 #include <limits>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 class PaintRegionTracker final : public QObject

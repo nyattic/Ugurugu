@@ -1,6 +1,6 @@
 #pragma once
 
-namespace wobble
+namespace ugurugu
 {
 
 int runAppPolicyTests(int argc, char **argv);

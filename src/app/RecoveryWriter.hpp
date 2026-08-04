@@ -13,7 +13,7 @@
 #include <optional>
 #include <variant>
 
-namespace wobble
+namespace ugurugu
 {
 
 // Serializes and writes recovery snapshots on a private thread. Every public

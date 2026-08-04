@@ -6,7 +6,7 @@ function isDistributionAsset(name)
   return /\.dmg$/i.test(name)
     || /Setup\.exe$/i.test(name)
     || /-full\.nupkg$/i.test(name)
-    || /WagleWaglePaint.*macOS.*\.zip$/i.test(name)
+    || /Ugurugu.*macOS.*\.zip$/i.test(name)
 }
 
 function distributionDownloadTotal(releases)

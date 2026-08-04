@@ -66,6 +66,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStringList>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -79,11 +80,33 @@
 #include <optional>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
 {
+
+QString projectExtension()
+{
+    return QStringLiteral("ugu");
+}
+
+// The same format under earlier names of the application, so these stay
+// readable and only ever appear in open filters, never in a save path.
+QStringList legacyProjectExtensions()
+{
+    return {QStringLiteral("wagle"), QStringLiteral("wobble")};
+}
+
+QString projectFilterPattern()
+{
+    QStringList patterns = {QStringLiteral("*.") + projectExtension()};
+    for (const QString &extension : legacyProjectExtensions())
+    {
+        patterns.append(QStringLiteral("*.") + extension);
+    }
+    return patterns.join(QLatin1Char(' '));
+}
 
 QSize requestCanvasSize(QWidget *parent,
     const QSize &current,
@@ -258,9 +281,10 @@ std::optional<Document> MainWindow::readProject(const QString &filePath)
             {
                 m_pendingWawaImportSummary = imported->summary;
                 const QFileInfo source(filePath);
-                m_suggestedSavePath = QDir(source.absolutePath())
-                                          .filePath(source.completeBaseName()
-                                                    + QStringLiteral(".wagle"));
+                m_suggestedSavePath =
+                    QDir(source.absolutePath())
+                        .filePath(source.completeBaseName()
+                                  + QStringLiteral(".") + projectExtension());
                 return imported->document;
             }
         }
@@ -328,7 +352,7 @@ bool MainWindow::activateProject(const QString &filePath, Document document)
             importSummary.value_or(WawaImportSummary{});
         QString details =
             tr("Imported native .wawa version 10 as a new, unsaved "
-               "WagleWaglePaint document.\n\n"
+               "Ugurugu document.\n\n"
                "Layers: %1\nBase images: %2\nPaint strokes: %3\n"
                "Eraser strokes: %4\nPolygon fills: %5")
                 .arg(summary.layers)
@@ -394,12 +418,11 @@ MainWindow::StartupResult MainWindow::initializeSession(
 
     QMessageBox dialog(QMessageBox::Question,
         tr("Recover unsaved work"),
-        hasRequestedFile
-            ? tr("WagleWaglePaint found work from a previous session. "
-                 "Choose what to do before opening %1.")
-                  .arg(QFileInfo(requestedFilePath).fileName())
-            : tr("WagleWaglePaint found work from a previous session. "
-                 "Choose whether to recover or discard it."),
+        hasRequestedFile ? tr("Ugurugu found work from a previous session. "
+                              "Choose what to do before opening %1.")
+                               .arg(QFileInfo(requestedFilePath).fileName())
+                         : tr("Ugurugu found work from a previous session. "
+                              "Choose whether to recover or discard it."),
         QMessageBox::NoButton,
         this);
     QPushButton *recoverButton =
@@ -707,7 +730,7 @@ void MainWindow::updateWindowTitle()
     const QString name = m_currentFilePath.isEmpty()
                              ? tr("Untitled")
                              : QFileInfo(m_currentFilePath).fileName();
-    setWindowTitle(tr("%1[*] — WagleWaglePaint").arg(name));
+    setWindowTitle(tr("%1[*] — Ugurugu").arg(name));
     setWindowFilePath(m_currentFilePath);
 }
 
@@ -820,13 +843,13 @@ bool MainWindow::saveAs()
 {
     const QString selected = QFileDialog::getSaveFileName(this,
         tr("Save project"),
-        saveDialogStartPath(QStringLiteral("wagle")),
-        tr("WagleWaglePaint projects (*.wagle)"));
+        saveDialogStartPath(projectExtension()),
+        tr("Ugurugu projects (*.%1)").arg(projectExtension()));
     if (selected.isEmpty())
     {
         return false;
     }
-    return saveToFile(normalizedPath(selected, QStringLiteral("wagle")));
+    return saveToFile(normalizedPath(selected, projectExtension()));
 }
 
 bool MainWindow::saveToFile(const QString &filePath)
@@ -1031,7 +1054,9 @@ void MainWindow::pasteFromClipboard()
         showNotice(tr("There is nothing to paste."));
         return;
     }
-    if (!mimeData->hasFormat(SelectionClipboardCodec::mimeType()))
+    const QString selectionMimeType =
+        SelectionClipboardCodec::availableMimeType(*mimeData);
+    if (selectionMimeType.isEmpty())
     {
         if (mimeData->hasImage())
         {
@@ -1047,7 +1072,7 @@ void MainWindow::pasteFromClipboard()
     QString error;
     const std::optional<SelectionClipboardCodec::Pasted> pasted =
         SelectionClipboardCodec::decode(
-            mimeData->data(SelectionClipboardCodec::mimeType()), &error);
+            mimeData->data(selectionMimeType), &error);
     if (!pasted)
     {
         showNotice(error.isEmpty()
@@ -1354,9 +1379,10 @@ void MainWindow::chooseOpenFile()
     const QString filePath = QFileDialog::getOpenFileName(this,
         tr("Open project"),
         QString(),
-        tr("Supported projects (*.wagle *.wobble *.wawa);;"
-           "WagleWaglePaint projects (*.wagle *.wobble);;"
-           "WiggleWiggleTool projects (*.wawa);;All files (*)"));
+        tr("Supported projects (%1 *.wawa);;"
+           "Ugurugu projects (%1);;"
+           "WiggleWiggleTool projects (*.wawa);;All files (*)")
+            .arg(projectFilterPattern()));
     if (!filePath.isEmpty())
     {
         openFile(filePath);
@@ -1454,8 +1480,9 @@ QString MainWindow::saveDialogStartPath(const QString &extension) const
     if (!m_currentFilePath.isEmpty())
     {
         const QFileInfo currentFile(m_currentFilePath);
-        if (extension.compare(QStringLiteral("wagle"), Qt::CaseInsensitive)
-            == 0)
+        // A project opened under a legacy extension falls through, so Save As
+        // proposes the same name carrying the current one.
+        if (currentFile.suffix().compare(extension, Qt::CaseInsensitive) == 0)
         {
             return currentFile.absoluteFilePath();
         }
@@ -1464,7 +1491,7 @@ QString MainWindow::saveDialogStartPath(const QString &extension) const
                       + extension);
     }
     if (!m_suggestedSavePath.isEmpty()
-        && extension.compare(QStringLiteral("wagle"), Qt::CaseInsensitive) == 0)
+        && extension.compare(projectExtension(), Qt::CaseInsensitive) == 0)
     {
         return m_suggestedSavePath;
     }

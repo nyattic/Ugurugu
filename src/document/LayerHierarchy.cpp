@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace wobble
+namespace ugurugu
 {
 
 bool LayerHierarchyAnalysis::isValid() const

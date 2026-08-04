@@ -130,50 +130,50 @@
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/main.cpp" line="113"/>
-        <location filename="../src/main.cpp" line="121"/>
-        <location filename="../src/main.cpp" line="193"/>
-        <source>WagleWaglePaint</source>
-        <translation>WagleWaglePaint</translation>
+        <location filename="../src/main.cpp" line="135"/>
+        <location filename="../src/main.cpp" line="143"/>
+        <location filename="../src/main.cpp" line="215"/>
+        <source>Ugurugu</source>
+        <translation>Ugurugu</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="114"/>
-        <source>WagleWaglePaint is already running.</source>
-        <translation>WagleWaglePaint가 이미 실행 중입니다.</translation>
+        <location filename="../src/main.cpp" line="136"/>
+        <source>Ugurugu is already running.</source>
+        <translation>Ugurugu가 이미 실행 중입니다.</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="122"/>
-        <source>WagleWaglePaint could not start.
+        <location filename="../src/main.cpp" line="144"/>
+        <source>Ugurugu could not start.
 
 %1</source>
-        <translation>WagleWaglePaint를 시작할 수 없습니다.
+        <translation>Ugurugu를 시작할 수 없습니다.
 
 %1</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="194"/>
+        <location filename="../src/main.cpp" line="216"/>
         <source>The application encountered an unexpected error.</source>
         <translation>애플리케이션에 예기치 않은 오류가 발생했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="109"/>
-        <location filename="../src/ui/MainWindow.cpp" line="110"/>
+        <location filename="../src/ui/MainWindow.cpp" line="127"/>
+        <location filename="../src/ui/MainWindow.cpp" line="128"/>
         <source> px</source>
         <translation> px</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="111"/>
+        <location filename="../src/ui/MainWindow.cpp" line="129"/>
         <source>Width</source>
         <translation>너비</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="112"/>
+        <location filename="../src/ui/MainWindow.cpp" line="130"/>
         <source>Height</source>
         <translation>높이</translation>
     </message>
 </context>
 <context>
-    <name>wobble::BrushPopoverPanel</name>
+    <name>ugurugu::BrushPopoverPanel</name>
     <message>
         <location filename="../src/ui/BrushPopoverPanel.cpp" line="115"/>
         <source>ANTI-ALIASING</source>
@@ -191,7 +191,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::BrushSizeRow</name>
+    <name>ugurugu::BrushSizeRow</name>
     <message>
         <location filename="../src/ui/BrushSizeRow.cpp" line="32"/>
         <source>SIZE</source>
@@ -214,7 +214,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::BucketPopoverPanel</name>
+    <name>ugurugu::BucketPopoverPanel</name>
     <message>
         <location filename="../src/ui/BucketPopoverPanel.cpp" line="27"/>
         <source>REFERENCE</source>
@@ -277,7 +277,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::CanvasSizeDialog</name>
+    <name>ugurugu::CanvasSizeDialog</name>
     <message>
         <location filename="../src/ui/CanvasSizeDialog.cpp" line="117"/>
         <source>Canvas size preview</source>
@@ -462,7 +462,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::CanvasWidget</name>
+    <name>ugurugu::CanvasWidget</name>
     <message>
         <location filename="../src/ui/CanvasWidgetEvents.cpp" line="249"/>
         <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
@@ -728,7 +728,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::ColorSwatchRow</name>
+    <name>ugurugu::ColorSwatchRow</name>
     <message>
         <location filename="../src/ui/ColorSwatchRow.cpp" line="126"/>
         <source>Recent color %1</source>
@@ -736,7 +736,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::DocumentController</name>
+    <name>ugurugu::DocumentController</name>
     <message>
         <location filename="../src/document/DocumentController.cpp" line="633"/>
         <location filename="../src/document/DocumentController.cpp" line="653"/>
@@ -1011,7 +1011,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::DocumentSerializer</name>
+    <name>ugurugu::DocumentSerializer</name>
     <message>
         <location filename="../src/io/serializer/DocumentValidation.cpp" line="178"/>
         <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="265"/>
@@ -1432,7 +1432,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::DocumentUndoStack</name>
+    <name>ugurugu::DocumentUndoStack</name>
     <message>
         <location filename="../src/document/history/DocumentUndoStack.cpp" line="243"/>
         <source>Undo %1</source>
@@ -1455,7 +1455,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::ExportWorker</name>
+    <name>ugurugu::ExportWorker</name>
     <message>
         <location filename="../src/io/ExportWorker.cpp" line="199"/>
         <location filename="../src/io/ExportWorker.cpp" line="210"/>
@@ -1470,7 +1470,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::FrameScrubber</name>
+    <name>ugurugu::FrameScrubber</name>
     <message>
         <location filename="../src/ui/FrameScrubber.cpp" line="36"/>
         <source>Frame scrubber</source>
@@ -1483,7 +1483,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::GifExportDialog</name>
+    <name>ugurugu::GifExportDialog</name>
     <message>
         <location filename="../src/ui/GifExportDialog.cpp" line="59"/>
         <source>%1%  (%2 × %3)</source>
@@ -1516,7 +1516,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::GifWriter</name>
+    <name>ugurugu::GifWriter</name>
     <message>
         <location filename="../src/io/GifWriter.cpp" line="571"/>
         <source>A frame could not be converted to the GIF pixel format.</source>
@@ -1570,20 +1570,20 @@
     </message>
 </context>
 <context>
-    <name>wobble::HelpDialog</name>
+    <name>ugurugu::HelpDialog</name>
     <message>
         <location filename="../src/ui/HelpDialog.cpp" line="14"/>
-        <source>WagleWaglePaint Help</source>
-        <translation>WagleWaglePaint 도움말</translation>
+        <source>Ugurugu Help</source>
+        <translation>Ugurugu 도움말</translation>
     </message>
     <message>
         <location filename="../src/ui/HelpDialog.cpp" line="23"/>
-        <source>&lt;h1&gt;WagleWaglePaint&lt;/h1&gt;&lt;p&gt;Draw a stroke, then play the timeline to see it wobble.&lt;/p&gt;&lt;h2&gt;Drawing&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Choose Brush, Eraser, Area Select, Auto Select, or Paint Bucket from the tool rail.&lt;/li&gt;&lt;li&gt;Open Wobble settings to choose Classic, Smooth, or Stepped motion and adjust line detail.&lt;/li&gt;&lt;li&gt;Use the timeline for frame count, playback speed, and the current frame.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Selection and layers&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Area Select can select content or paint a filled lasso shape.&lt;/li&gt;&lt;li&gt;Merge Down is available only when the two layers can be combined without changing their appearance.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Files and export&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Projects use .wagle. Native version 10 .wawa files open as new unsaved projects.&lt;/li&gt;&lt;li&gt;Insert image keeps the original pixels for later non-destructive transforms.&lt;/li&gt;&lt;li&gt;Export the current frame as PNG or JPEG, or the animation as GIF or WebP.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Press F1 to open this help again.&lt;/p&gt;</source>
-        <translation>&lt;h1&gt;WagleWaglePaint&lt;/h1&gt;&lt;p&gt;선을 그린 다음 타임라인을 재생해 와글거리는 모습을 확인하세요.&lt;/p&gt;&lt;h2&gt;그리기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;도구 막대에서 브러시, 지우개, 영역 선택, 자동 선택 또는 페인트 통을 고르세요.&lt;/li&gt;&lt;li&gt;와글거림 설정을 열어 클래식, 부드럽게 또는 단계별 모션을 고르고 선의 디테일을 조절하세요.&lt;/li&gt;&lt;li&gt;타임라인에서 프레임 수, 재생 속도와 현재 프레임을 조절하세요.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;선택과 레이어&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;영역 선택으로 내용을 선택하거나 채워진 올가미 모양을 그릴 수 있습니다.&lt;/li&gt;&lt;li&gt;아래 레이어와 병합은 두 레이어의 모양을 바꾸지 않고 합칠 수 있을 때만 사용할 수 있습니다.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;파일과 내보내기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;프로젝트는 .wagle 형식을 사용합니다. native 버전 10 .wawa 파일은 저장되지 않은 새 프로젝트로 열립니다.&lt;/li&gt;&lt;li&gt;이미지 삽입은 이후 비파괴 변형을 위해 원본 픽셀을 유지합니다.&lt;/li&gt;&lt;li&gt;현재 프레임은 PNG 또는 JPEG로, 애니메이션은 GIF 또는 WebP로 내보내세요.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;이 도움말을 다시 열려면 F1을 누르세요.&lt;/p&gt;</translation>
+        <source>&lt;h1&gt;Ugurugu&lt;/h1&gt;&lt;p&gt;Draw a stroke, then play the timeline to see it wobble.&lt;/p&gt;&lt;h2&gt;Drawing&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Choose Brush, Eraser, Area Select, Auto Select, or Paint Bucket from the tool rail.&lt;/li&gt;&lt;li&gt;Open Wobble settings to choose Classic, Smooth, or Stepped motion and adjust line detail.&lt;/li&gt;&lt;li&gt;Use the timeline for frame count, playback speed, and the current frame.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Selection and layers&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Area Select can select content or paint a filled lasso shape.&lt;/li&gt;&lt;li&gt;Merge Down is available only when the two layers can be combined without changing their appearance.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Files and export&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Projects use .ugu, and older .wagle or .wobble projects still open. Native version 10 .wawa files open as new unsaved projects.&lt;/li&gt;&lt;li&gt;Insert image keeps the original pixels for later non-destructive transforms.&lt;/li&gt;&lt;li&gt;Export the current frame as PNG or JPEG, or the animation as GIF or WebP.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Press F1 to open this help again.&lt;/p&gt;</source>
+        <translation>&lt;h1&gt;Ugurugu&lt;/h1&gt;&lt;p&gt;선을 그린 다음 타임라인을 재생해 우글거리는 모습을 확인하세요.&lt;/p&gt;&lt;h2&gt;그리기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;도구 막대에서 브러시, 지우개, 영역 선택, 자동 선택 또는 페인트 통을 고르세요.&lt;/li&gt;&lt;li&gt;우글거림 설정을 열어 클래식, 부드럽게 또는 단계별 모션을 고르고 선의 디테일을 조절하세요.&lt;/li&gt;&lt;li&gt;타임라인에서 프레임 수, 재생 속도와 현재 프레임을 조절하세요.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;선택과 레이어&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;영역 선택으로 내용을 선택하거나 채워진 올가미 모양을 그릴 수 있습니다.&lt;/li&gt;&lt;li&gt;아래 레이어와 병합은 두 레이어의 모양을 바꾸지 않고 합칠 수 있을 때만 사용할 수 있습니다.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;파일과 내보내기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;프로젝트는 .ugu 형식을 사용하며, 이전 .wagle과 .wobble 프로젝트도 그대로 열립니다. native 버전 10 .wawa 파일은 저장되지 않은 새 프로젝트로 열립니다.&lt;/li&gt;&lt;li&gt;이미지 삽입은 이후 비파괴 변형을 위해 원본 픽셀을 유지합니다.&lt;/li&gt;&lt;li&gt;현재 프레임은 PNG 또는 JPEG로, 애니메이션은 GIF 또는 WebP로 내보내세요.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;이 도움말을 다시 열려면 F1을 누르세요.&lt;/p&gt;</translation>
     </message>
 </context>
 <context>
-    <name>wobble::ImageSizeDialog</name>
+    <name>ugurugu::ImageSizeDialog</name>
     <message>
         <location filename="../src/ui/ImageSizeDialog.cpp" line="56"/>
         <source>Image size preview</source>
@@ -1683,7 +1683,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::LassoPopoverPanel</name>
+    <name>ugurugu::LassoPopoverPanel</name>
     <message>
         <location filename="../src/ui/LassoPopoverPanel.cpp" line="23"/>
         <source>MODE</source>
@@ -1736,7 +1736,7 @@
     </message>
 </context>
 <context>
-    <name>wobble::LayerDock</name>
+    <name>ugurugu::LayerDock</name>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="52"/>
         <location filename="../src/ui/LayerDock.cpp" line="85"/>
@@ -1902,27 +1902,27 @@
     </message>
 </context>
 <context>
-    <name>wobble::MainWindow</name>
+    <name>ugurugu::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="220"/>
-        <location filename="../src/ui/MainWindow.cpp" line="284"/>
-        <location filename="../src/ui/MainWindow.cpp" line="293"/>
-        <location filename="../src/ui/MainWindow.cpp" line="315"/>
+        <location filename="../src/ui/MainWindow.cpp" line="238"/>
+        <location filename="../src/ui/MainWindow.cpp" line="303"/>
+        <location filename="../src/ui/MainWindow.cpp" line="312"/>
+        <location filename="../src/ui/MainWindow.cpp" line="334"/>
         <source>Open failed</source>
         <translation>열기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="251"/>
+        <location filename="../src/ui/MainWindow.cpp" line="269"/>
         <source>The .wawa project could not be read or is too large.</source>
         <translation>.wawa 프로젝트를 읽을 수 없거나 파일이 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="271"/>
+        <location filename="../src/ui/MainWindow.cpp" line="290"/>
         <source>Import failed</source>
         <translation>가져오기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="272"/>
+        <location filename="../src/ui/MainWindow.cpp" line="291"/>
         <source>Could not import the .wawa project.
 
 %1</source>
@@ -1931,7 +1931,7 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="285"/>
+        <location filename="../src/ui/MainWindow.cpp" line="304"/>
         <source>Could not open the project.
 
 %1</source>
@@ -1940,15 +1940,15 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="330"/>
-        <source>Imported native .wawa version 10 as a new, unsaved WagleWaglePaint document.
+        <location filename="../src/ui/MainWindow.cpp" line="349"/>
+        <source>Imported native .wawa version 10 as a new, unsaved Ugurugu document.
 
 Layers: %1
 Base images: %2
 Paint strokes: %3
 Eraser strokes: %4
 Polygon fills: %5</source>
-        <translation>native .wawa 버전 10을 저장되지 않은 새 WagleWaglePaint 문서로 가져왔습니다.
+        <translation>native .wawa 버전 10을 저장되지 않은 새 Ugurugu 문서로 가져왔습니다.
 
 레이어: %1
 기본 이미지: %2
@@ -1957,7 +1957,7 @@ Polygon fills: %5</source>
 다각형 채우기: %5</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="341"/>
+        <location filename="../src/ui/MainWindow.cpp" line="360"/>
         <source>
 Skipped operations: %1
 Clamped widths: %2</source>
@@ -1966,77 +1966,77 @@ Clamped widths: %2</source>
 제한된 굵기: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="345"/>
+        <location filename="../src/ui/MainWindow.cpp" line="364"/>
         <source>
 
 Wobble, airbrush, and polygon fills are best-effort conversions and may look different from WiggleWiggleTool.</source>
         <translation>
 
-와글거림, 에어브러시와 다각형 채우기는 최선형 변환이므로 WiggleWiggleTool과 다르게 보일 수 있습니다.</translation>
+우글거림, 에어브러시와 다각형 채우기는 최선형 변환이므로 WiggleWiggleTool과 다르게 보일 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="348"/>
+        <location filename="../src/ui/MainWindow.cpp" line="367"/>
         <source>.wawa import complete</source>
         <translation>.wawa 가져오기 완료</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="349"/>
+        <location filename="../src/ui/MainWindow.cpp" line="368"/>
         <source>Imported %1 as a new document</source>
         <translation>%1을 새 문서로 가져왔습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="357"/>
+        <location filename="../src/ui/MainWindow.cpp" line="376"/>
         <source>Opened %1</source>
         <translation>%1 열림</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="396"/>
+        <location filename="../src/ui/MainWindow.cpp" line="415"/>
         <source>Recover unsaved work</source>
         <translation>저장하지 않은 작업 복구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="398"/>
-        <source>WagleWaglePaint found work from a previous session. Choose what to do before opening %1.</source>
-        <translation>WagleWaglePaint에서 이전 세션의 작업을 발견했습니다. %1 파일을 열기 전에 복구 작업 처리 방법을 선택하세요.</translation>
+        <location filename="../src/ui/MainWindow.cpp" line="417"/>
+        <source>Ugurugu found work from a previous session. Choose what to do before opening %1.</source>
+        <translation>Ugurugu에서 이전 세션의 작업을 발견했습니다. %1 파일을 열기 전에 복구 작업 처리 방법을 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="401"/>
-        <source>WagleWaglePaint found work from a previous session. Choose whether to recover or discard it.</source>
-        <translation>WagleWaglePaint에서 이전 세션의 작업을 발견했습니다. 복구하거나 폐기할지 선택하세요.</translation>
+        <location filename="../src/ui/MainWindow.cpp" line="420"/>
+        <source>Ugurugu found work from a previous session. Choose whether to recover or discard it.</source>
+        <translation>Ugurugu에서 이전 세션의 작업을 발견했습니다. 복구하거나 폐기할지 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="406"/>
+        <location filename="../src/ui/MainWindow.cpp" line="425"/>
         <source>Recover</source>
         <translation>복구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="413"/>
+        <location filename="../src/ui/MainWindow.cpp" line="432"/>
         <source>Keep Recovery and Open File</source>
         <translation>복구 파일을 보존하고 파일 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="417"/>
+        <location filename="../src/ui/MainWindow.cpp" line="436"/>
         <source>Discard Recovery and Open File</source>
         <translation>복구 파일을 폐기하고 파일 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="422"/>
+        <location filename="../src/ui/MainWindow.cpp" line="441"/>
         <source>Discard</source>
         <translation>폐기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="464"/>
+        <location filename="../src/ui/MainWindow.cpp" line="483"/>
         <source>Opened %1. Recovery preserved at %2</source>
         <translation>%1 열림. 복구 파일 보존 위치: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="537"/>
-        <location filename="../src/ui/MainWindow.cpp" line="557"/>
+        <location filename="../src/ui/MainWindow.cpp" line="556"/>
+        <location filename="../src/ui/MainWindow.cpp" line="576"/>
         <source>Recovery failed</source>
         <translation>복구 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="538"/>
+        <location filename="../src/ui/MainWindow.cpp" line="557"/>
         <source>The recovery file could not be opened.
 
 %1
@@ -2051,69 +2051,74 @@ The recovery file was not deleted. You can find it at:
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="569"/>
+        <location filename="../src/ui/MainWindow.cpp" line="588"/>
         <source>Recovered unsaved work.</source>
         <translation>저장하지 않은 작업을 복구했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="616"/>
+        <location filename="../src/ui/MainWindow.cpp" line="635"/>
         <source>Shortcut change</source>
         <translation>단축키 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1013"/>
+        <location filename="../src/ui/MainWindow.cpp" line="843"/>
+        <source>Ugurugu projects (*.%1)</source>
+        <translation>Ugurugu 프로젝트 (*.%1)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1032"/>
         <source>Canvas background</source>
         <translation>캔버스 배경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1031"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1043"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1050"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1064"/>
         <source>There is nothing to paste.</source>
         <translation>붙여넣을 내용이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1039"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1060"/>
         <source>Pasting images from other apps is not supported yet.</source>
         <translation>다른 앱에서 복사한 이미지 붙여넣기는 아직 지원하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1054"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1081"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1075"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1102"/>
         <source>The clipboard content could not be pasted.</source>
         <translation>클립보드 내용을 붙여넣을 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1061"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1082"/>
         <source>Pasted as a new layer.</source>
         <translation>새 레이어로 붙여넣었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1064"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1085"/>
         <source>The paste was rejected because the document already has the maximum number of layers.</source>
         <translation>문서가 이미 최대 레이어 수에 도달해 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1068"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1089"/>
         <source>The paste was rejected because it would exceed the stroke limit.</source>
         <translation>스트로크 한도를 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1072"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1093"/>
         <source>The paste was rejected because it would exceed the point limit.</source>
         <translation>점 한도를 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1076"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1097"/>
         <source>The paste was rejected because it would exceed the mask budget.</source>
         <translation>마스크 예산을 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1269"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1290"/>
         <source>Recovery could not be discarded</source>
         <translation>복구 파일을 폐기할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1270"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1291"/>
         <source>The recovery file was not deleted.
 
 %1</source>
@@ -2122,12 +2127,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1296"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1317"/>
         <source>Recovery could not be preserved</source>
         <translation>복구 파일을 보존할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1297"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1318"/>
         <source>The recovery file was left unchanged.
 
 %1</source>
@@ -2136,28 +2141,28 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1357"/>
-        <source>Supported projects (*.wagle *.wobble *.wawa);;WagleWaglePaint projects (*.wagle *.wobble);;WiggleWiggleTool projects (*.wawa);;All files (*)</source>
-        <translation>지원하는 프로젝트 (*.wagle *.wobble *.wawa);;WagleWaglePaint 프로젝트 (*.wagle *.wobble);;WiggleWiggleTool 프로젝트 (*.wawa);;모든 파일 (*)</translation>
+        <location filename="../src/ui/MainWindow.cpp" line="1378"/>
+        <source>Supported projects (%1 *.wawa);;Ugurugu projects (%1);;WiggleWiggleTool projects (*.wawa);;All files (*)</source>
+        <translation>지원하는 프로젝트 (%1 *.wawa);;Ugurugu 프로젝트 (%1);;WiggleWiggleTool 프로젝트 (*.wawa);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1369"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1391"/>
         <source>Insert image</source>
         <translation>이미지 삽입</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1371"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1393"/>
         <source>Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff);;All files (*)</source>
         <translation>이미지 파일 (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1384"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1417"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1406"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1439"/>
         <source>Could not insert image</source>
         <translation>이미지를 삽입할 수 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1385"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1407"/>
         <source>The image could not be decoded.
 
 %1</source>
@@ -2166,27 +2171,27 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1395"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1417"/>
         <source>Inserted %1</source>
         <translation>%1 삽입됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1405"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1427"/>
         <source>The image dimensions or pixel data are not supported.</source>
         <translation>이미지 크기 또는 픽셀 데이터를 지원하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1408"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1430"/>
         <source>The document has reached its layer limit.</source>
         <translation>문서가 레이어 한도에 도달했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1411"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1433"/>
         <source>The document has reached its image asset limit.</source>
         <translation>문서가 이미지 자산 한도에 도달했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1414"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1436"/>
         <source>The image would exceed the project size limit.</source>
         <translation>이미지를 추가하면 프로젝트 크기 한도를 초과합니다.</translation>
     </message>
@@ -2196,7 +2201,7 @@ The recovery file was not deleted. You can find it at:
         <translation>새로 만들기(&amp;N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="316"/>
+        <location filename="../src/ui/MainWindow.cpp" line="335"/>
         <source>The project could not be prepared.
 
 %1</source>
@@ -2205,7 +2210,7 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="558"/>
+        <location filename="../src/ui/MainWindow.cpp" line="577"/>
         <source>The recovered document could not be prepared.
 
 %1</source>
@@ -2365,8 +2370,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="187"/>
-        <source>WagleWaglePaint &amp;Help</source>
-        <translation>WagleWaglePaint 도움말(&amp;H)</translation>
+        <source>Ugurugu &amp;Help</source>
+        <translation>Ugurugu 도움말(&amp;H)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="384"/>
@@ -2533,7 +2538,7 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/MainWindowActions.cpp" line="918"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="919"/>
         <source>Wobble settings</source>
-        <translation>와글거림 설정</translation>
+        <translation>우글거림 설정</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="959"/>
@@ -2564,22 +2569,22 @@ The recovery file was not deleted. You can find it at:
         <translation>캔버스 확대/축소 배율</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="846"/>
+        <location filename="../src/ui/MainWindow.cpp" line="865"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then save again.</source>
         <translation>대기 중인 선택 영역 변형을 적용할 수 없습니다. 변형을 조정하거나 취소한 뒤 다시 저장하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="881"/>
+        <location filename="../src/ui/MainWindow.cpp" line="900"/>
         <source>The recovery file location is reserved. Choose a different project path.</source>
         <translation>복구 파일 위치는 예약되어 있습니다. 다른 프로젝트 경로를 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1326"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1347"/>
         <source>Layer group nesting limit</source>
         <translation>레이어 그룹 중첩 제한</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1327"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1348"/>
         <source>Some layers in this project are nested %1 levels deep inside layer groups. The structure will be preserved, but edits cannot increase the document&apos;s maximum nesting depth. New documents allow up to %2 levels.</source>
         <translation>이 프로젝트의 일부 레이어는 그룹 안에 %1단계 깊이로 중첩되어 있습니다. 현재 구조는 그대로 보존되지만, 편집으로 문서의 최대 중첩 단계를 더 늘릴 수는 없습니다. 새 문서는 최대 %2단계까지 사용할 수 있습니다.</translation>
     </message>
@@ -2594,12 +2599,12 @@ The recovery file was not deleted. You can find it at:
         <translation>이 이미지를 렌더링하려면 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 캔버스 크기나 레이어 그룹의 중첩 단계를 줄이세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="904"/>
+        <location filename="../src/ui/MainWindow.cpp" line="923"/>
         <source>New document failed</source>
         <translation>새 문서 만들기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="905"/>
+        <location filename="../src/ui/MainWindow.cpp" line="924"/>
         <source>The new document could not be prepared.
 
 %1</source>
@@ -2608,45 +2613,45 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="934"/>
-        <location filename="../src/ui/MainWindow.cpp" line="979"/>
+        <location filename="../src/ui/MainWindow.cpp" line="953"/>
+        <location filename="../src/ui/MainWindow.cpp" line="998"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then change the size again.</source>
         <translation>대기 중인 선택 영역 변형을 적용할 수 없습니다. 변형을 조정하거나 취소한 뒤 다시 크기를 변경하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="944"/>
+        <location filename="../src/ui/MainWindow.cpp" line="963"/>
         <source>Resize canvas</source>
         <translation>캔버스 크기 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="933"/>
-        <location filename="../src/ui/MainWindow.cpp" line="956"/>
+        <location filename="../src/ui/MainWindow.cpp" line="952"/>
+        <location filename="../src/ui/MainWindow.cpp" line="975"/>
         <source>Canvas size</source>
         <translation>캔버스 크기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="617"/>
+        <location filename="../src/ui/MainWindow.cpp" line="636"/>
         <source>Ctrl+D now deselects, matching the convention of other drawing tools. To duplicate content, copy it with Ctrl+C: the copy is placed on a new layer and can be dragged right away.</source>
         <translation>Ctrl+D가 다른 그림 도구의 관례대로 선택 해제로 동작합니다. 내용을 복제하려면 Ctrl+C로 복사하세요. 복사본이 새 레이어에 놓이며 바로 드래그해 옮길 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="957"/>
+        <location filename="../src/ui/MainWindow.cpp" line="976"/>
         <source>The canvas size could not be changed. Try a smaller size or offset.</source>
         <translation>캔버스 크기를 변경할 수 없습니다. 더 작은 크기나 오프셋으로 시도하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="989"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1008"/>
         <source>Resize image</source>
         <translation>이미지 크기 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="978"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1000"/>
+        <location filename="../src/ui/MainWindow.cpp" line="997"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1019"/>
         <source>Image size</source>
         <translation>이미지 크기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1001"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1020"/>
         <source>The image size could not be changed. Try smaller dimensions.</source>
         <translation>이미지 크기를 변경할 수 없습니다. 더 작은 크기로 시도하세요.</translation>
     </message>
@@ -2665,7 +2670,7 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1434"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1456"/>
         <source>Export &amp;image…</source>
         <translation>이미지로 내보내기(&amp;I)…</translation>
     </message>
@@ -2685,32 +2690,32 @@ The recovery file was not deleted. You can find it at:
         <translation>준비됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="708"/>
+        <location filename="../src/ui/MainWindow.cpp" line="727"/>
         <source>Untitled</source>
         <translation>제목 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="710"/>
-        <source>%1[*] — WagleWaglePaint</source>
-        <translation>%1[*] — WagleWaglePaint</translation>
+        <location filename="../src/ui/MainWindow.cpp" line="729"/>
+        <source>%1[*] — Ugurugu</source>
+        <translation>%1[*] — Ugurugu</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="748"/>
+        <location filename="../src/ui/MainWindow.cpp" line="767"/>
         <source>Unsaved changes</source>
         <translation>저장되지 않은 변경 사항</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="753"/>
+        <location filename="../src/ui/MainWindow.cpp" line="772"/>
         <source>The document has unsaved changes.</source>
         <translation>문서에 저장되지 않은 변경 사항이 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="758"/>
+        <location filename="../src/ui/MainWindow.cpp" line="777"/>
         <source>Save (S)</source>
         <translation>저장(S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="762"/>
+        <location filename="../src/ui/MainWindow.cpp" line="781"/>
         <source>Don&apos;t Save (N)</source>
         <translation>저장 안 함(N)</translation>
     </message>
@@ -2720,7 +2725,7 @@ The recovery file was not deleted. You can find it at:
         <translation>취소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="765"/>
+        <location filename="../src/ui/MainWindow.cpp" line="784"/>
         <source>Cancel (ESC)</source>
         <translation>취소(ESC)</translation>
     </message>
@@ -2745,24 +2750,19 @@ The recovery file was not deleted. You can find it at:
         <translation>드래그하여 선택 내용 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="822"/>
+        <location filename="../src/ui/MainWindow.cpp" line="841"/>
         <source>Save project</source>
         <translation>프로젝트 저장</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="824"/>
-        <source>WagleWaglePaint projects (*.wagle)</source>
-        <translation>WagleWaglePaint 프로젝트 (*.wagle)</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/MainWindow.cpp" line="834"/>
-        <location filename="../src/ui/MainWindow.cpp" line="845"/>
-        <location filename="../src/ui/MainWindow.cpp" line="858"/>
+        <location filename="../src/ui/MainWindow.cpp" line="853"/>
+        <location filename="../src/ui/MainWindow.cpp" line="864"/>
+        <location filename="../src/ui/MainWindow.cpp" line="877"/>
         <source>Save failed</source>
         <translation>저장 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="859"/>
+        <location filename="../src/ui/MainWindow.cpp" line="878"/>
         <source>Could not save the project.
 
 %1</source>
@@ -2771,37 +2771,37 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="867"/>
+        <location filename="../src/ui/MainWindow.cpp" line="886"/>
         <source>Saved %1</source>
         <translation>%1 저장됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="893"/>
+        <location filename="../src/ui/MainWindow.cpp" line="912"/>
         <source>New document</source>
         <translation>새 문서</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1090"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1111"/>
         <source>Scale selection</source>
         <translation>선택 영역 크기 조절</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1091"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1112"/>
         <source>Scale (%)</source>
         <translation>배율 (%)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1107"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
         <source>Rotate selection</source>
         <translation>선택 영역 회전</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1108"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
         <source>Angle (degrees)</source>
         <translation>각도 (도)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1355"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1376"/>
         <source>Open project</source>
         <translation>프로젝트 열기</translation>
     </message>
@@ -2876,7 +2876,7 @@ The recovery file was not deleted. You can find it at:
         <translation>PNG 이미지 (*.png)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1433"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1455"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="133"/>
         <source>Export current frame as &amp;image…</source>
         <translation>현재 프레임을 이미지로 내보내기(&amp;I)…</translation>
@@ -2915,8 +2915,8 @@ The recovery file was not deleted. You can find it at:
     <message>
         <location filename="../src/ui/MainWindowSettings.cpp" line="342"/>
         <location filename="../src/ui/MainWindowSettings.cpp" line="366"/>
-        <source>WagleWaglePaint presets (*.wwpreset)</source>
-        <translation>WagleWaglePaint 프리셋 (*.wwpreset)</translation>
+        <source>Ugurugu presets (*.wwpreset)</source>
+        <translation>Ugurugu 프리셋 (*.wwpreset)</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindowSettings.cpp" line="355"/>
@@ -2968,36 +2968,36 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::SelectionClipboardCodec</name>
+    <name>ugurugu::SelectionClipboardCodec</name>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="39"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="63"/>
         <source>The selected layer cannot be copied.</source>
         <translation>선택한 레이어는 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="45"/>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="106"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="69"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="130"/>
         <source>The selection could not be copied.</source>
         <translation>선택 영역을 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="52"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="76"/>
         <source>The selection is empty.</source>
         <translation>선택 영역이 비어 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="76"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="100"/>
         <source>The layer is too complex to copy.</source>
         <translation>레이어가 너무 복잡해 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="129"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="153"/>
         <source>The clipboard content is not supported.</source>
         <translation>지원하지 않는 클립보드 내용입니다.</translation>
     </message>
 </context>
 <context>
-    <name>wobble::SettingsDialog</name>
+    <name>ugurugu::SettingsDialog</name>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="112"/>
         <source>Settings</source>
@@ -3021,8 +3021,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="149"/>
-        <source>Restart WagleWaglePaint to apply language changes.</source>
-        <translation>언어 변경 사항을 적용하려면 WagleWaglePaint를 다시 시작하세요.</translation>
+        <source>Restart Ugurugu to apply language changes.</source>
+        <translation>언어 변경 사항을 적용하려면 Ugurugu를 다시 시작하세요.</translation>
     </message>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="152"/>
@@ -3107,7 +3107,7 @@ The recovery file was not deleted. You can find it at:
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="159"/>
         <source>Wobble animation</source>
-        <translation>와글거림 애니메이션</translation>
+        <translation>우글거림 애니메이션</translation>
     </message>
     <message>
         <location filename="../src/ui/SettingsDialog.cpp" line="299"/>
@@ -3121,7 +3121,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::StrokePropertiesDialog</name>
+    <name>ugurugu::StrokePropertiesDialog</name>
     <message>
         <location filename="../src/ui/StrokePropertiesDialog.cpp" line="22"/>
         <source>Edit Stroke Properties</source>
@@ -3149,7 +3149,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::StrokeStabilizationRow</name>
+    <name>ugurugu::StrokeStabilizationRow</name>
     <message>
         <location filename="../src/ui/StrokeStabilizationRow.cpp" line="21"/>
         <source>Stroke stabilization</source>
@@ -3167,7 +3167,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::TimelineBar</name>
+    <name>ugurugu::TimelineBar</name>
     <message>
         <location filename="../src/ui/TimelineBar.cpp" line="84"/>
         <source>Play preview (P)</source>
@@ -3206,7 +3206,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::UpdateController</name>
+    <name>ugurugu::UpdateController</name>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="117"/>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="239"/>
@@ -3231,8 +3231,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="136"/>
-        <source>WagleWaglePaint %1 is the latest version.</source>
-        <translation>WagleWaglePaint %1이 최신 버전입니다.</translation>
+        <source>Ugurugu %1 is the latest version.</source>
+        <translation>Ugurugu %1이 최신 버전입니다.</translation>
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="166"/>
@@ -3241,8 +3241,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="167"/>
-        <source>WagleWaglePaint %1 is available. Download and install it now?</source>
-        <translation>WagleWaglePaint %1을 사용할 수 있습니다. 지금 다운로드하고 설치할까요?</translation>
+        <source>Ugurugu %1 is available. Download and install it now?</source>
+        <translation>Ugurugu %1을 사용할 수 있습니다. 지금 다운로드하고 설치할까요?</translation>
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="193"/>
@@ -3251,8 +3251,8 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="199"/>
-        <source>WagleWaglePaint update</source>
-        <translation>WagleWaglePaint 업데이트</translation>
+        <source>Ugurugu update</source>
+        <translation>Ugurugu 업데이트</translation>
     </message>
     <message>
         <location filename="../src/app/UpdateControllerWindows.cpp" line="226"/>
@@ -3280,7 +3280,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::WandPopoverPanel</name>
+    <name>ugurugu::WandPopoverPanel</name>
     <message>
         <location filename="../src/ui/WandPopoverPanel.cpp" line="22"/>
         <source>REFERENCE</source>
@@ -3318,7 +3318,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::WebPWriter</name>
+    <name>ugurugu::WebPWriter</name>
     <message>
         <location filename="../src/io/WebPWriter.cpp" line="104"/>
         <source>The WebP encoder failed.</source>
@@ -3364,7 +3364,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::WobblePopoverPanel</name>
+    <name>ugurugu::WobblePopoverPanel</name>
     <message>
         <location filename="../src/ui/WobblePopoverPanel.cpp" line="64"/>
         <source>WOBBLE</source>
@@ -3433,7 +3433,7 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
-    <name>wobble::WobblePreview</name>
+    <name>ugurugu::WobblePreview</name>
     <message>
         <location filename="../src/ui/WobblePreview.cpp" line="22"/>
         <source>Wobble preview</source>

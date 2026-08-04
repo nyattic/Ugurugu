@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace wobble::ClassicStrokeMotion
+namespace ugurugu::ClassicStrokeMotion
 {
 
 namespace

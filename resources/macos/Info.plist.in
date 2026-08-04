@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>WagleWaglePaint</string>
+    <string>Ugurugu</string>
     <key>CFBundleExecutable</key>
-    <string>WagleWaglePaint</string>
+    <string>Ugurugu</string>
     <key>CFBundleIconFile</key>
-    <string>WobblePaint.icns</string>
+    <string>Ugurugu.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.waglewaglepaint.app</string>
+    <string>dev.ugurugu.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>WagleWaglePaint</string>
+    <string>Ugurugu</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -33,7 +33,7 @@
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <key>SUFeedURL</key>
-    <string>https://github.com/nyattic/WagleWaglePaint/releases/latest/download/appcast.xml</string>
+    <string>https://github.com/nyattic/Ugurugu/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>mLaqOS+6ecy63XvvlA7/LdNrLJO4fLrSWmy+2B/w2ow=</string>
     <!-- Keep in step with UpdateCheckPolicy::automaticCheckIntervalSeconds,

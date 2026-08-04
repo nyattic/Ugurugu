@@ -1,6 +1,6 @@
 #include "document/history/HistoryMemory.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 namespace history
 {

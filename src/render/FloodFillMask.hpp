@@ -2,7 +2,7 @@
 
 #include <QImage>
 
-namespace wobble::FloodFillMask
+namespace ugurugu::FloodFillMask
 {
 
 enum class Comparison

@@ -9,16 +9,36 @@
 #include <QJsonParseError>
 #include <QSet>
 #include <QSettings>
+#include <QStringList>
 
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
 {
 
 constexpr int formatVersion = 1;
+
+// Written into the "format" field of every preset this application saves.
+QString formatIdentifier()
+{
+    return QStringLiteral("UGURUGU_PRESET");
+}
+
+// The same layout under earlier names of the application, so presets already
+// on disk stay readable while only the current identifier is ever written.
+QStringList legacyFormatIdentifiers()
+{
+    return {QStringLiteral("WAGLEWAGLEPAINT_PRESET")};
+}
+
+bool supportedFormatIdentifier(const QString &candidate)
+{
+    return candidate == formatIdentifier()
+           || legacyFormatIdentifiers().contains(candidate);
+}
 
 void setError(QString *error, const QString &message)
 {
@@ -188,8 +208,7 @@ QByteArray WwpPresetCodec::encode(const WwpPreset &preset)
         {QStringLiteral("breakAmount"), preset.motion.breakAmount},
         {QStringLiteral("breakRange"), preset.motion.breakRange}};
     return QJsonDocument(
-        QJsonObject{{QStringLiteral("format"),
-                        QStringLiteral("WAGLEWAGLEPAINT_PRESET")},
+        QJsonObject{{QStringLiteral("format"), formatIdentifier()},
             {QStringLiteral("version"), formatVersion},
             {QStringLiteral("drawingTools"), tools},
             {QStringLiteral("motion"), motion}})
@@ -220,8 +239,8 @@ std::optional<WwpPreset> WwpPresetCodec::decode(
         return std::nullopt;
     }
     const QJsonObject root = json.object();
-    if (root.value(QStringLiteral("format")).toString()
-            != QStringLiteral("WAGLEWAGLEPAINT_PRESET")
+    if (!supportedFormatIdentifier(
+            root.value(QStringLiteral("format")).toString())
         || root.value(QStringLiteral("version")).toInt(-1) != formatVersion
         || !root.value(QStringLiteral("drawingTools")).isObject()
         || !root.value(QStringLiteral("motion")).isObject())

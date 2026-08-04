@@ -34,7 +34,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 using namespace canvas_detail;

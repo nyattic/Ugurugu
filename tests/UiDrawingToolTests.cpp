@@ -1,7 +1,7 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class UiDrawingToolTests final : public QObject

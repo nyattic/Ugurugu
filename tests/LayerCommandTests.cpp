@@ -1,7 +1,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class LayerCommandTests final : public QObject
@@ -249,7 +249,7 @@ private slots:
             QTemporaryDir directory;
             QVERIFY(directory.isValid());
             const QString path =
-                directory.filePath(QStringLiteral("depth-%1.wagle").arg(depth));
+                directory.filePath(QStringLiteral("depth-%1.ugu").arg(depth));
             QVERIFY2(DocumentSerializer::save(path, *decoded, &error),
                 qPrintable(error));
             const std::optional<Document> loaded =

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace wobble
+namespace ugurugu
 {
 
 enum class CanvasTool

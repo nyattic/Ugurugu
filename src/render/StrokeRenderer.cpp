@@ -12,7 +12,7 @@
 #include <cmath>
 #include <numbers>
 
-namespace wobble::StrokeRenderer
+namespace ugurugu::StrokeRenderer
 {
 
 namespace

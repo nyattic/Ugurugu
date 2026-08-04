@@ -5,7 +5,7 @@
 #include <QSize>
 #include <QtTypes>
 
-namespace wobble
+namespace ugurugu
 {
 
 class PreviewRenderPolicy final

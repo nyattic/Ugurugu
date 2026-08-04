@@ -30,7 +30,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -146,7 +146,7 @@ SettingsDialog::SettingsDialog(
     generalLayout->addRow(tr("Theme color"), m_themeColorButton);
 
     auto *restartLabel = new QLabel(
-        tr("Restart WagleWaglePaint to apply language changes."), generalTab);
+        tr("Restart Ugurugu to apply language changes."), generalTab);
     restartLabel->setWordWrap(true);
     generalLayout->addRow(QString(), restartLabel);
     tabs->addTab(generalTab, tr("General"));
@@ -288,7 +288,7 @@ SettingsDialog::SettingsDialog(
     aboutLayout->setSpacing(8);
 
     auto *applicationNameLabel =
-        new QLabel(QStringLiteral("WagleWaglePaint"), aboutTab);
+        new QLabel(QStringLiteral("Ugurugu"), aboutTab);
     QFont applicationNameFont = applicationNameLabel->font();
     applicationNameFont.setBold(true);
     applicationNameFont.setPointSize(applicationNameFont.pointSize() + 3);

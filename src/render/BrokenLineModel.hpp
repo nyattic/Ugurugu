@@ -4,7 +4,7 @@
 
 #include <QVector>
 
-namespace wobble::BrokenLineModel
+namespace ugurugu::BrokenLineModel
 {
 
 struct VisibleRun

@@ -1,4 +1,4 @@
-set(WOBBLEPAINT_CORE_SOURCES
+set(UGURUGU_CORE_SOURCES
     src/app/ApplicationInstanceLock.cpp
     src/app/ApplicationInstanceLock.hpp
     src/app/Logging.cpp
@@ -119,7 +119,7 @@ set(WOBBLEPAINT_CORE_SOURCES
     src/render/StrokeMotionModel.hpp
 )
 
-set(WOBBLEPAINT_UI_SOURCES
+set(UGURUGU_UI_SOURCES
     src/ui/BrushPopoverPanel.cpp
     src/ui/BrushPopoverPanel.hpp
     src/ui/BrushPresetButton.cpp
@@ -210,7 +210,7 @@ set(WOBBLEPAINT_UI_SOURCES
     src/ui/WandReferenceButton.hpp
 )
 
-set(WOBBLEPAINT_TEST_SOURCES
+set(UGURUGU_TEST_SOURCES
     tests/AppPolicyTests.cpp
     tests/BrushRenderingTests.cpp
     tests/BrokenLineModelTests.cpp

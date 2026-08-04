@@ -85,7 +85,7 @@ int main()
 
     QElapsedTimer timer;
     timer.start();
-    const std::optional<QImage> frozen = wobble::FrozenFillMask::fromPolygon(
+    const std::optional<QImage> frozen = ugurugu::FrozenFillMask::fromPolygon(
         QSize(canvasEdge, canvasEdge), polygon);
     const qint64 frozenRasterMilliseconds = timer.elapsed();
     if (!frozen)
@@ -97,7 +97,7 @@ int main()
     timer.restart();
     const QByteArray compressed = qCompress(canonical, 6);
     const qint64 compressionMilliseconds = timer.elapsed();
-    const auto packed = wobble::FrozenFillMask::packedFromPolygon(
+    const auto packed = ugurugu::FrozenFillMask::packedFromPolygon(
         QSize(canvasEdge, canvasEdge), polygon);
     if (!packed)
     {
@@ -109,7 +109,7 @@ int main()
     quint64 rasterChecksum = 0;
     for (int frame = 0; frame < frameCount; ++frame)
     {
-        const auto mask = wobble::FrozenFillMask::fromPolygon(
+        const auto mask = ugurugu::FrozenFillMask::fromPolygon(
             QSize(canvasEdge, canvasEdge), displacedPolygon(polygon, frame));
         if (!mask)
         {

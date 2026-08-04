@@ -8,7 +8,7 @@ class QPaintEvent;
 class QShowEvent;
 class QToolButton;
 
-namespace wobble
+namespace ugurugu
 {
 
 class SelectionActionBar final : public QWidget

@@ -11,7 +11,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 class ExportWorker final : public QObject

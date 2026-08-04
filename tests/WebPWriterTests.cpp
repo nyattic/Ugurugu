@@ -8,7 +8,7 @@
 #include <memory>
 #include <webp/demux.h>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

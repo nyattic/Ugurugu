@@ -4,7 +4,7 @@
 
 #include <QImage>
 
-namespace wobble
+namespace ugurugu
 {
 
 class RasterAssetCache final

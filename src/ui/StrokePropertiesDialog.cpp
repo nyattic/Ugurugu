@@ -11,7 +11,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace wobble
+namespace ugurugu
 {
 
 StrokePropertiesDialog::StrokePropertiesDialog(

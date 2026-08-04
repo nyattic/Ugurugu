@@ -25,8 +25,8 @@ int main(int argc, char **argv)
     QCoreApplication application(argc, argv);
     if (application.arguments().size() != 2)
     {
-        return fail(QStringLiteral(
-            "Usage: wobblepaint_package_smoke <WagleWaglePaint.app>"));
+        return fail(
+            QStringLiteral("Usage: ugurugu_package_smoke <Ugurugu.app>"));
     }
 
     const QDir bundle(application.arguments().at(1));

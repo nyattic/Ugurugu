@@ -12,7 +12,7 @@
 #include <memory>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 using DocumentBudget::distinctClipMaskBytes;

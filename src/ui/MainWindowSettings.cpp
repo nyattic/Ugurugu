@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 using namespace drawing_tool_settings;
@@ -339,7 +339,7 @@ void MainWindow::exportWwpPreset()
     const QString selected = QFileDialog::getSaveFileName(this,
         tr("Export WWP preset"),
         saveDialogStartPath(QStringLiteral("wwpreset")),
-        tr("WagleWaglePaint presets (*.wwpreset)"));
+        tr("Ugurugu presets (*.wwpreset)"));
     if (selected.isEmpty())
     {
         return;
@@ -363,7 +363,7 @@ void MainWindow::importWwpPreset()
     const QString filePath = QFileDialog::getOpenFileName(this,
         tr("Import WWP preset"),
         SettingsDialog::defaultSaveFolder(),
-        tr("WagleWaglePaint presets (*.wwpreset)"));
+        tr("Ugurugu presets (*.wwpreset)"));
     if (filePath.isEmpty())
     {
         return;

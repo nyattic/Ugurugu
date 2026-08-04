@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -53,7 +53,7 @@ void Logging::initialize()
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     QDir().mkpath(directory);
     currentLogFilePath =
-        QDir(directory).filePath(QStringLiteral("WagleWaglePaint.log"));
+        QDir(directory).filePath(QStringLiteral("Ugurugu.log"));
 
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
@@ -76,8 +76,8 @@ void Logging::initialize()
         fileLoggingError = QString::fromUtf8(error.what());
     }
 
-    auto logger = std::make_shared<spdlog::logger>(
-        "waglewaglepaint", sinks.begin(), sinks.end());
+    auto logger =
+        std::make_shared<spdlog::logger>("ugurugu", sinks.begin(), sinks.end());
     logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 #if defined(QT_DEBUG)
     logger->set_level(spdlog::level::debug);

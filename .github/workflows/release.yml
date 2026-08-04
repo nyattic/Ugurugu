@@ -58,14 +58,14 @@ jobs:
 
       - name: Verify installed package
         run: |
-          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          application="$RUNNER_TEMP/install/Ugurugu.app"
           smoke_root="$RUNNER_TEMP/package-smoke"
           mkdir -p "$smoke_root/MacOS"
           ln -s "$application/Contents/Frameworks" "$smoke_root/Frameworks"
           cp \
-            out/build/macos-distribution/wobblepaint_package_smoke \
+            out/build/macos-distribution/ugurugu_package_smoke \
             "$smoke_root/MacOS/"
-          "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
+          "$smoke_root/MacOS/ugurugu_package_smoke" "$application"
           codesign --verify --deep --strict "$application"
 
       - name: Import the Developer ID certificate
@@ -105,7 +105,7 @@ jobs:
             echo "MACOS_SIGNING_IDENTITY is not configured"
             exit 1
           fi
-          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          application="$RUNNER_TEMP/install/Ugurugu.app"
           sparkle="$application/Contents/Frameworks/Sparkle.framework"
           sign() {
             codesign --force --timestamp --options runtime \
@@ -152,7 +152,7 @@ jobs:
               exit 1
             fi
           done
-          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          application="$RUNNER_TEMP/install/Ugurugu.app"
           submission="$RUNNER_TEMP/notarize-application.zip"
           ditto -c -k --sequesterRsrc --keepParent "$application" "$submission"
           xcrun notarytool submit "$submission" \
@@ -169,7 +169,7 @@ jobs:
       - name: Package DMG and prepare Sparkle update
         id: package
         run: |
-          version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          version=$(sed -nE 's/project\(Ugurugu VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           architecture=$(uname -m)
           release_tag="${GITHUB_REF_NAME}"
           if [[ "${GITHUB_REF_TYPE}" == "tag" && "${release_tag}" != "v${version}" ]]; then
@@ -186,29 +186,29 @@ jobs:
             fi
           done
           mkdir -p artifacts "$RUNNER_TEMP/dmg" "$RUNNER_TEMP/sparkle-updates"
-          cp -R "$RUNNER_TEMP/install/WagleWaglePaint.app" "$RUNNER_TEMP/dmg/"
+          cp -R "$RUNNER_TEMP/install/Ugurugu.app" "$RUNNER_TEMP/dmg/"
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
           hdiutil create \
-            -volname WagleWaglePaint \
+            -volname Ugurugu \
             -srcfolder "$RUNNER_TEMP/dmg" \
             -format UDZO \
             -ov \
-            "artifacts/WagleWaglePaint-macOS-${architecture}.dmg"
-          archive="WagleWaglePaint-macOS-${architecture}.zip"
+            "artifacts/Ugurugu-macOS-${architecture}.dmg"
+          archive="Ugurugu-macOS-${architecture}.zip"
           ditto \
             -c \
             -k \
             --sequesterRsrc \
             --keepParent \
-            "$RUNNER_TEMP/install/WagleWaglePaint.app" \
+            "$RUNNER_TEMP/install/Ugurugu.app" \
             "$RUNNER_TEMP/sparkle-updates/$archive"
-          out/build/macos-distribution/wobblepaint_render_release_notes \
+          out/build/macos-distribution/ugurugu_render_release_notes \
             "release-notes/${version}.en.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.html"
-          out/build/macos-distribution/wobblepaint_render_release_notes \
+          out/build/macos-distribution/ugurugu_render_release_notes \
             "release-notes/${version}.ko.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ko.html"
-          out/build/macos-distribution/wobblepaint_render_release_notes \
+          out/build/macos-distribution/ugurugu_render_release_notes \
             "release-notes/${version}.ja.md" \
             "$RUNNER_TEMP/sparkle-updates/${archive%.zip}.ja.html"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
@@ -224,7 +224,7 @@ jobs:
           dmg=$(find artifacts \
             -maxdepth 1 \
             -type f \
-            -name 'WagleWaglePaint-macOS-*.dmg' \
+            -name 'Ugurugu-macOS-*.dmg' \
             -print -quit)
           if [[ -z "$dmg" ]]; then
             echo "Missing macOS DMG"
@@ -255,9 +255,9 @@ jobs:
           printf '%s' "$SPARKLE_PRIVATE_KEY" | \
             out/build/macos-distribution/_deps/sparkle-src/bin/generate_appcast \
               --ed-key-file - \
-              --download-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
-              --release-notes-url-prefix "https://github.com/nyattic/WagleWaglePaint/releases/download/${RELEASE_TAG}/" \
-              --link "https://github.com/nyattic/WagleWaglePaint" \
+              --download-url-prefix "https://github.com/nyattic/Ugurugu/releases/download/${RELEASE_TAG}/" \
+              --release-notes-url-prefix "https://github.com/nyattic/Ugurugu/releases/download/${RELEASE_TAG}/" \
+              --link "https://github.com/nyattic/Ugurugu" \
               --embed-release-notes \
               --maximum-versions 1 \
               --maximum-deltas 0 \
@@ -281,15 +281,15 @@ jobs:
             mkdir -p "$smoke_root/MacOS"
             ln -s "$application/Contents/Frameworks" "$smoke_root/Frameworks"
             cp \
-              out/build/macos-distribution/wobblepaint_package_smoke \
+              out/build/macos-distribution/ugurugu_package_smoke \
               "$smoke_root/MacOS/"
-            "$smoke_root/MacOS/wobblepaint_package_smoke" "$application"
+            "$smoke_root/MacOS/ugurugu_package_smoke" "$application"
             codesign --verify --deep --strict "$application"
             xcrun stapler validate "$application"
             spctl --assess --type execute --verbose=4 "$application"
           }
 
-          dmg=$(find artifacts -maxdepth 1 -type f -name 'WagleWaglePaint-macOS-*.dmg' -print -quit)
+          dmg=$(find artifacts -maxdepth 1 -type f -name 'Ugurugu-macOS-*.dmg' -print -quit)
           if [[ -z "$dmg" ]]; then
             echo "Missing macOS DMG"
             exit 1
@@ -304,7 +304,7 @@ jobs:
             -mountpoint "$mount_root"
           trap 'hdiutil detach "$mount_root"' EXIT
           verify_application \
-            "$mount_root/WagleWaglePaint.app" \
+            "$mount_root/Ugurugu.app" \
             "$RUNNER_TEMP/dmg-package-smoke"
           hdiutil detach "$mount_root"
           trap - EXIT
@@ -318,12 +318,12 @@ jobs:
           mkdir -p "$zip_root"
           ditto -x -k "$archive" "$zip_root"
           verify_application \
-            "$zip_root/WagleWaglePaint.app" \
+            "$zip_root/Ugurugu.app" \
             "$RUNNER_TEMP/zip-package-smoke"
 
       - name: Verify macOS compatibility
         run: |
-          application="$RUNNER_TEMP/install/WagleWaglePaint.app"
+          application="$RUNNER_TEMP/install/Ugurugu.app"
           cache="out/build/macos-distribution/CMakeCache.txt"
           minimum_target=$(sed -n 's/^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]*=//p' "$cache")
           if [[ ! "$minimum_target" =~ ^[0-9]+([.][0-9]+){0,2}$ ]]; then
@@ -403,7 +403,7 @@ jobs:
 
       - name: Create macOS release metadata
         run: |
-          version=$(sed -nE 's/project\(WagleWaglePaint VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          version=$(sed -nE 's/project\(Ugurugu VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
           architecture=$(uname -m)
           minimum_target=$(sed -n 's/^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]*=//p' out/build/macos-distribution/CMakeCache.txt)
           cmake_version=$(cmake --version | awk 'NR == 1 { print $3 }')
@@ -413,9 +413,9 @@ jobs:
             exit 1
           fi
           compiler_version=$("$compiler_path" --version | awk 'NR == 1')
-          metadata="artifacts/WagleWaglePaint-macOS-${architecture}-build-metadata.txt"
+          metadata="artifacts/Ugurugu-macOS-${architecture}-build-metadata.txt"
           {
-            printf 'project=WagleWaglePaint\n'
+            printf 'project=Ugurugu\n'
             printf 'version=%s\n' "$version"
             printf 'git_commit=%s\n' "$GITHUB_SHA"
             printf 'architecture=%s\n' "$architecture"
@@ -484,13 +484,13 @@ jobs:
         run: |
           cmake --install out/build/windows-distribution `
             --config Release `
-            --prefix "$env:RUNNER_TEMP\WagleWaglePaint"
+            --prefix "$env:RUNNER_TEMP\Ugurugu"
 
       - name: Package with Velopack
         shell: pwsh
         run: |
           $cmake = Get-Content CMakeLists.txt -Raw
-          if ($cmake -notmatch 'project\(WagleWaglePaint VERSION ([0-9.]+)') {
+          if ($cmake -notmatch 'project\(Ugurugu VERSION ([0-9.]+)') {
             throw "Could not determine application version"
           }
           $version = $Matches[1]
@@ -509,13 +509,13 @@ jobs:
           Set-Content -Path $releaseNotes -Value ($sections -join "`n")
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           vpk pack `
-            --packId WagleWaglePaint `
+            --packId Ugurugu `
             --packVersion $version `
-            --packDir "$env:RUNNER_TEMP\WagleWaglePaint" `
-            --mainExe WagleWaglePaint.exe `
-            --packTitle WagleWaglePaint `
+            --packDir "$env:RUNNER_TEMP\Ugurugu" `
+            --mainExe Ugurugu.exe `
+            --packTitle Ugurugu `
             --packAuthors nyattic `
-            --icon resources/icons/WobblePaint.ico `
+            --icon resources/icons/Ugurugu.ico `
             --releaseNotes $releaseNotes `
             --runtime win10-x64 `
             --channel win `
@@ -523,13 +523,13 @@ jobs:
             --noPortable true `
             --outputDir artifacts
           Rename-Item `
-            -Path "artifacts\WagleWaglePaint-win-Setup.exe" `
-            -NewName "WagleWaglePaint-Windows-x64-Setup.exe"
+            -Path "artifacts\Ugurugu-win-Setup.exe" `
+            -NewName "Ugurugu-Windows-x64-Setup.exe"
 
       - name: Verify final Windows installer
         shell: pwsh
         run: |
-          $setup = Resolve-Path "artifacts\WagleWaglePaint-Windows-x64-Setup.exe"
+          $setup = Resolve-Path "artifacts\Ugurugu-Windows-x64-Setup.exe"
           $installRoot = Join-Path $env:RUNNER_TEMP "velopack-smoke"
           $installer = Start-Process `
             -FilePath $setup `
@@ -541,7 +541,7 @@ jobs:
           }
 
           $current = Join-Path $installRoot "current"
-          $application = Join-Path $current "WagleWaglePaint.exe"
+          $application = Join-Path $current "Ugurugu.exe"
           $update = Join-Path $installRoot "Update.exe"
           $version = Join-Path $current "sq.version"
           foreach ($path in @($current, $application, $update, $version)) {
@@ -567,7 +567,7 @@ jobs:
         shell: pwsh
         run: |
           $cmake = Get-Content CMakeLists.txt -Raw
-          if ($cmake -notmatch 'project\(WagleWaglePaint VERSION ([0-9.]+)') {
+          if ($cmake -notmatch 'project\(Ugurugu VERSION ([0-9.]+)') {
             throw "Could not determine application version"
           }
           $version = $Matches[1]
@@ -595,7 +595,7 @@ jobs:
             throw "Could not read CMake compiler metadata"
           }
           $metadata = @(
-            "project=WagleWaglePaint"
+            "project=Ugurugu"
             "version=$version"
             "git_commit=$env:GITHUB_SHA"
             "architecture=x64"
@@ -604,7 +604,7 @@ jobs:
             "cmake_version=$cmakeVersion"
             "compiler=$compilerId $compilerVersion"
           )
-          $metadataPath = Join-Path artifacts "WagleWaglePaint-Windows-x64-build-metadata.txt"
+          $metadataPath = Join-Path artifacts "Ugurugu-Windows-x64-build-metadata.txt"
           Set-Content -Path $metadataPath -Value $metadata -Encoding utf8
           $checksums = foreach ($artifact in (Get-ChildItem artifacts -File | Sort-Object Name)) {
             $hash = (Get-FileHash -Algorithm SHA256 $artifact.FullName).Hash.ToLowerInvariant()
@@ -663,6 +663,6 @@ jobs:
 
       - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
         with:
-          name: WagleWaglePaint ${{ github.ref_name }}
+          name: Ugurugu ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.path }}
           files: artifacts/*

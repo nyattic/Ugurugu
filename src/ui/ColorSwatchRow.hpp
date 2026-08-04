@@ -7,7 +7,7 @@
 
 class QToolButton;
 
-namespace wobble
+namespace ugurugu
 {
 
 class ColorSwatchRow final : public QWidget

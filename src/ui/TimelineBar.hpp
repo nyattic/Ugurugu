@@ -6,7 +6,7 @@ class QEvent;
 class QLabel;
 class QSpinBox;
 
-namespace wobble
+namespace ugurugu
 {
 
 class CanvasWidget;

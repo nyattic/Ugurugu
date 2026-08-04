@@ -6,7 +6,7 @@
 #include <QToolButton>
 #include <QVariantAnimation>
 
-namespace wobble
+namespace ugurugu
 {
 
 class ToolPopover;

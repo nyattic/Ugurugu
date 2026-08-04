@@ -20,7 +20,7 @@
 #include <cmath>
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 using namespace canvas_detail;

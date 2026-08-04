@@ -10,7 +10,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
-namespace wobble
+namespace ugurugu
 {
 
 EraserPopoverPanel::EraserPopoverPanel(CanvasWidget *canvas, QWidget *parent)

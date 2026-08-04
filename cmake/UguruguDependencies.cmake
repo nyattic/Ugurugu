@@ -12,18 +12,18 @@ find_package(
 )
 
 set(
-    WOBBLEPAINT_DISTRIBUTION_QT_VERSION
+    UGURUGU_DISTRIBUTION_QT_VERSION
     ""
     CACHE STRING
     "Exact Qt version required for distribution builds"
 )
-if(WOBBLEPAINT_DISTRIBUTION_QT_VERSION
-    AND NOT Qt6_VERSION VERSION_EQUAL WOBBLEPAINT_DISTRIBUTION_QT_VERSION
+if(UGURUGU_DISTRIBUTION_QT_VERSION
+    AND NOT Qt6_VERSION VERSION_EQUAL UGURUGU_DISTRIBUTION_QT_VERSION
 )
     message(
         FATAL_ERROR
         "Distribution builds require Qt "
-        "${WOBBLEPAINT_DISTRIBUTION_QT_VERSION}, found ${Qt6_VERSION}"
+        "${UGURUGU_DISTRIBUTION_QT_VERSION}, found ${Qt6_VERSION}"
     )
 endif()
 
@@ -64,25 +64,25 @@ FetchContent_Declare(
     "SHA256=93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
-set(WOBBLEPAINT_AUTOMOC "${CMAKE_AUTOMOC}")
-set(WOBBLEPAINT_AUTOUIC "${CMAKE_AUTOUIC}")
-set(WOBBLEPAINT_AUTORCC "${CMAKE_AUTORCC}")
+set(UGURUGU_AUTOMOC "${CMAKE_AUTOMOC}")
+set(UGURUGU_AUTOUIC "${CMAKE_AUTOUIC}")
+set(UGURUGU_AUTORCC "${CMAKE_AUTORCC}")
 set(CMAKE_AUTOMOC OFF)
 set(CMAKE_AUTOUIC OFF)
 set(CMAKE_AUTORCC OFF)
 FetchContent_MakeAvailable(webp)
-set(CMAKE_AUTOMOC "${WOBBLEPAINT_AUTOMOC}")
-set(CMAKE_AUTOUIC "${WOBBLEPAINT_AUTOUIC}")
-set(CMAKE_AUTORCC "${WOBBLEPAINT_AUTORCC}")
-unset(WOBBLEPAINT_AUTOMOC)
-unset(WOBBLEPAINT_AUTOUIC)
-unset(WOBBLEPAINT_AUTORCC)
+set(CMAKE_AUTOMOC "${UGURUGU_AUTOMOC}")
+set(CMAKE_AUTOUIC "${UGURUGU_AUTOUIC}")
+set(CMAKE_AUTORCC "${UGURUGU_AUTORCC}")
+unset(UGURUGU_AUTOMOC)
+unset(UGURUGU_AUTOUIC)
+unset(UGURUGU_AUTORCC)
 set_property(DIRECTORY "${webp_SOURCE_DIR}" PROPERTY EXCLUDE_FROM_ALL TRUE)
 
 qt_standard_project_setup()
 
-set(WAGLEWAGLEPAINT_UPDATE_SOURCE src/app/UpdateControllerStub.cpp)
-set(WAGLEWAGLEPAINT_UPDATE_LIBRARIES)
+set(UGURUGU_UPDATE_SOURCE src/app/UpdateControllerStub.cpp)
+set(UGURUGU_UPDATE_LIBRARIES)
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -96,20 +96,20 @@ if(APPLE)
     )
     FetchContent_MakeAvailable(sparkle)
     find_library(
-        WAGLEWAGLEPAINT_SPARKLE_FRAMEWORK
+        UGURUGU_SPARKLE_FRAMEWORK
         Sparkle
         PATHS "${sparkle_SOURCE_DIR}"
         NO_DEFAULT_PATH
         REQUIRED
     )
     set(
-        WAGLEWAGLEPAINT_UPDATE_SOURCE
+        UGURUGU_UPDATE_SOURCE
         src/app/UpdateControllerMac.mm
     )
     list(
         APPEND
-        WAGLEWAGLEPAINT_UPDATE_LIBRARIES
-        "${WAGLEWAGLEPAINT_SPARKLE_FRAMEWORK}"
+        UGURUGU_UPDATE_LIBRARIES
+        "${UGURUGU_SPARKLE_FRAMEWORK}"
     )
 elseif(WIN32)
     FetchContent_Declare(
@@ -133,12 +133,12 @@ elseif(WIN32)
         "${velopack_SOURCE_DIR}/include"
     )
     set(
-        WAGLEWAGLEPAINT_UPDATE_SOURCE
+        UGURUGU_UPDATE_SOURCE
         src/app/UpdateControllerWindows.cpp
     )
     list(
         APPEND
-        WAGLEWAGLEPAINT_UPDATE_LIBRARIES
+        UGURUGU_UPDATE_LIBRARIES
         Qt6::Concurrent
         velopack_libc
     )

@@ -4,7 +4,7 @@
 
 #include <QPainter>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

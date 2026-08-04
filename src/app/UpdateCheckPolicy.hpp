@@ -2,7 +2,7 @@
 
 #include <QDateTime>
 
-namespace wobble
+namespace ugurugu
 {
 
 class UpdateCheckPolicy final

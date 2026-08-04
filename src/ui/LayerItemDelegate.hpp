@@ -2,7 +2,7 @@
 
 #include <QStyledItemDelegate>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace LayerItemRoles

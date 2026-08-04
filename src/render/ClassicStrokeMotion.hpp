@@ -2,7 +2,7 @@
 
 #include "document/Document.hpp"
 
-namespace wobble::ClassicStrokeMotion
+namespace ugurugu::ClassicStrokeMotion
 {
 
 qreal displacementAmplitude(qreal strokeWidth, qreal wobbleAmount);

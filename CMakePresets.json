@@ -54,7 +54,7 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "WOBBLEPAINT_ENABLE_SANITIZERS": "ON"
+        "UGURUGU_ENABLE_SANITIZERS": "ON"
       }
     },
     {
@@ -62,7 +62,7 @@
       "inherits": "macos-release",
       "displayName": "macOS Distribution",
       "cacheVariables": {
-        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.11.1"
+        "UGURUGU_DISTRIBUTION_QT_VERSION": "6.11.1"
       }
     },
     {
@@ -70,7 +70,7 @@
       "inherits": "macos-debug",
       "displayName": "macOS Coverage",
       "cacheVariables": {
-        "WOBBLEPAINT_ENABLE_COVERAGE": "ON"
+        "UGURUGU_ENABLE_COVERAGE": "ON"
       }
     },
     {
@@ -110,7 +110,7 @@
       "inherits": "windows-release",
       "displayName": "Windows Distribution",
       "cacheVariables": {
-        "WOBBLEPAINT_DISTRIBUTION_QT_VERSION": "6.11.1"
+        "UGURUGU_DISTRIBUTION_QT_VERSION": "6.11.1"
       }
     }
   ],
@@ -188,7 +188,7 @@
       "name": "macos-coverage",
       "configurePreset": "macos-coverage",
       "environment": {
-        "LLVM_PROFILE_FILE": "${sourceDir}/out/build/macos-coverage/profiles/wobble-%p-%m.profraw"
+        "LLVM_PROFILE_FILE": "${sourceDir}/out/build/macos-coverage/profiles/ugurugu-%p-%m.profraw"
       },
       "output": {
         "outputOnFailure": true

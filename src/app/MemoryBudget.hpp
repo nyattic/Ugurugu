@@ -2,7 +2,7 @@
 
 #include <QtTypes>
 
-namespace wobble
+namespace ugurugu
 {
 
 // The large in-memory subsystems share one documented process budget. Export

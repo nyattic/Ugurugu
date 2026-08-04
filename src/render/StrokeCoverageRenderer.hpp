@@ -2,7 +2,7 @@
 
 #include "render/RenderEngine.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class StrokeCoverageRenderer final

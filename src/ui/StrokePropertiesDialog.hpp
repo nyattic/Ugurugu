@@ -10,7 +10,7 @@ class QDialogButtonBox;
 class QDoubleSpinBox;
 class QPushButton;
 
-namespace wobble
+namespace ugurugu
 {
 
 class StrokePropertiesDialog final : public QDialog

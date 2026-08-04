@@ -1,7 +1,7 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class UiSessionTests final : public QObject
@@ -32,17 +32,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
+            directory.filePath(QStringLiteral("requested.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(173, 109));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -89,12 +89,12 @@ private slots:
     void rejectsReservedRecoveryProjectPaths()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         MainWindow window;
         CanvasWidget *canvas = window.findChild<CanvasWidget *>();
@@ -161,11 +161,11 @@ private slots:
     void capturesAutosaveSnapshotWhileEditingContinues()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
-            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
 
         MainWindow window;
         DocumentController &controller =
@@ -195,12 +195,12 @@ private slots:
     void dropsQueuedAutosaveAfterDiscard()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         MainWindow window;
         DocumentController &controller =
@@ -219,12 +219,12 @@ private slots:
     void flushesPendingAutosaveOnWindowTeardown()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         {
             MainWindow window;
@@ -246,12 +246,12 @@ private slots:
     void treatsRequestedRecoveryPathAsRecoveryOnly()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(171, 105));
         QString error;
@@ -303,15 +303,15 @@ private slots:
     void cancelingRecoveredSaveAsPreservesSourceAndRecovery()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString sourcePath =
-            directory.filePath(QStringLiteral("source.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("source.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(179, 107));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -391,17 +391,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
+            directory.filePath(QStringLiteral("requested.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(181, 113));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -441,8 +441,8 @@ private slots:
 
         const QStringList preservedFiles =
             QDir(directory.path())
-                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
-                    QDir::Files);
+                .entryList(
+                    {QStringLiteral("recovery-preserved-*.ugu")}, QDir::Files);
         QCOMPARE(preservedFiles.size(), 1);
         const QString preservedPath =
             directory.filePath(preservedFiles.first());
@@ -486,17 +486,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
+            directory.filePath(QStringLiteral("requested.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(191, 127));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -540,17 +540,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
+            directory.filePath(QStringLiteral("requested.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(193, 131));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -590,8 +590,8 @@ private slots:
         QVERIFY(!settings.contains(recoveryKey));
         const QStringList preservedFiles =
             QDir(directory.path())
-                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
-                    QDir::Files);
+                .entryList(
+                    {QStringLiteral("recovery-preserved-*.ugu")}, QDir::Files);
         QVERIFY(preservedFiles.isEmpty());
     }
 
@@ -600,15 +600,15 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(199, 137));
         QString error;
@@ -637,12 +637,12 @@ private slots:
     void keepsRecoveryWhenRecoveryTransitionFails()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(217, 159));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -683,14 +683,14 @@ private slots:
     void preservesArchivedRecoveryWhenRequestedTransitionFails()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("requested.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(219, 161));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -732,8 +732,8 @@ private slots:
         QVERIFY(!QFileInfo::exists(recoveryPath));
         const QStringList preservedFiles =
             QDir(directory.path())
-                .entryList({QStringLiteral("recovery-preserved-*.wagle")},
-                    QDir::Files);
+                .entryList(
+                    {QStringLiteral("recovery-preserved-*.ugu")}, QDir::Files);
         QCOMPARE(preservedFiles.size(), 1);
         QFile preservedFile(directory.filePath(preservedFiles.first()));
         QVERIFY(preservedFile.open(QIODevice::ReadOnly));
@@ -745,17 +745,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("requested.wagle"));
+            directory.filePath(QStringLiteral("requested.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(223, 163));
         Document requestedDocument = Document::createDefault(QSize(277, 167));
@@ -847,15 +847,15 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(211, 157));
         QString error;
@@ -883,17 +883,17 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryValueGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
 
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
+            directory.filePath(QStringLiteral("recovery.ugu"));
         const QString requestedPath =
-            directory.filePath(QStringLiteral("invalid-request.wagle"));
+            directory.filePath(QStringLiteral("invalid-request.ugu"));
         const QString recoverySourcePath =
-            directory.filePath(QStringLiteral("original-project.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("original-project.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         Document recoveryDocument = Document::createDefault(QSize(197, 149));
         recoveryDocument.layers.first().name = QStringLiteral("Recovered");
@@ -981,12 +981,12 @@ private slots:
         const QString recoveryKey = QStringLiteral("recovery/sourcePath");
         SettingValueGuard recoveryGuard(recoveryKey);
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir recoveryDirectory;
         QVERIFY(recoveryDirectory.isValid());
         const QString recoveryPath =
-            recoveryDirectory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            recoveryDirectory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
 
         MainWindow window;
         window.resize(1000, 680);

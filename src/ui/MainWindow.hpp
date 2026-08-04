@@ -21,7 +21,7 @@ class QProgressDialog;
 class QSlider;
 class QSpinBox;
 
-namespace wobble
+namespace ugurugu
 {
 
 class CanvasWidget;

@@ -3,7 +3,7 @@
 #include <QPointF>
 #include <QtGlobal>
 
-namespace wobble
+namespace ugurugu
 {
 
 class StrokeStabilizer final

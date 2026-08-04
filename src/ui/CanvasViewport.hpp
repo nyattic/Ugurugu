@@ -10,7 +10,7 @@
 
 class QPainter;
 
-namespace wobble
+namespace ugurugu
 {
 namespace canvas_detail
 {

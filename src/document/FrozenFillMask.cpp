@@ -10,7 +10,7 @@
 #include <cmath>
 #include <iterator>
 
-namespace wobble::FrozenFillMask
+namespace ugurugu::FrozenFillMask
 {
 
 namespace

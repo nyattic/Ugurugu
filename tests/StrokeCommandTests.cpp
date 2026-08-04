@@ -1,7 +1,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class StrokeCommandTests final : public QObject

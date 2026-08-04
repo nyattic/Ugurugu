@@ -1,4 +1,4 @@
-# Building WagleWaglePaint
+# Building Ugurugu
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Configure, build, and create a deployable app:
 cmake --preset macos-release
 cmake --build --preset macos-release
 cmake --install out/build/macos-release --prefix out/install/macos-release
-open out/install/macos-release/WagleWaglePaint.app
+open out/install/macos-release/Ugurugu.app
 ```
 
 The supported deployment target is macOS 14 or later. Use the official
@@ -47,7 +47,7 @@ Configure, build, and create a deployable application directory:
 cmake --preset windows-release "-DCMAKE_PREFIX_PATH=C:\Qt\6.11.1\msvc2022_64"
 cmake --build --preset windows-release
 cmake --install out/build/windows-release --config Release --prefix out/install/windows-release
-.\out\install\windows-release\WagleWaglePaint.exe
+.\out\install\windows-release\Ugurugu.exe
 ```
 
 ## Tests

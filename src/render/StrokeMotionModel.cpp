@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace wobble::StrokeMotionModel
+namespace ugurugu::StrokeMotionModel
 {
 
 namespace

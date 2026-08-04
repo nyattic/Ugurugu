@@ -17,7 +17,7 @@ class QComboBox;
 class QSlider;
 class QToolButton;
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentController;

@@ -15,7 +15,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -357,7 +357,7 @@ private slots:
         QCOMPARE(reader.size(), document.size);
         QCOMPARE(reader.imageCount(), document.animationFrames);
 
-        const QString outputPath = qEnvironmentVariable("WOBBLEPAINT_TEST_GIF");
+        const QString outputPath = qEnvironmentVariable("UGURUGU_TEST_GIF");
         if (!outputPath.isEmpty())
         {
             QVERIFY2(GifWriter::write(outputPath, frames, 4, &error),

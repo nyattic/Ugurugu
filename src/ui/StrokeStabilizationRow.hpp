@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-namespace wobble
+namespace ugurugu
 {
 
 class CanvasWidget;

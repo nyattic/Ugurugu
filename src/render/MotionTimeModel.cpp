@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble::MotionTimeModel
+namespace ugurugu::MotionTimeModel
 {
 
 namespace

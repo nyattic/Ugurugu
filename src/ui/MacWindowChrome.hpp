@@ -2,7 +2,7 @@
 
 class QWidget;
 
-namespace wobble
+namespace ugurugu
 {
 
 void applySeamlessTitleBar(QWidget *window);

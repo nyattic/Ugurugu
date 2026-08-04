@@ -5,7 +5,7 @@
 #include <QSize>
 #include <QVector>
 
-namespace wobble
+namespace ugurugu
 {
 
 struct LayerCompositionMemoryEstimate final

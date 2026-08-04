@@ -10,7 +10,7 @@ class QComboBox;
 class QDialogButtonBox;
 class QLabel;
 
-namespace wobble
+namespace ugurugu
 {
 
 // Export options for one animated image.

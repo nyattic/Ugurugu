@@ -1,7 +1,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentResizeTests final : public QObject
@@ -78,7 +78,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString filePath =
-            directory.filePath(QStringLiteral("resized.wagle"));
+            directory.filePath(QStringLiteral("resized.ugu"));
         QString error;
         QVERIFY2(
             DocumentSerializer::save(filePath, controller.document(), &error),
@@ -191,7 +191,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("off-canvas.wagle"));
+            directory.filePath(QStringLiteral("off-canvas.ugu"));
         QVERIFY2(DocumentSerializer::save(path, controller.document(), &error),
             qPrintable(error));
         const std::optional<Document> loadedFile =

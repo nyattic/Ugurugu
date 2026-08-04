@@ -1,7 +1,7 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class SerializationBudgetTests final : public QObject
@@ -12,8 +12,8 @@ private slots:
     void loadsBundledExample()
     {
         QString error;
-        const QString path = QStringLiteral(WOBBLEPAINT_SOURCE_DIR)
-                             + QStringLiteral("/examples/Wave.wagle");
+        const QString path = QStringLiteral(UGURUGU_SOURCE_DIR)
+                             + QStringLiteral("/examples/Wave.ugu");
         const std::optional<Document> document =
             DocumentSerializer::load(path, &error);
         QVERIFY2(document.has_value(), qPrintable(error));
@@ -28,8 +28,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString path =
-            directory.filePath(QStringLiteral("project.wagle"));
+        const QString path = directory.filePath(QStringLiteral("project.ugu"));
         Document source = Document::createDefault(QSize(222, 111));
         source.wobbleAmount = 3.4;
 
@@ -128,10 +127,11 @@ private slots:
         metadata.insert(
             QStringLiteral("revision"), QStringLiteral("9007199254740993"));
         QJsonObject additionalRootFields;
-        additionalRootFields.insert(QStringLiteral("wagleRecovery"), metadata);
+        additionalRootFields.insert(
+            QStringLiteral("uguruguRecovery"), metadata);
 
         QJsonObject expectedRoot = QJsonDocument::fromJson(base).object();
-        expectedRoot.insert(QStringLiteral("wagleRecovery"), metadata);
+        expectedRoot.insert(QStringLiteral("uguruguRecovery"), metadata);
         const QByteArray expected =
             QJsonDocument(expectedRoot).toJson(QJsonDocument::Compact);
         const QByteArray extended =
@@ -989,7 +989,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("maximum-points.wagle"));
+            directory.filePath(QStringLiteral("maximum-points.ugu"));
         Document source = Document::createDefault(QSize(4096, 4096));
         const StrokePoint point{
             QPointF(1234.56789012345, 3987.65432109876), 0.543210987654321};
@@ -1021,7 +1021,7 @@ private slots:
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString path = directory.filePath(QStringLiteral("unsafe.wagle"));
+        const QString path = directory.filePath(QStringLiteral("unsafe.ugu"));
 
         Document document = Document::createDefault(QSize(100, 100));
         Stroke stroke;
@@ -1050,7 +1050,7 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString path =
-            directory.filePath(QStringLiteral("oversized.wagle"));
+            directory.filePath(QStringLiteral("oversized.ugu"));
         QFile file(path);
         QVERIFY(file.open(QIODevice::WriteOnly));
         QVERIFY(file.resize(DocumentLimits::maximumProjectBytes + 1));

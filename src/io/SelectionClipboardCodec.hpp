@@ -6,19 +6,22 @@
 #include <QCoreApplication>
 #include <QImage>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
-namespace wobble
+class QMimeData;
+
+namespace ugurugu
 {
 
 // Clipboard payload for a masked layer selection. The payload is a complete
-// single-layer document in the regular `.wagle` JSON schema, so pasting
+// single-layer document in the regular project JSON schema, so pasting
 // reuses the serializer's full validation, mask round-trip and schema
 // version checks instead of introducing a second wire format.
 class SelectionClipboardCodec
 {
-    Q_DECLARE_TR_FUNCTIONS(wobble::SelectionClipboardCodec)
+    Q_DECLARE_TR_FUNCTIONS(ugurugu::SelectionClipboardCodec)
 
 public:
     struct Copy
@@ -39,6 +42,10 @@ public:
     };
 
     static QString mimeType();
+    static QStringList legacyMimeTypes();
+    // The type to read the payload from, or an empty string when mimeData
+    // carries neither the current nor a legacy selection.
+    static QString availableMimeType(const QMimeData &mimeData);
     static std::optional<Copy> makeCopy(const Document &document,
         const QUuid &layerId,
         const QImage &selectionMask,

@@ -1,7 +1,7 @@
 #include "io/serializer/DocumentValidation.hpp"
 
 // Messages keep using DocumentSerializer::tr so their translation context
-// stays wobble::DocumentSerializer, matching the existing i18n catalogues.
+// stays ugurugu::DocumentSerializer, matching the existing i18n catalogues.
 #include "document/DocumentLimits.hpp"
 #include "document/DocumentOperations.hpp"
 #include "document/LayerHierarchy.hpp"
@@ -18,7 +18,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 namespace serializer_detail
 {

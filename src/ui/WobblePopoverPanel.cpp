@@ -15,7 +15,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

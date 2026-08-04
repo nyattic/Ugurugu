@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="resources/icons/WobblePaint.png" width="128" alt="WagleWaglePaint 앱 아이콘">
+  <img src="resources/icons/Ugurugu.png" width="128" alt="Ugurugu 앱 아이콘">
 </p>
 
-# WagleWaglePaint
+# Ugurugu
 
-[![Latest Release](https://img.shields.io/github/v/release/nyattic/WagleWaglePaint?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases/latest)
-[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FWagleWaglePaint%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/WagleWaglePaint/releases)
+[![Latest Release](https://img.shields.io/github/v/release/nyattic/Ugurugu?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/Ugurugu/releases/latest)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FUgurugu%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/Ugurugu/releases)
 ![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
@@ -21,27 +21,27 @@
 
 > [!NOTE]
 > 문제가 생겼다면
-> [GitHub 이슈](https://github.com/nyattic/WagleWaglePaint/issues)에
-> 어떤 작업을 했는지와 실제로 일어난 일을 적어 주세요. 가능하면 `.wagle`
+> [GitHub 이슈](https://github.com/nyattic/Ugurugu/issues)에
+> 어떤 작업을 했는지와 실제로 일어난 일을 적어 주세요. 가능하면 `.ugu`
 > 파일도 함께 보내 주시면 원인을 찾는 데 큰 도움이 됩니다.
 
 ## 다운로드와 설치
 
 | 플랫폼 | 지원 환경 | 다운로드 |
 | --- | --- | --- |
-| Windows | Windows 10 이상, 64비트 | [Windows 설치 파일](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-Windows-x64-Setup.exe) |
-| macOS | macOS 14 이상, Apple Silicon | [macOS 설치 파일](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-macOS-arm64.dmg) |
+| Windows | Windows 10 이상, 64비트 | [Windows 설치 파일](https://github.com/nyattic/Ugurugu/releases/latest/download/Ugurugu-Windows-x64-Setup.exe) |
+| macOS | macOS 14 이상, Apple Silicon | [macOS 설치 파일](https://github.com/nyattic/Ugurugu/releases/latest/download/Ugurugu-macOS-arm64.dmg) |
 
 ### Windows
 
 다운로드한 Setup 파일을 실행하세요. Windows에서 출처 확인 경고가 나오면
 **추가 정보 → 실행**을 누르면 됩니다. 안전을 위해 반드시 공식
-[Releases 페이지](https://github.com/nyattic/WagleWaglePaint/releases/latest)에서
+[Releases 페이지](https://github.com/nyattic/Ugurugu/releases/latest)에서
 받은 파일만 사용하세요.
 
 ### macOS
 
-DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요. macOS용
+DMG를 열고 Ugurugu를 Applications 폴더로 드래그하세요. macOS용
 앱은 Apple의 확인을 거쳐 배포됩니다.
 
 릴리즈 페이지에 보이는 다른 파일은 자동 업데이트에 필요한 파일입니다.
@@ -51,7 +51,7 @@ DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요. macO
 
 1. 앱을 열고 새 캔버스를 만들거나 기존 그림을 엽니다.
 2. 왼쪽에서 브러시를 고르고 선을 그립니다.
-3. 와글거림 버튼에서 움직임을 고른 뒤 `P`를 눌러 재생합니다.
+3. 우글거림 버튼에서 움직임을 고른 뒤 `P`를 눌러 재생합니다.
 4. **파일** 메뉴에서 움직이는 GIF·WebP 또는 PNG·JPG 이미지로 내보냅니다.
 
 `F1`을 누르면 언제든 앱 안에서 간단한 사용법을 볼 수 있습니다.
@@ -89,11 +89,12 @@ DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요. macO
 
 ### 저장하고 공유하기
 
-- 작업 파일은 `.wagle`로 저장되며 레이어와 움직임 설정을 그대로 보관합니다.
+- 작업 파일은 `.ugu`로 저장되며 레이어와 움직임 설정을 그대로 보관합니다.
+- 이전 버전에서 만든 `.wagle`과 `.wobble` 파일도 그대로 열립니다.
 - 움직이는 GIF와 WebP, 한 장의 PNG와 JPG로 내보낼 수 있습니다.
 - 투명한 배경을 사용하면 스티커처럼 배경 없는 이미지와 애니메이션을 만들 수
   있습니다.
-- 자주 쓰는 브러시·색칠·와글거림 설정은 `.wwpreset` 파일로 저장해 다른
+- 자주 쓰는 브러시·색칠·우글거림 설정은 `.wwpreset` 파일로 저장해 다른
   컴퓨터에서도 불러올 수 있습니다.
 - 비정상적으로 종료되어도 다음 실행 때 작업을 복구할 수 있습니다.
 
@@ -108,9 +109,9 @@ DMG를 열고 WagleWaglePaint를 Applications 폴더로 드래그하세요. macO
 
 WiggleWiggleTool 10에서 저장한 `.wawa` 파일을 **파일 → 열기**로 불러올 수
 있습니다. 원본은 건드리지 않고 새 작업으로 열리며, 처음 저장할 때 같은
-이름의 `.wagle` 파일을 제안합니다.
+이름의 `.ugu` 파일을 제안합니다.
 
-두 앱의 표현 방식이 달라 일부 와글거림, 에어브러시, 채워진 모양은 조금
+두 앱의 표현 방식이 달라 일부 우글거림, 에어브러시, 채워진 모양은 조금
 다르게 보일 수 있습니다. 불러오기가 끝나면 바뀌거나 가져오지 못한 항목을
 앱이 알려 줍니다.
 
@@ -138,7 +139,7 @@ WiggleWiggleTool 10에서 저장한 `.wawa` 파일을 **파일 → 열기**로 �
 
 툴바의 톱니바퀴 버튼으로 언어, 화면 색상, 그리기 동작, 기본 저장 폴더,
 단축키를 바꿀 수 있습니다. Windows에서는 **편집 → 설정**, macOS에서는
-**WagleWaglePaint → 설정**에서도 열 수 있습니다.
+**Ugurugu → 설정**에서도 열 수 있습니다.
 
 앱은 실행할 때 새 버전이 있는지 확인합니다. **도움말 → 업데이트 확인**을
 누르면 언제든 직접 확인할 수 있습니다.
@@ -154,7 +155,7 @@ WiggleWiggleTool 10에서 저장한 `.wawa` 파일을 **파일 → 열기**로 �
 
 ## 라이선스
 
-WagleWaglePaint는 [GNU General Public License v3.0](LICENSE)으로
+Ugurugu는 [GNU General Public License v3.0](LICENSE)으로
 배포됩니다. 포함된 글꼴과 라이브러리의 자세한 저작권 및 이용 조건은
 [서드파티 고지](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.
 

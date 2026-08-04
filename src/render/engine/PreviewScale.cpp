@@ -1,6 +1,6 @@
 #include "render/engine/PreviewScale.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 namespace render_detail
 {

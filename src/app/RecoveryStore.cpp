@@ -15,7 +15,7 @@
 
 #include <filesystem>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace
@@ -61,8 +61,8 @@ QString uniqueSiblingPath(const QString &source, const QString &label)
         QStringLiteral("yyyyMMdd-HHmmss-zzz"));
     const QString identifier =
         QUuid::createUuid().toString(QUuid::WithoutBraces);
-    return sourceInfo.dir().filePath(QStringLiteral("recovery-%1-%2-%3.wagle")
-            .arg(label, stamp, identifier));
+    return sourceInfo.dir().filePath(
+        QStringLiteral("recovery-%1-%2-%3.ugu").arg(label, stamp, identifier));
 }
 
 bool validMetadata(const RecoveryStore::Metadata &metadata)
@@ -88,7 +88,7 @@ QJsonObject metadataToJson(const RecoveryStore::Metadata &metadata)
 QJsonObject recoveryRootFields(const RecoveryStore::Metadata &metadata)
 {
     QJsonObject fields;
-    fields.insert(QStringLiteral("wagleRecovery"), metadataToJson(metadata));
+    fields.insert(QStringLiteral("uguruguRecovery"), metadataToJson(metadata));
     return fields;
 }
 
@@ -185,15 +185,14 @@ QJsonObject RecoveryStore::metadataRootFields(const Metadata &metadata)
 
 QString RecoveryStore::filePath()
 {
-    const QString configured =
-        qEnvironmentVariable("WAGLEWAGLEPAINT_RECOVERY_PATH");
+    const QString configured = qEnvironmentVariable("UGURUGU_RECOVERY_PATH");
     if (!configured.isEmpty())
     {
         return QFileInfo(configured).absoluteFilePath();
     }
     return QDir(
         QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
-        .filePath(QStringLiteral("recovery.wagle"));
+        .filePath(QStringLiteral("recovery.ugu"));
 }
 
 bool RecoveryStore::isRecoveryPath(const QString &candidatePath)
@@ -312,7 +311,7 @@ std::optional<RecoveryStore::Snapshot> RecoveryStore::load(QString *error)
     std::optional<Metadata> metadata;
     MetadataStatus metadataStatus = MetadataStatus::Missing;
     const QJsonValue metadataValue =
-        root.value(QStringLiteral("wagleRecovery"));
+        root.value(QStringLiteral("uguruguRecovery"));
     if (!metadataValue.isUndefined())
     {
         metadata = metadataFromJson(metadataValue);

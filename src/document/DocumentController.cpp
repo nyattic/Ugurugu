@@ -30,7 +30,7 @@
 #include <variant>
 #include <vector>
 
-namespace wobble
+namespace ugurugu
 {
 
 using DocumentBudget::distinctClipMaskBytes;

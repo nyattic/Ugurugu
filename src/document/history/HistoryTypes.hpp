@@ -2,7 +2,7 @@
 
 #include <QtGlobal>
 
-namespace wobble
+namespace ugurugu
 {
 namespace history
 {

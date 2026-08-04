@@ -14,7 +14,7 @@ class QLineEdit;
 class QPushButton;
 class QRadioButton;
 
-namespace wobble
+namespace ugurugu
 {
 
 class SettingsDialog final : public QDialog

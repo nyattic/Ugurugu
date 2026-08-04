@@ -8,7 +8,7 @@
 #include <cmath>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,

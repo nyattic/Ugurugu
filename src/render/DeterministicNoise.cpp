@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace wobble::DeterministicNoise
+namespace ugurugu::DeterministicNoise
 {
 
 namespace

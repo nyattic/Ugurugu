@@ -2,7 +2,7 @@
 
 ## 1. 목표
 
-WiggleWiggleTool(이하 WWT)에서 유용했던 기능과 작업 흐름을 선별해 WagleWaglePaint(이하 WWP)에 맞게 다시 설계하고 구현한다.
+WiggleWiggleTool(이하 WWT)에서 유용했던 기능과 작업 흐름을 선별해 Ugurugu(이하 WWP)에 맞게 다시 설계하고 구현한다.
 
 > 편집 동작을 Clip Studio 관례로 정렬하는 `EDIT_BEHAVIOR_ALIGNMENT_PLAN.md`의 단계 A와 B는 완료됐다. 보류된 변형 핸들은 별도 작업이므로 이 계획을 더 이상 막지 않는다.
 
@@ -261,7 +261,7 @@ op으로 두면 "이미지 레이어"는 image op 하나만 든 평범한 Paint 
 #### 자산 형식과 예산 결정
 
 schema에 연결하지 않은 `RasterAssetTable` prototype과
-`wobblepaint_raster_asset_probe`로 결정했다.
+`ugurugu_raster_asset_probe`로 결정했다.
 
 - canonical pixel은 top-to-bottom, tightly packed, straight-alpha
   `QImage::Format_RGBA8888`이다
@@ -349,7 +349,7 @@ coverage는 packed bits를 직접 샘플링하거나 출력 크기별 cache를 �
 
 #### Lasso Paint는 frozen coverage를 사용한다
 
-`wobblepaint_fill_representation_probe`에서 4K canvas, 512점 freehand
+`ugurugu_fill_representation_probe`에서 4K canvas, 512점 freehand
 polygon, 60프레임을 비교했다. 정적 mask와 매 프레임 4px 변위한 polygon은
 같은 odd-even, binary raster 규칙으로 만들었다. 시간은 macOS Debug
 빌드의 단일 실행 기준이다.
@@ -608,7 +608,7 @@ Broken Line은 이 단계에서 가장 비싸다. 나머지 항목이 문서 스
 - 기존 `WobbleAnimationTests`, `StrokeRenderingTests`, `StrokeCoverageTests` 유지
 - preview, export, thumbnail, tile redraw 사이의 결과 비교
 - schema 9 load와 schema 10·11 round-trip
-- 변경한 C++ 묶음마다 `wobblepaint_format_check`, `wobblepaint_tidy`, 관련 테스트 실행
+- 변경한 C++ 묶음마다 `ugurugu_format_check`, `ugurugu_tidy`, 관련 테스트 실행
 
 `WobbleAnimationTests`의 반복성·변화 여부·wobbleScale property test 다섯 개는 그대로 유지한다. 골든 corpus는 이를 대체하지 않고 `LegacyRenderGoldenTests`에서 별도로 검사한다.
 

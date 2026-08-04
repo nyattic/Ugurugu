@@ -6,7 +6,7 @@
 #include <QJsonArray>
 #include <QString>
 
-namespace wobble
+namespace ugurugu
 {
 namespace serializer_detail
 {

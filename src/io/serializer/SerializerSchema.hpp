@@ -8,7 +8,7 @@
 #include <QUuid>
 #include <QVector>
 
-namespace wobble
+namespace ugurugu
 {
 namespace serializer_detail
 {

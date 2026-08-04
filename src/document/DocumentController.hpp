@@ -10,7 +10,7 @@
 
 #include <memory>
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentController;

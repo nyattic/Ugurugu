@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 namespace drawing_tool_settings
 {

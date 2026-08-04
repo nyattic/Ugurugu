@@ -2,7 +2,7 @@
 
 #include "document/Document.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 struct RenderExportMemoryEstimate final

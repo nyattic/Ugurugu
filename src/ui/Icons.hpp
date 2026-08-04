@@ -4,7 +4,7 @@
 #include <QIcon>
 #include <QPixmap>
 
-namespace wobble
+namespace ugurugu
 {
 
 enum class IconGlyph

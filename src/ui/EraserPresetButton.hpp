@@ -3,7 +3,7 @@
 #include <QAbstractButton>
 #include <QImage>
 
-namespace wobble
+namespace ugurugu
 {
 
 struct EraserPreset;

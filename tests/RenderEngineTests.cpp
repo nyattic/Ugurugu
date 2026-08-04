@@ -1,7 +1,7 @@
 #include "TestSuites.hpp"
 #include "support/RenderTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 int runRenderEngineTests(int argc, char **argv)

@@ -5,7 +5,9 @@
 #include "io/DocumentSerializer.hpp"
 #include "render/RenderEngine.hpp"
 
-namespace wobble
+#include <QMimeData>
+
+namespace ugurugu
 {
 
 namespace
@@ -23,7 +25,31 @@ void setCodecError(QString *error, const QString &message)
 
 QString SelectionClipboardCodec::mimeType()
 {
-    return QStringLiteral("application/x-waglewaglepaint-selection+json");
+    return QStringLiteral("application/x-ugurugu-selection+json");
+}
+
+QStringList SelectionClipboardCodec::legacyMimeTypes()
+{
+    // Payloads published by an earlier name of the application. A rename makes
+    // the previous build a separate application that can run at the same time,
+    // so a copy taken there is still worth accepting on paste.
+    return {QStringLiteral("application/x-waglewaglepaint-selection+json")};
+}
+
+QString SelectionClipboardCodec::availableMimeType(const QMimeData &mimeData)
+{
+    if (mimeData.hasFormat(mimeType()))
+    {
+        return mimeType();
+    }
+    for (const QString &legacy : legacyMimeTypes())
+    {
+        if (mimeData.hasFormat(legacy))
+        {
+            return legacy;
+        }
+    }
+    return {};
 }
 
 std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(

@@ -7,12 +7,12 @@
 
 #include <functional>
 
-namespace wobble
+namespace ugurugu
 {
 
 class WebPWriter final
 {
-    Q_DECLARE_TR_FUNCTIONS(wobble::WebPWriter)
+    Q_DECLARE_TR_FUNCTIONS(ugurugu::WebPWriter)
 
 public:
     static bool write(const QString &filePath,

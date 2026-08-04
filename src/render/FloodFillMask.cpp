@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace wobble::FloodFillMask
+namespace ugurugu::FloodFillMask
 {
 
 QImage fromImage(const QImage &image,

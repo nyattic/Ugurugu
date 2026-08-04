@@ -7,7 +7,7 @@
 #include <QRect>
 #include <QSize>
 
-namespace wobble
+namespace ugurugu
 {
 namespace render_detail
 {

@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 BrushSizeRow::BrushSizeRow(CanvasWidget *canvas,

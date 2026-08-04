@@ -1,7 +1,7 @@
 #include "support/RenderTestHelpers.hpp"
 #include "support/RenderTestSuites.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 class WobbleAnimationTests final : public QObject

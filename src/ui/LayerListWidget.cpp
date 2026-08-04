@@ -3,7 +3,7 @@
 #include <QDropEvent>
 #include <QKeyEvent>
 
-namespace wobble
+namespace ugurugu
 {
 
 LayerListWidget::LayerListWidget(QWidget *parent)

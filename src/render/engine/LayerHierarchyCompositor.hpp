@@ -7,7 +7,7 @@
 #include <QImage>
 #include <QPainter>
 
-namespace wobble
+namespace ugurugu
 {
 namespace render_detail
 {

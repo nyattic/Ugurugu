@@ -7,7 +7,7 @@
 
 #import <AppKit/AppKit.h>
 
-namespace wobble
+namespace ugurugu
 {
 
 void applySeamlessTitleBar(QWidget *window)

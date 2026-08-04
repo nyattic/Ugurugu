@@ -3,7 +3,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace wobble
+namespace ugurugu
 {
 
 class DocumentController;

@@ -2,7 +2,7 @@
 
 #include <QDialog>
 
-namespace wobble
+namespace ugurugu
 {
 
 class HelpDialog final : public QDialog

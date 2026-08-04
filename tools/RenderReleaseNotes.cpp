@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     QCoreApplication application(argc, argv);
     if (application.arguments().size() != 3)
     {
-        return fail(QStringLiteral("Usage: wobblepaint_render_release_notes "
+        return fail(QStringLiteral("Usage: ugurugu_render_release_notes "
                                    "<input.md> <output.html>"));
     }
 

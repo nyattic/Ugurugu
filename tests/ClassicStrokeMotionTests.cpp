@@ -6,7 +6,7 @@
 #include <array>
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 class ClassicStrokeMotionTests final : public QObject

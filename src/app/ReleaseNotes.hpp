@@ -2,7 +2,7 @@
 
 #include <QString>
 
-namespace wobble
+namespace ugurugu
 {
 
 QString localizedReleaseNotes(const QString &markdown, const QString &language);

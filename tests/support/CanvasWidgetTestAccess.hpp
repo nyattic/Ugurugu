@@ -4,7 +4,7 @@
 
 #include <QSize>
 
-namespace wobble
+namespace ugurugu
 {
 
 class CanvasWidgetTestAccess final

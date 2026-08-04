@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="resources/icons/WobblePaint.png" width="128" alt="WagleWaglePaint アプリアイコン">
+  <img src="resources/icons/Ugurugu.png" width="128" alt="Ugurugu アプリアイコン">
 </p>
 
-# WagleWaglePaint
+# Ugurugu
 
-[![Latest Release](https://img.shields.io/github/v/release/nyattic/WagleWaglePaint?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/WagleWaglePaint/releases/latest)
-[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FWagleWaglePaint%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/WagleWaglePaint/releases)
+[![Latest Release](https://img.shields.io/github/v/release/nyattic/Ugurugu?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/Ugurugu/releases/latest)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FUgurugu%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/Ugurugu/releases)
 ![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
@@ -20,27 +20,27 @@
 
 > [!NOTE]
 > 問題が起きたときは、
-> [GitHub Issue](https://github.com/nyattic/WagleWaglePaint/issues)に
+> [GitHub Issue](https://github.com/nyattic/Ugurugu/issues)に
 > 何をしていたか、実際に何が起きたかを書いてください。可能であれば
-> `.wagle`ファイルも添付していただけると、原因を見つけやすくなります。
+> `.ugu`ファイルも添付していただけると、原因を見つけやすくなります。
 
 ## ダウンロードとインストール
 
 | プラットフォーム | 対応環境 | ダウンロード |
 | --- | --- | --- |
-| Windows | Windows 10以降、64ビット | [Windowsインストーラー](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-Windows-x64-Setup.exe) |
-| macOS | macOS 14以降、Apple Silicon | [macOSインストーラー](https://github.com/nyattic/WagleWaglePaint/releases/latest/download/WagleWaglePaint-macOS-arm64.dmg) |
+| Windows | Windows 10以降、64ビット | [Windowsインストーラー](https://github.com/nyattic/Ugurugu/releases/latest/download/Ugurugu-Windows-x64-Setup.exe) |
+| macOS | macOS 14以降、Apple Silicon | [macOSインストーラー](https://github.com/nyattic/Ugurugu/releases/latest/download/Ugurugu-macOS-arm64.dmg) |
 
 ### Windows
 
 ダウンロードしたSetupファイルを実行してください。Windowsから確認の
 警告が出た場合は、**詳細情報 → 実行**を選びます。安全のため、必ず公式の
-[Releasesページ](https://github.com/nyattic/WagleWaglePaint/releases/latest)から
+[Releasesページ](https://github.com/nyattic/Ugurugu/releases/latest)から
 ダウンロードしたファイルを使用してください。
 
 ### macOS
 
-DMGを開き、WagleWaglePaintをApplicationsフォルダーへドラッグして
+DMGを開き、UguruguをApplicationsフォルダーへドラッグして
 ください。macOS版はAppleの確認を受けてから配布されます。
 
 リリースページにあるその他のファイルは、自動アップデートに使われます。
@@ -91,7 +91,8 @@ DMGを開き、WagleWaglePaintをApplicationsフォルダーへドラッグし�
 
 ### 保存して共有する
 
-- 作品は`.wagle`ファイルに保存され、レイヤーや動きの設定も残ります。
+- 作品は`.ugu`ファイルに保存され、レイヤーや動きの設定も残ります。
+- 以前のバージョンで作った`.wagle`や`.wobble`のファイルもそのまま開けます。
 - 動くGIF・WebP、1枚のPNG・JPG画像として書き出せます。
 - 透明なキャンバスを使えば、背景のないステッカー風の画像や
   アニメーションを作れます。
@@ -110,7 +111,7 @@ DMGを開き、WagleWaglePaintをApplicationsフォルダーへドラッグし�
 
 WiggleWiggleTool 10で保存した`.wawa`ファイルを**ファイル → 開く**から
 読み込めます。元のファイルは変更せず、新しい作品として開きます。最初に
-保存するときは、同じ名前の`.wagle`ファイルが提案されます。
+保存するときは、同じ名前の`.ugu`ファイルが提案されます。
 
 二つのアプリでは描き方が異なるため、一部の揺れ、エアブラシ、塗りつぶした
 形は少し違って見えることがあります。読み込みが終わると、変更された項目や
@@ -140,7 +141,7 @@ WiggleWiggleTool 10で保存した`.wawa`ファイルを**ファイル → 開�
 
 歯車ボタンから、言語、アプリの色、描画の動作、保存先フォルダー、
 ショートカットを変更できます。Windowsでは**編集 → 設定**、macOSでは
-**WagleWaglePaint → 設定**からも開けます。
+**Ugurugu → 設定**からも開けます。
 
 アプリは起動時に新しいバージョンがあるか確認します。**ヘルプ →
 アップデートを確認**から、いつでも手動で確認できます。
@@ -156,7 +157,7 @@ WiggleWiggleTool 10で保存した`.wawa`ファイルを**ファイル → 開�
 
 ## ライセンス
 
-WagleWaglePaintは[GNU General Public License v3.0](LICENSE)のもとで
+Uguruguは[GNU General Public License v3.0](LICENSE)のもとで
 配布されています。同梱のフォントとライブラリの著作権および利用条件は
 [サードパーティ通知](THIRD_PARTY_NOTICES.md)で確認できます。
 

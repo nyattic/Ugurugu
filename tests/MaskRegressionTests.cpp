@@ -15,7 +15,7 @@
 #include <cstring>
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

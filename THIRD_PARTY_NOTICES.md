@@ -1,6 +1,6 @@
 # Third-party notices
 
-WagleWaglePaint includes or dynamically links the following third-party
+Ugurugu includes or dynamically links the following third-party
 software. The corresponding license texts are installed next to this file in
 release packages.
 
@@ -8,10 +8,10 @@ release packages.
 
 Copyright © The Qt Company Ltd. and other contributors.
 
-WagleWaglePaint uses Qt under the GNU Lesser General Public License
+Ugurugu uses Qt under the GNU Lesser General Public License
 version 3. Release packages ship Qt as separate dynamic libraries, so the
 bundled Qt can be replaced with a modified build of the same version
-without rebuilding WagleWaglePaint. LGPLv3 adds permissions on top of
+without rebuilding Ugurugu. LGPLv3 adds permissions on top of
 GPLv3; both texts are included, as `LGPL-3.0.txt` and `LICENSE`. Qt source
 for the bundled libraries and the full relinking obligations are available
 from <https://www.qt.io/licensing/open-source-lgpl-obligations> and

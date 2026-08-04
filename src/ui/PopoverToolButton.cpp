@@ -9,7 +9,7 @@
 
 #include <numbers>
 
-namespace wobble
+namespace ugurugu
 {
 
 PopoverToolButton::PopoverToolButton(QWidget *parent)

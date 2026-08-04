@@ -6,7 +6,7 @@
 
 #include <limits>
 
-namespace wobble
+namespace ugurugu
 {
 
 using namespace serializer_detail;

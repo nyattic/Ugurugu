@@ -14,7 +14,7 @@
 
 #include <algorithm>
 
-namespace wobble
+namespace ugurugu
 {
 
 void MainWindow::exportGif()

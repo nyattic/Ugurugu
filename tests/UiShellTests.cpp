@@ -3,7 +3,7 @@
 
 #include <QImageReader>
 
-namespace wobble
+namespace ugurugu
 {
 
 class UiShellTests final : public QObject
@@ -92,7 +92,7 @@ private slots:
         QTRY_VERIFY(undoAction->isEnabled());
 
         const QString screenshotPath =
-            qEnvironmentVariable("WOBBLEPAINT_TEST_SCREENSHOT");
+            qEnvironmentVariable("UGURUGU_TEST_SCREENSHOT");
         if (!screenshotPath.isEmpty())
         {
             QVERIFY(window.grab().save(screenshotPath, "PNG"));
@@ -100,7 +100,7 @@ private slots:
         }
 
         const QString brushPanelScreenshotPath =
-            qEnvironmentVariable("WOBBLEPAINT_BRUSH_PANEL_SCREENSHOT");
+            qEnvironmentVariable("UGURUGU_BRUSH_PANEL_SCREENSHOT");
         if (!brushPanelScreenshotPath.isEmpty())
         {
             BrushPopoverPanel *brushPanel =
@@ -139,8 +139,7 @@ private slots:
         QVERIFY(checkForUpdatesAction);
         QVERIFY(settingsButton);
         QCOMPARE(settingsButton->defaultAction(), settingsAction);
-        QVERIFY(
-            window.windowTitle().contains(QStringLiteral("WagleWaglePaint")));
+        QVERIFY(window.windowTitle().contains(QStringLiteral("Ugurugu")));
     }
 
     void exposesBrushPresetNameToAccessibility()
@@ -890,13 +889,13 @@ private slots:
     void warnsWhenOpeningLegacyLayerHierarchy()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
-            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
         const QString projectPath =
-            directory.filePath(QStringLiteral("legacy-depth.wagle"));
+            directory.filePath(QStringLiteral("legacy-depth.ugu"));
         QString error;
         QVERIFY2(DocumentSerializer::save(projectPath,
                      nestedLayerDocument(DocumentLimits::maximumLayerDepth + 1),
@@ -930,12 +929,12 @@ private slots:
     void warnsWhenRecoveringLegacyLayerHierarchy()
     {
         EnvironmentVariableGuard environmentGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString recoveryPath =
-            directory.filePath(QStringLiteral("recovery.wagle"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH", recoveryPath.toUtf8());
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
         QString error;
         QVERIFY2(DocumentSerializer::save(recoveryPath,
                      nestedLayerDocument(DocumentLimits::maximumLayerDepth + 1),
@@ -1555,11 +1554,11 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         EnvironmentVariableGuard recoveryGuard(
-            QByteArrayLiteral("WAGLEWAGLEPAINT_RECOVERY_PATH"));
-        qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
-            directory.filePath(QStringLiteral("recovery.wagle")).toUtf8());
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
         const QString filePath =
-            directory.filePath(QStringLiteral("shortcuts.wagle"));
+            directory.filePath(QStringLiteral("shortcuts.ugu"));
         QString error;
         QVERIFY2(
             DocumentSerializer::save(

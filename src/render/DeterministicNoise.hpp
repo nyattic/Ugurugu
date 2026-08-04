@@ -2,7 +2,7 @@
 
 #include <QtTypes>
 
-namespace wobble::DeterministicNoise
+namespace ugurugu::DeterministicNoise
 {
 
 // Results are pure functions of these inputs so preview, export, incremental

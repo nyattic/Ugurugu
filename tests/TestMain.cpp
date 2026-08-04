@@ -21,15 +21,15 @@ struct Suite
 };
 
 constexpr std::array suites{
-    Suite{"app", wobble::runAppPolicyTests},
-    Suite{"document", wobble::runDocumentTests},
-    Suite{"render", wobble::runRenderEngineTests},
-    Suite{"gif", wobble::runGifWriterTests},
-    Suite{"webp", wobble::runWebPWriterTests},
-    Suite{"mask", wobble::runMaskRegressionTests},
-    Suite{"release_notes", wobble::runReleaseNotesTests},
-    Suite{"stabilizer", wobble::runStrokeStabilizerTests},
-    Suite{"ui", wobble::runUiTests},
+    Suite{"app", ugurugu::runAppPolicyTests},
+    Suite{"document", ugurugu::runDocumentTests},
+    Suite{"render", ugurugu::runRenderEngineTests},
+    Suite{"gif", ugurugu::runGifWriterTests},
+    Suite{"webp", ugurugu::runWebPWriterTests},
+    Suite{"mask", ugurugu::runMaskRegressionTests},
+    Suite{"release_notes", ugurugu::runReleaseNotesTests},
+    Suite{"stabilizer", ugurugu::runStrokeStabilizerTests},
+    Suite{"ui", ugurugu::runUiTests},
 };
 
 }
@@ -48,8 +48,8 @@ int main(int argc, char **argv)
         QSettings::IniFormat, QSettings::UserScope, settingsDirectory.path());
     QSettings::setPath(
         QSettings::IniFormat, QSettings::SystemScope, settingsDirectory.path());
-    if (!qputenv("WAGLEWAGLEPAINT_RECOVERY_PATH",
-            settingsDirectory.filePath(QStringLiteral("recovery.wagle"))
+    if (!qputenv("UGURUGU_RECOVERY_PATH",
+            settingsDirectory.filePath(QStringLiteral("recovery.ugu"))
                 .toUtf8()))
     {
         qCritical("Could not isolate the test recovery file.");
@@ -57,28 +57,27 @@ int main(int argc, char **argv)
     }
 
     QApplication application(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("WagleWaglePaint"));
-    QApplication::setApplicationDisplayName(QStringLiteral("WagleWaglePaint"));
-    QApplication::setApplicationVersion(
-        QStringLiteral(WAGLEWAGLEPAINT_VERSION));
-    QApplication::setOrganizationName(QStringLiteral("WagleWaglePaint"));
-    QApplication::setOrganizationDomain(QStringLiteral("waglewaglepaint.dev"));
-    wobble::Theme::apply(application);
+    QApplication::setApplicationName(QStringLiteral("Ugurugu"));
+    QApplication::setApplicationDisplayName(QStringLiteral("Ugurugu"));
+    QApplication::setApplicationVersion(QStringLiteral(UGURUGU_VERSION));
+    QApplication::setOrganizationName(QStringLiteral("Ugurugu"));
+    QApplication::setOrganizationDomain(QStringLiteral("ugurugu.dev"));
+    ugurugu::Theme::apply(application);
 
     const QString lockProbePath =
-        qEnvironmentVariable("WOBBLEPAINT_INSTANCE_LOCK_PROBE_PATH");
+        qEnvironmentVariable("UGURUGU_INSTANCE_LOCK_PROBE_PATH");
     if (!lockProbePath.isEmpty())
     {
-        wobble::ApplicationInstanceLock lock(lockProbePath);
+        ugurugu::ApplicationInstanceLock lock(lockProbePath);
         const auto result = lock.acquire();
         QFile ready(
-            qEnvironmentVariable("WOBBLEPAINT_INSTANCE_LOCK_PROBE_READY_PATH"));
+            qEnvironmentVariable("UGURUGU_INSTANCE_LOCK_PROBE_READY_PATH"));
         if (!ready.open(QIODevice::WriteOnly))
         {
             return 3;
         }
         const QByteArray status =
-            result == wobble::ApplicationInstanceLock::AcquireResult::Acquired
+            result == ugurugu::ApplicationInstanceLock::AcquireResult::Acquired
                 ? QByteArrayLiteral("acquired")
                 : QByteArrayLiteral("failed");
         if (ready.write(status) != status.size())
@@ -86,7 +85,7 @@ int main(int argc, char **argv)
             return 3;
         }
         ready.close();
-        if (result != wobble::ApplicationInstanceLock::AcquireResult::Acquired)
+        if (result != ugurugu::ApplicationInstanceLock::AcquireResult::Acquired)
         {
             return 4;
         }
@@ -95,7 +94,7 @@ int main(int argc, char **argv)
         return loop.exec();
     }
 
-    const QByteArray requested = qgetenv("WOBBLEPAINT_TEST_SUITE");
+    const QByteArray requested = qgetenv("UGURUGU_TEST_SUITE");
     int result = 0;
     bool matched = requested.isEmpty();
     for (const Suite &suite : suites)
@@ -109,7 +108,7 @@ int main(int argc, char **argv)
     }
     if (!matched)
     {
-        qCritical("Unknown WOBBLEPAINT_TEST_SUITE: %s", requested.constData());
+        qCritical("Unknown UGURUGU_TEST_SUITE: %s", requested.constData());
         return 2;
     }
     return result;

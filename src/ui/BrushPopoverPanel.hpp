@@ -7,7 +7,7 @@
 class QButtonGroup;
 class QStackedWidget;
 
-namespace wobble
+namespace ugurugu
 {
 
 class BrushPresetButton;

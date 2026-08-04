@@ -5,7 +5,7 @@
 #include <QPainter>
 #include <QPainterPath>
 
-namespace wobble::StrokeRenderer
+namespace ugurugu::StrokeRenderer
 {
 
 struct PreparedStroke

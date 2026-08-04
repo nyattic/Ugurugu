@@ -7,7 +7,7 @@
 
 #include <utility>
 
-namespace wobble
+namespace ugurugu
 {
 
 SelectionShapeButton::SelectionShapeButton(CanvasSelectionShape shape,

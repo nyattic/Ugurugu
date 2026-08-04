@@ -2,7 +2,7 @@
 
 #include <QtTypes>
 
-namespace wobble
+namespace ugurugu
 {
 
 // Byte totals for the preview surfaces a canvas can retain at the same time.

@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace wobble
+namespace ugurugu
 {
 
 class BrokenLineModelTests final : public QObject

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace wobble
+namespace ugurugu
 {
 
 int runBrokenLineModelTests(int argc, char **argv);

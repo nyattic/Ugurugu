@@ -4,28 +4,28 @@ endif()
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Test)
 
-qt_add_executable(wobblepaint_tests ${WOBBLEPAINT_TEST_SOURCES})
+qt_add_executable(ugurugu_tests ${UGURUGU_TEST_SOURCES})
 target_include_directories(
-    wobblepaint_tests
+    ugurugu_tests
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests"
 )
 target_link_libraries(
-    wobblepaint_tests
+    ugurugu_tests
     PRIVATE
-    wobblepaint_ui
+    ugurugu_ui
     Qt6::Test
     webpdemux
 )
 target_compile_definitions(
-    wobblepaint_tests
+    ugurugu_tests
     PRIVATE
-    WOBBLEPAINT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    WAGLEWAGLEPAINT_VERSION="${PROJECT_VERSION}"
+    UGURUGU_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    UGURUGU_VERSION="${PROJECT_VERSION}"
 )
-wobblepaint_target_defaults(wobblepaint_tests)
+ugurugu_target_defaults(ugurugu_tests)
 
-set(WOBBLEPAINT_TEST_SUITES
+set(UGURUGU_TEST_SUITES
     app
     document
     render
@@ -36,18 +36,18 @@ set(WOBBLEPAINT_TEST_SUITES
     stabilizer
     ui
 )
-foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)
-    set(test_name "wobblepaint_${suite}_tests")
+foreach(suite IN LISTS UGURUGU_TEST_SUITES)
+    set(test_name "ugurugu_${suite}_tests")
     set(test_timeout 180)
     if(suite STREQUAL "render")
         set(test_timeout 420)
     endif()
-    add_test(NAME ${test_name} COMMAND wobblepaint_tests)
+    add_test(NAME ${test_name} COMMAND ugurugu_tests)
     set_tests_properties(
         ${test_name}
         PROPERTIES
         ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen;WOBBLEPAINT_TEST_SUITE=${suite}"
+        "QT_QPA_PLATFORM=offscreen;UGURUGU_TEST_SUITE=${suite}"
         TIMEOUT
         ${test_timeout}
     )
@@ -62,64 +62,64 @@ foreach(suite IN LISTS WOBBLEPAINT_TEST_SUITES)
 endforeach()
 
 if(APPLE)
-    add_executable(wobblepaint_package_smoke tests/PackageSmoke.cpp)
+    add_executable(ugurugu_package_smoke tests/PackageSmoke.cpp)
     target_link_libraries(
-        wobblepaint_package_smoke
+        ugurugu_package_smoke
         PRIVATE
         Qt6::Core
         Qt6::Gui
     )
     set_target_properties(
-        wobblepaint_package_smoke
+        ugurugu_package_smoke
         PROPERTIES
         SKIP_BUILD_RPATH TRUE
     )
-    wobblepaint_target_defaults(wobblepaint_package_smoke)
+    ugurugu_target_defaults(ugurugu_package_smoke)
     add_custom_command(
-        TARGET wobblepaint_package_smoke
+        TARGET ugurugu_package_smoke
         POST_BUILD
         COMMAND
         "${CMAKE_COMMAND}"
-        "-DSMOKE_EXECUTABLE=$<TARGET_FILE:wobblepaint_package_smoke>"
+        "-DSMOKE_EXECUTABLE=$<TARGET_FILE:ugurugu_package_smoke>"
         "-DSMOKE_BUILD_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
         -P
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/PreparePackageSmoke.cmake"
         VERBATIM
     )
     set(
-        WOBBLEPAINT_PACKAGE_SMOKE_ROOT
+        UGURUGU_PACKAGE_SMOKE_ROOT
         "${CMAKE_CURRENT_BINARY_DIR}/package-smoke"
     )
     set(
-        WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/install/WagleWaglePaint.app"
+        UGURUGU_PACKAGE_SMOKE_APPLICATION
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}/install/Ugurugu.app"
     )
     add_custom_target(
-        wobblepaint_package_smoke_test
+        ugurugu_package_smoke_test
         COMMAND
         "${CMAKE_COMMAND}" -E remove_directory
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}"
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}"
         COMMAND
         "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}"
-        --prefix "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/install"
+        --prefix "${UGURUGU_PACKAGE_SMOKE_ROOT}/install"
         COMMAND
         "${CMAKE_COMMAND}" -E make_directory
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS"
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}/runtime/MacOS"
         COMMAND
         "${CMAKE_COMMAND}" -E create_symlink
-        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}/Contents/Frameworks"
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/Frameworks"
+        "${UGURUGU_PACKAGE_SMOKE_APPLICATION}/Contents/Frameworks"
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}/runtime/Frameworks"
         COMMAND
         "${CMAKE_COMMAND}" -E copy
-        "$<TARGET_FILE:wobblepaint_package_smoke>"
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS/"
+        "$<TARGET_FILE:ugurugu_package_smoke>"
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}/runtime/MacOS/"
         COMMAND
-        "${WOBBLEPAINT_PACKAGE_SMOKE_ROOT}/runtime/MacOS/wobblepaint_package_smoke"
-        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}"
+        "${UGURUGU_PACKAGE_SMOKE_ROOT}/runtime/MacOS/ugurugu_package_smoke"
+        "${UGURUGU_PACKAGE_SMOKE_APPLICATION}"
         COMMAND
         /usr/bin/codesign --verify --deep --strict
-        "${WOBBLEPAINT_PACKAGE_SMOKE_APPLICATION}"
-        DEPENDS WagleWaglePaint wobblepaint_package_smoke
+        "${UGURUGU_PACKAGE_SMOKE_APPLICATION}"
+        DEPENDS Ugurugu ugurugu_package_smoke
         USES_TERMINAL
         VERBATIM
     )

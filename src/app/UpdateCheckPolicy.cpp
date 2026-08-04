@@ -1,6 +1,6 @@
 #include "app/UpdateCheckPolicy.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 bool UpdateCheckPolicy::isAutomaticCheckDue(

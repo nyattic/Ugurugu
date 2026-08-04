@@ -24,7 +24,7 @@
 #include <cmath>
 #include <numbers>
 
-namespace wobble
+namespace ugurugu
 {
 
 using namespace render_detail;

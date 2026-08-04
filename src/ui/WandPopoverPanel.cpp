@@ -9,7 +9,7 @@
 
 #include <array>
 
-namespace wobble
+namespace ugurugu
 {
 
 WandPopoverPanel::WandPopoverPanel(CanvasWidget *canvas, QWidget *parent)

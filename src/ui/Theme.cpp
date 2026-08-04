@@ -9,7 +9,7 @@
 #include <QStyleFactory>
 #include <QWidget>
 
-namespace wobble
+namespace ugurugu
 {
 
 namespace

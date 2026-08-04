@@ -6,7 +6,7 @@
 
 class QLockFile;
 
-namespace wobble
+namespace ugurugu
 {
 
 class ApplicationInstanceLock final

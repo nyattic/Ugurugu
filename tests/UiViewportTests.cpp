@@ -3,7 +3,7 @@
 
 #include <cmath>
 
-namespace wobble
+namespace ugurugu
 {
 
 class UiViewportTests final : public QObject

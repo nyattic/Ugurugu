@@ -6,13 +6,13 @@ if(MSVC)
     )
 endif()
 
-add_library(wobblepaint_core STATIC ${WOBBLEPAINT_CORE_SOURCES})
-target_include_directories(wobblepaint_core PUBLIC src)
+add_library(ugurugu_core STATIC ${UGURUGU_CORE_SOURCES})
+target_include_directories(ugurugu_core PUBLIC src)
 # Deliberately no Qt6::Widgets. The document, render and IO core must stay
 # usable from a non-widget UI, so anything needing QtWidgets belongs in
-# wobblepaint_ui instead.
+# ugurugu_ui instead.
 target_link_libraries(
-    wobblepaint_core
+    ugurugu_core
     PUBLIC
     Qt6::Core
     Qt6::Gui
@@ -21,22 +21,22 @@ target_link_libraries(
     webp
     libwebpmux
 )
-wobblepaint_target_defaults(wobblepaint_core)
+ugurugu_target_defaults(ugurugu_core)
 
-add_library(wobblepaint_ui STATIC ${WOBBLEPAINT_UI_SOURCES})
-wobblepaint_target_defaults(wobblepaint_ui)
-target_include_directories(wobblepaint_ui PUBLIC src)
+add_library(ugurugu_ui STATIC ${UGURUGU_UI_SOURCES})
+ugurugu_target_defaults(ugurugu_ui)
+target_include_directories(ugurugu_ui PUBLIC src)
 target_link_libraries(
-    wobblepaint_ui
+    ugurugu_ui
     PUBLIC
-    wobblepaint_core
+    ugurugu_core
     Qt6::Concurrent
     Qt6::Widgets
 )
 
 if(APPLE)
     target_sources(
-        wobblepaint_ui
+        ugurugu_ui
         PRIVATE
         src/ui/MacWindowChrome.hpp
         src/ui/MacWindowChrome.mm
@@ -46,26 +46,26 @@ if(APPLE)
         PROPERTIES
         COMPILE_OPTIONS "-fobjc-arc"
     )
-    target_link_libraries(wobblepaint_ui PUBLIC "-framework AppKit")
+    target_link_libraries(ugurugu_ui PUBLIC "-framework AppKit")
 endif()
 
 qt_add_executable(
-    WagleWaglePaint
+    Ugurugu
     src/app/UpdateController.hpp
-    ${WAGLEWAGLEPAINT_UPDATE_SOURCE}
+    ${UGURUGU_UPDATE_SOURCE}
     src/main.cpp
 )
 
 if(APPLE)
     set_source_files_properties(
-        resources/icons/WobblePaint.icns
+        resources/icons/Ugurugu.icns
         PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources
     )
     target_sources(
-        WagleWaglePaint
+        Ugurugu
         PRIVATE
-        resources/icons/WobblePaint.icns
+        resources/icons/Ugurugu.icns
     )
     set_source_files_properties(
         src/app/UpdateControllerMac.mm
@@ -74,67 +74,67 @@ if(APPLE)
     )
     configure_file(
         resources/macos/Info.plist.in
-        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint-Info.plist"
+        "${CMAKE_CURRENT_BINARY_DIR}/Ugurugu-Info.plist"
         @ONLY
     )
 elseif(WIN32)
     configure_file(
-        resources/icons/WobblePaint.rc.in
-        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint.rc"
+        resources/icons/Ugurugu.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/Ugurugu.rc"
         @ONLY
     )
     target_sources(
-        WagleWaglePaint
+        Ugurugu
         PRIVATE
-        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint.rc"
+        "${CMAKE_CURRENT_BINARY_DIR}/Ugurugu.rc"
     )
 endif()
 
 qt_add_translation(
-    WOBBLEPAINT_QM_FILES
-    i18n/wobblepaint_ko.ts
-    i18n/wobblepaint_ja.ts
+    UGURUGU_QM_FILES
+    i18n/ugurugu_ko.ts
+    i18n/ugurugu_ja.ts
 )
-qt_add_resources(WagleWaglePaint "wobblepaint_translations"
+qt_add_resources(Ugurugu "ugurugu_translations"
     PREFIX "/i18n"
     BASE "${CMAKE_CURRENT_BINARY_DIR}"
-    FILES ${WOBBLEPAINT_QM_FILES}
+    FILES ${UGURUGU_QM_FILES}
 )
-qt_add_resources(WagleWaglePaint "wobblepaint_fonts"
+qt_add_resources(Ugurugu "ugurugu_fonts"
     PREFIX "/fonts"
     BASE "resources/fonts"
     FILES resources/fonts/PretendardJP-Medium.otf
 )
 
 target_link_libraries(
-    WagleWaglePaint
+    Ugurugu
     PRIVATE
-    wobblepaint_ui
-    ${WAGLEWAGLEPAINT_UPDATE_LIBRARIES}
+    ugurugu_ui
+    ${UGURUGU_UPDATE_LIBRARIES}
 )
 target_compile_definitions(
-    WagleWaglePaint
+    Ugurugu
     PRIVATE
-    WAGLEWAGLEPAINT_VERSION="${PROJECT_VERSION}"
+    UGURUGU_VERSION="${PROJECT_VERSION}"
 )
-wobblepaint_target_defaults(WagleWaglePaint)
+ugurugu_target_defaults(Ugurugu)
 
-set_target_properties(WagleWaglePaint PROPERTIES
+set_target_properties(Ugurugu PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "WagleWaglePaint"
-    MACOSX_BUNDLE_ICON_FILE "WobblePaint.icns"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "dev.waglewaglepaint.app"
+    MACOSX_BUNDLE_BUNDLE_NAME "Ugurugu"
+    MACOSX_BUNDLE_ICON_FILE "Ugurugu.icns"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "dev.ugurugu.app"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
 )
 
 if(APPLE)
     set_target_properties(
-        WagleWaglePaint
+        Ugurugu
         PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST
-        "${CMAKE_CURRENT_BINARY_DIR}/WagleWaglePaint-Info.plist"
+        "${CMAKE_CURRENT_BINARY_DIR}/Ugurugu-Info.plist"
         INSTALL_RPATH
         "@executable_path/../Frameworks"
     )

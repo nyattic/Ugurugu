@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace wobble::BrokenLineModel
+namespace ugurugu::BrokenLineModel
 {
 
 namespace

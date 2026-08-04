@@ -3,7 +3,7 @@
 #include "ui/Icons.hpp"
 #include "ui/Theme.hpp"
 
-namespace wobble
+namespace ugurugu
 {
 
 WobblePlayButton::WobblePlayButton(QWidget *parent)

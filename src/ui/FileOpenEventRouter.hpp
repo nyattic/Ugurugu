@@ -6,7 +6,7 @@
 
 #include <functional>
 
-namespace wobble
+namespace ugurugu
 {
 
 class FileOpenEventRouter final : public QObject

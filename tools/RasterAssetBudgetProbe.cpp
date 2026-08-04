@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     const QStringList arguments = application.arguments();
     if (arguments.size() != 3)
     {
-        output << "usage: wobblepaint_raster_asset_probe <deflate|png> "
+        output << "usage: ugurugu_raster_asset_probe <deflate|png> "
                   "<1|3|5>\n";
         return 2;
     }

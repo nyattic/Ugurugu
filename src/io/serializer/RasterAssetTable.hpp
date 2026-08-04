@@ -11,7 +11,7 @@
 
 #include <optional>
 
-namespace wobble::serializer_detail
+namespace ugurugu::serializer_detail
 {
 
 enum class RasterAssetRegistrationStatus

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace wobble
+namespace ugurugu
 {
 
 int runUiShellTests(int argc, char **argv);

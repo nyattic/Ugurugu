@@ -6,7 +6,7 @@
 
 class QWidget;
 
-namespace wobble
+namespace ugurugu
 {
 
 class UpdateController final : public QObject

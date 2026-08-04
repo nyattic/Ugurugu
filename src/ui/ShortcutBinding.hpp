@@ -5,7 +5,7 @@
 
 class QAction;
 
-namespace wobble
+namespace ugurugu
 {
 
 class ShortcutBinding final

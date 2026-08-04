@@ -14,7 +14,7 @@
 
 #include <optional>
 
-namespace wobble
+namespace ugurugu
 {
 
 enum class StrokeMode
