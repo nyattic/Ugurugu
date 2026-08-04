@@ -491,6 +491,8 @@ private slots:
         canvas.resize(400, 400);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
 
         const QPoint center = canvas.rect().center();
         QTest::mousePress(&canvas, Qt::MiddleButton, Qt::NoModifier, center);
