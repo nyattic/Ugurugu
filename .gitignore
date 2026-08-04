@@ -20,3 +20,6 @@ artifacts/
 # AI
 .codex/
 .claude/
+
+# Docs
+docs/
