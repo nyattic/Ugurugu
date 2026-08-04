@@ -21,6 +21,20 @@ test('includes installers and actual updater packages', () =>
   }
 })
 
+test('keeps counting assets released before the Ugurugu rename', () =>
+{
+  for (const name of [
+    'WagleWaglePaint-macOS-arm64.dmg',
+    'WagleWaglePaint-Windows-x64-Setup.exe',
+    'WagleWaglePaint-1.1.0-full.nupkg',
+    'WagleWaglePaint-macOS-arm64.zip',
+    'WagleWaglePaint-0.2.2-macOS-arm64.zip',
+  ])
+  {
+    assert.equal(isDistributionAsset(name), true, name)
+  }
+})
+
 test('excludes updater metadata requests', () =>
 {
   for (const name of [
