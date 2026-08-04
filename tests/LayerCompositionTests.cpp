@@ -312,8 +312,11 @@ private slots:
         QVERIFY(estimate.valid);
         QCOMPARE(estimate.peakSurfaceCount, 11);
         QCOMPARE(estimate.bytesPerSurface, 64ULL * 1024ULL * 1024ULL);
+        // Against the ceiling rather than the granted budget: the granted one
+        // follows installed memory, and the point being made is that a 4K
+        // hierarchy overflows even the most memory this app will ever take.
         QVERIFY(estimate.peakBytes
-                > static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB)
+                > static_cast<quint64>(MemoryBudget::maximumPreviewCacheKiB)
                       * 1024ULL);
 
         const QSize preview = PreviewRenderPolicy::renderSize(
@@ -329,7 +332,7 @@ private slots:
                                      * static_cast<quint64>(preview.height())
                                      * sizeof(quint32) * concurrentSurfaceCount;
         QVERIFY(previewBytes
-                <= static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB)
+                <= static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB())
                        * 1024ULL);
     }
 

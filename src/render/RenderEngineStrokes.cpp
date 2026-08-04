@@ -233,6 +233,8 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
     const int frameCount = std::max(1, document.animationFrames);
     const int normalizedFrame =
         ((frameIndex % frameCount) + frameCount) % frameCount;
+    // Coverage has to move exactly like the layer it belongs to.
+    const Document layerDocument = documentForLayer(document, layer);
     QHash<qint64, QPainterPath> clipPaths;
     QHash<qint64, QImage> scaledClipMasks;
     if (source.mode == StrokeMode::Image)
@@ -256,7 +258,7 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
             probe.color = QColor(255, 255, 255, source.color.alpha());
         }
         renderLayerStrokes(coverage,
-            document,
+            layerDocument,
             {probe},
             normalizedFrame,
             frameCount,
@@ -289,7 +291,7 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
         else if (operation.mode == StrokeMode::Erase)
         {
             renderLayerStrokes(coverage,
-                document,
+                layerDocument,
                 {operation},
                 normalizedFrame,
                 frameCount,

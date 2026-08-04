@@ -264,6 +264,8 @@ private:
         frozen.reference = source.reference;
         frozen.opacity = source.opacity;
         frozen.blendMode = source.blendMode;
+        frozen.wobbleAmount = source.wobbleAmount;
+        frozen.motion = source.motion;
         frozen.initialCanvasSize = source.initialCanvasSize;
         frozen.strokes.reserve(source.strokes.size());
         for (const Stroke &stroke : source.strokes)

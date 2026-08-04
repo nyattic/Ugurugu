@@ -6,9 +6,11 @@
 #include "ui/DrawingToolSettings.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SettingsDialog.hpp"
+#include "ui/TimelineBar.hpp"
 #include "ui/WwpPresetCodec.hpp"
 
 #include <QFile>
+#include <QLatin1StringView>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -23,6 +25,28 @@ namespace ugurugu
 {
 
 using namespace drawing_tool_settings;
+
+namespace
+{
+
+constexpr QLatin1StringView timelineVisibleKey("window/animationBarVisible");
+
+}
+
+bool MainWindow::timelineVisibleSetting()
+{
+    return QSettings().value(timelineVisibleKey, true).toBool();
+}
+
+void MainWindow::setTimelineVisible(bool visible)
+{
+    if (!m_timeline)
+    {
+        return;
+    }
+    m_timeline->setVisible(visible);
+    QSettings().setValue(timelineVisibleKey, visible);
+}
 
 void MainWindow::restoreDrawingToolSettings()
 {
@@ -394,7 +418,6 @@ void MainWindow::importWwpPreset()
     QSettings settings;
     WwpPresetCodec::applyDrawingTools(*preset, settings);
     restoreDrawingToolSettings();
-    m_swatchRow->setActiveColor(m_canvas->brushColor());
     statusBar()->showMessage(
         tr("Imported preset %1").arg(QFileInfo(filePath).fileName()), 4000);
 }

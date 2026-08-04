@@ -144,7 +144,7 @@ private slots:
             static_cast<quint64>(animatedPreview.width())
             * animatedPreview.height() * sizeof(quint32) * 30;
         const quint64 cacheBytes =
-            static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024;
+            static_cast<quint64>(PreviewRenderPolicy::maximumCacheKiB()) * 1024;
         QVERIFY(retainedBytes <= cacheBytes);
         const int retainedCost =
             PreviewRenderPolicy::cacheCostKiB(
@@ -152,7 +152,7 @@ private slots:
                 * static_cast<qsizetype>(animatedPreview.height())
                 * static_cast<qsizetype>(sizeof(quint32)))
             * 30;
-        QVERIFY(retainedCost <= PreviewRenderPolicy::maximumCacheKiB);
+        QVERIFY(retainedCost <= PreviewRenderPolicy::maximumCacheKiB());
         QCOMPARE(PreviewRenderPolicy::renderSize(documentSize, 16.0, 0),
             staticPreview);
     }

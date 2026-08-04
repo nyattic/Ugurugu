@@ -10,10 +10,12 @@
 #include <QApplication>
 #include <QFileInfo>
 #include <QImageReader>
+#include <QInputDevice>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QMessageBox>
 #include <QObject>
+#include <QPointingDevice>
 #include <QSettings>
 #include <QTranslator>
 
@@ -33,6 +35,47 @@ void configureApplicationMetadata()
     QApplication::setApplicationVersion(QStringLiteral(UGURUGU_VERSION));
     QApplication::setOrganizationName(QStringLiteral("Ugurugu"));
     QApplication::setOrganizationDomain(QStringLiteral("ugurugu.dev"));
+}
+
+// Turning Windows Ink off moves a pen from the pointer API onto WinTab, and
+// WinTab only reaches Qt when the driver has installed a 64-bit wintab32.dll.
+// When it has not, the pen arrives as plain mouse input and every stroke draws
+// at full width. That is indistinguishable from a broken app, so the log says
+// which devices were actually found and whether any reports pressure.
+void logPointingDevices()
+{
+    int styluses = 0;
+    int withPressure = 0;
+    for (const QInputDevice *device : QInputDevice::devices())
+    {
+        const auto *pointing = qobject_cast<const QPointingDevice *>(device);
+        if (!pointing
+            || (pointing->type() != QInputDevice::DeviceType::Stylus
+                && pointing->type() != QInputDevice::DeviceType::Airbrush
+                && pointing->type() != QInputDevice::DeviceType::Puck))
+        {
+            continue;
+        }
+        ++styluses;
+        const bool pressure = pointing->capabilities().testFlag(
+            QInputDevice::Capability::Pressure);
+        withPressure += pressure ? 1 : 0;
+        spdlog::info("Tablet device: {} (system id {}), pressure {}",
+            pointing->name().toUtf8().constData(),
+            pointing->systemId(),
+            pressure ? "yes" : "no");
+    }
+    if (styluses == 0)
+    {
+        spdlog::info("No tablet device reported by Qt. A pen will draw at a "
+                     "constant width. With Windows Ink off, check that the "
+                     "tablet driver installed a 64-bit wintab32.dll.");
+    }
+    else if (withPressure == 0)
+    {
+        spdlog::warn("{} tablet device(s) found but none reports pressure.",
+            styluses);
+    }
 }
 
 struct LegacySettingsIdentity
@@ -104,6 +147,7 @@ int runApplication(int argc, char *argv[])
         migrateLegacySettings();
     }
     ugurugu::Theme::apply(application);
+    logPointingDevices();
 
     QTranslator qtBaseTranslator;
     const QString configuredLanguage = ugurugu::SettingsDialog::uiLanguage();

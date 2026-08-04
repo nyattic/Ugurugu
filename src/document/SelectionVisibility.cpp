@@ -42,9 +42,10 @@ bool layerVariesByFrame(const Document &document, const Layer &layer)
     {
         return false;
     }
+    const qreal wobbleAmount = effectiveWobbleAmount(document, layer);
     return std::any_of(layer.strokes.cbegin(),
         layer.strokes.cend(),
-        [&document](const Stroke &stroke)
+        [wobbleAmount](const Stroke &stroke)
         {
             if (stroke.mode == StrokeMode::Fill || stroke.pixelSelectionOp
                 || stroke.reframeOp)
@@ -52,7 +53,7 @@ bool layerVariesByFrame(const Document &document, const Layer &layer)
                 return false;
             }
             const bool displaced =
-                document.wobbleAmount > 0.0 && stroke.brush.wobbleScale > 0.0;
+                wobbleAmount > 0.0 && stroke.brush.wobbleScale > 0.0;
             const bool animatedSpray = stroke.brush.engine == BrushEngine::Spray
                                        && stroke.brush.animatedJitter;
             return displaced || animatedSpray;

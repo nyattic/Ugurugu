@@ -172,7 +172,17 @@ bool validateDocument(const Document &document,
                     || layer.reference))
             || layer.strokes.size() > DocumentLimits::maximumStrokesPerLayer
             || layer.strokes.size()
-                   > DocumentLimits::maximumTotalStrokes - totalStrokes)
+                   > DocumentLimits::maximumTotalStrokes - totalStrokes
+            || (layer.wobbleAmount
+                && (!std::isfinite(*layer.wobbleAmount)
+                    || *layer.wobbleAmount < DocumentLimits::minimumWobbleAmount
+                    || *layer.wobbleAmount
+                           > DocumentLimits::maximumWobbleAmount))
+            || (layer.motion
+                && !isValidMotionSettings(
+                    *layer.motion, document.animationFrames))
+            || (layer.kind == LayerKind::Group
+                && (layer.wobbleAmount || layer.motion)))
         {
             setError(error,
                 DocumentSerializer::tr("A layer contains invalid data."));

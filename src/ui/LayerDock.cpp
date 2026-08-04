@@ -737,6 +737,11 @@ void LayerDock::updateControls()
     case DocumentController::MergeLayerDownStatus::UnsupportedProperties:
         mergeToolTip = tr("Both layers must use matching safe properties");
         break;
+    case DocumentController::MergeLayerDownStatus::UnsupportedStrokes:
+        mergeToolTip =
+            tr("This layer's eraser or moved pixels overlap the layer below, "
+               "so merging would erase its artwork");
+        break;
     case DocumentController::MergeLayerDownStatus::IncompatibleCanvasEpoch:
         mergeToolTip = tr("The layers use incompatible canvas histories");
         break;

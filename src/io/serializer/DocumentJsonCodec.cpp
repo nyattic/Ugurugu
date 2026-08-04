@@ -283,6 +283,58 @@ std::optional<MotionSettings> motionSettingsFromJson(
     return settings;
 }
 
+// Schema 12. A layer without these keys follows the document, which is what
+// every layer written by an earlier version did.
+void insertLayerWobbleOverrides(QJsonObject &object, const Layer &layer)
+{
+    if (layer.wobbleAmount)
+    {
+        object.insert(QStringLiteral("wobble"), *layer.wobbleAmount);
+    }
+    if (layer.motion)
+    {
+        object.insert(
+            QStringLiteral("motion"), motionSettingsToJson(*layer.motion));
+    }
+}
+
+bool readLayerWobbleOverrides(
+    const QJsonObject &object, Layer &layer, QString *error)
+{
+    const QJsonValue wobble = object.value(QStringLiteral("wobble"));
+    if (!wobble.isUndefined() && !wobble.isNull())
+    {
+        if (!wobble.isDouble())
+        {
+            setError(error,
+                DocumentSerializer::tr("A layer has an invalid wobble."));
+            return false;
+        }
+        const qreal amount = wobble.toDouble();
+        if (!std::isfinite(amount)
+            || amount < DocumentLimits::minimumWobbleAmount
+            || amount > DocumentLimits::maximumWobbleAmount)
+        {
+            setError(error,
+                DocumentSerializer::tr("A layer has an invalid wobble."));
+            return false;
+        }
+        layer.wobbleAmount = amount;
+    }
+    const QJsonValue motion = object.value(QStringLiteral("motion"));
+    if (!motion.isUndefined() && !motion.isNull())
+    {
+        const std::optional<MotionSettings> settings =
+            motionSettingsFromJson(motion, error);
+        if (!settings)
+        {
+            return false;
+        }
+        layer.motion = *settings;
+    }
+    return true;
+}
+
 QJsonArray transformToJson(const QTransform &transform)
 {
     return {transform.m11(),
@@ -1386,6 +1438,7 @@ QJsonObject layerToJson(const Layer &layer,
     object.insert(QStringLiteral("initialCanvasSize"),
         QJsonArray{
             layer.initialCanvasSize.width(), layer.initialCanvasSize.height()});
+    insertLayerWobbleOverrides(object, layer);
     object.insert(QStringLiteral("strokes"), strokes);
     return object;
 }
@@ -1410,6 +1463,7 @@ QJsonObject layerSkeletonToJson(const Layer &layer)
     object.insert(QStringLiteral("initialCanvasSize"),
         QJsonArray{
             layer.initialCanvasSize.width(), layer.initialCanvasSize.height()});
+    insertLayerWobbleOverrides(object, layer);
     object.insert(QStringLiteral("strokes"), QJsonArray());
     return object;
 }
@@ -1574,6 +1628,10 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
             return std::nullopt;
         }
         layer.blendMode = *blendMode;
+    }
+    if (fileSchemaVersion >= 12 && !readLayerWobbleOverrides(object, layer, error))
+    {
+        return std::nullopt;
     }
     layer.initialCanvasSize = canvasSize;
     if (fileSchemaVersion >= 6)

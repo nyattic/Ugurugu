@@ -155,7 +155,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(source);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
         QCOMPARE(root.value(QStringLiteral("binaryMasks")).toArray().size(), 1);
         const QJsonObject serializedStroke =
             root.value(QStringLiteral("layers"))
@@ -201,7 +201,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(source);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
         QCOMPARE(
             root.value(QStringLiteral("rasterAssets")).toArray().size(), 1);
 
@@ -297,7 +297,7 @@ private slots:
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
         QCOMPARE(
-            currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 11);
+            currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 12);
         QCOMPARE(
             currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 3);
         const std::optional<Document> reloaded =

@@ -16,6 +16,7 @@
 #include "ui/ShortcutBinding.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
+#include "ui/ToolDock.hpp"
 #include "ui/ToolPopover.hpp"
 #include "ui/WandPopoverPanel.hpp"
 #include "ui/WobblePopoverPanel.hpp"
@@ -447,6 +448,19 @@ void MainWindow::createActions()
         m_canvas,
         &CanvasWidget::deleteSelection);
 
+    m_fillSelectionAction = new QAction(tr("Fill selection"), this);
+    m_fillSelectionAction->setObjectName(
+        QStringLiteral("fillSelectionAction"));
+    m_fillSelectionAction->setIcon(Icons::icon(IconGlyph::Bucket));
+    m_fillSelectionAction->setToolTip(
+        tr("Fill the selected area with the brush color"));
+    registerShortcut(m_fillSelectionAction,
+        QKeySequence(Qt::AltModifier | Qt::Key_Delete));
+    connect(m_fillSelectionAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::fillSelection);
+
     m_deselectSelectionAction = new QAction(tr("Deselect"), this);
     m_deselectSelectionAction->setObjectName(
         QStringLiteral("deselectSelectionAction"));
@@ -483,6 +497,9 @@ void MainWindow::createActions()
         m_flipSelectionHorizontalAction->setEnabled(hasContent);
         m_flipSelectionVerticalAction->setEnabled(hasContent);
         m_deleteSelectionAction->setEnabled(hasContent);
+        // Filling needs an area, not content: filling an empty selection is
+        // the whole point of the command.
+        m_fillSelectionAction->setEnabled(hasArea);
         m_deselectSelectionAction->setEnabled(hasArea);
         if (!hasContent)
         {
@@ -522,6 +539,7 @@ void MainWindow::createActions()
     selectionBar->addSeparator();
     selectionBar->addActionButton(m_copySelectionAction);
     selectionBar->addActionButton(m_editStrokePropertiesAction);
+    selectionBar->addActionButton(m_fillSelectionAction);
     selectionBar->addActionButton(m_deleteSelectionAction);
     selectionBar->addSeparator();
     selectionBar->addActionButton(m_deselectSelectionAction);
@@ -636,6 +654,27 @@ void MainWindow::createActions()
     m_bucketAction->setObjectName(QStringLiteral("bucketAction"));
     registerShortcut(m_bucketAction, QKeySequence(QStringLiteral("G")));
 
+    m_eyedropperAction = new QAction(tr("E&yedropper"), this);
+    m_eyedropperAction->setCheckable(true);
+    m_eyedropperAction->setIcon(Icons::toggleIcon(IconGlyph::Eyedropper));
+    m_eyedropperAction->setObjectName(QStringLiteral("eyedropperAction"));
+    m_eyedropperAction->setToolTip(
+        tr("Pick a color from the canvas. Alt+click does the same from any "
+           "paint tool."));
+    registerShortcut(m_eyedropperAction, QKeySequence(QStringLiteral("I")));
+
+    // The animation bar is a fixture of the central layout rather than a dock,
+    // so it needs its own toggle and its own persisted visibility.
+    m_showTimelineAction = new QAction(tr("Show &animation bar"), this);
+    m_showTimelineAction->setObjectName(QStringLiteral("showTimelineAction"));
+    m_showTimelineAction->setCheckable(true);
+    m_showTimelineAction->setChecked(timelineVisibleSetting());
+    registerShortcut(m_showTimelineAction, QKeySequence(QStringLiteral("Ctrl+T")));
+    connect(m_showTimelineAction,
+        &QAction::toggled,
+        this,
+        &MainWindow::setTimelineVisible);
+
     auto *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
     toolGroup->addAction(m_brushAction);
@@ -643,6 +682,7 @@ void MainWindow::createActions()
     toolGroup->addAction(m_lassoAction);
     toolGroup->addAction(m_wandAction);
     toolGroup->addAction(m_bucketAction);
+    toolGroup->addAction(m_eyedropperAction);
     connect(m_brushAction,
         &QAction::triggered,
         this,
@@ -678,6 +718,13 @@ void MainWindow::createActions()
         {
             m_canvas->setTool(CanvasWidget::Tool::Bucket);
         });
+    connect(m_eyedropperAction,
+        &QAction::triggered,
+        this,
+        [this]()
+        {
+            m_canvas->setTool(CanvasWidget::Tool::Eyedropper);
+        });
     const auto syncToolAction = [this](CanvasWidget::Tool tool)
     {
         switch (tool)
@@ -696,6 +743,9 @@ void MainWindow::createActions()
             break;
         case CanvasWidget::Tool::Bucket:
             m_bucketAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Eyedropper:
+            m_eyedropperAction->setChecked(true);
             break;
         }
     };
@@ -729,6 +779,7 @@ void MainWindow::createActions()
     addAction(m_applySelectionTransformAction);
     addAction(m_cancelSelectionTransformAction);
     addAction(m_editStrokePropertiesAction);
+    addAction(m_fillSelectionAction);
     addAction(m_deleteSelectionAction);
     addAction(m_deselectSelectionAction);
     addAction(escapeCanvasAction);
@@ -796,6 +847,7 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_cancelSelectionTransformAction);
     selectionMenu->addSeparator();
     selectionMenu->addAction(m_editStrokePropertiesAction);
+    selectionMenu->addAction(m_fillSelectionAction);
     selectionMenu->addAction(m_deleteSelectionAction);
     editMenu->addSeparator();
     editMenu->addAction(
@@ -812,6 +864,8 @@ void MainWindow::createMenus()
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
     viewMenu->addSeparator();
+    viewMenu->addAction(m_showTimelineAction);
+    viewMenu->addAction(m_toolDock->toggleViewAction());
     viewMenu->addAction(m_layerDock->toggleViewAction());
 
     QMenu *toolMenu = menuBar()->addMenu(tr("&Tools"));
@@ -820,6 +874,7 @@ void MainWindow::createMenus()
     toolMenu->addAction(m_lassoAction);
     toolMenu->addAction(m_wandAction);
     toolMenu->addAction(m_bucketAction);
+    toolMenu->addAction(m_eyedropperAction);
     toolMenu->addSeparator();
     toolMenu->addAction(
         findChild<QAction *>(QStringLiteral("importWwpPresetAction")));
@@ -860,55 +915,22 @@ void MainWindow::createToolBars()
         button->setDefaultAction(action);
         button->setIconSize(rail->iconSize());
         button->setHoverGlyph(glyph);
+        // Icon only. The dock names the selected tool and shows its settings,
+        // so labels here only made the rail taller without telling anyone
+        // anything the dock does not already say.
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         rail->addWidget(button);
         return button;
     };
 
-    PopoverToolButton *brushButton =
-        addRailButton(m_brushAction, IconGlyph::Brush);
-    PopoverToolButton *eraserButton =
-        addRailButton(m_eraserAction, IconGlyph::Eraser);
-    PopoverToolButton *lassoButton =
-        addRailButton(m_lassoAction, IconGlyph::Lasso);
-    PopoverToolButton *wandButton =
-        addRailButton(m_wandAction, IconGlyph::Wand);
-    PopoverToolButton *bucketButton =
-        addRailButton(m_bucketAction, IconGlyph::Bucket);
-
-    auto *brushPopover = new ToolPopover(this);
-    auto *brushPanel = new BrushPopoverPanel(m_canvas);
-    brushPopover->setContentWidget(brushPanel);
-    connect(brushPopover,
-        &ToolPopover::popoverShown,
-        brushPanel,
-        [brushPanel]()
-        {
-            brushPanel->setAnimationActive(true);
-        });
-    connect(brushPopover,
-        &ToolPopover::popoverHidden,
-        brushPanel,
-        [brushPanel]()
-        {
-            brushPanel->setAnimationActive(false);
-        });
-    brushButton->setPopover(brushPopover);
-
-    auto *eraserPopover = new ToolPopover(this);
-    eraserPopover->setContentWidget(new EraserPopoverPanel(m_canvas));
-    eraserButton->setPopover(eraserPopover);
-
-    auto *lassoPopover = new ToolPopover(this);
-    lassoPopover->setContentWidget(new LassoPopoverPanel(m_canvas));
-    lassoButton->setPopover(lassoPopover);
-
-    auto *wandPopover = new ToolPopover(this);
-    wandPopover->setContentWidget(new WandPopoverPanel(m_canvas));
-    wandButton->setPopover(wandPopover);
-
-    auto *bucketPopover = new ToolPopover(this);
-    bucketPopover->setContentWidget(new BucketPopoverPanel(m_canvas));
-    bucketButton->setPopover(bucketPopover);
+    // No popovers hang off these any more: every tool's options live in the
+    // always-visible ToolDock, so the rail is purely tool selection.
+    addRailButton(m_brushAction, IconGlyph::Brush);
+    addRailButton(m_eraserAction, IconGlyph::Eraser);
+    addRailButton(m_lassoAction, IconGlyph::Lasso);
+    addRailButton(m_wandAction, IconGlyph::Wand);
+    addRailButton(m_bucketAction, IconGlyph::Bucket);
+    addRailButton(m_eyedropperAction, IconGlyph::Eyedropper);
 
     rail->addSeparator();
     auto *wobbleButton = new QToolButton(rail);
@@ -918,14 +940,16 @@ void MainWindow::createToolBars()
     wobbleButton->setToolTip(tr("Wobble settings"));
     wobbleButton->setAccessibleName(tr("Wobble settings"));
     rail->addWidget(wobbleButton);
-    auto *wobblePopover = new ToolPopover(this);
-    wobblePopover->setContentWidget(new WobblePopoverPanel(&m_controller));
+    // The settings themselves live in the dock now, so the rail button's job
+    // is to bring that section into view rather than to hold a copy of them.
     connect(wobbleButton,
         &QToolButton::clicked,
-        wobblePopover,
-        [wobblePopover, wobbleButton]()
+        this,
+        [this]()
         {
-            wobblePopover->popupBeside(wobbleButton);
+            m_toolDock->show();
+            m_toolDock->raise();
+            m_toolDock->revealWobbleSettings();
         });
 
     connect(m_canvas,
@@ -980,13 +1004,9 @@ void MainWindow::createToolBars()
     quick->addWidget(colorHolder);
     quick->addSeparator();
 
-    m_swatchRow = new ColorSwatchRow(quick);
-    connect(m_swatchRow,
-        &ColorSwatchRow::colorSelected,
-        m_canvas,
-        &CanvasWidget::setBrushColor);
-    quick->addWidget(m_swatchRow);
-
+    // The recent-colour row lives in the tool dock alongside the wheel. A
+    // second instance here would not only duplicate it, it would race the
+    // dock's over the same stored list of recent colours.
     auto *quickSpacer = new QWidget(quick);
     quickSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     quick->addWidget(quickSpacer);
@@ -1005,13 +1025,11 @@ void MainWindow::createToolBars()
     connect(m_canvas,
         &CanvasWidget::brushColorChanged,
         this,
-        [this](const QColor &color)
+        [this](const QColor &)
         {
             updateColorButton();
-            m_swatchRow->setActiveColor(color);
         });
     updateColorButton();
-    m_swatchRow->setActiveColor(m_canvas->brushColor());
 }
 
 void MainWindow::createStatusBar()

@@ -61,7 +61,13 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
 
     // Input latency takes priority over speculative animation frames. The
     // completed stroke will schedule a fresh warmup for the new document.
-    cancelFrameCacheWarmup();
+    // Wobbling while drawing is the exception: there every animation tick
+    // composes the stroke over a different frame, so an unwarmed cache means a
+    // full frame render per tick on the GUI thread.
+    if (!m_animateWhileDrawing)
+    {
+        cancelFrameCacheWarmup();
+    }
     m_activeStroke = Stroke();
     m_activeStroke.seed = QRandomGenerator::global()->generate64();
     const bool erasing = tabletEraser || m_tool == Tool::Eraser;
@@ -380,7 +386,7 @@ void CanvasWidget::endZoomDrag()
 bool CanvasWidget::isColorPickableTool() const
 {
     return m_tool == Tool::Brush || m_tool == Tool::Eraser
-           || m_tool == Tool::Bucket;
+           || m_tool == Tool::Bucket || m_tool == Tool::Eyedropper;
 }
 
 void CanvasWidget::beginColorPick(const QPointF &widgetPosition)

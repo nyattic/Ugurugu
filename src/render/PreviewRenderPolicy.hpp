@@ -11,7 +11,8 @@ namespace ugurugu
 class PreviewRenderPolicy final
 {
 public:
-    static constexpr int maximumCacheKiB = MemoryBudget::previewCacheKiB;
+    // Follows installed memory, so it is a call rather than a constant.
+    static int maximumCacheKiB();
     static constexpr qreal maximumPreviewEdge = 4096.0;
 
     // Surfaces an active stroke keeps resident alongside the frame it composes

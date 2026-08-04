@@ -55,6 +55,7 @@ PercentControls addPercentControls(QWidget *parent,
 WobblePopoverPanel::WobblePopoverPanel(
     DocumentController *controller, QWidget *parent)
     : QWidget(parent)
+    , m_controller(controller)
 {
     setMinimumWidth(320);
     auto *layout = new QVBoxLayout(this);
@@ -141,55 +142,117 @@ WobblePopoverPanel::WobblePopoverPanel(
         });
     connect(amountSpin,
         &QDoubleSpinBox::valueChanged,
-        controller,
-        &DocumentController::setWobbleAmount);
+        this,
+        [this, controller](double value)
+        {
+            if (editScopedLayer(
+                    [value](qreal &amount, MotionSettings &) { amount = value; }))
+            {
+                return;
+            }
+            controller->setWobbleAmount(value);
+        });
     connect(style,
         &QComboBox::currentIndexChanged,
-        controller,
-        [controller, style](int)
+        this,
+        [this, controller, style](int)
         {
-            controller->setMotionStyle(
-                static_cast<MotionStyle>(style->currentData().toInt()));
+            const auto next =
+                static_cast<MotionStyle>(style->currentData().toInt());
+            if (editScopedLayer([next](qreal &, MotionSettings &motion)
+                    { motion.style = next; }))
+            {
+                return;
+            }
+            controller->setMotionStyle(next);
         });
     connect(poseCount,
         &QSpinBox::valueChanged,
-        controller,
-        &DocumentController::setMotionPoseCount);
+        this,
+        [this, controller](int value)
+        {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.poseCount = value; }))
+            {
+                return;
+            }
+            controller->setMotionPoseCount(value);
+        });
     connect(detail,
         &QSpinBox::valueChanged,
-        controller,
-        &DocumentController::setMotionDetail);
+        this,
+        [this, controller](int value)
+        {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.detail = value; }))
+            {
+                return;
+            }
+            controller->setMotionDetail(value);
+        });
     connect(linked.spin,
         &QSpinBox::valueChanged,
-        controller,
-        [controller](int value)
+        this,
+        [this, controller](int value)
         {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.linked = value / 100.0; }))
+            {
+                return;
+            }
             controller->setMotionLinked(value / 100.0);
         });
     connect(randomness.spin,
         &QSpinBox::valueChanged,
-        controller,
-        [controller](int value)
+        this,
+        [this, controller](int value)
         {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.randomness = value / 100.0; }))
+            {
+                return;
+            }
             controller->setMotionRandomness(value / 100.0);
         });
     connect(brokenLine,
         &QCheckBox::toggled,
-        controller,
-        &DocumentController::setBrokenLineEnabled);
+        this,
+        [this, controller](bool enabled)
+        {
+            if (editScopedLayer([enabled](qreal &, MotionSettings &motion)
+                    { motion.brokenLine = enabled; }))
+            {
+                return;
+            }
+            controller->setBrokenLineEnabled(enabled);
+        });
     connect(breakAmount.spin,
         &QSpinBox::valueChanged,
-        controller,
-        [controller](int value)
+        this,
+        [this, controller](int value)
         {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.breakAmount = value / 100.0; }))
+            {
+                return;
+            }
             controller->setBreakAmount(value / 100.0);
         });
     connect(breakRange,
         &QDoubleSpinBox::valueChanged,
-        controller,
-        &DocumentController::setBreakRange);
+        this,
+        [this, controller](double value)
+        {
+            if (editScopedLayer([value](qreal &, MotionSettings &motion)
+                    { motion.breakRange = value; }))
+            {
+                return;
+            }
+            controller->setBreakRange(value);
+        });
 
-    const auto sync = [controller,
+    const auto sync = [this,
+                          controller,
                           amountSlider,
                           amountSpin,
                           style,
@@ -215,25 +278,34 @@ WobblePopoverPanel::WobblePopoverPanel(
         const QSignalBlocker breakAmountSpinBlocker(breakAmount.spin);
         const QSignalBlocker breakRangeBlocker(breakRange);
         const Document &document = controller->document();
-        amountSlider->setValue(qRound(document.wobbleAmount * 10.0));
-        amountSpin->setValue(document.wobbleAmount);
-        style->setCurrentIndex(
-            style->findData(static_cast<int>(document.motion.style)));
-        poseCount->setMaximum(document.motion.style == MotionStyle::Classic
+        // A layer that has not overridden anything still shows the document's
+        // values, so switching scope never blanks the panel.
+        const Layer *scoped =
+            m_scopeLayer.isNull() ? nullptr : document.layer(m_scopeLayer);
+        const qreal wobbleAmount = scoped
+                                       ? effectiveWobbleAmount(document, *scoped)
+                                       : document.wobbleAmount;
+        const MotionSettings motion =
+            scoped ? effectiveMotion(document, *scoped) : document.motion;
+        amountSlider->setValue(qRound(wobbleAmount * 10.0));
+        amountSpin->setValue(wobbleAmount);
+        style->setCurrentIndex(style->findData(static_cast<int>(motion.style)));
+        poseCount->setMaximum(motion.style == MotionStyle::Classic
                                   ? DocumentLimits::maximumMotionPoseCount
                                   : document.animationFrames);
-        poseCount->setValue(document.motion.poseCount);
-        poseCount->setEnabled(document.motion.style != MotionStyle::Classic);
-        detail->setValue(document.motion.detail);
-        linked.spin->setValue(qRound(document.motion.linked * 100.0));
-        randomness.spin->setValue(qRound(document.motion.randomness * 100.0));
-        brokenLine->setChecked(document.motion.brokenLine);
-        breakAmount.spin->setValue(qRound(document.motion.breakAmount * 100.0));
-        breakRange->setValue(document.motion.breakRange);
-        breakAmount.slider->setEnabled(document.motion.brokenLine);
-        breakAmount.spin->setEnabled(document.motion.brokenLine);
-        breakRange->setEnabled(document.motion.brokenLine);
+        poseCount->setValue(motion.poseCount);
+        poseCount->setEnabled(motion.style != MotionStyle::Classic);
+        detail->setValue(motion.detail);
+        linked.spin->setValue(qRound(motion.linked * 100.0));
+        randomness.spin->setValue(qRound(motion.randomness * 100.0));
+        brokenLine->setChecked(motion.brokenLine);
+        breakAmount.spin->setValue(qRound(motion.breakAmount * 100.0));
+        breakRange->setValue(motion.breakRange);
+        breakAmount.slider->setEnabled(motion.brokenLine);
+        breakAmount.spin->setEnabled(motion.brokenLine);
+        breakRange->setEnabled(motion.brokenLine);
     };
+    m_sync = sync;
     connect(controller,
         &DocumentController::documentChanged,
         this,
@@ -242,6 +314,46 @@ WobblePopoverPanel::WobblePopoverPanel(
             sync();
         });
     sync();
+}
+
+void WobblePopoverPanel::setScopeLayer(const QUuid &layerId)
+{
+    if (m_scopeLayer == layerId)
+    {
+        return;
+    }
+    m_scopeLayer = layerId;
+    if (m_sync)
+    {
+        m_sync();
+    }
+}
+
+QUuid WobblePopoverPanel::scopeLayer() const
+{
+    return m_scopeLayer;
+}
+
+bool WobblePopoverPanel::editScopedLayer(
+    const std::function<void(qreal &, MotionSettings &)> &mutate)
+{
+    if (m_scopeLayer.isNull() || !m_controller)
+    {
+        return false;
+    }
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_scopeLayer);
+    if (!layer || layer->kind != LayerKind::Paint)
+    {
+        return false;
+    }
+    // Seeding from the effective values means the first edit on a layer that
+    // was following the document keeps everything else exactly as it looked.
+    qreal amount = effectiveWobbleAmount(document, *layer);
+    MotionSettings motion = effectiveMotion(document, *layer);
+    mutate(amount, motion);
+    m_controller->setLayerWobbleOverride(m_scopeLayer, amount, motion);
+    return true;
 }
 
 }

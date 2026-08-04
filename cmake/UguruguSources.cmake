@@ -3,6 +3,7 @@ set(UGURUGU_CORE_SOURCES
     src/app/ApplicationInstanceLock.hpp
     src/app/Logging.cpp
     src/app/Logging.hpp
+    src/app/MemoryBudget.cpp
     src/app/MemoryBudget.hpp
     src/app/RecoveryStore.cpp
     src/app/RecoveryStore.hpp
@@ -141,6 +142,12 @@ set(UGURUGU_UI_SOURCES
     src/ui/CanvasWidgetTools.cpp
     src/ui/ColorSwatchRow.cpp
     src/ui/ColorSwatchRow.hpp
+    src/ui/CollapsibleSection.cpp
+    src/ui/CollapsibleSection.hpp
+    src/ui/ColorWheel.cpp
+    src/ui/ColorWheel.hpp
+    src/ui/ToolDock.cpp
+    src/ui/ToolDock.hpp
     src/ui/EraserPopoverPanel.cpp
     src/ui/EraserPopoverPanel.hpp
     src/ui/EraserPresetButton.cpp

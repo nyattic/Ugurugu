@@ -141,7 +141,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(document);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 11);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
         QString error;
         const std::optional<Document> decoded =
             DocumentSerializer::fromJson(json, &error);
@@ -653,6 +653,124 @@ private slots:
         controller.undoStack()->undo();
         QCOMPARE(controller.document().layers.size(), 2);
         QCOMPARE(controller.document().activeLayerId, upperId);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+    }
+
+    void overridesWobblePerLayerUndoablyAndAcrossASaveCycle()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke stroke;
+        stroke.width = 6.0;
+        stroke.points = {{QPointF(10.0, 48.0), 1.0}, {QPointF(86.0, 48.0), 1.0}};
+        controller.addStroke(layerId, stroke);
+        controller.undoStack()->setClean();
+        QVERIFY(!controller.document().layer(layerId)->wobbleAmount);
+
+        MotionSettings still;
+        still.poseCount = 1;
+        controller.setLayerWobbleOverride(layerId, 0.0, still);
+        const Layer *held = controller.document().layer(layerId);
+        QVERIFY(held->wobbleAmount.has_value());
+        QCOMPARE(*held->wobbleAmount, 0.0);
+        QCOMPARE(effectiveWobbleAmount(controller.document(), *held), 0.0);
+        // A layer pinned to zero must be identical on every frame while the
+        // document itself still wobbles.
+        QCOMPARE(RenderEngine::render(controller.document(), 3),
+            RenderEngine::render(controller.document(), 11));
+
+        const QByteArray json =
+            DocumentSerializer::toJson(controller.document());
+        QVERIFY(!json.isEmpty());
+        QString error;
+        const std::optional<Document> loaded =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        const Layer *reloaded = loaded->layer(layerId);
+        QVERIFY(reloaded);
+        QCOMPARE(reloaded->wobbleAmount, held->wobbleAmount);
+        QCOMPARE(reloaded->motion, held->motion);
+
+        controller.undoStack()->undo();
+        QVERIFY(!controller.document().layer(layerId)->wobbleAmount);
+        QVERIFY(!controller.document().layer(layerId)->motion);
+        controller.undoStack()->redo();
+        QCOMPARE(*controller.document().layer(layerId)->wobbleAmount, 0.0);
+
+        // Half an override is meaningless, so it is refused outright.
+        const int count = controller.undoStack()->count();
+        controller.setLayerWobbleOverride(layerId, 4.0, std::nullopt);
+        QCOMPARE(controller.undoStack()->count(), count);
+        QCOMPARE(*controller.document().layer(layerId)->wobbleAmount, 0.0);
+    }
+
+    void refusesToMergeALayerWhoseEraserWouldEatTheLayerBelow()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.color = QColor(220, 40, 30);
+        lowerStroke.width = 24.0;
+        lowerStroke.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        // Erasing on its own layer leaves the layer below untouched. Appending
+        // that stroke to the layer below would let it cut into pixels it never
+        // covered before.
+        Stroke upperErase;
+        upperErase.mode = StrokeMode::Erase;
+        upperErase.width = 24.0;
+        upperErase.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(upperId, upperErase);
+        controller.undoStack()->setClean();
+        const QImage before = RenderEngine::render(controller.document(), 0);
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::UnsupportedStrokes);
+        QVERIFY(!controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+        QVERIFY(controller.undoStack()->isClean());
+    }
+
+    void mergesALayerWhoseEraserOnlyTouchesItsOwnStrokes()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(512, 512));
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.color = QColor(220, 40, 30);
+        lowerStroke.width = 8.0;
+        lowerStroke.points = {
+            {QPointF(24.0, 40.0), 1.0}, {QPointF(480.0, 40.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.color = QColor(30, 80, 220);
+        upperStroke.width = 8.0;
+        upperStroke.points = {
+            {QPointF(24.0, 460.0), 1.0}, {QPointF(480.0, 460.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
+        // Far clear of the lower layer's stroke, so flattening keeps pixels.
+        Stroke upperErase;
+        upperErase.mode = StrokeMode::Erase;
+        upperErase.width = 6.0;
+        upperErase.points = {
+            {QPointF(240.0, 460.0), 1.0}, {QPointF(272.0, 460.0), 1.0}};
+        controller.addStroke(upperId, upperErase);
+        controller.undoStack()->setClean();
+        const QImage before = RenderEngine::render(controller.document(), 0);
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::Available);
+        QVERIFY(controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 1);
         QCOMPARE(RenderEngine::render(controller.document(), 0), before);
     }
 

@@ -36,6 +36,7 @@ constexpr int motionRandomnessMergeId = 9;
 constexpr int brokenLineMergeId = 10;
 constexpr int breakAmountMergeId = 11;
 constexpr int breakRangeMergeId = 12;
+constexpr int layerWobbleMergeId = 13;
 
 }
 

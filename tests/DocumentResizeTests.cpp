@@ -180,7 +180,7 @@ private slots:
                      .object()
                      .value(QStringLiteral("schemaVersion"))
                      .toInt(),
-            11);
+            12);
         const std::optional<Document> loaded =
             DocumentSerializer::fromJson(json, &error);
         QVERIFY2(loaded.has_value(), qPrintable(error));

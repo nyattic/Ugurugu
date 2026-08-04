@@ -5,14 +5,20 @@
 
 #include <QApplication>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFutureWatcher>
+#include <QLabel>
 #include <QLocale>
 #include <QMessageBox>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QPromise>
+#include <QPushButton>
 #include <QSettings>
+#include <QTextBrowser>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QtConcurrentRun>
 
 #include <spdlog/spdlog.h>
@@ -158,29 +164,66 @@ public:
             }));
     }
 
+    // QMessageBox only offers release notes through setDetailedText, which
+    // folds them behind a "Show Details" button and renders the markdown as
+    // plain text. The notes are the whole reason to show this dialog, so they
+    // get the body of a purpose-built one instead.
     void offerUpdate(const Velopack::UpdateInfo &update)
     {
         const QString version =
             QString::fromStdString(update.TargetFullRelease.Version);
-        QMessageBox message(QMessageBox::Information,
-            UpdateController::tr("Update available"),
-            UpdateController::tr("Ugurugu %1 is available. "
-                                 "Download and install it now?")
-                .arg(version),
-            QMessageBox::Yes | QMessageBox::No,
-            window);
-        message.setDefaultButton(QMessageBox::Yes);
-        if (!update.TargetFullRelease.NotesMarkdown.empty())
+        const QString configured = SettingsDialog::uiLanguage();
+        const QString language = configured == QStringLiteral("system")
+                                     ? QLocale::system().name()
+                                     : configured;
+        const QString notes =
+            update.TargetFullRelease.NotesMarkdown.empty()
+                ? QString()
+                : localizedReleaseNotes(QString::fromStdString(
+                                            update.TargetFullRelease
+                                                .NotesMarkdown),
+                      language);
+
+        QDialog dialog(window);
+        dialog.setObjectName(QStringLiteral("updateAvailableDialog"));
+        dialog.setWindowTitle(UpdateController::tr("Update available"));
+        auto *layout = new QVBoxLayout(&dialog);
+
+        auto *heading = new QLabel(
+            UpdateController::tr("Ugurugu %1 is available.").arg(version),
+            &dialog);
+        heading->setObjectName(QStringLiteral("updateHeadingLabel"));
+        heading->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        QFont headingFont = heading->font();
+        headingFont.setBold(true);
+        heading->setFont(headingFont);
+        layout->addWidget(heading);
+
+        if (!notes.isEmpty())
         {
-            const QString configured = SettingsDialog::uiLanguage();
-            const QString language = configured == QStringLiteral("system")
-                                         ? QLocale::system().name()
-                                         : configured;
-            message.setDetailedText(localizedReleaseNotes(
-                QString::fromStdString(update.TargetFullRelease.NotesMarkdown),
-                language));
+            auto *browser = new QTextBrowser(&dialog);
+            browser->setObjectName(QStringLiteral("updateNotesBrowser"));
+            browser->setOpenExternalLinks(true);
+            browser->setMarkdown(notes);
+            layout->addWidget(browser, 1);
         }
-        if (message.exec() == QMessageBox::Yes)
+
+        auto *prompt = new QLabel(
+            UpdateController::tr("Download and install it now?"), &dialog);
+        prompt->setObjectName(QStringLiteral("updatePromptLabel"));
+        layout->addWidget(prompt);
+
+        auto *buttons = new QDialogButtonBox(
+            QDialogButtonBox::Yes | QDialogButtonBox::No, &dialog);
+        buttons->button(QDialogButtonBox::Yes)->setDefault(true);
+        QObject::connect(
+            buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        QObject::connect(
+            buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+        dialog.resize(notes.isEmpty() ? QSize(420, 160) : QSize(560, 480));
+
+        if (dialog.exec() == QDialog::Accepted)
         {
             startDownload(update);
         }

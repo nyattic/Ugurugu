@@ -257,9 +257,17 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             || !std::isfinite(layer.opacity) || layer.opacity < 0.0
             || layer.opacity > 1.0 || !isValidLayerBlendMode(layer.blendMode)
             || !isValidLayerKind(layer.kind)
+            || (layer.wobbleAmount
+                && (!std::isfinite(*layer.wobbleAmount)
+                    || *layer.wobbleAmount < DocumentLimits::minimumWobbleAmount
+                    || *layer.wobbleAmount
+                           > DocumentLimits::maximumWobbleAmount))
+            || (layer.motion
+                && !isValidMotionSettings(
+                    *layer.motion, source.animationFrames))
             || (layer.kind == LayerKind::Group
                 && (!layer.strokes.isEmpty() || layer.clipToLayerBelow
-                    || layer.reference)))
+                    || layer.reference || layer.wobbleAmount || layer.motion)))
         {
             setError(error,
                 DocumentSerializer::tr("A layer contains invalid data."));
@@ -398,6 +406,8 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             frozenLayer.reference = layer.reference;
             frozenLayer.opacity = layer.opacity;
             frozenLayer.blendMode = layer.blendMode;
+            frozenLayer.wobbleAmount = layer.wobbleAmount;
+            frozenLayer.motion = layer.motion;
             frozenLayer.initialCanvasSize = layer.initialCanvasSize;
             frozenLayer.strokes = baseLayer.strokes;
             frozen.layers.append(std::move(frozenLayer));

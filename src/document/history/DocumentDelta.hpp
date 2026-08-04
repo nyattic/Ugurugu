@@ -75,13 +75,15 @@ struct DocumentDelta
         std::optional<ValueChange<QUuid>> parentGroupId;
         std::optional<ValueChange<bool>> clipToLayerBelow;
         std::optional<ValueChange<QSize>> initialCanvasSize;
+        std::optional<ValueChange<std::optional<qreal>>> wobbleAmount;
+        std::optional<ValueChange<std::optional<MotionSettings>>> motion;
         StrokeSequenceDelta strokes;
 
         bool isEmpty() const
         {
             return !name && !visible && !reference && !opacity && !blendMode
                    && !parentGroupId && !clipToLayerBelow && !initialCanvasSize
-                   && strokes.isEmpty();
+                   && !wobbleAmount && !motion && strokes.isEmpty();
         }
     };
 

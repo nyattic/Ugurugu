@@ -37,7 +37,9 @@ constexpr auto layerScalarFields = std::tuple{&LayerChange::name,
     &LayerChange::blendMode,
     &LayerChange::parentGroupId,
     &LayerChange::clipToLayerBelow,
-    &LayerChange::initialCanvasSize};
+    &LayerChange::initialCanvasSize,
+    &LayerChange::wobbleAmount,
+    &LayerChange::motion};
 
 template <typename Owner, typename Fields>
 int populatedFieldCount(const Owner &owner, const Fields &fields)
@@ -109,6 +111,60 @@ bool mergeLayerScalar(DocumentDelta &current,
         return false;
     }
     return mergeValue(currentLayer.*field, nextLayer.*field);
+}
+
+// A layer's wobble override is two fields that move as one gesture, so it
+// needs a merge that spans both rather than the single-field form above. A
+// field only one side touched is adopted as is: the other side left it alone,
+// so its recorded before value is still the truth.
+bool mergeLayerWobble(
+    DocumentDelta &current, const DocumentDelta &next, const QUuid &scope)
+{
+    if (scope.isNull() || !hasNoDocumentStructure(current)
+        || !hasNoDocumentStructure(next)
+        || populatedFieldCount(current, documentScalarFields) != 0
+        || populatedFieldCount(next, documentScalarFields) != 0
+        || current.changedLayers.size() != 1 || next.changedLayers.size() != 1)
+    {
+        return false;
+    }
+    LayerChange &currentLayer = current.changedLayers[0];
+    const LayerChange &nextLayer = next.changedLayers[0];
+    const auto touchesOnlyWobble = [](const LayerChange &change)
+    {
+        return !change.name && !change.visible && !change.reference
+               && !change.opacity && !change.blendMode && !change.parentGroupId
+               && !change.clipToLayerBelow && !change.initialCanvasSize
+               && change.strokes.isEmpty();
+    };
+    if (currentLayer.id != scope || nextLayer.id != scope
+        || !touchesOnlyWobble(currentLayer) || !touchesOnlyWobble(nextLayer))
+    {
+        return false;
+    }
+    const auto fold = []<typename T>(std::optional<DocumentDelta::ValueChange<T>>
+                                         &target,
+                          const std::optional<DocumentDelta::ValueChange<T>>
+                              &later)
+    {
+        if (!later)
+        {
+            return true;
+        }
+        if (!target)
+        {
+            target = later;
+            return true;
+        }
+        if (target->after != later->before)
+        {
+            return false;
+        }
+        target->after = later->after;
+        return true;
+    };
+    return fold(currentLayer.wobbleAmount, nextLayer.wobbleAmount)
+           && fold(currentLayer.motion, nextLayer.motion);
 }
 
 // Payload equality is decided by backing address, not by content, because a
@@ -592,6 +648,9 @@ DocumentDelta DocumentDelta::between(
         recordChange(layer.initialCanvasSize,
             afterLayer.initialCanvasSize,
             change.initialCanvasSize);
+        recordChange(
+            layer.wobbleAmount, afterLayer.wobbleAmount, change.wobbleAmount);
+        recordChange(layer.motion, afterLayer.motion, change.motion);
         if (!sameStrokeVectorBacking(layer.strokes, afterLayer.strokes))
         {
             change.strokes = betweenStrokes(layer.strokes, afterLayer.strokes);
@@ -649,6 +708,8 @@ DocumentDelta DocumentDelta::appendedStroke(
             || beforeLayer.reference != afterLayer.reference
             || beforeLayer.opacity != afterLayer.opacity
             || beforeLayer.blendMode != afterLayer.blendMode
+            || beforeLayer.wobbleAmount != afterLayer.wobbleAmount
+            || beforeLayer.motion != afterLayer.motion
             || beforeLayer.initialCanvasSize != afterLayer.initialCanvasSize)
         {
             return {};
@@ -709,6 +770,8 @@ bool DocumentDelta::apply(Document &document, bool forward) const
         applyChange(layer->clipToLayerBelow, change.clipToLayerBelow, forward);
         applyChange(
             layer->initialCanvasSize, change.initialCanvasSize, forward);
+        applyChange(layer->wobbleAmount, change.wobbleAmount, forward);
+        applyChange(layer->motion, change.motion, forward);
         if (!applyStrokeDelta(layer->strokes, change.strokes, forward))
         {
             return false;
@@ -775,6 +838,10 @@ bool DocumentDelta::mergeScalar(
     {
         return mergeLayerScalar(*this, next, scope, &LayerChange::opacity);
     }
+    if (mergeId == layerWobbleMergeId)
+    {
+        return mergeLayerWobble(*this, next, scope);
+    }
     return false;
 }
 
@@ -804,6 +871,8 @@ void DocumentDelta::normalizeMergedChanges()
         normalize(change.parentGroupId);
         normalize(change.clipToLayerBelow);
         normalize(change.initialCanvasSize);
+        normalize(change.wobbleAmount);
+        normalize(change.motion);
     }
     changedLayers.removeIf(
         [](const LayerChange &change)

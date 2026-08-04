@@ -94,6 +94,7 @@ public:
     bool copySelection();
     bool cutSelection();
     bool deleteSelection();
+    bool fillSelection();
     void selectAll();
     void invertSelection();
     void deselectSelection();

@@ -128,6 +128,7 @@ public:
         MissingLayer,
         NoPaintLayerBelow,
         UnsupportedProperties,
+        UnsupportedStrokes,
         IncompatibleCanvasEpoch,
         StrokeLimit
     };
@@ -238,6 +239,11 @@ public:
     void setLayerReference(const QUuid &id, bool reference);
     void setLayerOpacity(const QUuid &id, qreal opacity);
     void setLayerBlendMode(const QUuid &id, LayerBlendMode mode);
+    // Pass both values to give the layer its own wobble, or both empty to make
+    // it follow the document again. A half-set pair is rejected.
+    void setLayerWobbleOverride(const QUuid &id,
+        const std::optional<qreal> &wobbleAmount,
+        const std::optional<MotionSettings> &motion);
     void setLayerClipToBelow(const QUuid &id, bool clipped);
     void setLayerParentGroup(const QUuid &id, const QUuid &groupId);
     void moveLayer(const QUuid &id, int offset);

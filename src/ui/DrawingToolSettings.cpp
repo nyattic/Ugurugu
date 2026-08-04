@@ -84,6 +84,8 @@ QString toolSettingsId(CanvasWidget::Tool tool)
         return QStringLiteral("wand");
     case CanvasWidget::Tool::Bucket:
         return QStringLiteral("bucket");
+    case CanvasWidget::Tool::Eyedropper:
+        return QStringLiteral("eyedropper");
     }
     return QStringLiteral("brush");
 }
@@ -109,6 +111,10 @@ std::optional<CanvasWidget::Tool> toolFromSettingsId(const QString &id)
     if (id == QStringLiteral("bucket"))
     {
         return CanvasWidget::Tool::Bucket;
+    }
+    if (id == QStringLiteral("eyedropper"))
+    {
+        return CanvasWidget::Tool::Eyedropper;
     }
     return std::nullopt;
 }

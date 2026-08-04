@@ -5,6 +5,7 @@
 #include "document/SelectionOperation.hpp"
 #include "document/history/HistoryEffects.hpp"
 #include "io/serializer/RasterAssetTable.hpp"
+#include "render/RenderEngine.hpp"
 
 #include <QFileInfo>
 
@@ -19,6 +20,7 @@ using DocumentBudget::distinctClipMaskBytes;
 using DocumentBudget::totalPointCount;
 using DocumentBudget::totalStrokeCount;
 using history::layerOpacityMergeId;
+using history::layerWobbleMergeId;
 
 namespace
 {
@@ -48,6 +50,70 @@ QSize finalCanvasSize(const Layer &layer)
         }
     }
     return size;
+}
+
+// Where a layer's strokes put ink on the canvas. Erase strokes take pixels
+// away rather than adding any, so they do not extend it. An unreadable
+// coverage plan reports the whole canvas so callers stay conservative.
+QRect paintedContentBounds(const Document &document, const Layer &layer)
+{
+    const RenderEngine::StrokeCoveragePlan plan =
+        RenderEngine::prepareStrokeCoverage(document, layer);
+    if (!plan.valid || plan.primitiveBounds.size() != layer.strokes.size())
+    {
+        return QRect(QPoint(), document.size);
+    }
+    QRect bounds;
+    for (int index = 0; index < layer.strokes.size(); ++index)
+    {
+        if (layer.strokes[index].mode == StrokeMode::Erase)
+        {
+            continue;
+        }
+        bounds = bounds.united(plan.primitiveBounds[index]);
+    }
+    return bounds;
+}
+
+// A merge appends the upper layer's strokes to the lower one, so any stroke
+// that removes or relocates pixels already on the layer starts acting on the
+// lower layer's artwork too. That is invisible in the layer list and destroys
+// work, so the merge is only offered while those strokes cannot reach it.
+// Bounds carry the same wobble margin the renderer uses, which keeps the
+// answer conservative for every frame rather than only the current one.
+bool destructiveStrokesClearOf(
+    const Document &document, const Layer &layer, const QRect &painted)
+{
+    const RenderEngine::StrokeCoveragePlan plan =
+        RenderEngine::prepareStrokeCoverage(document, layer);
+    if (!plan.valid || plan.primitiveBounds.size() != layer.strokes.size())
+    {
+        return false;
+    }
+    for (int index = 0; index < layer.strokes.size(); ++index)
+    {
+        const Stroke &stroke = layer.strokes[index];
+        if (stroke.mode == StrokeMode::Reframe)
+        {
+            // Would re-frame the lower layer's strokes along with its own.
+            return false;
+        }
+        if (stroke.mode == StrokeMode::PixelSelection)
+        {
+            if (!stroke.pixelSelectionOp
+                || stroke.pixelSelectionOp->sourceBounds.intersects(painted))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (stroke.mode == StrokeMode::Erase
+            && plan.primitiveBounds[index].intersects(painted))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool imageTransformWithinStoredBounds(
@@ -412,6 +478,11 @@ DocumentController::mergeLayerDownStatus(const QUuid &id) const
     if (finalCanvasSize(target) != source->initialCanvasSize)
     {
         return MergeLayerDownStatus::IncompatibleCanvasEpoch;
+    }
+    if (!destructiveStrokesClearOf(
+            current, *source, paintedContentBounds(current, target)))
+    {
+        return MergeLayerDownStatus::UnsupportedStrokes;
     }
     if (source->strokes.size()
         > DocumentLimits::maximumStrokesPerLayer - target.strokes.size())
@@ -790,6 +861,83 @@ void DocumentController::setLayerOpacity(const QUuid &id, qreal opacity)
         std::move(effects),
         ActiveLayerPolicy::PreserveCurrentIfPresent,
         layerOpacityMergeId,
+        id);
+}
+
+void DocumentController::setLayerWobbleOverride(const QUuid &id,
+    const std::optional<qreal> &wobbleAmount,
+    const std::optional<MotionSettings> &motion)
+{
+    const Document &current = document();
+    const Layer *layer = current.layer(id);
+    if (!layer || layer->kind != LayerKind::Paint)
+    {
+        failHistoryMacro();
+        return;
+    }
+    // Both halves move together: a layer either follows the document or states
+    // its own motion in full. Half an override would render against a mix of
+    // the two and be impossible to reason about in the layer list.
+    if (wobbleAmount.has_value() != motion.has_value())
+    {
+        failHistoryMacro();
+        return;
+    }
+    std::optional<qreal> normalizedAmount;
+    if (wobbleAmount)
+    {
+        if (!std::isfinite(*wobbleAmount))
+        {
+            failHistoryMacro();
+            return;
+        }
+        normalizedAmount = std::clamp(*wobbleAmount,
+            DocumentLimits::minimumWobbleAmount,
+            DocumentLimits::maximumWobbleAmount);
+    }
+    std::optional<MotionSettings> normalizedMotion = motion;
+    if (normalizedMotion)
+    {
+        if (!isValidMotionStyle(normalizedMotion->style))
+        {
+            failHistoryMacro();
+            return;
+        }
+        normalizedMotion->poseCount = std::clamp(normalizedMotion->poseCount,
+            DocumentLimits::minimumMotionPoseCount,
+            std::min(DocumentLimits::maximumMotionPoseCount,
+                current.animationFrames));
+        normalizedMotion->detail = std::clamp(normalizedMotion->detail,
+            DocumentLimits::minimumMotionDetail,
+            DocumentLimits::maximumMotionDetail);
+        normalizedMotion->linked = std::clamp(normalizedMotion->linked, 0.0, 1.0);
+        normalizedMotion->randomness =
+            std::clamp(normalizedMotion->randomness, 0.0, 1.0);
+        normalizedMotion->breakAmount =
+            std::clamp(normalizedMotion->breakAmount, 0.0, 1.0);
+        normalizedMotion->breakRange = std::clamp(normalizedMotion->breakRange,
+            DocumentLimits::minimumBreakRange,
+            DocumentLimits::maximumBreakRange);
+    }
+    if (layer->wobbleAmount == normalizedAmount
+        && layer->motion == normalizedMotion)
+    {
+        failHistoryMacro();
+        return;
+    }
+    Document candidate = current;
+    Layer *target = candidate.layer(id);
+    target->wobbleAmount = normalizedAmount;
+    target->motion = normalizedMotion;
+    auto effects = std::make_shared<HistoryEffects>();
+    effects->afterDocumentChanged.append(
+        HistoryEffects::LayerThumbnailsReset{});
+    tryCommitCandidate(normalizedAmount ? tr("Change layer wobble")
+                                        : tr("Follow document wobble"),
+        std::move(candidate),
+        std::move(effects),
+        ActiveLayerPolicy::PreserveCurrentIfPresent,
+        layerWobbleMergeId,
         id);
 }
 

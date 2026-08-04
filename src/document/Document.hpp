@@ -218,6 +218,11 @@ struct Layer
     bool reference = false;
     qreal opacity = 1.0;
     LayerBlendMode blendMode = LayerBlendMode::Normal;
+    // Unset means the layer follows the document's wobble. Set means it
+    // overrides it outright, which is what lets a background hold still while
+    // the lines above it keep moving.
+    std::optional<qreal> wobbleAmount;
+    std::optional<MotionSettings> motion;
     // The framebuffer epoch before the first ordered operation.
     QSize initialCanvasSize;
     QVector<Stroke> strokes;
@@ -248,5 +253,13 @@ struct Document
         const QUuid &layerId, const QUuid &ancestorGroupId) const;
     int layerDepth(const QUuid &id) const;
 };
+
+qreal effectiveWobbleAmount(const Document &document, const Layer &layer);
+MotionSettings effectiveMotion(const Document &document, const Layer &layer);
+// The document a layer's strokes should be rendered against: the same document
+// with the layer's wobble overrides folded into the top-level fields the
+// renderers already read. Copying is cheap because every container inside is
+// implicitly shared and none of them are touched.
+Document documentForLayer(const Document &document, const Layer &layer);
 
 }

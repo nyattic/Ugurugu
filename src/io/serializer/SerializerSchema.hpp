@@ -16,7 +16,7 @@ namespace serializer_detail
 // Written into every saved document and checked on load. Raising either one
 // changes what older builds accept, so they may only move together with the
 // corresponding reader change.
-constexpr int schemaVersion = 11;
+constexpr int schemaVersion = 12;
 constexpr int algorithmVersion = 3;
 
 // Namespaces the process-local compressed payload cache keys. It is not

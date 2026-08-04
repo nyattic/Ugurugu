@@ -166,11 +166,12 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                                       ? layer.initialCanvasSize
                                       : DocumentOperations::initialCanvasSize(
                                             layer.strokes, document.size);
+        const Document layerDocument = documentForLayer(document, layer);
         if (displayScaleReplay)
         {
             QImage displayLayer;
             if (!renderLayerOperationsAtDisplayScale(displayLayer,
-                    document,
+                    layerDocument,
                     layer.strokes,
                     normalizedFrame,
                     frameCount,
@@ -183,7 +184,7 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
             return displayLayer;
         }
         if (!renderLayerOperations(native,
-                document,
+                layerDocument,
                 layer.strokes,
                 normalizedFrame,
                 frameCount,
@@ -326,10 +327,11 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
                     ? layer.initialCanvasSize
                     : DocumentOperations::initialCanvasSize(
                           layer.strokes, document.size);
+            const Document layerDocument = documentForLayer(document, layer);
             if (displayScaleReplay)
             {
                 if (!renderLayerOperationsAtDisplayScale(layerImage,
-                        document,
+                        layerDocument,
                         layer.strokes,
                         normalizedFrame,
                         frameCount,
@@ -344,7 +346,7 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
             {
                 QImage native;
                 if (!renderLayerOperations(native,
-                        document,
+                        layerDocument,
                         layer.strokes,
                         normalizedFrame,
                         frameCount,

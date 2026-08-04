@@ -570,6 +570,30 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
     commitFrozenFill(coverage);
 }
 
+bool CanvasWidget::fillSelection()
+{
+    cancelSelectionTransformForBoundary(
+        tr("The pending selection transform was canceled before filling."));
+    const Document &document = m_controller->document();
+    if (m_selectionMask.isNull() || m_selectionLayer != document.activeLayerId)
+    {
+        emit interactionMessage(tr("Select an area on this layer to fill."));
+        return false;
+    }
+    if (m_groupSelectionActive)
+    {
+        emit interactionMessage(
+            tr("Groups can't be painted on. Select a paint layer to draw."));
+        return false;
+    }
+    // Held by value because committing the fill can prune the selection, and
+    // commitFrozenFill clips to the same mask, so the fill lands exactly
+    // inside the marching ants instead of bleeding a pixel past them.
+    const QImage mask = m_selectionMask;
+    commitFrozenFill(mask);
+    return true;
+}
+
 void CanvasWidget::commitFrozenFill(const QImage &coverage)
 {
     const Document &document = m_controller->document();

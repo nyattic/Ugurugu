@@ -262,6 +262,21 @@ Glyph bucketGlyph()
     return glyph;
 }
 
+// A pipette laid along the same 45° axis the brush and eraser glyphs use: a
+// squeezed bulb, a collar, and a barrel tapering to the point that samples.
+Glyph eyedropperGlyph()
+{
+    Glyph glyph;
+    QPolygonF outline =
+        polyline({{4.6, 19.4}, {5.7, 15.7}, {10.0, 11.4}, {9.0, 10.4},
+            {15.4, 4.0}});
+    outline += sampleQuad({15.4, 4.0}, {20.3, 3.7}, {20.0, 8.6}, 10);
+    outline += polyline({{13.6, 15.0}, {12.7, 14.0}, {8.3, 18.3}, {4.6, 19.4}});
+    glyph.lines.append(outline);
+    glyph.lines.append(polyline({{8.4, 11.9}, {12.1, 15.6}}));
+    return glyph;
+}
+
 // A stroke caught mid-wobble. The two summed sines mirror the shape
 // WobblePreview animates, so the rail button shows what the tool does rather
 // than a generic settings mark.
@@ -435,6 +450,8 @@ Glyph glyphFor(IconGlyph glyph)
         return wandGlyph();
     case IconGlyph::Bucket:
         return bucketGlyph();
+    case IconGlyph::Eyedropper:
+        return eyedropperGlyph();
     case IconGlyph::Wobble:
         return wobbleGlyph();
     case IconGlyph::Settings:

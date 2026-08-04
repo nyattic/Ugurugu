@@ -392,8 +392,8 @@ private slots:
         sample();
         QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::AltModifier, center);
 
-        constexpr qint64 budgetBytes =
-            static_cast<qint64>(MemoryBudget::previewCacheKiB) * 1024;
+        const qint64 budgetBytes =
+            static_cast<qint64>(MemoryBudget::previewCacheKiB()) * 1024;
         constexpr qreal mib = 1024.0 * 1024.0;
         qInfo().nospace() << "4K preview peak "
                           << static_cast<qreal>(peak.totalBytes()) / mib

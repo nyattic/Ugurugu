@@ -718,6 +718,9 @@ RenderEngine::StrokeCoveragePlan StrokeCoverageRenderer::prepare(
     {
         return plan;
     }
+    // Bounds carry the wobble margin, so they have to be measured against the
+    // motion this layer actually renders with rather than the document's.
+    const Document layerDocument = documentForLayer(document, layer);
     plan.canvasBefore.resize(layer.strokes.size());
     plan.primitiveBounds.resize(layer.strokes.size());
     plan.epochBefore.resize(layer.strokes.size());
@@ -740,7 +743,7 @@ RenderEngine::StrokeCoveragePlan StrokeCoverageRenderer::prepare(
                 return {};
             }
             plan.primitiveBounds[index] = primitiveCoverageBounds(
-                document, stroke, canvasSize, &maskBoundsCache);
+                layerDocument, stroke, canvasSize, &maskBoundsCache);
             if (stroke.mode == StrokeMode::Erase)
             {
                 addCoverageEffect(plan.epochs[epochIndex],
@@ -996,7 +999,7 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
         }
         frame.pixels.fill(Qt::transparent);
         noteCoverageImage(stats, frame.pixels);
-        Document epochDocument = document;
+        Document epochDocument = documentForLayer(document, layer);
         epochDocument.size = frame.canvasSize;
         if (!RenderEngine::renderStrokesOnLayerRegion(
                 frame.pixels, epochDocument, {probe}, frameIndex, frame.bounds)
@@ -1061,7 +1064,7 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
             {
                 return exactRegion();
             }
-            Document epochDocument = document;
+            Document epochDocument = documentForLayer(document, layer);
             epochDocument.size = frame.canvasSize;
             if (!RenderEngine::renderStrokesOnLayerRegion(frame.pixels,
                     epochDocument,

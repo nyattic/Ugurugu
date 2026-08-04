@@ -27,6 +27,7 @@ namespace ugurugu
 class CanvasWidget;
 class ColorSwatchRow;
 class LayerDock;
+class ToolDock;
 class MainWindowTestAccess;
 class TimelineBar;
 
@@ -112,6 +113,8 @@ private:
         const QString &error);
     void updateExportActions();
     void applyWobbleAnimationEnabled(bool enabled);
+    void setTimelineVisible(bool visible);
+    static bool timelineVisibleSetting();
     QString normalizedPath(
         const QString &filePath, const QString &extension) const;
     QString saveDialogStartPath(const QString &extension) const;
@@ -120,6 +123,7 @@ private:
     CanvasWidget *m_canvas = nullptr;
     TimelineBar *m_timeline = nullptr;
     LayerDock *m_layerDock = nullptr;
+    ToolDock *m_toolDock = nullptr;
     QString m_currentFilePath;
     QString m_suggestedSavePath;
     std::optional<WawaImportSummary> m_pendingWawaImportSummary;
@@ -130,6 +134,9 @@ private:
     QAction *m_lassoAction = nullptr;
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
+    QAction *m_eyedropperAction = nullptr;
+    QAction *m_showTimelineAction = nullptr;
+    QAction *m_fillSelectionAction = nullptr;
     QAction *m_scaleSelectionAction = nullptr;
     QAction *m_rotateSelectionAction = nullptr;
     QAction *m_cutSelectionAction = nullptr;
@@ -148,7 +155,6 @@ private:
     QAction *m_mirrorCanvasAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QPushButton *m_colorButton = nullptr;
-    ColorSwatchRow *m_swatchRow = nullptr;
     QLabel *m_pointerLabel = nullptr;
     QSlider *m_zoomSlider = nullptr;
     QSpinBox *m_zoomSpin = nullptr;

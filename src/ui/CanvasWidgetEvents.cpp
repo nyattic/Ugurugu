@@ -350,6 +350,14 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
             event->accept();
             return;
         }
+        // Sampling reads the composed frame rather than a layer, so it is the
+        // one tool that stays useful on an empty document.
+        if (m_tool == Tool::Eyedropper)
+        {
+            beginColorPick(event->position());
+            event->accept();
+            return;
+        }
         const Document &document = m_controller->document();
         if (!document.layer(document.activeLayerId))
         {
@@ -362,6 +370,8 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
         case Tool::Brush:
         case Tool::Eraser:
             beginStroke(event->position(), 1.0, false, event->timestamp());
+            break;
+        case Tool::Eyedropper:
             break;
         case Tool::Lasso:
             beginAreaSelection(documentPosition,
@@ -591,6 +601,12 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         if (!eraser && m_tool == Tool::Bucket)
         {
             applyBucketFill(mapToDocument(event->position()));
+            event->accept();
+            return;
+        }
+        if (!eraser && m_tool == Tool::Eyedropper)
+        {
+            beginColorPick(event->position());
             event->accept();
             return;
         }

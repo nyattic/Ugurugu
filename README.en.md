@@ -64,6 +64,26 @@ Press `F1` at any time to open the built-in help.
 - Create lines with playful gaps, or let erased areas move with the drawing.
 - Turn movement off whenever you want to use the app like a regular paint app.
 
+#### Wobble settings in detail
+
+The **Wobble** button on the tool rail opens these settings.
+
+| Setting | Range (default) | What it does |
+| --- | --- | --- |
+| Motion style | Classic · Smooth · Stepped (Classic) | How the movement is built. **Classic** is the familiar movement from earlier versions, **Smooth** flows from one pose into the next, and **Stepped** snaps between poses for a hand-drawn animation feel. |
+| Wobble | 0 – 12 px (1.6 px) | How far a line can stray from where you drew it. At 0 nothing moves. |
+| Pose count | 1 – frame count (8) | How many **distinct drawings** the wobble cycles through. With 30 frames and 8 poses it is like drawing 8 pictures and looping them. Fewer poses feel choppy and hand-drawn, more feel smooth. **At 1 the animation stops entirely.** |
+| Detail | 1 – 24 (12) | The **spacing** of the wobble along a line. Low values give broad, gentle waves; high values give a fine shiver. |
+| Linked | 0 – 100% (100%) | How much the lines **move as one**. At 100% the whole drawing sways together like a single sheet; at 0% every line does its own thing. |
+| Randomness | 0 – 100% (0%) | At 0% the movement flows smoothly. The higher you go, the more it becomes point-by-point noise. |
+| Broken line | on · off (off) | Lets parts of a line vanish and reappear. The two settings below only apply when this is on. |
+| Break amount | 0 – 100% (35%) | **How much** of the line disappears. At 0% nothing breaks; at 100% the line vanishes completely. |
+| Break range | 2 – 256 px (24 px) | The **size of the gaps**. Small values look like a dotted line, large values break the line into big chunks. |
+
+> [!TIP]
+> **Pose count** and **Detail** only apply when the motion style is *Smooth* or
+> *Stepped*. *Classic* does not use them.
+
 ### Draw and color comfortably
 
 - Use pressure-sensitive brushes and erasers, with 17 ready-made pens,
@@ -121,10 +141,13 @@ These are the defaults. You can change all of them in **Settings → Shortcuts**
 | --- | --- |
 | `B` / `E` | Brush / Eraser |
 | `L` / `W` / `G` | Area select / Auto select / Paint bucket |
+| `I` | Eyedropper |
 | `P` | Play or pause movement |
 | `Space` + drag | Move around the canvas |
 | Scroll | Zoom in or out |
 | `Alt` + click | Pick a color from the drawing |
+| `Alt+Delete` | Fill the selected area with the brush color |
+| `Ctrl+T` | Collapse or show the animation bar |
 | `Ctrl/Cmd+C`, `X`, `V` | Copy / Cut / Paste |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo on Windows |
 | `Cmd+Z` / `Cmd+Shift+Z` | Undo / Redo on macOS |

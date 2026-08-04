@@ -11,6 +11,11 @@
 namespace ugurugu
 {
 
+int PreviewRenderPolicy::maximumCacheKiB()
+{
+    return MemoryBudget::previewCacheKiB();
+}
+
 QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
     qreal physicalDisplayScale,
     int retainedSurfaceCount,
@@ -35,7 +40,7 @@ QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
         const qreal retainedBytes = static_cast<qreal>(surfaceCount)
                                     * sizeof(quint32) * documentSize.width()
                                     * documentSize.height();
-        const qreal budgetBytes = maximumCacheKiB * 1024.0 * 0.9;
+        const qreal budgetBytes = maximumCacheKiB() * 1024.0 * 0.9;
         scaleLimit =
             std::min(scaleLimit, std::sqrt(budgetBytes / retainedBytes));
     }
@@ -49,7 +54,7 @@ QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
 int PreviewRenderPolicy::frameCacheCostKiB(
     qint64 pinnedBytes, qint64 singleFrameBytes)
 {
-    const qint64 budgetBytes = static_cast<qint64>(maximumCacheKiB) * 1024;
+    const qint64 budgetBytes = static_cast<qint64>(maximumCacheKiB()) * 1024;
     const qint64 available = std::max(
         std::max<qint64>(singleFrameBytes, 0), budgetBytes - pinnedBytes);
     return cacheCostKiB(static_cast<qsizetype>(available));

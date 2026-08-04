@@ -9,7 +9,8 @@ enum class CanvasTool
     Eraser,
     Lasso,
     Wand,
-    Bucket
+    Bucket,
+    Eyedropper
 };
 
 enum class CanvasWandReference

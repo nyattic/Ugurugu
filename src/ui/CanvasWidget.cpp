@@ -49,7 +49,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     setMouseTracking(true);
     setTabletTracking(true);
     setCursor(Qt::BlankCursor);
-    m_frameCache.setMaxCost(PreviewRenderPolicy::maximumCacheKiB);
+    m_frameCache.setMaxCost(PreviewRenderPolicy::maximumCacheKiB());
     const BrushPreset &defaultPreset = BrushPresetCatalog::defaultPreset();
     m_brushPresetId = defaultPreset.id;
     m_brushSettings = defaultPreset.settings;
@@ -109,6 +109,12 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
                 clearSelection();
             }
         });
+    // Windows delivers coarse timers as WM_TIMER, which the message queue only
+    // generates once nothing else is pending. A stroke keeps pointer packets
+    // and repaints in the queue continuously, so a coarse animation timer stops
+    // firing for exactly as long as the pen is down. A precise timer is posted
+    // instead of synthesised and survives that.
+    m_animationTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_animationTimer,
         &QTimer::timeout,
         this,

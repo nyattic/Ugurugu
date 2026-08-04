@@ -167,4 +167,26 @@ int Document::layerDepth(const QUuid &id) const
     return depth >= 0 ? depth : 0;
 }
 
+qreal effectiveWobbleAmount(const Document &document, const Layer &layer)
+{
+    return layer.wobbleAmount.value_or(document.wobbleAmount);
+}
+
+MotionSettings effectiveMotion(const Document &document, const Layer &layer)
+{
+    return layer.motion.value_or(document.motion);
+}
+
+Document documentForLayer(const Document &document, const Layer &layer)
+{
+    if (!layer.wobbleAmount && !layer.motion)
+    {
+        return document;
+    }
+    Document resolved = document;
+    resolved.wobbleAmount = effectiveWobbleAmount(document, layer);
+    resolved.motion = effectiveMotion(document, layer);
+    return resolved;
+}
+
 }

@@ -20,6 +20,7 @@
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
+#include "ui/ToolDock.hpp"
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
@@ -169,6 +170,8 @@ MainWindow::MainWindow(QWidget *parent)
     centralLayout->addWidget(m_timeline);
     setCentralWidget(central);
 
+    m_toolDock = new ToolDock(&m_controller, m_canvas, this);
+    addDockWidget(Qt::RightDockWidgetArea, m_toolDock);
     m_layerDock = new LayerDock(&m_controller, this);
     addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
     connect(m_layerDock,
@@ -218,8 +221,15 @@ MainWindow::MainWindow(QWidget *parent)
     {
         resize(1280, 820);
     }
+    // Qt splits a dock area evenly by default, which left the tool dock too
+    // short to reach its colour and wobble sections without scrolling. The
+    // tool dock carries three sections to the layer dock's one, so it gets the
+    // larger share, and its column is held to a readable width.
+    resizeDocks({m_toolDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
+    resizeDocks({m_toolDock, m_layerDock}, {6, 4}, Qt::Vertical);
 
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
+    setTimelineVisible(m_showTimelineAction->isChecked());
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     qApp->installEventFilter(this);
@@ -603,6 +613,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("window/state"), saveState());
+    m_toolDock->saveState();
     saveDrawingToolSettings();
     clearAutosave();
     event->accept();

@@ -126,15 +126,18 @@ QImage CanvasWidget::activeStrokePreview(
     }
 
     QImage preview;
-    if (document.layer(m_activeStrokeLayer))
+    if (const Layer *strokeLayer = document.layer(m_activeStrokeLayer))
     {
+        // The live stroke has to wobble the way its own layer does, not the
+        // way the document does.
+        const Document strokeDocument = documentForLayer(document, *strokeLayer);
         const RenderEngine::LayerSplitFrame &split =
             previewSplit(m_activeStrokeLayer, renderSize);
         if (split.valid)
         {
             const IncrementalStrokeRenderer::Update update =
                 m_incrementalStrokeRenderer.update(split.layerBase,
-                    document,
+                    strokeDocument,
                     m_activeStroke,
                     m_currentFrame,
                     renderSize);
@@ -185,7 +188,7 @@ QImage CanvasWidget::activeStrokePreview(
             {
                 const IncrementalStrokeRenderer::Update update =
                     m_incrementalStrokeRenderer.update(cached.value(),
-                        document,
+                        strokeDocument,
                         m_activeStroke,
                         m_currentFrame,
                         renderSize);
@@ -311,7 +314,7 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
         m_frameCache.clear();
         m_previewLayerRasters = {};
         const qint64 budgetBytes =
-            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB) * 1024;
+            static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB()) * 1024;
         m_previewLayerRasters =
             RenderEngine::renderLayerRasterFrame(displayDocument(),
                 m_currentFrame,
@@ -333,7 +336,12 @@ QSize CanvasWidget::previewRenderSize() const
     const QSize documentSize = document.size;
     const qreal displayScale =
         std::abs(documentTransform().m11()) * devicePixelRatioF();
-    int retainedSurfaces = m_animating ? document.animationFrames : 1;
+    // Sized for the whole frame cache whether or not playback is running, for
+    // the same reason the active stroke below is always reserved for: sizing
+    // off m_animating changed the render size on every play and pause, and
+    // each change threw away every cached frame. Resuming then re-rendered the
+    // entire animation before the first frame could be shown.
+    int retainedSurfaces = std::max(1, document.animationFrames);
     // Sized for an active stroke whether or not one is in progress. Reserving
     // only while drawing would change the render size the moment a stroke
     // starts, and that discards every preview cache mid-interaction.
@@ -475,7 +483,8 @@ void CanvasWidget::scheduleFrameCacheWarmup()
         [this, generation]()
         {
             if (generation != m_frameCacheWarmupGeneration || !m_animating
-                || !m_wobbleAnimationEnabled || m_drawing)
+                || !m_wobbleAnimationEnabled
+                || (m_drawing && !m_animateWhileDrawing))
             {
                 return;
             }
@@ -610,11 +619,25 @@ void CanvasWidget::updateTimerInterval()
 
 void CanvasWidget::advanceFrame()
 {
-    if (!m_animating || m_frameCacheWarmupActive
-        || (m_drawing && !m_animateWhileDrawing) || m_panning || m_zoomDragging
-        || m_pickingColor || m_movingSelection || m_areaSelectionActive)
+    if (!m_animating || (m_drawing && !m_animateWhileDrawing) || m_panning
+        || m_zoomDragging || m_pickingColor || m_movingSelection
+        || m_areaSelectionActive)
     {
         return;
+    }
+    // A warmup used to stop playback outright until every frame was ready,
+    // which read as a freeze after anything that invalidated frames: a wobble
+    // setting, a committed stroke, resuming playback. Stepping only onto
+    // frames the warmup has already produced keeps the animation moving as it
+    // fills in, and never renders a frame on the GUI thread to do it.
+    if (m_frameCacheWarmupActive)
+    {
+        const int frameCount =
+            std::max(1, m_controller->document().animationFrames);
+        if (!m_frameCache.object((m_currentFrame + 1) % frameCount))
+        {
+            return;
+        }
     }
     setCurrentFrame(m_currentFrame + 1);
 }

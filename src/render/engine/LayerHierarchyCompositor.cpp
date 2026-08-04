@@ -73,7 +73,7 @@ QImage renderAtDisplayScale(const Document &document,
                                             layer.strokes, document.size);
         QImage layerImage;
         if (!renderLayerOperationsAtDisplayScale(layerImage,
-                document,
+                documentForLayer(document, layer),
                 layer.strokes,
                 normalizedFrame,
                 frameCount,
@@ -119,7 +119,7 @@ QImage renderAtSize(
                                       : DocumentOperations::initialCanvasSize(
                                             layer.strokes, document.size);
         if (!renderLayerOperations(nativeLayer,
-                document,
+                documentForLayer(document, layer),
                 layer.strokes,
                 normalizedFrame,
                 frameCount,
