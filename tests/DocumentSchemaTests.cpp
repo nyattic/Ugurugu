@@ -643,9 +643,13 @@ private slots:
         };
 
         QString error;
+        // Built with append: QJsonArray{QJsonArray{...}} picks the copy
+        // constructor on compilers without CWG2137 and would flatten the
+        // payload into plain numbers.
+        QJsonArray boundaryPoints;
+        boundaryPoints.append(QJsonArray{2.0, 2.0, 1.0});
         QVERIFY(!DocumentSerializer::fromJson(
-            boundaryWithField(QStringLiteral("points"),
-                QJsonArray{QJsonArray{2.0, 2.0, 1.0}}),
+            boundaryWithField(QStringLiteral("points"), boundaryPoints),
             &error));
         QVERIFY(error.contains(QStringLiteral("point count")));
         QVERIFY(!DocumentSerializer::fromJson(
