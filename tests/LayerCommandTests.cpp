@@ -852,6 +852,12 @@ private slots:
             before.append(RenderEngine::render(controller.document(), frame));
         }
 
+        QEXPECT_FAIL("",
+            "Contract for the erase-scope plan: merge stays blocked until "
+            "composite-boundary rendering lands (stage 5). An XPASS means "
+            "the guard came off; remove this marker and let the full "
+            "contract run.",
+            Abort);
         QCOMPARE(controller.mergeLayerDownStatus(upperId),
             DocumentController::MergeLayerDownStatus::Available);
         QVERIFY(controller.mergeLayerDown(upperId));
@@ -894,6 +900,12 @@ private slots:
             {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
         controller.addStroke(upperId, upperErase);
 
+        QEXPECT_FAIL("",
+            "Contract for the erase-scope plan: merge stays blocked until "
+            "composite-boundary rendering lands (stage 5). An XPASS means "
+            "the guard came off; remove this marker and let the full "
+            "contract run.",
+            Abort);
         QCOMPARE(controller.mergeLayerDownStatus(upperId),
             DocumentController::MergeLayerDownStatus::Available);
         QVERIFY(controller.mergeLayerDown(upperId));
