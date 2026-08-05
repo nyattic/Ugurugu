@@ -1253,6 +1253,11 @@
         <translation>キャンバス再構成操作が正しくありません。</translation>
     </message>
     <message>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="334"/>
+        <source>A composite boundary is invalid.</source>
+        <translation>合成境界が正しくありません。</translation>
+    </message>
+    <message>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1367"/>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1385"/>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1394"/>

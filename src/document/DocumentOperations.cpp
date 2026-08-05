@@ -135,6 +135,17 @@ bool normalizeAndValidate(Document &document)
                 epochSize = stroke.reframeOp->targetSize;
                 continue;
             }
+            if (stroke.mode == StrokeMode::CompositeBoundary)
+            {
+                if (stroke.pixelSelectionOp || stroke.reframeOp
+                    || stroke.imageOp || !stroke.points.isEmpty()
+                    || stroke.visibilityClip || !stroke.clipMask.isNull()
+                    || !stroke.fillMask.isNull() || stroke.fillCoverage)
+                {
+                    return false;
+                }
+                continue;
+            }
             if (stroke.mode == StrokeMode::Image)
             {
                 if (!stroke.imageOp || stroke.pixelSelectionOp

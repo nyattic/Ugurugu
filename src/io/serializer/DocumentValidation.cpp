@@ -322,6 +322,21 @@ bool validateDocument(const Document &document,
                 epochSize = stroke.reframeOp->targetSize;
                 continue;
             }
+            if (stroke.mode == StrokeMode::CompositeBoundary)
+            {
+                if (fileSchemaVersion < 13 || stroke.pixelSelectionOp
+                    || stroke.reframeOp || stroke.imageOp
+                    || !stroke.points.isEmpty() || stroke.visibilityClip
+                    || !stroke.clipMask.isNull() || !stroke.fillMask.isNull()
+                    || stroke.fillCoverage)
+                {
+                    setError(error,
+                        DocumentSerializer::tr(
+                            "A composite boundary is invalid."));
+                    return false;
+                }
+                continue;
+            }
             if (stroke.mode == StrokeMode::Image)
             {
                 if (fileSchemaVersion < 11 || !stroke.imageOp

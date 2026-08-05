@@ -179,7 +179,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(document);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 13);
         const QJsonArray masks =
             root.value(QStringLiteral("clipMasks")).toArray();
         QCOMPARE(masks.size(), 1);

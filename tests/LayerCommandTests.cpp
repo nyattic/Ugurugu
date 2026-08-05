@@ -141,7 +141,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(document);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 13);
         QString error;
         const std::optional<Document> decoded =
             DocumentSerializer::fromJson(json, &error);

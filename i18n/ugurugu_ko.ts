@@ -1253,6 +1253,11 @@
         <translation>캔버스 재구성 작업이 올바르지 않습니다.</translation>
     </message>
     <message>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="334"/>
+        <source>A composite boundary is invalid.</source>
+        <translation>합성 경계가 올바르지 않습니다.</translation>
+    </message>
+    <message>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1367"/>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1385"/>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1394"/>

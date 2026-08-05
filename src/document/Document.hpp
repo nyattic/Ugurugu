@@ -24,7 +24,12 @@ enum class StrokeMode
     Fill,
     Image,
     PixelSelection,
-    Reframe
+    Reframe,
+    // A payload-free marker that splits a layer into sections rendered onto
+    // separate transparent surfaces and then composited in order. An eraser
+    // reaches only the section it belongs to. A layer without markers is one
+    // section, so documents written before schema 13 keep their appearance.
+    CompositeBoundary
 };
 
 enum class SamplingMode

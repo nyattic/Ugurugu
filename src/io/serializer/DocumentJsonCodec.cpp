@@ -390,6 +390,10 @@ QJsonObject strokeToJson(const Stroke &stroke,
     {
         modeName = QStringLiteral("reframe");
     }
+    else if (stroke.mode == StrokeMode::CompositeBoundary)
+    {
+        modeName = QStringLiteral("compositeBoundary");
+    }
     object.insert(QStringLiteral("mode"), modeName);
     object.insert(QStringLiteral("color"), stroke.color.name(QColor::HexArgb));
     object.insert(QStringLiteral("width"), stroke.width);
@@ -1015,6 +1019,8 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
     const QString mode = object.value(QStringLiteral("mode")).toString();
     if (mode != QStringLiteral("paint") && mode != QStringLiteral("erase")
         && mode != QStringLiteral("fill")
+        && (fileSchemaVersion < 13
+            || mode != QStringLiteral("compositeBoundary"))
         && (fileSchemaVersion < 11 || mode != QStringLiteral("image"))
         && (fileSchemaVersion < 6
             || (mode != QStringLiteral("pixelSelection")
@@ -1043,6 +1049,10 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
     else if (mode == QStringLiteral("reframe"))
     {
         stroke.mode = StrokeMode::Reframe;
+    }
+    else if (mode == QStringLiteral("compositeBoundary"))
+    {
+        stroke.mode = StrokeMode::CompositeBoundary;
     }
     else
     {
@@ -1088,10 +1098,12 @@ std::optional<Stroke> strokeFromJson(const QJsonValue &value,
         }
         stroke.points.append(*point);
     }
-    const bool framebufferOperation = stroke.mode == StrokeMode::PixelSelection
-                                      || stroke.mode == StrokeMode::Reframe
-                                      || stroke.mode == StrokeMode::Image;
-    if (framebufferOperation != points.isEmpty())
+    const bool operationWithoutPoints =
+        stroke.mode == StrokeMode::PixelSelection
+        || stroke.mode == StrokeMode::Reframe
+        || stroke.mode == StrokeMode::Image
+        || stroke.mode == StrokeMode::CompositeBoundary;
+    if (operationWithoutPoints != points.isEmpty())
     {
         setError(error,
             DocumentSerializer::tr("A stroke has an invalid point count."));

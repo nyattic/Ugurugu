@@ -396,7 +396,8 @@ DocumentSerializer::AppendStrokeResult DocumentSerializer::appendStroke(
         return result;
     }
     if (stroke.mode == StrokeMode::PixelSelection
-        || stroke.mode == StrokeMode::Reframe || stroke.fillCoverage)
+        || stroke.mode == StrokeMode::Reframe
+        || stroke.mode == StrokeMode::CompositeBoundary || stroke.fillCoverage)
     {
         return result;
     }

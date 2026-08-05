@@ -179,7 +179,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(source);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 13);
         QCOMPARE(root.value(QStringLiteral("binaryMasks")).toArray().size(), 1);
         const QJsonObject serializedStroke =
             root.value(QStringLiteral("layers"))
@@ -225,7 +225,7 @@ private slots:
         const QByteArray json = DocumentSerializer::toJson(source);
         QVERIFY(!json.isEmpty());
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 12);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 13);
         QCOMPARE(
             root.value(QStringLiteral("rasterAssets")).toArray().size(), 1);
 
@@ -321,7 +321,7 @@ private slots:
         const QJsonObject currentRoot =
             QJsonDocument::fromJson(currentJson).object();
         QCOMPARE(
-            currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 12);
+            currentRoot.value(QStringLiteral("schemaVersion")).toInt(), 13);
         QCOMPARE(
             currentRoot.value(QStringLiteral("algorithmVersion")).toInt(), 3);
         const std::optional<Document> reloaded =
@@ -502,6 +502,209 @@ private slots:
         {
             QCOMPARE(RenderEngine::render(controller.document(), frame),
                 RenderEngine::render(*loaded, frame));
+        }
+    }
+
+    void roundTripsSchemaThirteenCompositeBoundaries()
+    {
+        Document source = Document::createDefault(QSize(64, 48));
+        source.background = Qt::transparent;
+        Stroke paint;
+        paint.color = QColor(220, 40, 30);
+        paint.width = 12.0;
+        paint.points = {{QPointF(8.0, 24.0), 1.0}, {QPointF(56.0, 24.0), 1.0}};
+        Stroke boundary;
+        boundary.mode = StrokeMode::CompositeBoundary;
+        boundary.points.clear();
+        Stroke erase;
+        erase.mode = StrokeMode::Erase;
+        erase.width = 12.0;
+        erase.points = {{QPointF(24.0, 24.0), 1.0}, {QPointF(40.0, 24.0), 1.0}};
+        source.layers.first().strokes = {paint, boundary, erase};
+
+        const QByteArray json = DocumentSerializer::toJson(source);
+        QVERIFY(!json.isEmpty());
+        const QJsonObject root = QJsonDocument::fromJson(json).object();
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 13);
+        const QJsonObject serializedBoundary =
+            root.value(QStringLiteral("layers"))
+                .toArray()
+                .first()
+                .toObject()
+                .value(QStringLiteral("strokes"))
+                .toArray()[1]
+                .toObject();
+        QCOMPARE(serializedBoundary.value(QStringLiteral("mode")).toString(),
+            QStringLiteral("compositeBoundary"));
+        QVERIFY(serializedBoundary.value(QStringLiteral("points"))
+                .toArray()
+                .isEmpty());
+        QVERIFY(!serializedBoundary.contains(QStringLiteral("pixelSelection")));
+        QVERIFY(!serializedBoundary.contains(QStringLiteral("reframe")));
+        QVERIFY(!serializedBoundary.contains(QStringLiteral("image")));
+
+        QString error;
+        const std::optional<Document> loaded =
+            DocumentSerializer::fromJson(json, &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        const QVector<Stroke> &loadedStrokes = loaded->layers.first().strokes;
+        QCOMPARE(loadedStrokes.size(), 3);
+        QCOMPARE(loadedStrokes[1].mode, StrokeMode::CompositeBoundary);
+        QCOMPARE(loadedStrokes[1].id, boundary.id);
+        QVERIFY(loadedStrokes[1].points.isEmpty());
+        QVERIFY(!loadedStrokes[1].pixelSelectionOp);
+        QVERIFY(!loadedStrokes[1].reframeOp);
+        QVERIFY(!loadedStrokes[1].imageOp);
+        QVERIFY(!loadedStrokes[1].visibilityClip);
+        QVERIFY(loadedStrokes[1].clipMask.isNull());
+        for (int frame = 0; frame < source.animationFrames; ++frame)
+        {
+            QCOMPARE(RenderEngine::render(*loaded, frame),
+                RenderEngine::render(source, frame));
+        }
+    }
+
+    void rejectsCompositeBoundariesThatCarryContent()
+    {
+        Document source = Document::createDefault(QSize(32, 32));
+        Stroke paint;
+        paint.points = {{QPointF(4.0, 16.0), 1.0}, {QPointF(28.0, 16.0), 1.0}};
+        source.layers.first().strokes = {paint};
+        const auto documentWithBoundary = [&source](const Stroke &boundary)
+        {
+            Document candidate = source;
+            candidate.layers.first().strokes.append(boundary);
+            return candidate;
+        };
+
+        Stroke boundary;
+        boundary.mode = StrokeMode::CompositeBoundary;
+        boundary.points.clear();
+        const QByteArray validJson =
+            DocumentSerializer::toJson(documentWithBoundary(boundary));
+        QVERIFY(!validJson.isEmpty());
+
+        Stroke withPoints = boundary;
+        withPoints.points = {{QPointF(2.0, 2.0), 1.0}};
+        QVERIFY(DocumentSerializer::toJson(documentWithBoundary(withPoints))
+                .isEmpty());
+
+        Stroke withPixelSelection = boundary;
+        withPixelSelection.pixelSelectionOp = PixelSelectionOp();
+        QVERIFY(
+            DocumentSerializer::toJson(documentWithBoundary(withPixelSelection))
+                .isEmpty());
+
+        Stroke withReframe = boundary;
+        withReframe.reframeOp = ReframeOp();
+        QVERIFY(DocumentSerializer::toJson(documentWithBoundary(withReframe))
+                .isEmpty());
+
+        Stroke withImage = boundary;
+        withImage.imageOp = ImageOp();
+        QVERIFY(DocumentSerializer::toJson(documentWithBoundary(withImage))
+                .isEmpty());
+
+        Stroke withVisibilityClip = boundary;
+        withVisibilityClip.visibilityClip = QRect(2, 2, 8, 8);
+        QVERIFY(
+            DocumentSerializer::toJson(documentWithBoundary(withVisibilityClip))
+                .isEmpty());
+
+        Stroke withClipMask = boundary;
+        withClipMask.clipMask = QImage(source.size, QImage::Format_Grayscale8);
+        withClipMask.clipMask.fill(255);
+        QVERIFY(DocumentSerializer::toJson(documentWithBoundary(withClipMask))
+                .isEmpty());
+
+        Stroke withFillCoverage = boundary;
+        withFillCoverage.fillCoverage = PackedMaskRegion();
+        QVERIFY(
+            DocumentSerializer::toJson(documentWithBoundary(withFillCoverage))
+                .isEmpty());
+
+        const QJsonObject validRoot =
+            QJsonDocument::fromJson(validJson).object();
+        const auto boundaryWithField =
+            [validRoot](const QString &key, const QJsonValue &value)
+        {
+            QJsonObject root = validRoot;
+            QJsonArray layers = root.value(QStringLiteral("layers")).toArray();
+            QJsonObject layer = layers.first().toObject();
+            QJsonArray strokes =
+                layer.value(QStringLiteral("strokes")).toArray();
+            QJsonObject serializedBoundary = strokes.last().toObject();
+            serializedBoundary.insert(key, value);
+            strokes[strokes.size() - 1] = serializedBoundary;
+            layer.insert(QStringLiteral("strokes"), strokes);
+            layers[0] = layer;
+            root.insert(QStringLiteral("layers"), layers);
+            return QJsonDocument(root).toJson(QJsonDocument::Compact);
+        };
+
+        QString error;
+        QVERIFY(!DocumentSerializer::fromJson(
+            boundaryWithField(QStringLiteral("points"),
+                QJsonArray{QJsonArray{2.0, 2.0, 1.0}}),
+            &error));
+        QVERIFY(error.contains(QStringLiteral("point count")));
+        QVERIFY(!DocumentSerializer::fromJson(
+            boundaryWithField(QStringLiteral("reframe"), QJsonObject()),
+            &error));
+        QVERIFY(error.contains(QStringLiteral("wrong mode")));
+        QVERIFY(!DocumentSerializer::fromJson(
+            boundaryWithField(QStringLiteral("image"), QJsonObject()), &error));
+        QVERIFY(error.contains(QStringLiteral("wrong mode")));
+        // A visibility clip decodes for any mode, so only the marker invariant
+        // can reject it. Asserting the message keeps this case from passing on
+        // some unrelated rejection.
+        QVERIFY(!DocumentSerializer::fromJson(
+            boundaryWithField(
+                QStringLiteral("visibilityClip"), QJsonArray{2, 2, 8, 8}),
+            &error));
+        QVERIFY(error.contains(QStringLiteral("composite boundary")));
+
+        QJsonObject downgraded = validRoot;
+        downgraded.insert(QStringLiteral("schemaVersion"), 12);
+        QVERIFY(!DocumentSerializer::fromJson(
+            QJsonDocument(downgraded).toJson(QJsonDocument::Compact), &error));
+        QVERIFY(error.contains(QStringLiteral("invalid mode")));
+    }
+
+    void opensProjectsWrittenBeforeCompositeBoundaries()
+    {
+        Document source = Document::createDefault(QSize(64, 48));
+        source.background = Qt::transparent;
+        Stroke paint;
+        paint.color = QColor(30, 60, 200);
+        paint.width = 12.0;
+        paint.points = {{QPointF(8.0, 24.0), 1.0}, {QPointF(56.0, 24.0), 1.0}};
+        Stroke erase;
+        erase.mode = StrokeMode::Erase;
+        erase.width = 12.0;
+        erase.points = {{QPointF(24.0, 24.0), 1.0}, {QPointF(40.0, 24.0), 1.0}};
+        source.layers.first().strokes = {paint, erase};
+
+        const QByteArray json = DocumentSerializer::toJson(source);
+        QVERIFY(!json.isEmpty());
+        QJsonObject legacyRoot = QJsonDocument::fromJson(json).object();
+        legacyRoot.insert(QStringLiteral("schemaVersion"), 12);
+        QString error;
+        const std::optional<Document> legacy = DocumentSerializer::fromJson(
+            QJsonDocument(legacyRoot).toJson(QJsonDocument::Compact), &error);
+        QVERIFY2(legacy.has_value(), qPrintable(error));
+        const QVector<Stroke> &legacyStrokes = legacy->layers.first().strokes;
+        QCOMPARE(legacyStrokes.size(), 2);
+        QVERIFY(std::none_of(legacyStrokes.cbegin(),
+            legacyStrokes.cend(),
+            [](const Stroke &stroke)
+            {
+                return stroke.mode == StrokeMode::CompositeBoundary;
+            }));
+        for (int frame = 0; frame < source.animationFrames; ++frame)
+        {
+            QCOMPARE(RenderEngine::render(*legacy, frame),
+                RenderEngine::render(source, frame));
         }
     }
 
