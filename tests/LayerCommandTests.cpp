@@ -815,6 +815,105 @@ private slots:
         QVERIFY(controller.undoStack()->isClean());
     }
 
+    // Merging must not ask the user to choose between keeping a layer's
+    // eraser and merging it. Appending the strokes lets the eraser reach the
+    // artwork below, so the merged layer has to keep compositing the two
+    // sides the way the two layers did: identically, in every frame.
+    void mergesALayerWhoseEraserOverlapsTheArtworkBelow()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.color = QColor(220, 40, 30);
+        lowerStroke.width = 24.0;
+        lowerStroke.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.color = QColor(30, 60, 200);
+        upperStroke.width = 24.0;
+        upperStroke.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
+        Stroke upperErase;
+        upperErase.mode = StrokeMode::Erase;
+        upperErase.width = 24.0;
+        upperErase.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        controller.addStroke(upperId, upperErase);
+
+        const int frames = controller.document().animationFrames;
+        QVector<QImage> before;
+        for (int frame = 0; frame < frames; ++frame)
+        {
+            before.append(RenderEngine::render(controller.document(), frame));
+        }
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::Available);
+        QVERIFY(controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 1);
+
+        for (int frame = 0; frame < frames; ++frame)
+        {
+            QVERIFY2(RenderEngine::render(controller.document(), frame)
+                         == before.at(frame),
+                qPrintable(
+                    QStringLiteral("merging changed frame %1").arg(frame)));
+        }
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before.at(0));
+    }
+
+    // Scoping an eraser to what it covered before the merge must not make the
+    // merged layer behave like two layers afterwards: a new eraser reaches
+    // everything already on it.
+    void letsANewEraserOnAMergedLayerReachWhatItWasMergedWith()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        controller.setWobbleAmount(0.0);
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.color = QColor(220, 40, 30);
+        lowerStroke.width = 24.0;
+        lowerStroke.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperErase;
+        upperErase.mode = StrokeMode::Erase;
+        upperErase.width = 24.0;
+        upperErase.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        controller.addStroke(upperId, upperErase);
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::Available);
+        QVERIFY(controller.mergeLayerDown(upperId));
+        const QUuid mergedId = controller.document().activeLayerId;
+        QCOMPARE(
+            RenderEngine::render(controller.document(), 0).pixelColor(32, 32),
+            QColor(220, 40, 30));
+
+        Stroke freshErase;
+        freshErase.mode = StrokeMode::Erase;
+        freshErase.width = 24.0;
+        freshErase.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        QCOMPARE(controller.addStroke(mergedId, freshErase),
+            DocumentController::AddStrokeResult::Added);
+        QCOMPARE(
+            RenderEngine::render(controller.document(), 0).pixelColor(32, 32),
+            controller.document().background);
+    }
+
     void mergesALayerWhoseEraserOnlyTouchesItsOwnStrokes()
     {
         DocumentController controller;
