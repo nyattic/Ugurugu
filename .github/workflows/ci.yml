@@ -200,7 +200,7 @@ jobs:
         run: mkdir -p "out/build/${{ matrix.preset }}/profiles"
 
       - name: Test
-        run: ctest --preset ${{ matrix.preset }} --parallel 7 --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --parallel --output-on-failure
 
       - name: Check source coverage
         if: matrix.coverage
@@ -277,7 +277,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }} --parallel
 
       - name: Test
-        run: ctest --preset ${{ matrix.preset }} --parallel 7 --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --parallel --output-on-failure
 
       - name: Test installed macOS package
         if: matrix.smoke == 'macos'

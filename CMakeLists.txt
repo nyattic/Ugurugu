@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.31)
 
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(

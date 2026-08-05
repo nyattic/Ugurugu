@@ -34,7 +34,11 @@ set(UGURUGU_TEST_SUITES
     mask
     release_notes
     stabilizer
-    ui
+    ui_shell
+    ui_selection
+    ui_viewport
+    ui_drawing_tools
+    ui_session
 )
 foreach(suite IN LISTS UGURUGU_TEST_SUITES)
     set(test_name "ugurugu_${suite}_tests")

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- CMake 3.25 or later, and 4.2 or later on Windows for the
+- CMake 3.31 or later, and 4.2 or later on Windows for the
   Visual Studio 18 2026 generator
 - Qt 6.10 or later; releases are built against Qt 6.11.1
 - An internet connection while configuring so CMake can fetch the

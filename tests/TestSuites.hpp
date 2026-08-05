@@ -11,6 +11,5 @@ int runWebPWriterTests(int argc, char **argv);
 int runMaskRegressionTests(int argc, char **argv);
 int runReleaseNotesTests(int argc, char **argv);
 int runStrokeStabilizerTests(int argc, char **argv);
-int runUiTests(int argc, char **argv);
 
 }

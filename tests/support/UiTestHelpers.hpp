@@ -61,6 +61,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFocusEvent>
+#include <QFont>
 #include <QHideEvent>
 #include <QInputDialog>
 #include <QKeySequenceEdit>
@@ -188,6 +189,26 @@ private:
     QByteArray m_name;
     bool m_existed = false;
     QByteArray m_value;
+};
+
+class ApplicationFontGuard final
+{
+public:
+    explicit ApplicationFontGuard(int pointSizeScale)
+        : m_font(QApplication::font())
+    {
+        QFont scaled = m_font;
+        scaled.setPointSize(m_font.pointSize() * pointSizeScale);
+        QApplication::setFont(scaled);
+    }
+
+    ~ApplicationFontGuard()
+    {
+        QApplication::setFont(m_font);
+    }
+
+private:
+    QFont m_font;
 };
 
 class ApplicationVersionGuard final

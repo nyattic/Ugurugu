@@ -13,6 +13,10 @@ namespace ugurugu
 namespace
 {
 
+// Every palette dock declares this as the width it can be narrowed to, so no
+// panel's contents may report a larger minimum.
+constexpr int declaredPaletteDockWidth = 150;
+
 // QMainWindowLayout pools the tab bar of a dissolved dock group: it stays a
 // visible child of the window, parked outside it, so only the rendered region
 // tells whether a tab is actually left over.
@@ -1770,6 +1774,14 @@ private slots:
                 }),
             1);
 
+        for (const QDockWidget *dock : paletteDocks)
+        {
+            QVERIFY2(dock->minimumWidth() <= declaredPaletteDockWidth,
+                qPrintable(QStringLiteral("%1 contents demand %2")
+                        .arg(dock->objectName())
+                        .arg(dock->minimumWidth())));
+        }
+
         // How narrow a dock can actually get depends on the platform's frame
         // and font metrics, so squeeze it and check the panels reflow at
         // whatever width it settles on rather than at a fixed pixel count.
@@ -1940,6 +1952,37 @@ private slots:
         follow->click();
         QVERIFY(!controller.document().layer(layerId)->wobbleAmount);
         QVERIFY(!controller.document().layer(layerId)->motion);
+    }
+
+    // The layer panel is the only palette panel that shows text the user
+    // supplies, so what it displays must not decide how narrow the palette
+    // area can become. Windows measured even the shipped labels wider than
+    // macOS did and the panel pinned the whole area open there; an inflated
+    // font reproduces that platform difference on any host.
+    void keepsLayerPanelMinimumWidthIndependentOfItsText()
+    {
+        const ApplicationFontGuard inflatedText(2);
+
+        MainWindow window;
+        window.resize(1100, 720);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        auto *layerDock = window.findChild<LayerDock *>();
+        QVERIFY(layerDock);
+        QCOMPARE(layerDock->minimumWidth(), declaredPaletteDockWidth);
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const QUuid paintId = controller.document().activeLayerId;
+        controller.addLayerGroup(paintId);
+        const QUuid groupId =
+            controller.document().layer(paintId)->parentGroupId;
+        QVERIFY(!groupId.isNull());
+        controller.renameLayer(groupId,
+            QString(DocumentLimits::maximumLayerNameLength, QLatin1Char('W')));
+        QCoreApplication::processEvents();
+        QCOMPARE(layerDock->minimumWidth(), declaredPaletteDockWidth);
     }
 
     void showsLayerCompositingAndTogglesWobblePerLayer()

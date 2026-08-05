@@ -1,5 +1,6 @@
 #include "TestSuites.hpp"
 #include "app/ApplicationInstanceLock.hpp"
+#include "support/UiTestSuites.hpp"
 #include "ui/Theme.hpp"
 
 #include <QApplication>
@@ -29,7 +30,11 @@ constexpr std::array suites{
     Suite{"mask", ugurugu::runMaskRegressionTests},
     Suite{"release_notes", ugurugu::runReleaseNotesTests},
     Suite{"stabilizer", ugurugu::runStrokeStabilizerTests},
-    Suite{"ui", ugurugu::runUiTests},
+    Suite{"ui_shell", ugurugu::runUiShellTests},
+    Suite{"ui_selection", ugurugu::runUiSelectionTests},
+    Suite{"ui_viewport", ugurugu::runUiViewportTests},
+    Suite{"ui_drawing_tools", ugurugu::runUiDrawingToolTests},
+    Suite{"ui_session", ugurugu::runUiSessionTests},
 };
 
 }

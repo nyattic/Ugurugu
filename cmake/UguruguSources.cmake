@@ -152,6 +152,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/ColorWheel.hpp
     src/ui/ToolDock.cpp
     src/ui/ToolDock.hpp
+    src/ui/ElidingCheckBox.cpp
+    src/ui/ElidingCheckBox.hpp
     src/ui/EraserPopoverPanel.cpp
     src/ui/EraserPopoverPanel.hpp
     src/ui/EraserPresetButton.cpp
@@ -267,7 +269,6 @@ set(UGURUGU_TEST_SOURCES
     tests/UiSelectionTests.cpp
     tests/UiSessionTests.cpp
     tests/UiShellTests.cpp
-    tests/UiTests.cpp
     tests/UiViewportTests.cpp
     tests/support/CanvasWidgetTestAccess.hpp
     tests/support/DocumentControllerTestAccess.hpp

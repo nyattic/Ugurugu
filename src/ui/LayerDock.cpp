@@ -3,6 +3,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/LayerHierarchy.hpp"
+#include "ui/ElidingCheckBox.hpp"
 #include "ui/Icons.hpp"
 #include "ui/LayerItemDelegate.hpp"
 #include "ui/LayerListWidget.hpp"
@@ -37,6 +38,18 @@ namespace ugurugu
 
 namespace
 {
+
+constexpr int propertyComboContentsLength = 6;
+
+// Layer and group names come from the user, and a combo box otherwise reports
+// its widest entry as its minimum width, which would let one long name pin the
+// palette dock area open. A combo box is horizontally QSizePolicy::Minimum by
+// default, so the shorter minimum only counts once the policy can shrink.
+void makePropertyComboShrinkable(QComboBox *combo)
+{
+    combo->setMinimumContentsLength(propertyComboContentsLength);
+    combo->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+}
 
 QString blendModeName(LayerBlendMode mode)
 {
@@ -177,6 +190,7 @@ void LayerDock::buildContent()
     m_blendModeCombo = new QComboBox(content);
     m_blendModeCombo->setObjectName(QStringLiteral("layerBlendModeCombo"));
     m_blendModeCombo->setAccessibleName(tr("Layer blend mode"));
+    makePropertyComboShrinkable(m_blendModeCombo);
     for (LayerBlendMode mode : {LayerBlendMode::Normal,
              LayerBlendMode::Multiply,
              LayerBlendMode::Screen,
@@ -192,16 +206,17 @@ void LayerDock::buildContent()
     m_parentGroupCombo = new QComboBox(content);
     m_parentGroupCombo->setObjectName(QStringLiteral("layerParentGroupCombo"));
     m_parentGroupCombo->setAccessibleName(tr("Parent layer group"));
+    makePropertyComboShrinkable(m_parentGroupCombo);
     groupLabel->setBuddy(m_parentGroupCombo);
     properties->addRow(groupLabel, m_parentGroupCombo);
 
-    m_clipCheck = new QCheckBox(tr("Clip to layer below"), content);
+    m_clipCheck = new ElidingCheckBox(tr("Clip to layer below"), content);
     m_clipCheck->setObjectName(QStringLiteral("layerClipCheck"));
     m_clipCheck->setToolTip(
         tr("Limit this layer to the opacity of the base layer below it"));
     properties->addRow(m_clipCheck);
 
-    m_referenceCheck = new QCheckBox(tr("Reference layer"), content);
+    m_referenceCheck = new ElidingCheckBox(tr("Reference layer"), content);
     m_referenceCheck->setObjectName(QStringLiteral("layerReferenceCheck"));
     m_referenceCheck->setToolTip(
         tr("Use this layer when a selection tool references marked layers"));
