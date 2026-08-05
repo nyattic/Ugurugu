@@ -101,8 +101,8 @@ void ColorHistoryGrid::relayoutForWidth(int width)
         m_layout->addWidget(
             m_buttons[index], index / m_columns, index % m_columns);
     }
-    const int rows =
-        (m_buttons.size() + m_columns - 1) / std::max(1, m_columns);
+    const int rows = static_cast<int>(
+        (m_buttons.size() + m_columns - 1) / std::max(1, m_columns));
     setMinimumHeight(gridMargin * 2 + rows * swatchSize
                      + std::max(0, rows - 1) * swatchSpacing);
     updateGeometry();
