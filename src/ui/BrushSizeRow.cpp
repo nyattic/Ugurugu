@@ -3,6 +3,7 @@
 #include "document/DocumentLimits.hpp"
 #include "ui/CanvasWidget.hpp"
 
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
@@ -25,33 +26,39 @@ BrushSizeRow::BrushSizeRow(CanvasWidget *canvas,
     const QString accessibleName =
         controlsEraser ? tr("Eraser size") : tr("Brush size");
 
-    auto *layout = new QHBoxLayout(this);
+    auto *layout = new QFormLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
+    layout->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     auto *label = new QLabel(tr("SIZE"), this);
     label->setProperty("fieldLabel", true);
-    layout->addWidget(label);
 
     const int minimum =
         static_cast<int>(std::ceil(DocumentLimits::minimumStrokeWidth));
 
-    auto *slider = new QSlider(Qt::Horizontal, this);
+    auto *controls = new QWidget(this);
+    auto *controlsLayout = new QHBoxLayout(controls);
+    controlsLayout->setContentsMargins(0, 0, 0, 0);
+    controlsLayout->setSpacing(8);
+
+    auto *slider = new QSlider(Qt::Horizontal, controls);
     slider->setObjectName(objectNamePrefix + QStringLiteral("Slider"));
     slider->setRange(minimum, 128);
     slider->setMinimumWidth(40);
     slider->setToolTip(accessibleName);
     slider->setAccessibleName(accessibleName);
-    layout->addWidget(slider, 1);
+    controlsLayout->addWidget(slider, 1);
 
-    auto *spin = new QSpinBox(this);
+    auto *spin = new QSpinBox(controls);
     spin->setObjectName(objectNamePrefix + QStringLiteral("Spin"));
     spin->setRange(minimum,
         static_cast<int>(std::floor(DocumentLimits::maximumStrokeWidth)));
     spin->setSuffix(tr(" px"));
     spin->setAccessibleName(accessibleName);
     label->setBuddy(spin);
-    layout->addWidget(spin);
+    controlsLayout->addWidget(spin);
+    layout->addRow(label, controls);
 
     const int initial =
         qRound(controlsEraser ? canvas->eraserWidth() : canvas->brushWidth());

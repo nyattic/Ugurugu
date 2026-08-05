@@ -4,6 +4,7 @@
 #include "ui/ColorPairSwatch.hpp"
 #include "ui/ColorWheel.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
+#include "ui/ResponsiveGrid.hpp"
 
 #include <QButtonGroup>
 #include <QHBoxLayout>
@@ -32,7 +33,7 @@ ColorDock::ColorDock(CanvasWidget *canvas, QWidget *parent)
     setFeatures(QDockWidget::DockWidgetMovable
                 | QDockWidget::DockWidgetFloatable
                 | QDockWidget::DockWidgetClosable);
-    setMinimumWidth(200);
+    setMinimumWidth(150);
     installCompactPaletteTitleBar(this);
 
     auto *body = new QWidget(this);
@@ -43,47 +44,42 @@ ColorDock::ColorDock(CanvasWidget *canvas, QWidget *parent)
     m_colorWheel = new ColorWheel(body);
     layout->addWidget(m_colorWheel);
 
-    auto *shapeRow = new QWidget(body);
-    auto *shapeLayout = new QHBoxLayout(shapeRow);
-    shapeLayout->setContentsMargins(0, 0, 0, 0);
-    shapeLayout->setSpacing(4);
-    auto *squareButton = new QToolButton(shapeRow);
+    auto *shapeGrid = new ResponsiveGrid(76, 2, 4, body);
+    shapeGrid->setObjectName(QStringLiteral("colorShapeGrid"));
+    auto *squareButton = new QToolButton(shapeGrid);
     squareButton->setObjectName(QStringLiteral("colorWheelSquareButton"));
     squareButton->setText(tr("HSV Square"));
     squareButton->setCheckable(true);
     squareButton->setProperty("categoryTab", true);
-    auto *triangleButton = new QToolButton(shapeRow);
+    auto *triangleButton = new QToolButton(shapeGrid);
     triangleButton->setObjectName(QStringLiteral("colorWheelTriangleButton"));
     triangleButton->setText(tr("HSV Triangle"));
     triangleButton->setCheckable(true);
     triangleButton->setProperty("categoryTab", true);
-    auto *shapeGroup = new QButtonGroup(shapeRow);
+    auto *shapeGroup = new QButtonGroup(shapeGrid);
     shapeGroup->setExclusive(true);
     shapeGroup->addButton(squareButton);
     shapeGroup->addButton(triangleButton);
-    shapeLayout->addWidget(squareButton);
-    shapeLayout->addWidget(triangleButton);
-    shapeLayout->addStretch(1);
-    layout->addWidget(shapeRow);
+    shapeGrid->addWidget(squareButton);
+    shapeGrid->addWidget(triangleButton);
+    layout->addWidget(shapeGrid);
 
-    auto *colorRow = new QWidget(body);
-    auto *colorLayout = new QHBoxLayout(colorRow);
-    colorLayout->setContentsMargins(0, 2, 0, 0);
-    colorLayout->setSpacing(8);
-    m_colorSwatch = new ColorPairSwatch(colorRow);
-    colorLayout->addWidget(m_colorSwatch);
-    auto *colorText = new QVBoxLayout;
+    auto *colorGrid = new ResponsiveGrid(116, 2, 8, body);
+    colorGrid->setObjectName(QStringLiteral("currentColorGrid"));
+    m_colorSwatch = new ColorPairSwatch(colorGrid);
+    colorGrid->addWidget(m_colorSwatch);
+    auto *colorTextWidget = new QWidget(colorGrid);
+    auto *colorText = new QVBoxLayout(colorTextWidget);
     colorText->setContentsMargins(0, 0, 0, 0);
     colorText->setSpacing(1);
-    auto *colorLabel = new QLabel(tr("Current color"), colorRow);
+    auto *colorLabel = new QLabel(tr("Current color"), colorTextWidget);
     colorLabel->setProperty("fieldLabel", true);
     colorText->addWidget(colorLabel);
-    m_colorValue = new QLabel(colorRow);
+    m_colorValue = new QLabel(colorTextWidget);
     m_colorValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
     colorText->addWidget(m_colorValue);
-    colorLayout->addLayout(colorText);
-    colorLayout->addStretch(1);
-    layout->addWidget(colorRow);
+    colorGrid->addWidget(colorTextWidget);
+    layout->addWidget(colorGrid);
 
     layout->addStretch(1);
     setWidget(body);

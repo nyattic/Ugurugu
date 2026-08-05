@@ -3,6 +3,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "ui/WobblePreview.hpp"
+#include "ui/ResponsiveGrid.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -65,24 +66,25 @@ WobblePopoverPanel::WobblePopoverPanel(
     heading->setProperty("fieldLabel", true);
     layout->addWidget(heading);
 
-    auto *amountRow = new QHBoxLayout;
-    m_preview = new WobblePreview(controller, this);
+    auto *amountGrid = new ResponsiveGrid(84, 3, 6, this);
+    amountGrid->setObjectName(QStringLiteral("wobbleAmountGrid"));
+    m_preview = new WobblePreview(controller, amountGrid);
     m_preview->setObjectName(QStringLiteral("wobbleSettingsPreview"));
-    amountRow->addWidget(m_preview);
-    auto *amountSlider = new QSlider(Qt::Horizontal, this);
+    amountGrid->addWidget(m_preview);
+    auto *amountSlider = new QSlider(Qt::Horizontal, amountGrid);
     amountSlider->setObjectName(QStringLiteral("wobbleSlider"));
     amountSlider->setRange(qRound(DocumentLimits::minimumWobbleAmount * 10.0),
         qRound(DocumentLimits::maximumWobbleAmount * 10.0));
-    amountRow->addWidget(amountSlider, 1);
-    auto *amountSpin = new QDoubleSpinBox(this);
+    amountGrid->addWidget(amountSlider);
+    auto *amountSpin = new QDoubleSpinBox(amountGrid);
     amountSpin->setObjectName(QStringLiteral("wobbleSpin"));
     amountSpin->setRange(DocumentLimits::minimumWobbleAmount,
         DocumentLimits::maximumWobbleAmount);
     amountSpin->setDecimals(1);
     amountSpin->setSingleStep(0.1);
     amountSpin->setSuffix(tr(" px"));
-    amountRow->addWidget(amountSpin);
-    layout->addLayout(amountRow);
+    amountGrid->addWidget(amountSpin);
+    layout->addWidget(amountGrid);
 
     auto *form = new QFormLayout;
     form->setContentsMargins(0, 0, 0, 0);

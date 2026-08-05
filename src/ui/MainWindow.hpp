@@ -115,7 +115,6 @@ private:
         const QString &error);
     void updateExportActions();
     void applyWobbleAnimationEnabled(bool enabled);
-    void setSimpleMode(bool enabled);
     void setTimelineVisible(bool visible);
     static bool timelineVisibleSetting();
     QString normalizedPath(
@@ -142,7 +141,6 @@ private:
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
     QAction *m_eyedropperAction = nullptr;
-    QAction *m_simpleModeAction = nullptr;
     QAction *m_showTimelineAction = nullptr;
     QAction *m_fillSelectionAction = nullptr;
     QAction *m_scaleSelectionAction = nullptr;
@@ -161,8 +159,6 @@ private:
     QAction *m_deleteSelectionAction = nullptr;
     QAction *m_deselectSelectionAction = nullptr;
     QAction *m_mirrorCanvasAction = nullptr;
-    QByteArray m_studioDockState;
-    bool m_studioTimelineVisible = true;
     QList<QAction *> m_shortcutActions;
     QLabel *m_pointerLabel = nullptr;
     QSlider *m_zoomSlider = nullptr;

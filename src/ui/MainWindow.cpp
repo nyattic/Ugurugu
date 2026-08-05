@@ -90,8 +90,7 @@ namespace ugurugu
 namespace
 {
 
-constexpr int dockLayoutVersion = 3;
-constexpr QLatin1StringView simpleModeKey("window/simpleMode");
+constexpr int dockLayoutVersion = 4;
 
 QString projectExtension()
 {
@@ -239,9 +238,6 @@ MainWindow::MainWindow(QWidget *parent)
     {
         resize(1280, 820);
     }
-    resizeDocks({m_toolDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
-    resizeDocks(
-        {m_toolDock, m_colorDock, m_colorHistoryDock}, {3, 3, 4}, Qt::Vertical);
 
     m_paletteDockAreaManager =
         new PaletteDockAreaManager(this, dockLayoutVersion);
@@ -257,10 +253,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
     setTimelineVisible(m_showTimelineAction->isChecked());
-    if (settings.value(simpleModeKey, false).toBool())
-    {
-        m_simpleModeAction->setChecked(true);
-    }
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     qApp->installEventFilter(this);
@@ -643,16 +635,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
-    QByteArray dockState;
-    if (m_simpleModeAction->isChecked() && !m_studioDockState.isEmpty())
-    {
-        dockState = m_studioDockState;
-    }
-    else
-    {
-        dockState = m_paletteDockAreaManager->layoutStateForPersistence();
-    }
-    settings.setValue(QStringLiteral("window/state"), dockState);
+    settings.setValue(QStringLiteral("window/state"),
+        m_paletteDockAreaManager->layoutStateForPersistence());
     m_toolDock->rememberWidth();
     saveDrawingToolSettings();
     clearAutosave();
@@ -662,6 +646,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+    m_paletteDockAreaManager->requestAreaControlsUpdate();
     if (!m_initialFitApplied)
     {
         m_initialFitApplied = true;
@@ -819,70 +804,6 @@ void MainWindow::resetDockLayout()
     resizeDocks({m_toolDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
     resizeDocks(
         {m_toolDock, m_colorDock, m_colorHistoryDock}, {3, 3, 4}, Qt::Vertical);
-}
-
-void MainWindow::setSimpleMode(bool enabled)
-{
-    QSettings().setValue(simpleModeKey, enabled);
-    m_simpleModeAction->setText(
-        enabled ? tr("Studio mode") : tr("Simple mode"));
-
-    QAction *resetAction =
-        findChild<QAction *>(QStringLiteral("resetPanelLayoutAction"));
-    const QList<QDockWidget *> advancedDocks{
-        m_toolDock, m_wobbleDock, m_colorHistoryDock};
-
-    if (enabled)
-    {
-        m_studioDockState =
-            m_paletteDockAreaManager->layoutStateForPersistence();
-        m_studioTimelineVisible = m_showTimelineAction->isChecked();
-        for (QDockWidget *dock : advancedDocks)
-        {
-            dock->hide();
-            dock->toggleViewAction()->setEnabled(false);
-        }
-        m_showTimelineAction->setEnabled(false);
-        if (resetAction)
-        {
-            resetAction->setEnabled(false);
-        }
-        m_timeline->hide();
-
-        removeDockWidget(m_colorDock);
-        removeDockWidget(m_layerDock);
-        m_colorDock->setFloating(false);
-        m_layerDock->setFloating(false);
-        addDockWidget(Qt::RightDockWidgetArea, m_colorDock);
-        addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
-        splitDockWidget(m_colorDock, m_layerDock, Qt::Vertical);
-        m_colorDock->show();
-        m_layerDock->show();
-        resizeDocks(
-            {m_colorDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
-        resizeDocks({m_colorDock, m_layerDock}, {1, 1}, Qt::Vertical);
-        statusBar()->showMessage(
-            tr("Simple mode: essential panels only"), 3000);
-        return;
-    }
-
-    for (QDockWidget *dock : advancedDocks)
-    {
-        dock->toggleViewAction()->setEnabled(true);
-    }
-    m_showTimelineAction->setEnabled(true);
-    if (resetAction)
-    {
-        resetAction->setEnabled(true);
-    }
-    if (!m_studioDockState.isEmpty())
-    {
-        restoreState(m_studioDockState, dockLayoutVersion);
-    }
-    m_paletteDockAreaManager->resumeCollapsedAreas();
-    m_showTimelineAction->setChecked(m_studioTimelineVisible);
-    setTimelineVisible(m_studioTimelineVisible);
-    statusBar()->showMessage(tr("Studio mode: all panels available"), 3000);
 }
 
 bool MainWindow::hasUnsavedWork() const

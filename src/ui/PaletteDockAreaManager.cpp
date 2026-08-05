@@ -4,11 +4,14 @@
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QSettings>
+#include <QSet>
 #include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <limits>
 
 namespace ugurugu
 {
@@ -26,8 +29,8 @@ bool isManagedArea(Qt::DockWidgetArea area)
 QString collapsedSettingKey(Qt::DockWidgetArea area)
 {
     return area == Qt::LeftDockWidgetArea
-               ? QStringLiteral("dock/leftAreaCollapsed")
-               : QStringLiteral("dock/rightAreaCollapsed");
+               ? QStringLiteral("dock/v4/leftAreaCollapsed")
+               : QStringLiteral("dock/v4/rightAreaCollapsed");
 }
 
 QString railObjectName(Qt::DockWidgetArea area)
@@ -42,6 +45,12 @@ QString expandButtonObjectName(Qt::DockWidgetArea area)
     return area == Qt::LeftDockWidgetArea
                ? QStringLiteral("expandLeftPaletteAreaButton")
                : QStringLiteral("expandRightPaletteAreaButton");
+}
+
+QToolButton *collapseButton(const QDockWidget *dock)
+{
+    return dock->findChild<QToolButton *>(
+        QStringLiteral("collapsePaletteButton"));
 }
 
 }
@@ -66,25 +75,56 @@ void PaletteDockAreaManager::registerDock(QDockWidget *dock)
     }
     m_docks.append(dock);
     connect(dock,
+        &QObject::destroyed,
+        this,
+        [this, dock]()
+        {
+            m_docks.removeAll(dock);
+            m_left.docks.remove(dock);
+            m_right.docks.remove(dock);
+        });
+    const auto updateControls = [this]()
+    {
+        requestAreaControlsUpdate();
+    };
+    connect(dock,
         &QDockWidget::dockLocationChanged,
         this,
-        [this, dock](Qt::DockWidgetArea area)
+        [updateControls](Qt::DockWidgetArea)
         {
-            if (!isManagedArea(area) || !isCollapsed(area))
-            {
-                return;
-            }
-            AreaState &areaState = state(area);
-            areaState.docks.insert(dock,
-                {dock->isVisible(), dock->toggleViewAction()->isEnabled()});
-            dock->toggleViewAction()->setEnabled(false);
-            QTimer::singleShot(0, dock, &QDockWidget::hide);
+            updateControls();
         });
+    connect(dock,
+        &QDockWidget::topLevelChanged,
+        this,
+        [updateControls](bool)
+        {
+            updateControls();
+        });
+    connect(dock,
+        &QDockWidget::visibilityChanged,
+        this,
+        [updateControls](bool)
+        {
+            updateControls();
+        });
+    requestAreaControlsUpdate();
 }
 
 bool PaletteDockAreaManager::isCollapsed(Qt::DockWidgetArea area) const
 {
     return isManagedArea(area) && state(area).collapsed;
+}
+
+bool PaletteDockAreaManager::isDockCollapsed(const QDockWidget *dock) const
+{
+    if (!dock)
+    {
+        return false;
+    }
+    auto *mutableDock = const_cast<QDockWidget *>(dock);
+    return (m_left.collapsed && m_left.docks.contains(mutableDock))
+           || (m_right.collapsed && m_right.docks.contains(mutableDock));
 }
 
 void PaletteDockAreaManager::setCollapsed(
@@ -107,87 +147,50 @@ void PaletteDockAreaManager::setCollapsed(
 
 void PaletteDockAreaManager::restorePersistedState()
 {
+    captureExpandedLayoutState();
+    const QSettings settings;
     for (Qt::DockWidgetArea area :
         {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea})
     {
-        if (QSettings().value(collapsedSettingKey(area), false).toBool())
-        {
-            collapseArea(area, false);
-        }
-    }
-}
-
-void PaletteDockAreaManager::suspendCollapsedAreas()
-{
-    for (Qt::DockWidgetArea area :
-        {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea})
-    {
-        AreaState &areaState = state(area);
-        if (!areaState.collapsed || areaState.suspended)
+        if (!settings.value(collapsedSettingKey(area), false).toBool())
         {
             continue;
         }
-        hideRail(area);
-        for (auto iterator = areaState.docks.cbegin();
-            iterator != areaState.docks.cend();
-            ++iterator)
-        {
-            iterator.key()->toggleViewAction()->setEnabled(
-                iterator.value().toggleEnabled);
-            iterator.key()->setVisible(iterator.value().visible);
-        }
-        setAreaTabBarsVisible(area, true);
-        areaState.suspended = true;
-    }
-}
-
-void PaletteDockAreaManager::resumeCollapsedAreas()
-{
-    for (Qt::DockWidgetArea area :
-        {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea})
-    {
-        AreaState &areaState = state(area);
-        if (!areaState.collapsed || !areaState.suspended)
-        {
-            continue;
-        }
-        collapseArea(area, false);
+        QTimer::singleShot(0,
+            this,
+            [this, area]()
+            {
+                if (!isCollapsed(area))
+                {
+                    collapseArea(area, false);
+                }
+            });
     }
 }
 
 void PaletteDockAreaManager::resetCollapsedAreas()
 {
-    const bool leftCollapsed = m_left.collapsed;
-    const bool rightCollapsed = m_right.collapsed;
-    if (leftCollapsed)
+    for (Qt::DockWidgetArea area :
+        {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea})
     {
-        restoreExpandedLayout(Qt::LeftDockWidgetArea, true);
+        if (state(area).collapsed)
+        {
+            restoreExpandedLayout(area, false);
+        }
+        QSettings().setValue(collapsedSettingKey(area), false);
     }
-    if (rightCollapsed && m_right.collapsed)
-    {
-        restoreExpandedLayout(Qt::RightDockWidgetArea, true);
-    }
-    QSettings().setValue(collapsedSettingKey(Qt::LeftDockWidgetArea), false);
-    QSettings().setValue(collapsedSettingKey(Qt::RightDockWidgetArea), false);
 }
 
 QByteArray PaletteDockAreaManager::layoutStateForPersistence()
 {
-    if (m_left.collapsed || m_right.collapsed)
-    {
-        suspendCollapsedAreas();
-        if (!m_expandedLayoutState.isEmpty())
-        {
-            m_window->restoreState(m_expandedLayoutState, m_layoutVersion);
-        }
-        setAreaTabBarsVisible(Qt::LeftDockWidgetArea, true);
-        setAreaTabBarsVisible(Qt::RightDockWidgetArea, true);
-    }
-    else
-    {
-        m_expandedLayoutState = m_window->saveState(m_layoutVersion);
-    }
+    captureExpandedLayoutState();
     return m_expandedLayoutState;
+}
+
+void PaletteDockAreaManager::requestAreaControlsUpdate()
+{
+    QTimer::singleShot(
+        0, this, &PaletteDockAreaManager::updateAreaControls);
 }
 
 PaletteDockAreaManager *PaletteDockAreaManager::find(const QDockWidget *dock)
@@ -229,34 +232,40 @@ QList<QDockWidget *> PaletteDockAreaManager::docksInArea(
     return result;
 }
 
+QList<QTabBar *> PaletteDockAreaManager::dockAreaTabBars() const
+{
+    QList<QTabBar *> result;
+    for (QTabBar *tabBar : m_window->findChildren<QTabBar *>())
+    {
+        // Skips tab bars belonging to dialogs and to floating dock groups,
+        // which are separate windows parented to the main window.
+        if (tabBar->window() == m_window)
+        {
+            result.append(tabBar);
+        }
+    }
+    return result;
+}
+
 void PaletteDockAreaManager::collapseArea(Qt::DockWidgetArea area, bool persist)
 {
     AreaState &areaState = state(area);
     areaState.docks.clear();
-    setAreaTabBarsVisible(area, false);
+    areaState.collapsed = true;
     for (QDockWidget *dock : docksInArea(area))
     {
         areaState.docks.insert(
-            dock, {dock->isVisible(), dock->toggleViewAction()->isEnabled()});
-        dock->toggleViewAction()->setEnabled(false);
+            dock, {dock->toggleViewAction()->isEnabled()});
         dock->hide();
+        m_window->removeDockWidget(dock);
+        dock->toggleViewAction()->setEnabled(false);
     }
-    areaState.collapsed = true;
-    areaState.suspended = false;
     if (persist)
     {
         QSettings().setValue(collapsedSettingKey(area), true);
     }
     showRail(area);
-    QTimer::singleShot(0,
-        this,
-        [this, area]()
-        {
-            if (isCollapsed(area) && !state(area).suspended)
-            {
-                setAreaTabBarsVisible(area, false);
-            }
-        });
+    requestAreaControlsUpdate();
 }
 
 void PaletteDockAreaManager::restoreExpandedLayout(
@@ -266,20 +275,18 @@ void PaletteDockAreaManager::restoreExpandedLayout(
         m_left.collapsed && expandedArea != Qt::LeftDockWidgetArea;
     const bool keepRightCollapsed =
         m_right.collapsed && expandedArea != Qt::RightDockWidgetArea;
-    QDockWidget *leftRail = m_left.rail;
-    QDockWidget *rightRail = m_right.rail;
-
-    suspendCollapsedAreas();
     hideRail(Qt::LeftDockWidgetArea);
     hideRail(Qt::RightDockWidgetArea);
-    m_left = {.rail = leftRail};
-    m_right = {.rail = rightRail};
+    restoreDockActions(m_left);
+    restoreDockActions(m_right);
+    m_left.docks.clear();
+    m_right.docks.clear();
+    m_left.collapsed = false;
+    m_right.collapsed = false;
     if (!m_expandedLayoutState.isEmpty())
     {
         m_window->restoreState(m_expandedLayoutState, m_layoutVersion);
     }
-    setAreaTabBarsVisible(Qt::LeftDockWidgetArea, true);
-    setAreaTabBarsVisible(Qt::RightDockWidgetArea, true);
     if (persist)
     {
         QSettings().setValue(collapsedSettingKey(expandedArea), false);
@@ -292,6 +299,80 @@ void PaletteDockAreaManager::restoreExpandedLayout(
     {
         collapseArea(Qt::RightDockWidgetArea, false);
     }
+    requestAreaControlsUpdate();
+}
+
+void PaletteDockAreaManager::restoreDockActions(AreaState &areaState)
+{
+    for (auto iterator = areaState.docks.cbegin();
+        iterator != areaState.docks.cend();
+        ++iterator)
+    {
+        iterator.key()->toggleViewAction()->setEnabled(
+            iterator.value().toggleEnabled);
+    }
+}
+
+void PaletteDockAreaManager::updateAreaControls()
+{
+    for (QDockWidget *dock : m_docks)
+    {
+        if (QToolButton *button = collapseButton(dock))
+        {
+            button->hide();
+        }
+    }
+
+    QSet<QString> selectedDockTitles;
+    for (QTabBar *tabBar : dockAreaTabBars())
+    {
+        if (!tabBar->property("paletteControlsConnected").toBool())
+        {
+            connect(tabBar,
+                &QTabBar::currentChanged,
+                this,
+                [this](int)
+                {
+                    requestAreaControlsUpdate();
+                });
+            tabBar->setProperty("paletteControlsConnected", true);
+        }
+        if (tabBar->currentIndex() >= 0)
+        {
+            selectedDockTitles.insert(tabBar->tabText(tabBar->currentIndex()));
+        }
+    }
+
+    for (Qt::DockWidgetArea area :
+        {Qt::LeftDockWidgetArea, Qt::RightDockWidgetArea})
+    {
+        QDockWidget *topDock = nullptr;
+        int top = std::numeric_limits<int>::max();
+        for (QDockWidget *dock : docksInArea(area))
+        {
+            const bool tabified =
+                !m_window->tabifiedDockWidgets(dock).isEmpty();
+            if (dock->isHidden() || !dock->titleBarWidget()
+                || (tabified
+                    && !selectedDockTitles.contains(dock->windowTitle())))
+            {
+                continue;
+            }
+            const int dockTop = dock->mapTo(m_window, QPoint()).y();
+            if (dockTop < top)
+            {
+                top = dockTop;
+                topDock = dock;
+            }
+        }
+        if (topDock)
+        {
+            if (QToolButton *button = collapseButton(topDock))
+            {
+                button->show();
+            }
+        }
+    }
 }
 
 void PaletteDockAreaManager::showRail(Qt::DockWidgetArea area)
@@ -299,7 +380,6 @@ void PaletteDockAreaManager::showRail(Qt::DockWidgetArea area)
     AreaState &areaState = state(area);
     m_window->addDockWidget(area, areaState.rail);
     areaState.rail->show();
-    m_window->resizeDocks({areaState.rail}, {railWidth}, Qt::Horizontal);
 }
 
 void PaletteDockAreaManager::hideRail(Qt::DockWidgetArea area)
@@ -309,74 +389,11 @@ void PaletteDockAreaManager::hideRail(Qt::DockWidgetArea area)
     m_window->removeDockWidget(areaState.rail);
 }
 
-void PaletteDockAreaManager::setAreaTabBarsVisible(
-    Qt::DockWidgetArea area, bool visible)
-{
-    AreaState &areaState = state(area);
-    if (visible)
-    {
-        for (QTabBar *tabBar : areaState.tabBars)
-        {
-            if (tabBar)
-            {
-                tabBar->show();
-            }
-        }
-        return;
-    }
-
-    const QList<QDockWidget *> areaDocks = docksInArea(area);
-    if (areaState.tabBars.isEmpty())
-    {
-        for (QTabBar *tabBar : m_window->findChildren<QTabBar *>())
-        {
-            bool belongsToArea = false;
-            for (int index = 0; index < tabBar->count() && !belongsToArea;
-                ++index)
-            {
-                for (const QDockWidget *dock : areaDocks)
-                {
-                    if (tabBar->tabText(index) == dock->windowTitle())
-                    {
-                        belongsToArea = true;
-                        break;
-                    }
-                }
-            }
-            const int tabCenter =
-                tabBar->mapTo(m_window, tabBar->rect().center()).x();
-            const bool onAreaSide = area == Qt::LeftDockWidgetArea
-                                        ? tabCenter < m_window->width() / 2
-                                        : tabCenter > m_window->width() / 2;
-            if (belongsToArea || onAreaSide)
-            {
-                areaState.tabBars.append(tabBar);
-            }
-        }
-    }
-    for (QTabBar *tabBar : areaState.tabBars)
-    {
-        if (tabBar)
-        {
-            tabBar->hide();
-        }
-    }
-}
-
 void PaletteDockAreaManager::captureExpandedLayoutState()
 {
     if (!m_left.collapsed && !m_right.collapsed)
     {
         m_expandedLayoutState = m_window->saveState(m_layoutVersion);
-        return;
-    }
-    const bool resumeLeft = m_left.collapsed && !m_left.suspended;
-    const bool resumeRight = m_right.collapsed && !m_right.suspended;
-    layoutStateForPersistence();
-    m_expandedLayoutState = m_window->saveState(m_layoutVersion);
-    if (resumeLeft || resumeRight)
-    {
-        resumeCollapsedAreas();
     }
 }
 
@@ -388,6 +405,7 @@ QDockWidget *PaletteDockAreaManager::createRail(Qt::DockWidgetArea area)
     rail->setFeatures(QDockWidget::NoDockWidgetFeatures);
     rail->setMinimumWidth(railWidth);
     rail->setMaximumWidth(railWidth);
+    rail->hide();
     auto *titleBar = new QWidget(rail);
     titleBar->setFixedHeight(0);
     rail->setTitleBarWidget(titleBar);

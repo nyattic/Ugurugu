@@ -12,6 +12,10 @@ class QTabBar;
 namespace ugurugu
 {
 
+// Owns only whether the left and right dock areas are collapsed, plus the
+// layout snapshot taken before a collapse. Dock areas, tab groups, tab order,
+// dock sizes and per-dock visibility remain owned by QMainWindow's
+// saveState/restoreState, including for docks the user has closed.
 class PaletteDockAreaManager final : public QObject
 {
     Q_OBJECT
@@ -21,19 +25,18 @@ public:
 
     void registerDock(QDockWidget *dock);
     bool isCollapsed(Qt::DockWidgetArea area) const;
+    bool isDockCollapsed(const QDockWidget *dock) const;
     void setCollapsed(Qt::DockWidgetArea area, bool collapsed);
     void restorePersistedState();
-    void suspendCollapsedAreas();
-    void resumeCollapsedAreas();
     void resetCollapsedAreas();
     QByteArray layoutStateForPersistence();
+    void requestAreaControlsUpdate();
 
     static PaletteDockAreaManager *find(const QDockWidget *dock);
 
 private:
     struct DockState final
     {
-        bool visible = true;
         bool toggleEnabled = true;
     };
 
@@ -41,19 +44,19 @@ private:
     {
         QDockWidget *rail = nullptr;
         QHash<QDockWidget *, DockState> docks;
-        QList<QTabBar *> tabBars;
         bool collapsed = false;
-        bool suspended = false;
     };
 
     AreaState &state(Qt::DockWidgetArea area);
     const AreaState &state(Qt::DockWidgetArea area) const;
     QList<QDockWidget *> docksInArea(Qt::DockWidgetArea area) const;
+    QList<QTabBar *> dockAreaTabBars() const;
     void collapseArea(Qt::DockWidgetArea area, bool persist);
     void restoreExpandedLayout(Qt::DockWidgetArea expandedArea, bool persist);
+    void restoreDockActions(AreaState &areaState);
+    void updateAreaControls();
     void showRail(Qt::DockWidgetArea area);
     void hideRail(Qt::DockWidgetArea area);
-    void setAreaTabBarsVisible(Qt::DockWidgetArea area, bool visible);
     void captureExpandedLayoutState();
     QDockWidget *createRail(Qt::DockWidgetArea area);
 

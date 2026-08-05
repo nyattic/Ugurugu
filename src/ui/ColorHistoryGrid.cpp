@@ -116,6 +116,11 @@ ColorHistoryGrid::~ColorHistoryGrid()
     }
 }
 
+QSize ColorHistoryGrid::minimumSizeHint() const
+{
+    return QSize(swatchSize + gridMargin * 2, 0);
+}
+
 void ColorHistoryGrid::setActiveColor(const QColor &color)
 {
     if (!color.isValid() || m_activeColor == color)

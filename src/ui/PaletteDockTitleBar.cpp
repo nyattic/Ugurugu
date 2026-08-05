@@ -38,8 +38,11 @@ void updateCollapseButton(QDockWidget *dock)
     button->setText(area == Qt::LeftDockWidgetArea
                         ? QStringLiteral("‹ %1").arg(label)
                         : QStringLiteral("%1 ›").arg(label));
-    button->setVisible(
-        area == Qt::LeftDockWidgetArea || area == Qt::RightDockWidgetArea);
+    button->hide();
+    if (PaletteDockAreaManager *manager = PaletteDockAreaManager::find(dock))
+    {
+        manager->requestAreaControlsUpdate();
+    }
 }
 
 class CompactPaletteTitleBar final : public QWidget
@@ -151,7 +154,7 @@ void installCompactPaletteTitleBar(QDockWidget *dock)
 bool isPaletteDockCollapsed(const QDockWidget *dock)
 {
     PaletteDockAreaManager *manager = PaletteDockAreaManager::find(dock);
-    return manager && manager->isCollapsed(dockArea(dock));
+    return manager && manager->isDockCollapsed(dock);
 }
 
 void setPaletteDockCollapsed(QDockWidget *dock, bool collapsed)

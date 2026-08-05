@@ -20,7 +20,7 @@ WobbleDock::WobbleDock(DocumentController *controller, QWidget *parent)
     setFeatures(QDockWidget::DockWidgetMovable
                 | QDockWidget::DockWidgetFloatable
                 | QDockWidget::DockWidgetClosable);
-    setMinimumWidth(200);
+    setMinimumWidth(150);
     installCompactPaletteTitleBar(this);
 
     auto *body = new QWidget(this);

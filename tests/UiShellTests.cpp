@@ -10,6 +10,51 @@
 namespace ugurugu
 {
 
+namespace
+{
+
+// QMainWindowLayout pools the tab bar of a dissolved dock group: it stays a
+// visible child of the window, parked outside it, so only the rendered region
+// tells whether a tab is actually left over.
+bool hasOnScreenTabBar(const QMainWindow &window)
+{
+    return std::ranges::any_of(window.findChildren<QTabBar *>(),
+        [](const QTabBar *tabBar)
+        {
+            return !tabBar->visibleRegion().isEmpty();
+        });
+}
+
+bool visibleChildrenFit(const QWidget *container)
+{
+    return std::ranges::all_of(
+        container->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly),
+        [container](const QWidget *child)
+        {
+            return !child->isVisible()
+                   || container->contentsRect().contains(child->geometry());
+        });
+}
+
+QStringList dockTabOrder(const QMainWindow &window, const QDockWidget *dock)
+{
+    for (const QTabBar *tabBar : window.findChildren<QTabBar *>())
+    {
+        QStringList titles;
+        for (int index = 0; index < tabBar->count(); ++index)
+        {
+            titles.append(tabBar->tabText(index));
+        }
+        if (titles.contains(dock->windowTitle()))
+        {
+            return titles;
+        }
+    }
+    return {};
+}
+
+}
+
 class UiShellTests final : public QObject
 {
     Q_OBJECT
@@ -1702,6 +1747,9 @@ private slots:
         for (const PopoverToolButton *button : railButtons)
         {
             QVERIFY(!button->text().contains(QLatin1Char('(')));
+            QVERIFY(std::abs(button->geometry().center().x()
+                        - toolRail->contentsRect().center().x())
+                    <= 1);
         }
         const QList<QDockWidget *> paletteDocks{
             toolDock, colorDock, colorHistoryDock, wobbleDock, layerDock};
@@ -1711,6 +1759,37 @@ private slots:
             QVERIFY(dock->titleBarWidget()->height() > 0);
             QVERIFY(dock->titleBarWidget()->height() <= 24);
         }
+        QTRY_COMPARE(std::ranges::count_if(
+                         window.findChildren<QToolButton *>(
+                             QStringLiteral("collapsePaletteButton")),
+                         [](const QToolButton *button)
+                         {
+                             return button->isVisible();
+                         }),
+            1);
+
+        window.resizeDocks(
+            paletteDocks, {150, 150, 150, 150, 150}, Qt::Horizontal);
+        QTRY_VERIFY(toolDock->width() <= 170);
+        const auto verifyResponsiveGrid = [&window](const QString &name)
+        {
+            QWidget *grid = window.findChild<QWidget *>(name);
+            QVERIFY(grid);
+            QCoreApplication::processEvents();
+            QVERIFY2(visibleChildrenFit(grid), qPrintable(name));
+        };
+        verifyResponsiveGrid(QStringLiteral("brushCategoryGrid"));
+        verifyResponsiveGrid(QStringLiteral("brushPresetGrid"));
+        verifyResponsiveGrid(QStringLiteral("colorShapeGrid"));
+        verifyResponsiveGrid(QStringLiteral("currentColorGrid"));
+        wobbleDock->raise();
+        QCoreApplication::processEvents();
+        verifyResponsiveGrid(QStringLiteral("wobbleAmountGrid"));
+        layerDock->raise();
+        QCoreApplication::processEvents();
+        verifyResponsiveGrid(QStringLiteral("layerButtonGrid"));
+        toolDock->raise();
+        colorHistoryDock->raise();
 
         window.addDockWidget(Qt::LeftDockWidgetArea, colorHistoryDock);
         QCOMPARE(
@@ -1730,16 +1809,19 @@ private slots:
                 QStringLiteral("expandLeftPaletteAreaButton"));
         QVERIFY(leftPaletteRail);
         QVERIFY(expandLeftPaletteAreaButton);
-        QVERIFY(leftPaletteRail->isVisible());
+        QTRY_VERIFY(leftPaletteRail->isVisible());
         QVERIFY(leftPaletteRail->width() < 100);
         expandLeftPaletteAreaButton->click();
         QTRY_VERIFY(!isPaletteDockCollapsed(colorHistoryDock));
         QVERIFY(!colorHistoryDock->isHidden());
         QVERIFY(leftPaletteRail->isHidden());
         window.addDockWidget(Qt::RightDockWidgetArea, colorHistoryDock);
+        window.tabifyDockWidget(colorHistoryDock, layerDock);
+        colorHistoryDock->raise();
         QCOMPARE(
             window.dockWidgetArea(colorHistoryDock), Qt::RightDockWidgetArea);
 
+        const int expandedCanvasWidth = window.centralWidget()->width();
         QToolButton *collapseRightPaletteButton =
             toolDock->findChild<QToolButton *>(
                 QStringLiteral("collapsePaletteButton"));
@@ -1750,6 +1832,7 @@ private slots:
             QTRY_VERIFY(isPaletteDockCollapsed(dock));
             QVERIFY(dock->isHidden());
             QVERIFY(!dock->toggleViewAction()->isEnabled());
+            QCOMPARE(window.dockWidgetArea(dock), Qt::NoDockWidgetArea);
         }
         QDockWidget *rightPaletteRail = window.findChild<QDockWidget *>(
             QStringLiteral("RightPaletteRailDock"));
@@ -1758,12 +1841,14 @@ private slots:
                 QStringLiteral("expandRightPaletteAreaButton"));
         QVERIFY(rightPaletteRail);
         QVERIFY(expandRightPaletteAreaButton);
+        QCOMPARE(window.findChildren<QToolButton *>(
+                     QStringLiteral("expandRightPaletteAreaButton"))
+                     .size(),
+            1);
         QVERIFY(rightPaletteRail->isVisible());
         QVERIFY(rightPaletteRail->width() < 100);
-        for (QTabBar *tabBar : window.findChildren<QTabBar *>())
-        {
-            QTRY_VERIFY(!tabBar->isVisible());
-        }
+        QTRY_VERIFY(window.centralWidget()->width() > expandedCanvasWidth);
+        QTRY_VERIFY(!hasOnScreenTabBar(window));
         expandRightPaletteAreaButton->click();
         for (QDockWidget *dock : paletteDocks)
         {
@@ -1775,6 +1860,17 @@ private slots:
         QVERIFY(window.tabifiedDockWidgets(toolDock).contains(wobbleDock));
         QVERIFY(
             window.tabifiedDockWidgets(colorHistoryDock).contains(layerDock));
+
+        colorHistoryDock->setFloating(true);
+        QTRY_VERIFY(colorHistoryDock->isFloating());
+        colorHistoryDock->setFloating(false);
+        QTRY_VERIFY(!colorHistoryDock->isFloating());
+        QVERIFY(colorHistoryDock->titleBarWidget());
+        colorHistoryDock->setFloating(true);
+        QTRY_VERIFY(colorHistoryDock->isFloating());
+        colorHistoryDock->setFloating(false);
+        QTRY_VERIFY(!colorHistoryDock->isFloating());
+        QVERIFY(colorHistoryDock->titleBarWidget());
 
         QToolButton *panelsButton =
             window.findChild<QToolButton *>(QStringLiteral("panelsButton"));
@@ -1839,15 +1935,14 @@ private slots:
         QVERIFY(!controller.document().layer(layerId)->motion);
     }
 
-    void switchesToSimpleModeAndRestoresTheStudioWorkspace()
+    void ignoresRetiredSimpleModeSetting()
     {
+        QSettings().setValue(QStringLiteral("window/simpleMode"), true);
         MainWindow window;
         window.resize(1100, 720);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-        QAction *simpleModeAction =
-            window.findChild<QAction *>(QStringLiteral("simpleModeAction"));
         ToolDock *toolDock = window.findChild<ToolDock *>();
         ColorDock *colorDock = window.findChild<ColorDock *>();
         ColorHistoryDock *colorHistoryDock =
@@ -1855,35 +1950,28 @@ private slots:
         WobbleDock *wobbleDock = window.findChild<WobbleDock *>();
         LayerDock *layerDock = window.findChild<LayerDock *>();
         TimelineBar *timeline = window.findChild<TimelineBar *>();
-        QVERIFY(simpleModeAction);
         QVERIFY(toolDock);
         QVERIFY(colorDock);
         QVERIFY(colorHistoryDock);
         QVERIFY(wobbleDock);
         QVERIFY(layerDock);
         QVERIFY(timeline);
-        QVERIFY(!simpleModeAction->isChecked());
-
-        window.addDockWidget(Qt::LeftDockWidgetArea, toolDock);
-        colorHistoryDock->hide();
-        simpleModeAction->setChecked(true);
-        QVERIFY(toolDock->isHidden());
-        QVERIFY(wobbleDock->isHidden());
-        QVERIFY(colorHistoryDock->isHidden());
+        QVERIFY(!window.findChild<QAction *>(QStringLiteral("simpleModeAction")));
+        QVERIFY(!toolDock->isHidden());
+        QVERIFY(!wobbleDock->isHidden());
+        QVERIFY(!colorHistoryDock->isHidden());
         QVERIFY(!colorDock->isHidden());
         QVERIFY(!layerDock->isHidden());
-        QVERIFY(timeline->isHidden());
-        QVERIFY(!toolDock->toggleViewAction()->isEnabled());
-
-        simpleModeAction->setChecked(false);
-        QCOMPARE(window.dockWidgetArea(toolDock), Qt::LeftDockWidgetArea);
-        QVERIFY(colorHistoryDock->isHidden());
-        QVERIFY(toolDock->toggleViewAction()->isEnabled());
         QVERIFY(!timeline->isHidden());
+        QVERIFY(toolDock->toggleViewAction()->isEnabled());
     }
 
     void restoresPaletteTabsAcrossRestart()
     {
+        int savedDockWidth = 0;
+        int savedHistoryHeight = 0;
+        QStringList savedToolTabOrder;
+        QStringList savedHistoryTabOrder;
         {
             MainWindow window;
             window.resize(1100, 720);
@@ -1891,9 +1979,28 @@ private slots:
             QVERIFY(QTest::qWaitForWindowExposed(&window));
             ColorDock *colorDock = window.findChild<ColorDock *>();
             ToolDock *toolDock = window.findChild<ToolDock *>();
+            ColorHistoryDock *colorHistoryDock =
+                window.findChild<ColorHistoryDock *>();
+            WobbleDock *wobbleDock = window.findChild<WobbleDock *>();
+            LayerDock *layerDock = window.findChild<LayerDock *>();
             QVERIFY(colorDock);
             QVERIFY(toolDock);
+            QVERIFY(colorHistoryDock);
+            QVERIFY(wobbleDock);
+            QVERIFY(layerDock);
             window.addDockWidget(Qt::LeftDockWidgetArea, colorDock);
+            window.resizeDocks({toolDock}, {246}, Qt::Horizontal);
+            window.resizeDocks({colorHistoryDock}, {260}, Qt::Vertical);
+            QCoreApplication::processEvents();
+            savedDockWidth = toolDock->width();
+            savedHistoryHeight = colorHistoryDock->height();
+            savedToolTabOrder = dockTabOrder(window, toolDock);
+            savedHistoryTabOrder = dockTabOrder(window, colorHistoryDock);
+            QVERIFY(savedToolTabOrder.size() >= 2);
+            QVERIFY(savedHistoryTabOrder.size() >= 2);
+            QVERIFY(window.tabifiedDockWidgets(toolDock).contains(wobbleDock));
+            wobbleDock->hide();
+            QCoreApplication::processEvents();
             QToolButton *collapseRightPaletteButton =
                 toolDock->findChild<QToolButton *>(
                     QStringLiteral("collapsePaletteButton"));
@@ -1904,10 +2011,6 @@ private slots:
         }
 
         MainWindow restored;
-        restored.resize(1100, 720);
-        restored.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&restored));
-
         ToolDock *toolDock = restored.findChild<ToolDock *>();
         ColorDock *colorDock = restored.findChild<ColorDock *>();
         ColorHistoryDock *colorHistoryDock =
@@ -1919,6 +2022,10 @@ private slots:
         QVERIFY(colorHistoryDock);
         QVERIFY(wobbleDock);
         QVERIFY(layerDock);
+        restored.resize(1100, 720);
+        restored.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&restored));
+
         QCOMPARE(restored.dockWidgetArea(colorDock), Qt::LeftDockWidgetArea);
         QVERIFY(isPaletteDockCollapsed(toolDock));
         QVERIFY(toolDock->isHidden());
@@ -1933,9 +2040,22 @@ private slots:
         expandRightPaletteAreaButton->click();
         QTRY_VERIFY(!isPaletteDockCollapsed(toolDock));
         QCOMPARE(restored.dockWidgetArea(colorDock), Qt::LeftDockWidgetArea);
-        QVERIFY(restored.tabifiedDockWidgets(toolDock).contains(wobbleDock));
+        QTRY_VERIFY(std::abs(toolDock->width() - savedDockWidth) <= 4);
+        QTRY_VERIFY(
+            std::abs(colorHistoryDock->height() - savedHistoryHeight) <= 4);
         QVERIFY(
             restored.tabifiedDockWidgets(colorHistoryDock).contains(layerDock));
+        QCOMPARE(
+            dockTabOrder(restored, colorHistoryDock), savedHistoryTabOrder);
+        QVERIFY(wobbleDock->isHidden());
+        QVERIFY(!wobbleDock->toggleViewAction()->isChecked());
+
+        // A closed dock keeps its place in the tab group it was closed from,
+        // but QMainWindow only reports tabified docks that are on screen.
+        wobbleDock->toggleViewAction()->trigger();
+        QTRY_VERIFY(!wobbleDock->isHidden());
+        QTRY_VERIFY(restored.tabifiedDockWidgets(toolDock).contains(wobbleDock));
+        QCOMPARE(dockTabOrder(restored, toolDock), savedToolTabOrder);
     }
 };
 

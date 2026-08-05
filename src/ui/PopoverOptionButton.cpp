@@ -4,6 +4,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QSizePolicy>
 
 #include <utility>
 
@@ -30,6 +31,7 @@ PopoverOptionButton::PopoverOptionButton(
     setAccessibleName(m_title);
     setAccessibleDescription(m_description);
     setAttribute(Qt::WA_Hover);
+    setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 }
 
 QSize PopoverOptionButton::sizeHint() const

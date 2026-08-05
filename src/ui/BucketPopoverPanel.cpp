@@ -5,6 +5,7 @@
 
 #include <QButtonGroup>
 #include <QCheckBox>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QRadioButton>
@@ -98,19 +99,24 @@ BucketPopoverPanel::BucketPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     layout->addWidget(alphaButton);
     layout->addWidget(colorButton);
 
-    auto *toleranceRow = new QHBoxLayout;
+    auto *toleranceRow = new QFormLayout;
+    toleranceRow->setRowWrapPolicy(QFormLayout::WrapLongRows);
     auto *toleranceLabel = new QLabel(tr("Tolerance"), this);
-    auto *toleranceSlider = new QSlider(Qt::Horizontal, this);
+    auto *toleranceControls = new QWidget(this);
+    auto *toleranceControlsLayout = new QHBoxLayout(toleranceControls);
+    toleranceControlsLayout->setContentsMargins(0, 0, 0, 0);
+    auto *toleranceSlider =
+        new QSlider(Qt::Horizontal, toleranceControls);
     toleranceSlider->setObjectName(QStringLiteral("bucketToleranceSlider"));
     toleranceSlider->setRange(0, 255);
     toleranceSlider->setValue(canvas->fillTolerance());
-    auto *toleranceSpin = new QSpinBox(this);
+    auto *toleranceSpin = new QSpinBox(toleranceControls);
     toleranceSpin->setObjectName(QStringLiteral("bucketToleranceSpin"));
     toleranceSpin->setRange(0, 255);
     toleranceSpin->setValue(canvas->fillTolerance());
-    toleranceRow->addWidget(toleranceLabel);
-    toleranceRow->addWidget(toleranceSlider, 1);
-    toleranceRow->addWidget(toleranceSpin);
+    toleranceControlsLayout->addWidget(toleranceSlider, 1);
+    toleranceControlsLayout->addWidget(toleranceSpin);
+    toleranceRow->addRow(toleranceLabel, toleranceControls);
     layout->addLayout(toleranceRow);
 
     const auto syncToleranceEnabled =

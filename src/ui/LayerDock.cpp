@@ -8,11 +8,13 @@
 #include "ui/LayerListWidget.hpp"
 #include "ui/LayerThumbnailRenderer.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
+#include "ui/ResponsiveGrid.hpp"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFutureWatcher>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>
@@ -55,7 +57,7 @@ LayerDock::LayerDock(DocumentController *controller, QWidget *parent)
 {
     setObjectName(QStringLiteral("LayerDock"));
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    setMinimumWidth(200);
+    setMinimumWidth(150);
     installCompactPaletteTitleBar(this);
 
     buildContent();
@@ -87,15 +89,15 @@ void LayerDock::buildContent()
     m_layerList->setItemDelegate(new LayerItemDelegate(m_layerList));
     layout->addWidget(m_layerList, 1);
 
-    auto *buttonLayout = new QHBoxLayout;
-    buttonLayout->setContentsMargins(8, 0, 8, 0);
-    buttonLayout->setSpacing(2);
+    auto *buttonGrid = new ResponsiveGrid(30, 7, 2, content);
+    buttonGrid->setObjectName(QStringLiteral("layerButtonGrid"));
+    buttonGrid->setContentsMargins(8, 0, 8, 0);
 
     m_addButton = makeLayerButton(content,
         IconGlyph::Add,
         QStringLiteral("layerAddButton"),
         tr("Add layer"));
-    buttonLayout->addWidget(m_addButton);
+    buttonGrid->addWidget(m_addButton);
 
     m_addGroupButton = makeLayerButton(content,
         IconGlyph::Add,
@@ -103,50 +105,47 @@ void LayerDock::buildContent()
         tr("Add group containing the selected layer"));
     m_addGroupButton->setText(QStringLiteral("G"));
     m_addGroupButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    buttonLayout->addWidget(m_addGroupButton);
+    buttonGrid->addWidget(m_addGroupButton);
 
     m_duplicateButton = makeLayerButton(content,
         IconGlyph::Duplicate,
         QStringLiteral("layerDuplicateButton"),
         tr("Duplicate layer"));
-    buttonLayout->addWidget(m_duplicateButton);
+    buttonGrid->addWidget(m_duplicateButton);
 
     m_mergeDownButton = makeLayerButton(content,
         IconGlyph::MoveDown,
         QStringLiteral("layerMergeDownButton"),
         tr("Merge with layer below"));
-    buttonLayout->addWidget(m_mergeDownButton);
+    buttonGrid->addWidget(m_mergeDownButton);
 
     m_deleteButton = makeLayerButton(content,
         IconGlyph::Remove,
         QStringLiteral("layerDeleteButton"),
         tr("Delete layer"));
-    buttonLayout->addWidget(m_deleteButton);
-
-    buttonLayout->addStretch(1);
+    buttonGrid->addWidget(m_deleteButton);
 
     m_moveUpButton = makeLayerButton(content,
         IconGlyph::MoveUp,
         QStringLiteral("layerMoveUpButton"),
         tr("Move layer up"));
-    buttonLayout->addWidget(m_moveUpButton);
+    buttonGrid->addWidget(m_moveUpButton);
 
     m_moveDownButton = makeLayerButton(content,
         IconGlyph::MoveDown,
         QStringLiteral("layerMoveDownButton"),
         tr("Move layer down"));
-    buttonLayout->addWidget(m_moveDownButton);
+    buttonGrid->addWidget(m_moveDownButton);
 
-    layout->addLayout(buttonLayout);
+    layout->addWidget(buttonGrid);
 
-    auto *blendModeLayout = new QHBoxLayout;
-    blendModeLayout->setContentsMargins(10, 0, 10, 0);
-    blendModeLayout->setSpacing(6);
+    auto *properties = new QFormLayout;
+    properties->setContentsMargins(10, 0, 10, 0);
+    properties->setSpacing(6);
+    properties->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     auto *blendModeLabel = new QLabel(tr("BLEND MODE"), content);
     blendModeLabel->setProperty("fieldLabel", true);
-    blendModeLayout->addWidget(blendModeLabel);
-
     m_blendModeCombo = new QComboBox(content);
     m_blendModeCombo->setObjectName(QStringLiteral("layerBlendModeCombo"));
     m_blendModeCombo->setAccessibleName(tr("Layer blend mode"));
@@ -159,45 +158,35 @@ void LayerDock::buildContent()
     m_blendModeCombo->addItem(
         tr("Overlay"), static_cast<int>(LayerBlendMode::Overlay));
     blendModeLabel->setBuddy(m_blendModeCombo);
-    blendModeLayout->addWidget(m_blendModeCombo, 1);
-
-    layout->addLayout(blendModeLayout);
-
-    auto *groupLayout = new QHBoxLayout;
-    groupLayout->setContentsMargins(10, 0, 10, 0);
-    groupLayout->setSpacing(6);
+    properties->addRow(blendModeLabel, m_blendModeCombo);
 
     auto *groupLabel = new QLabel(tr("GROUP"), content);
     groupLabel->setProperty("fieldLabel", true);
-    groupLayout->addWidget(groupLabel);
-
     m_parentGroupCombo = new QComboBox(content);
     m_parentGroupCombo->setObjectName(QStringLiteral("layerParentGroupCombo"));
     m_parentGroupCombo->setAccessibleName(tr("Parent layer group"));
     groupLabel->setBuddy(m_parentGroupCombo);
-    groupLayout->addWidget(m_parentGroupCombo, 1);
-    layout->addLayout(groupLayout);
+    properties->addRow(groupLabel, m_parentGroupCombo);
 
     m_clipCheck = new QCheckBox(tr("Clip to layer below"), content);
     m_clipCheck->setObjectName(QStringLiteral("layerClipCheck"));
     m_clipCheck->setToolTip(
         tr("Limit this layer to the opacity of the base layer below it"));
-    layout->addWidget(m_clipCheck, 0, Qt::AlignLeft);
+    properties->addRow(m_clipCheck);
 
     m_referenceCheck = new QCheckBox(tr("Reference layer"), content);
     m_referenceCheck->setObjectName(QStringLiteral("layerReferenceCheck"));
     m_referenceCheck->setToolTip(
         tr("Use this layer when a selection tool references marked layers"));
-    layout->addWidget(m_referenceCheck, 0, Qt::AlignLeft);
+    properties->addRow(m_referenceCheck);
 
-    auto *opacityLayout = new QHBoxLayout;
-    opacityLayout->setContentsMargins(10, 0, 10, 0);
+    auto *opacityControls = new QWidget(content);
+    auto *opacityLayout = new QHBoxLayout(opacityControls);
+    opacityLayout->setContentsMargins(0, 0, 0, 0);
     opacityLayout->setSpacing(6);
 
     auto *opacityLabel = new QLabel(tr("OPACITY"), content);
     opacityLabel->setProperty("fieldLabel", true);
-    opacityLayout->addWidget(opacityLabel);
-
     m_opacitySlider = new QSlider(Qt::Horizontal, content);
     m_opacitySlider->setRange(0, 100);
     m_opacitySlider->setSingleStep(1);
@@ -213,7 +202,8 @@ void LayerDock::buildContent()
     m_opacityValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     opacityLayout->addWidget(m_opacityValue);
 
-    layout->addLayout(opacityLayout);
+    properties->addRow(opacityLabel, opacityControls);
+    layout->addLayout(properties);
     setWidget(content);
 }
 

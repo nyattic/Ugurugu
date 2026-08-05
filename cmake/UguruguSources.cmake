@@ -193,6 +193,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/PopoverToolButton.hpp
     src/ui/PopoverOptionButton.cpp
     src/ui/PopoverOptionButton.hpp
+    src/ui/ResponsiveGrid.cpp
+    src/ui/ResponsiveGrid.hpp
     src/ui/SelectionActionBar.cpp
     src/ui/SelectionActionBar.hpp
     src/ui/SelectionShapeButton.cpp

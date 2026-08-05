@@ -4,12 +4,11 @@
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/ResponsiveGrid.hpp"
 #include "ui/StrokeStabilizationRow.hpp"
 
 #include <QButtonGroup>
 #include <QCheckBox>
-#include <QGridLayout>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QStackedWidget>
@@ -41,8 +40,8 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(10);
 
-    auto *tabRow = new QHBoxLayout;
-    tabRow->setSpacing(4);
+    auto *tabGrid = new ResponsiveGrid(72, 4, 4, this);
+    tabGrid->setObjectName(QStringLiteral("brushCategoryGrid"));
     m_tabGroup = new QButtonGroup(this);
     m_tabGroup->setExclusive(true);
     m_stack = new QStackedWidget(this);
@@ -61,22 +60,19 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
         tab->setCursor(Qt::PointingHandCursor);
         tab->setProperty("categoryTab", true);
         m_tabGroup->addButton(tab, categoryIndex);
-        tabRow->addWidget(tab);
+        tabGrid->addWidget(tab);
 
-        auto *page = new QWidget(m_stack);
-        auto *grid = new QGridLayout(page);
-        grid->setContentsMargins(0, 0, 0, 0);
-        grid->setSpacing(6);
-        int cell = 0;
+        auto *presetGrid = new ResponsiveGrid(124, 2, 6, m_stack);
+        presetGrid->setObjectName(QStringLiteral("brushPresetGrid"));
         for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
         {
             if (preset.category != category)
             {
                 continue;
             }
-            auto *button = new BrushPresetButton(preset, page);
+            auto *button = new BrushPresetButton(preset, presetGrid);
             presetGroup->addButton(button);
-            grid->addWidget(button, cell / 2, cell % 2);
+            presetGrid->addWidget(button);
             connect(button,
                 &QAbstractButton::clicked,
                 this,
@@ -85,18 +81,15 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
                     m_canvas->setBrushPreset(button->presetId());
                 });
             m_presetButtons.append(button);
-            ++cell;
         }
-        grid->setRowStretch(grid->rowCount(), 1);
-        m_stack->addWidget(page);
+        m_stack->addWidget(presetGrid);
     }
-    tabRow->addStretch(1);
     connect(m_tabGroup,
         &QButtonGroup::idClicked,
         m_stack,
         &QStackedWidget::setCurrentIndex);
 
-    layout->addLayout(tabRow);
+    layout->addWidget(tabGrid);
     layout->addWidget(m_stack);
     layout->addWidget(new BrushSizeRow(canvas,
         BrushSizeRow::Target::Brush,

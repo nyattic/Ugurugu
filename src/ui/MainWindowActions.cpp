@@ -28,6 +28,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QSlider>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
@@ -684,14 +685,6 @@ void MainWindow::createActions()
             m_showTimelineAction->setChecked(false);
         });
 
-    m_simpleModeAction = new QAction(tr("Simple mode"), this);
-    m_simpleModeAction->setObjectName(QStringLiteral("simpleModeAction"));
-    m_simpleModeAction->setCheckable(true);
-    connect(m_simpleModeAction,
-        &QAction::toggled,
-        this,
-        &MainWindow::setSimpleMode);
-
     auto *resetPanelLayoutAction = new QAction(tr("Reset panel layout"), this);
     resetPanelLayoutAction->setObjectName(
         QStringLiteral("resetPanelLayoutAction"));
@@ -907,8 +900,6 @@ void MainWindow::createMenus()
         findChild<QAction *>(QStringLiteral("exportWwpPresetAction")));
 
     QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));
-    windowMenu->addAction(m_simpleModeAction);
-    windowMenu->addSeparator();
     windowMenu->addAction(m_showTimelineAction);
     windowMenu->addSeparator();
     windowMenu->addAction(m_toolDock->toggleViewAction());
@@ -957,6 +948,7 @@ void MainWindow::createToolBars()
         button->setIconSize(rail->iconSize());
         button->setHoverGlyph(glyph);
         button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         rail->addWidget(button);
         return button;
     };
@@ -1002,8 +994,6 @@ void MainWindow::createToolBars()
     panelsButton->setAccessibleName(tr("Panels"));
     panelsButton->setPopupMode(QToolButton::InstantPopup);
     auto *panelsMenu = new QMenu(panelsButton);
-    panelsMenu->addAction(m_simpleModeAction);
-    panelsMenu->addSeparator();
     panelsMenu->addAction(m_showTimelineAction);
     panelsMenu->addSeparator();
     panelsMenu->addAction(m_toolDock->toggleViewAction());
@@ -1016,11 +1006,6 @@ void MainWindow::createToolBars()
         findChild<QAction *>(QStringLiteral("resetPanelLayoutAction")));
     panelsButton->setMenu(panelsMenu);
     quick->addWidget(panelsButton);
-    auto *modeButton = new QToolButton(quick);
-    modeButton->setObjectName(QStringLiteral("modeButton"));
-    modeButton->setDefaultAction(m_simpleModeAction);
-    modeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    quick->addWidget(modeButton);
     quick->addSeparator();
 
     auto *quickSpacer = new QWidget(quick);

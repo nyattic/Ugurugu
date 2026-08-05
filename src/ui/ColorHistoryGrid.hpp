@@ -20,6 +20,7 @@ public:
     explicit ColorHistoryGrid(QWidget *parent = nullptr);
     ~ColorHistoryGrid() override;
 
+    QSize minimumSizeHint() const override;
     void setActiveColor(const QColor &color);
     void recordColor(const QColor &color);
     void clear();

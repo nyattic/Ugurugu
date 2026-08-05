@@ -24,7 +24,7 @@ namespace
 {
 
 constexpr QLatin1StringView dockWidthKey("dock/toolWidth");
-constexpr int minimumDockWidth = 200;
+constexpr int minimumDockWidth = 150;
 constexpr int maximumDockWidth = 460;
 constexpr int defaultDockWidth = 330;
 
