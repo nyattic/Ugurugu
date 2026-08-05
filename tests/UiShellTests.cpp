@@ -1968,6 +1968,68 @@ private slots:
         QVERIFY(toolDock->toggleViewAction()->isEnabled());
     }
 
+    void alignsBrushPresetCardsAcrossCategories()
+    {
+        MainWindow window;
+        window.resize(1100, 1300);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        ToolDock *toolDock = window.findChild<ToolDock *>();
+        ColorDock *colorDock = window.findChild<ColorDock *>();
+        ColorHistoryDock *colorHistoryDock =
+            window.findChild<ColorHistoryDock *>();
+        BrushPopoverPanel *panel = window.findChild<BrushPopoverPanel *>();
+        QWidget *categoryGrid =
+            window.findChild<QWidget *>(QStringLiteral("brushCategoryGrid"));
+        QVERIFY(toolDock);
+        QVERIFY(colorDock);
+        QVERIFY(colorHistoryDock);
+        QVERIFY(panel);
+        QVERIFY(categoryGrid);
+
+        // The panel needs more height than its presets fill for the categories
+        // to drift apart.
+        window.resizeDocks(
+            {toolDock, colorDock, colorHistoryDock}, {20, 1, 1}, Qt::Vertical);
+        QCoreApplication::processEvents();
+
+        const QList<QToolButton *> tabs =
+            categoryGrid->findChildren<QToolButton *>(
+                QString(), Qt::FindDirectChildrenOnly);
+        QVERIFY(tabs.size() >= 2);
+
+        QSet<int> gaps;
+        QSet<int> cardHeights;
+        for (QToolButton *tab : tabs)
+        {
+            tab->click();
+            QCoreApplication::processEvents();
+            int cardTop = -1;
+            for (BrushPresetButton *card :
+                window.findChildren<BrushPresetButton *>())
+            {
+                if (!card->isVisible())
+                {
+                    continue;
+                }
+                cardHeights.insert(card->height());
+                const int top = card->mapTo(panel, QPoint()).y();
+                if (cardTop < 0 || top < cardTop)
+                {
+                    cardTop = top;
+                }
+            }
+            QVERIFY2(cardTop >= 0, qPrintable(tab->text()));
+            gaps.insert(cardTop - categoryGrid->geometry().bottom());
+        }
+
+        // A category with fewer presets used to push its cards down by the
+        // height of the rows it did not need.
+        QCOMPARE(gaps.size(), 1);
+        QCOMPARE(cardHeights.size(), 1);
+    }
+
     void restoresPaletteTabsAcrossRestart()
     {
         int savedDockWidth = 0;

@@ -32,6 +32,7 @@ private:
     int m_maximumColumnCount;
     int m_spacing;
     int m_columnCount = 0;
+    int m_stretchRow = -1;
 };
 
 }

@@ -67,11 +67,20 @@ void ResponsiveGrid::relayout()
     {
         m_layout->removeWidget(widget);
     }
+    if (m_stretchRow >= 0)
+    {
+        m_layout->setRowStretch(m_stretchRow, 0);
+    }
     for (int index = 0; index < m_widgets.size(); ++index)
     {
         m_layout->addWidget(
             m_widgets.at(index), index / columns, index % columns);
     }
+    // Height the grid does not need goes to a trailing empty row. Without it
+    // the rows absorb it, and a page with fewer items ends up with taller
+    // items than a page with more.
+    m_stretchRow = (m_widgets.size() + columns - 1) / columns;
+    m_layout->setRowStretch(m_stretchRow, 1);
     m_layout->activate();
     setMinimumHeight(m_layout->minimumSize().height());
     updateGeometry();
