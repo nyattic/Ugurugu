@@ -305,15 +305,15 @@ private slots:
     void includesHierarchyTransientSurfacesInFourKPreviewBudget()
     {
         const QSize fourK(4096, 4096);
-        const Document document = adversarialClippedHierarchy(fourK, 8);
+        const Document document = adversarialClippedHierarchy(fourK, 64);
         QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
         const LayerCompositionMemoryEstimate estimate =
             RenderEngine::estimateHierarchyMemory(document, fourK);
         QVERIFY(estimate.valid);
-        QCOMPARE(estimate.peakSurfaceCount, 11);
+        QCOMPARE(estimate.peakSurfaceCount, 67);
         QCOMPARE(estimate.bytesPerSurface, 64ULL * 1024ULL * 1024ULL);
         // Against the ceiling rather than the granted budget: the granted one
-        // follows installed memory, and the point being made is that a 4K
+        // follows installed memory, and the point being made is that a deep 4K
         // hierarchy overflows even the most memory this app will ever take.
         QVERIFY(estimate.peakBytes
                 > static_cast<quint64>(MemoryBudget::maximumPreviewCacheKiB)

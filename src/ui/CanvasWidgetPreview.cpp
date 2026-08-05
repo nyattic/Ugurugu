@@ -536,14 +536,16 @@ void CanvasWidget::scheduleFrameCacheWarmup()
 
 void CanvasWidget::renderNextFrameCacheWarmup()
 {
-    if (m_frameCacheWarmupWorkerRunning)
-    {
-        return;
-    }
     if (!m_frameCacheWarmupActive || !m_frameCacheWarmupDocument
         || !m_frameCacheWarmupCancellation
         || m_frameCacheWarmupCursor >= m_frameCacheWarmupFrames.size())
     {
+        // Workers from a cancelled or exhausted warmup may still be running;
+        // the last one to finish performs the reset.
+        if (m_frameCacheWarmupWorkersRunning > 0)
+        {
+            return;
+        }
         m_frameCacheWarmupActive = false;
         m_frameCacheWarmupCancellation.reset();
         m_frameCacheWarmupDocument.reset();
@@ -554,64 +556,74 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         return;
     }
 
-    const quint64 generation = m_frameCacheWarmupGeneration;
-    const int frame = m_frameCacheWarmupFrames[m_frameCacheWarmupCursor];
-    const QSize renderSize = m_frameCacheWarmupRenderSize;
-    const std::shared_ptr<const Document> document = m_frameCacheWarmupDocument;
-    const std::shared_ptr<std::atomic_bool> cancellation =
-        m_frameCacheWarmupCancellation;
-    m_frameCacheWarmupWorkerRunning = true;
-    connect(
-        &m_frameCacheWarmupWatcher,
-        &QFutureWatcher<QImage>::finished,
-        this,
-        [this, generation, frame, renderSize, cancellation]()
-        {
-            const QImage image = m_frameCacheWarmupWatcher.result();
-            m_frameCacheWarmupWorkerRunning = false;
-            if (generation != m_frameCacheWarmupGeneration
-                || cancellation != m_frameCacheWarmupCancellation
-                || cancellation->load(std::memory_order_relaxed))
+    // Frames render on every pool thread at once. Wobble gives each frame
+    // unique geometry, so frames cannot share work, which makes them ideal to
+    // parallelise; dispatch stays in playback order so playback can step onto
+    // finished frames while later ones are still rendering.
+    while (m_frameCacheWarmupWorkersRunning
+               < m_frameCacheWarmupPool.maxThreadCount()
+        && m_frameCacheWarmupCursor < m_frameCacheWarmupFrames.size())
+    {
+        const quint64 generation = m_frameCacheWarmupGeneration;
+        const int frame = m_frameCacheWarmupFrames[m_frameCacheWarmupCursor];
+        ++m_frameCacheWarmupCursor;
+        const QSize renderSize = m_frameCacheWarmupRenderSize;
+        const std::shared_ptr<const Document> document =
+            m_frameCacheWarmupDocument;
+        const std::shared_ptr<std::atomic_bool> cancellation =
+            m_frameCacheWarmupCancellation;
+        ++m_frameCacheWarmupWorkersRunning;
+        auto *watcher = new QFutureWatcher<QImage>(this);
+        connect(watcher,
+            &QFutureWatcher<QImage>::finished,
+            this,
+            [this, watcher, generation, frame, renderSize, cancellation]()
             {
+                const QImage image = watcher->result();
+                watcher->deleteLater();
+                --m_frameCacheWarmupWorkersRunning;
+                if (generation != m_frameCacheWarmupGeneration
+                    || cancellation != m_frameCacheWarmupCancellation
+                    || cancellation->load(std::memory_order_relaxed))
+                {
+                    QTimer::singleShot(
+                        0, this, &CanvasWidget::renderNextFrameCacheWarmup);
+                    return;
+                }
+                if (previewRenderSize() != renderSize)
+                {
+                    cancelFrameCacheWarmup();
+                    QTimer::singleShot(
+                        0, this, &CanvasWidget::renderNextFrameCacheWarmup);
+                    return;
+                }
+                if (!image.isNull())
+                {
+                    m_cachedRenderSize = renderSize;
+                    updateFrameCacheBudget();
+                    const int cost =
+                        PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
+                    m_frameCache.insert(frame, new QImage(image), cost);
+                }
                 QTimer::singleShot(
                     0, this, &CanvasWidget::renderNextFrameCacheWarmup);
-                return;
-            }
-            if (previewRenderSize() != renderSize)
+            });
+        watcher->setFuture(QtConcurrent::run(&m_frameCacheWarmupPool,
+            [document, cancellation, frame, renderSize]()
             {
-                cancelFrameCacheWarmup();
-                QTimer::singleShot(
-                    0, this, &CanvasWidget::renderNextFrameCacheWarmup);
-                return;
-            }
-            if (!image.isNull())
-            {
-                m_cachedRenderSize = renderSize;
-                updateFrameCacheBudget();
-                const int cost =
-                    PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
-                m_frameCache.insert(frame, new QImage(image), cost);
-            }
-            ++m_frameCacheWarmupCursor;
-            QTimer::singleShot(
-                0, this, &CanvasWidget::renderNextFrameCacheWarmup);
-        },
-        Qt::SingleShotConnection);
-    m_frameCacheWarmupWatcher.setFuture(QtConcurrent::run(
-        [document, cancellation, frame, renderSize]()
-        {
-            if (cancellation->load(std::memory_order_relaxed))
-            {
-                return QImage();
-            }
-            QImage image =
-                RenderEngine::renderScaled(*document, frame, renderSize);
-            if (cancellation->load(std::memory_order_relaxed))
-            {
-                return QImage();
-            }
-            return image;
-        }));
+                if (cancellation->load(std::memory_order_relaxed))
+                {
+                    return QImage();
+                }
+                QImage image =
+                    RenderEngine::renderScaled(*document, frame, renderSize);
+                if (cancellation->load(std::memory_order_relaxed))
+                {
+                    return QImage();
+                }
+                return image;
+            }));
+    }
 }
 
 void CanvasWidget::updateTimerInterval()

@@ -28,6 +28,7 @@
 #include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QTabletEvent>
+#include <QThread>
 #include <QWheelEvent>
 #include <QtConcurrentRun>
 
@@ -144,6 +145,13 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
         {
             update();
         });
+
+    // Warmup renders on a dedicated pool: sharing the global QtConcurrent
+    // pool would let a 30-frame warmup starve the layer thumbnail and
+    // selection visibility workers that also run there. Two cores stay free
+    // for the GUI thread and those workers.
+    m_frameCacheWarmupPool.setMaxThreadCount(
+        std::clamp(QThread::idealThreadCount() - 2, 1, 8));
 
     updateTimerInterval();
     m_animationTimer.start();

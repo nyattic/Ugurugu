@@ -16,6 +16,7 @@
 #include <QPainterPath>
 #include <QPointer>
 #include <QSet>
+#include <QThreadPool>
 #include <QTimer>
 #include <QWidget>
 
@@ -356,8 +357,8 @@ private:
     qsizetype m_frameCacheWarmupCursor = 0;
     quint64 m_frameCacheWarmupGeneration = 0;
     bool m_frameCacheWarmupActive = false;
-    bool m_frameCacheWarmupWorkerRunning = false;
-    QFutureWatcher<QImage> m_frameCacheWarmupWatcher;
+    int m_frameCacheWarmupWorkersRunning = 0;
+    QThreadPool m_frameCacheWarmupPool;
     QImage m_colorPickFrame;
     int m_colorPickFrameIndex = -1;
     RenderEngine::LayerSplitFrame m_previewSplit;

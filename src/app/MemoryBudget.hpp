@@ -11,7 +11,7 @@ namespace ugurugu
 // constructing JSON while retaining compressed raster payloads.
 struct MemoryBudget final
 {
-    static constexpr qint64 residentTargetBytes = 2048LL * 1024LL * 1024LL;
+    static constexpr qint64 residentTargetBytes = 4096LL * 1024LL * 1024LL;
     static constexpr qint64 historyResidentBytes = 192LL * 1024LL * 1024LL;
     static constexpr qint64 serializationCacheBytes = 64LL * 1024LL * 1024LL;
     static constexpr qint64 rasterAssetEncodedBytes = 72LL * 1024LL * 1024LL;
@@ -27,7 +27,7 @@ struct MemoryBudget final
     // pushed small ones into swap, so the ceiling follows installed memory and
     // is clamped to the range below.
     static constexpr int minimumPreviewCacheKiB = 128 * 1024;
-    static constexpr int maximumPreviewCacheKiB = 512 * 1024;
+    static constexpr int maximumPreviewCacheKiB = 2048 * 1024;
     static constexpr qint64 previewCacheMemoryShare = 16;
 
     // Installed physical memory in bytes, or 0 when the platform cannot report
