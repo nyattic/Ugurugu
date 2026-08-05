@@ -112,6 +112,12 @@ target_link_libraries(
     ugurugu_ui
     ${UGURUGU_UPDATE_LIBRARIES}
 )
+if(WIN32)
+    # Qt 6.11 exposes WinTab as a private Windows application interface. The
+    # distribution build pins Qt exactly, so enabling the Wacom compatibility
+    # path here is preferable to duplicating Qt's WinTab packet handling.
+    target_link_libraries(Ugurugu PRIVATE Qt6::GuiPrivate)
+endif()
 target_compile_definitions(
     Ugurugu
     PRIVATE

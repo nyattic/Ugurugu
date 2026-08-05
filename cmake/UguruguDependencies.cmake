@@ -10,6 +10,9 @@ find_package(
     Widgets
     LinguistTools
 )
+if(WIN32)
+    find_package(Qt6 6.10 REQUIRED COMPONENTS GuiPrivate)
+endif()
 
 set(
     UGURUGU_DISTRIBUTION_QT_VERSION

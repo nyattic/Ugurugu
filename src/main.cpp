@@ -21,6 +21,11 @@
 
 #include <spdlog/spdlog.h>
 
+#if defined(Q_OS_WIN)
+#include <QtGui/private/qguiapplication_p.h>
+#include <QtGui/qpa/qplatformintegration.h>
+#endif
+
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -36,6 +41,17 @@ void configureApplicationMetadata()
     QApplication::setOrganizationName(QStringLiteral("Ugurugu"));
     QApplication::setOrganizationDomain(QStringLiteral("ugurugu.dev"));
 }
+
+#if defined(Q_OS_WIN)
+bool enableWacomWinTab()
+{
+    using QWindowsApplication = QNativeInterface::Private::QWindowsApplication;
+    auto *nativeWindowsApplication = dynamic_cast<QWindowsApplication *>(
+        QGuiApplicationPrivate::platformIntegration());
+    return nativeWindowsApplication
+           && nativeWindowsApplication->setWinTabEnabled(true);
+}
+#endif
 
 // Turning Windows Ink off moves a pen from the pointer API onto WinTab, and
 // WinTab only reaches Qt when the driver has installed a 64-bit wintab32.dll.
@@ -67,9 +83,8 @@ void logPointingDevices()
     }
     if (styluses == 0)
     {
-        spdlog::info("No tablet device reported by Qt. A pen will draw at a "
-                     "constant width. With Windows Ink off, check that the "
-                     "tablet driver installed a 64-bit wintab32.dll.");
+        spdlog::info("No tablet device reported by Qt at startup. A WinTab "
+                     "device can appear after the pen enters proximity.");
     }
     else if (withPressure == 0)
     {
@@ -147,7 +162,6 @@ int runApplication(int argc, char *argv[])
         migrateLegacySettings();
     }
     ugurugu::Theme::apply(application);
-    logPointingDevices();
 
     QTranslator qtBaseTranslator;
     const QString configuredLanguage = ugurugu::SettingsDialog::uiLanguage();
@@ -191,6 +205,19 @@ int runApplication(int argc, char *argv[])
     ugurugu::Logging::initialize();
     spdlog::info("Ugurugu {} starting",
         QApplication::applicationVersion().toStdString());
+#if defined(Q_OS_WIN)
+    if (enableWacomWinTab())
+    {
+        spdlog::info("Wacom WinTab compatibility enabled");
+    }
+    else
+    {
+        spdlog::warn("Wacom WinTab compatibility is unavailable. Windows "
+                     "Pointer input remains active; with Windows Ink off, "
+                     "install the 64-bit Wacom tablet driver.");
+    }
+#endif
+    logPointingDevices();
 
     int result = EXIT_FAILURE;
     try
