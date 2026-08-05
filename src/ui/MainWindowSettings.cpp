@@ -2,7 +2,6 @@
 #include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
 #include "ui/CanvasWidget.hpp"
-#include "ui/ColorSwatchRow.hpp"
 #include "ui/DrawingToolSettings.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SettingsDialog.hpp"
@@ -10,9 +9,9 @@
 #include "ui/WwpPresetCodec.hpp"
 
 #include <QFile>
-#include <QLatin1StringView>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QLatin1StringView>
 #include <QMessageBox>
 #include <QSaveFile>
 #include <QSettings>
@@ -137,9 +136,13 @@ void MainWindow::restoreDrawingToolSettings()
     QColor storedColor(settings.value(activeColorKey).toString());
     if (!storedColor.isValid())
     {
-        const QStringList recentColors =
-            settings.value(recentColorsKey).toStringList();
-        for (const QString &name : recentColors)
+        QStringList rememberedColors =
+            settings.value(colorHistoryKey).toStringList();
+        if (rememberedColors.isEmpty())
+        {
+            rememberedColors = settings.value(recentColorsKey).toStringList();
+        }
+        for (const QString &name : rememberedColors)
         {
             const QColor recentColor(name);
             if (recentColor.isValid())

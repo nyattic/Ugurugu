@@ -10,6 +10,7 @@ namespace ugurugu
 
 class DocumentController;
 struct MotionSettings;
+class WobblePreview;
 
 class WobblePopoverPanel final : public QWidget
 {
@@ -33,6 +34,7 @@ private:
         const std::function<void(qreal &, MotionSettings &)> &mutate);
 
     DocumentController *m_controller = nullptr;
+    WobblePreview *m_preview = nullptr;
     QUuid m_scopeLayer;
     std::function<void()> m_sync;
 };

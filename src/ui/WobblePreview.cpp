@@ -29,7 +29,7 @@ WobblePreview::WobblePreview(DocumentController *controller, QWidget *parent)
         [this]()
         {
             m_phase += 1.0;
-            if (m_controller->document().wobbleAmount > 0.0)
+            if (currentAmount() > 0.0)
             {
                 update();
             }
@@ -43,13 +43,13 @@ WobblePreview::WobblePreview(DocumentController *controller, QWidget *parent)
         {
             syncAnimationState();
         });
-    m_lastAmount = m_controller->document().wobbleAmount;
+    m_lastAmount = currentAmount();
     connect(m_controller,
         &DocumentController::documentChanged,
         this,
         [this]()
         {
-            const qreal amount = m_controller->document().wobbleAmount;
+            const qreal amount = currentAmount();
             if (!qFuzzyCompare(amount, m_lastAmount))
             {
                 m_lastAmount = amount;
@@ -70,12 +70,31 @@ bool WobblePreview::isAnimationActive() const
     return m_timer.isActive();
 }
 
+void WobblePreview::setScopeLayer(const QUuid &layerId)
+{
+    if (m_scopeLayer == layerId)
+    {
+        return;
+    }
+    m_scopeLayer = layerId;
+    m_lastAmount = currentAmount();
+    update();
+}
+
+qreal WobblePreview::currentAmount() const
+{
+    const Document &document = m_controller->document();
+    const Layer *layer = document.layer(m_scopeLayer);
+    return layer ? effectiveWobbleAmount(document, *layer)
+                 : document.wobbleAmount;
+}
+
 void WobblePreview::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const qreal amount = m_controller->document().wobbleAmount;
+    const qreal amount = currentAmount();
     const qreal amplitude = std::min(6.5, amount * 0.55);
     const qreal centerY = height() / 2.0;
 

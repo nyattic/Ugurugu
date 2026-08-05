@@ -57,7 +57,6 @@ WobblePopoverPanel::WobblePopoverPanel(
     : QWidget(parent)
     , m_controller(controller)
 {
-    setMinimumWidth(320);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(10);
@@ -67,9 +66,9 @@ WobblePopoverPanel::WobblePopoverPanel(
     layout->addWidget(heading);
 
     auto *amountRow = new QHBoxLayout;
-    auto *preview = new WobblePreview(controller, this);
-    preview->setObjectName(QStringLiteral("wobbleSettingsPreview"));
-    amountRow->addWidget(preview);
+    m_preview = new WobblePreview(controller, this);
+    m_preview->setObjectName(QStringLiteral("wobbleSettingsPreview"));
+    amountRow->addWidget(m_preview);
     auto *amountSlider = new QSlider(Qt::Horizontal, this);
     amountSlider->setObjectName(QStringLiteral("wobbleSlider"));
     amountSlider->setRange(qRound(DocumentLimits::minimumWobbleAmount * 10.0),
@@ -88,6 +87,7 @@ WobblePopoverPanel::WobblePopoverPanel(
     auto *form = new QFormLayout;
     form->setContentsMargins(0, 0, 0, 0);
     form->setSpacing(8);
+    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     auto *style = new QComboBox(this);
     style->setObjectName(QStringLiteral("motionStyleCombo"));
     style->addItem(tr("Classic"), static_cast<int>(MotionStyle::Classic));
@@ -146,7 +146,10 @@ WobblePopoverPanel::WobblePopoverPanel(
         [this, controller](double value)
         {
             if (editScopedLayer(
-                    [value](qreal &amount, MotionSettings &) { amount = value; }))
+                    [value](qreal &amount, MotionSettings &)
+                    {
+                        amount = value;
+                    }))
             {
                 return;
             }
@@ -159,8 +162,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         {
             const auto next =
                 static_cast<MotionStyle>(style->currentData().toInt());
-            if (editScopedLayer([next](qreal &, MotionSettings &motion)
-                    { motion.style = next; }))
+            if (editScopedLayer(
+                    [next](qreal &, MotionSettings &motion)
+                    {
+                        motion.style = next;
+                    }))
             {
                 return;
             }
@@ -171,8 +177,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](int value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.poseCount = value; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.poseCount = value;
+                    }))
             {
                 return;
             }
@@ -183,8 +192,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](int value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.detail = value; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.detail = value;
+                    }))
             {
                 return;
             }
@@ -195,8 +207,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](int value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.linked = value / 100.0; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.linked = value / 100.0;
+                    }))
             {
                 return;
             }
@@ -207,8 +222,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](int value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.randomness = value / 100.0; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.randomness = value / 100.0;
+                    }))
             {
                 return;
             }
@@ -219,8 +237,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](bool enabled)
         {
-            if (editScopedLayer([enabled](qreal &, MotionSettings &motion)
-                    { motion.brokenLine = enabled; }))
+            if (editScopedLayer(
+                    [enabled](qreal &, MotionSettings &motion)
+                    {
+                        motion.brokenLine = enabled;
+                    }))
             {
                 return;
             }
@@ -231,8 +252,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](int value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.breakAmount = value / 100.0; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.breakAmount = value / 100.0;
+                    }))
             {
                 return;
             }
@@ -243,8 +267,11 @@ WobblePopoverPanel::WobblePopoverPanel(
         this,
         [this, controller](double value)
         {
-            if (editScopedLayer([value](qreal &, MotionSettings &motion)
-                    { motion.breakRange = value; }))
+            if (editScopedLayer(
+                    [value](qreal &, MotionSettings &motion)
+                    {
+                        motion.breakRange = value;
+                    }))
             {
                 return;
             }
@@ -282,9 +309,9 @@ WobblePopoverPanel::WobblePopoverPanel(
         // values, so switching scope never blanks the panel.
         const Layer *scoped =
             m_scopeLayer.isNull() ? nullptr : document.layer(m_scopeLayer);
-        const qreal wobbleAmount = scoped
-                                       ? effectiveWobbleAmount(document, *scoped)
-                                       : document.wobbleAmount;
+        const qreal wobbleAmount =
+            scoped ? effectiveWobbleAmount(document, *scoped)
+                   : document.wobbleAmount;
         const MotionSettings motion =
             scoped ? effectiveMotion(document, *scoped) : document.motion;
         amountSlider->setValue(qRound(wobbleAmount * 10.0));
@@ -323,6 +350,7 @@ void WobblePopoverPanel::setScopeLayer(const QUuid &layerId)
         return;
     }
     m_scopeLayer = layerId;
+    m_preview->setScopeLayer(layerId);
     if (m_sync)
     {
         m_sync();

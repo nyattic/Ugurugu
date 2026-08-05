@@ -140,10 +140,14 @@ set(UGURUGU_UI_SOURCES
     src/ui/CanvasWidgetPreview.cpp
     src/ui/CanvasWidgetSelection.cpp
     src/ui/CanvasWidgetTools.cpp
-    src/ui/ColorSwatchRow.cpp
-    src/ui/ColorSwatchRow.hpp
-    src/ui/CollapsibleSection.cpp
-    src/ui/CollapsibleSection.hpp
+    src/ui/ColorDock.cpp
+    src/ui/ColorDock.hpp
+    src/ui/ColorHistoryDock.cpp
+    src/ui/ColorHistoryDock.hpp
+    src/ui/ColorHistoryGrid.cpp
+    src/ui/ColorHistoryGrid.hpp
+    src/ui/ColorPairSwatch.cpp
+    src/ui/ColorPairSwatch.hpp
     src/ui/ColorWheel.cpp
     src/ui/ColorWheel.hpp
     src/ui/ToolDock.cpp
@@ -181,6 +185,10 @@ set(UGURUGU_UI_SOURCES
     src/ui/MainWindowActions.cpp
     src/ui/MainWindowExport.cpp
     src/ui/MainWindowSettings.cpp
+    src/ui/PaletteDockAreaManager.cpp
+    src/ui/PaletteDockAreaManager.hpp
+    src/ui/PaletteDockTitleBar.cpp
+    src/ui/PaletteDockTitleBar.hpp
     src/ui/PopoverToolButton.cpp
     src/ui/PopoverToolButton.hpp
     src/ui/PopoverOptionButton.cpp
@@ -205,6 +213,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/ToolPopover.hpp
     src/ui/WobblePlayButton.cpp
     src/ui/WobblePlayButton.hpp
+    src/ui/WobbleDock.cpp
+    src/ui/WobbleDock.hpp
     src/ui/WobblePopoverPanel.cpp
     src/ui/WobblePopoverPanel.hpp
     src/ui/WobblePreview.cpp

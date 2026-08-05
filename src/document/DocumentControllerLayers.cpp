@@ -470,7 +470,11 @@ DocumentController::mergeLayerDownStatus(const QUuid &id) const
         && qFuzzyCompare(source->opacity, 1.0)
         && qFuzzyCompare(target.opacity, 1.0) && !source->clipToLayerBelow
         && !target.clipToLayerBelow && source->reference == target.reference
-        && source->visible == target.visible;
+        && source->visible == target.visible
+        && qFuzzyCompare(effectiveWobbleAmount(current, *source),
+            effectiveWobbleAmount(current, target))
+        && effectiveMotion(current, *source)
+               == effectiveMotion(current, target);
     if (!supportedProperties)
     {
         return MergeLayerDownStatus::UnsupportedProperties;
@@ -905,12 +909,14 @@ void DocumentController::setLayerWobbleOverride(const QUuid &id,
         }
         normalizedMotion->poseCount = std::clamp(normalizedMotion->poseCount,
             DocumentLimits::minimumMotionPoseCount,
-            std::min(DocumentLimits::maximumMotionPoseCount,
-                current.animationFrames));
+            normalizedMotion->style == MotionStyle::Classic
+                ? DocumentLimits::maximumMotionPoseCount
+                : current.animationFrames);
         normalizedMotion->detail = std::clamp(normalizedMotion->detail,
             DocumentLimits::minimumMotionDetail,
             DocumentLimits::maximumMotionDetail);
-        normalizedMotion->linked = std::clamp(normalizedMotion->linked, 0.0, 1.0);
+        normalizedMotion->linked =
+            std::clamp(normalizedMotion->linked, 0.0, 1.0);
         normalizedMotion->randomness =
             std::clamp(normalizedMotion->randomness, 0.0, 1.0);
         normalizedMotion->breakAmount =

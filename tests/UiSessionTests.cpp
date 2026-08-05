@@ -14,6 +14,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
@@ -23,6 +24,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }

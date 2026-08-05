@@ -30,6 +30,7 @@ enum class IconGlyph
     Bucket,
     Eyedropper,
     Wobble,
+    Panels,
     Settings,
     Move,
     Scale,

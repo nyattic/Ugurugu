@@ -16,6 +16,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
@@ -25,6 +26,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
@@ -59,6 +61,71 @@ private slots:
         QVERIFY(!canvas->isCanvasMirrored());
         QVERIFY(!mirrorAction->isChecked());
         QVERIFY(!window.isWindowModified());
+    }
+
+    void disablesDocumentAndLayerWobbleForTheCanvasView()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        MotionSettings motion = controller.document().motion;
+        controller.setLayerWobbleOverride(layerId, 5.0, motion);
+        CanvasWidget canvas(&controller);
+
+        canvas.setWobbleAnimationEnabled(false);
+        const Document display =
+            CanvasWidgetTestAccess::displayDocument(canvas);
+        const Layer *displayLayer = display.layer(layerId);
+        QVERIFY(displayLayer);
+        QCOMPARE(display.wobbleAmount, 0.0);
+        QCOMPARE(effectiveWobbleAmount(display, *displayLayer), 0.0);
+    }
+
+    void keepsAnimatingWhileThePenIsDownWhenEnabled()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(128, 128)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(320, 320);
+        canvas.setAnimateWhileDrawing(true);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(30, 0));
+        const int frameWhilePressed = canvas.currentFrame();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            canvas.currentFrame() != frameWhilePressed, 2000);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(30, 0));
+    }
+
+    void resumesPlaybackAfterChangingMotionLinkage()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(128, 128)));
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(16.0, 64.0), 1.0}, {QPointF(112.0, 64.0), 1.0}};
+        QCOMPARE(controller.addStroke(layerId, stroke),
+            DocumentController::AddStrokeResult::Added);
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(320, 320);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
+
+        controller.setMotionLinked(0.35);
+        const int frameAfterEdit = canvas.currentFrame();
+        QTRY_VERIFY_WITH_TIMEOUT(canvas.currentFrame() != frameAfterEdit, 3000);
     }
 
     void zoomsWithKeyboardActions()

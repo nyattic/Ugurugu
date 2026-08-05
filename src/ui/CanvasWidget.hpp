@@ -142,6 +142,7 @@ public slots:
 signals:
     void toolChanged(Tool tool);
     void brushColorChanged(const QColor &color);
+    void colorUsed(const QColor &color);
     void brushWidthChanged(qreal width);
     void eraserWidthChanged(qreal width);
     void brushStabilizationChanged(qreal strength);

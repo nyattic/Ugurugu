@@ -332,6 +332,13 @@ bool readLayerWobbleOverrides(
         }
         layer.motion = *settings;
     }
+    if (layer.wobbleAmount.has_value() != layer.motion.has_value())
+    {
+        setError(error,
+            DocumentSerializer::tr(
+                "A layer has an incomplete wobble override."));
+        return false;
+    }
     return true;
 }
 
@@ -1629,7 +1636,8 @@ std::optional<Layer> layerFromJson(const QJsonValue &value,
         }
         layer.blendMode = *blendMode;
     }
-    if (fileSchemaVersion >= 12 && !readLayerWobbleOverrides(object, layer, error))
+    if (fileSchemaVersion >= 12
+        && !readLayerWobbleOverrides(object, layer, error))
     {
         return std::nullopt;
     }

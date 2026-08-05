@@ -656,6 +656,29 @@ private slots:
         QCOMPARE(RenderEngine::render(controller.document(), 0), before);
     }
 
+    void keepsTheUpperLayersOnlyArtworkWhenMergingDown()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 64));
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.color = QColor(30, 80, 220);
+        upperStroke.width = 12.0;
+        upperStroke.points = {
+            {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
+        const QImage before = RenderEngine::render(controller.document(), 0);
+        const QImage laterBefore =
+            RenderEngine::render(controller.document(), 11);
+
+        QVERIFY(controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 1);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+        QCOMPARE(RenderEngine::render(controller.document(), 11), laterBefore);
+    }
+
     void overridesWobblePerLayerUndoablyAndAcrossASaveCycle()
     {
         DocumentController controller;
@@ -663,7 +686,8 @@ private slots:
         const QUuid layerId = controller.document().activeLayerId;
         Stroke stroke;
         stroke.width = 6.0;
-        stroke.points = {{QPointF(10.0, 48.0), 1.0}, {QPointF(86.0, 48.0), 1.0}};
+        stroke.points = {
+            {QPointF(10.0, 48.0), 1.0}, {QPointF(86.0, 48.0), 1.0}};
         controller.addStroke(layerId, stroke);
         controller.undoStack()->setClean();
         QVERIFY(!controller.document().layer(layerId)->wobbleAmount);
@@ -703,6 +727,59 @@ private slots:
         controller.setLayerWobbleOverride(layerId, 4.0, std::nullopt);
         QCOMPARE(controller.undoStack()->count(), count);
         QCOMPARE(*controller.document().layer(layerId)->wobbleAmount, 0.0);
+    }
+
+    void refusesToMergeLayersWithDifferentEffectiveWobble()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid lowerId = controller.document().activeLayerId;
+        Stroke lowerStroke;
+        lowerStroke.points = {
+            {QPointF(12.0, 24.0), 1.0}, {QPointF(84.0, 24.0), 1.0}};
+        controller.addStroke(lowerId, lowerStroke);
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.points = {
+            {QPointF(12.0, 72.0), 1.0}, {QPointF(84.0, 72.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
+
+        MotionSettings still = controller.document().motion;
+        still.poseCount = 1;
+        controller.setLayerWobbleOverride(upperId, 0.0, still);
+        controller.undoStack()->setClean();
+        const QImage before = RenderEngine::render(controller.document(), 7);
+
+        QCOMPARE(controller.mergeLayerDownStatus(upperId),
+            DocumentController::MergeLayerDownStatus::UnsupportedProperties);
+        QVERIFY(!controller.mergeLayerDown(upperId));
+        QCOMPARE(controller.document().layers.size(), 2);
+        QCOMPARE(RenderEngine::render(controller.document(), 7), before);
+        QVERIFY(controller.undoStack()->isClean());
+    }
+
+    void keepsLayerMotionValidWhenAnimationFramesShrink()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        const QUuid layerId = controller.document().activeLayerId;
+        MotionSettings motion = controller.document().motion;
+        motion.style = MotionStyle::Smooth;
+        motion.poseCount = 20;
+        controller.setLayerWobbleOverride(layerId, 3.0, motion);
+        controller.undoStack()->setClean();
+        const int historyCountBefore = controller.undoStack()->count();
+
+        controller.setAnimationFrames(8);
+        QCOMPARE(controller.document().animationFrames, 8);
+        QVERIFY(controller.document().layer(layerId)->motion.has_value());
+        QCOMPARE(controller.document().layer(layerId)->motion->poseCount, 8);
+        QCOMPARE(controller.undoStack()->count(), historyCountBefore + 1);
+
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().animationFrames, 30);
+        QCOMPARE(controller.document().layer(layerId)->motion->poseCount, 20);
     }
 
     void refusesToMergeALayerWhoseEraserWouldEatTheLayerBelow()

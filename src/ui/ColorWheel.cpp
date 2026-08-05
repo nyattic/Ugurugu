@@ -26,6 +26,11 @@ qreal wrapUnit(qreal value)
     return wrapped < 0.0 ? wrapped + 1.0 : wrapped;
 }
 
+float colorComponent(qreal value)
+{
+    return static_cast<float>(std::clamp(value, 0.0, 1.0));
+}
+
 // The hue that a point sits at, measured counter-clockwise from the right of
 // the ring so that the ring reads the way a colour circle is normally drawn.
 qreal hueForPoint(const QPointF &offset)
@@ -48,8 +53,8 @@ std::array<qreal, 3> barycentric(
     const QPointF a = corners[0];
     const QPointF b = corners[1];
     const QPointF c = corners[2];
-    const qreal denominator = (b.y() - c.y()) * (a.x() - c.x())
-                              + (c.x() - b.x()) * (a.y() - c.y());
+    const qreal denominator =
+        (b.y() - c.y()) * (a.x() - c.x()) + (c.x() - b.x()) * (a.y() - c.y());
     if (qFuzzyIsNull(denominator))
     {
         return {1.0, 0.0, 0.0};
@@ -90,15 +95,17 @@ ColorWheel::ColorWheel(QWidget *parent)
     setObjectName(QStringLiteral("colorWheel"));
     setCursor(Qt::CrossCursor);
     setFocusPolicy(Qt::ClickFocus);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
 }
 
 QColor ColorWheel::color() const
 {
-    QColor result = QColor::fromHsvF(std::clamp(m_hue, 0.0, 1.0),
-        std::clamp(m_saturation, 0.0, 1.0),
-        std::clamp(m_value, 0.0, 1.0));
-    result.setAlphaF(std::clamp(m_alpha, 0.0, 1.0));
+    QColor result = QColor::fromHsvF(colorComponent(m_hue),
+        colorComponent(m_saturation),
+        colorComponent(m_value));
+    result.setAlphaF(colorComponent(m_alpha));
     return result;
 }
 
@@ -114,7 +121,12 @@ QSize ColorWheel::sizeHint() const
 
 QSize ColorWheel::minimumSizeHint() const
 {
-    return QSize(140, 140);
+    return QSize(96, 96);
+}
+
+int ColorWheel::heightForWidth(int width) const
+{
+    return width;
 }
 
 void ColorWheel::setColor(const QColor &color)
@@ -167,8 +179,7 @@ ColorWheel::Geometry ColorWheel::geometry() const
     }
     metrics.center = QPointF(width() * 0.5, height() * 0.5);
     metrics.ringThickness = std::max(10.0, side * 0.11);
-    metrics.innerRadius =
-        metrics.outerRadius - metrics.ringThickness - ringGap;
+    metrics.innerRadius = metrics.outerRadius - metrics.ringThickness - ringGap;
     metrics.valid = metrics.innerRadius > 8.0;
     return metrics;
 }
@@ -187,9 +198,10 @@ std::array<QPointF, 3> ColorWheel::triangleCorners(
     const Geometry &metrics) const
 {
     const qreal radius = metrics.innerRadius;
-    return {metrics.center + pointForHue(m_hue, radius),
-        metrics.center + pointForHue(m_hue + 1.0 / 3.0, radius),
-        metrics.center + pointForHue(m_hue + 2.0 / 3.0, radius)};
+    const qreal vertical = radius * std::sqrt(3.0) * 0.5;
+    return {metrics.center + QPointF(radius, 0.0),
+        metrics.center + QPointF(-radius * 0.5, -vertical),
+        metrics.center + QPointF(-radius * 0.5, vertical)};
 }
 
 QPointF ColorWheel::fieldMarker(const Geometry &metrics) const
@@ -218,8 +230,8 @@ void ColorWheel::rebuildRing(const Geometry &metrics)
         return;
     }
     const qreal ratio = devicePixelRatioF();
-    QImage ring(QSize(static_cast<int>(side * ratio),
-                    static_cast<int>(side * ratio)),
+    QImage ring(
+        QSize(static_cast<int>(side * ratio), static_cast<int>(side * ratio)),
         QImage::Format_ARGB32_Premultiplied);
     if (ring.isNull())
     {
@@ -247,8 +259,10 @@ void ColorWheel::rebuildRing(const Geometry &metrics)
             // stair-stepped without paying for supersampling.
             const qreal edge = std::min(outer - distance, distance - inner);
             const qreal coverage = std::clamp(edge, 0.0, 1.0);
-            const QColor hue =
-                QColor::fromHsvF(hueForPoint(QPointF(deviceX, deviceY)), 1.0, 1.0);
+            const QColor hue = QColor::fromHsvF(
+                colorComponent(hueForPoint(QPointF(deviceX, deviceY))),
+                1.0,
+                1.0);
             line[x] = qPremultiply(qRgba(hue.red(),
                 hue.green(),
                 hue.blue(),
@@ -299,8 +313,9 @@ void ColorWheel::rebuildField(const Geometry &metrics)
                 {
                     continue;
                 }
-                const QColor sample =
-                    QColor::fromHsvF(m_hue, saturation, value);
+                const QColor sample = QColor::fromHsvF(colorComponent(m_hue),
+                    colorComponent(saturation),
+                    colorComponent(value));
                 line[x] = qPremultiply(sample.rgba());
             }
         }
@@ -308,7 +323,8 @@ void ColorWheel::rebuildField(const Geometry &metrics)
     else
     {
         const std::array<QPointF, 3> corners = triangleCorners(metrics);
-        const QColor hueColor = QColor::fromHsvF(m_hue, 1.0, 1.0);
+        const QColor hueColor =
+            QColor::fromHsvF(colorComponent(m_hue), 1.0, 1.0);
         for (int y = 0; y < field.height(); ++y)
         {
             auto *line = reinterpret_cast<QRgb *>(field.scanLine(y));
@@ -327,10 +343,13 @@ void ColorWheel::rebuildField(const Geometry &metrics)
                 const qreal red = hueColor.redF() * weights[0] + weights[1];
                 const qreal green = hueColor.greenF() * weights[0] + weights[1];
                 const qreal blue = hueColor.blueF() * weights[0] + weights[1];
-                line[x] = qPremultiply(qRgb(
-                    static_cast<int>(std::lround(std::clamp(red, 0.0, 1.0) * 255.0)),
-                    static_cast<int>(std::lround(std::clamp(green, 0.0, 1.0) * 255.0)),
-                    static_cast<int>(std::lround(std::clamp(blue, 0.0, 1.0) * 255.0))));
+                line[x] = qPremultiply(
+                    qRgb(static_cast<int>(
+                             std::lround(std::clamp(red, 0.0, 1.0) * 255.0)),
+                        static_cast<int>(
+                            std::lround(std::clamp(green, 0.0, 1.0) * 255.0)),
+                        static_cast<int>(
+                            std::lround(std::clamp(blue, 0.0, 1.0) * 255.0))));
             }
         }
     }
@@ -384,8 +403,8 @@ void ColorWheel::paintEvent(QPaintEvent *)
         painter.drawEllipse(position, markerRadius, markerRadius);
     };
     drawMarker(metrics.center
-        + pointForHue(
-            m_hue, metrics.outerRadius - metrics.ringThickness * 0.5));
+               + pointForHue(
+                   m_hue, metrics.outerRadius - metrics.ringThickness * 0.5));
     drawMarker(fieldMarker(metrics));
 }
 
@@ -466,8 +485,8 @@ void ColorWheel::mousePressEvent(QMouseEvent *event)
         return;
     }
     const QPointF position = event->position();
-    const qreal distance = std::hypot(position.x() - metrics.center.x(),
-        position.y() - metrics.center.y());
+    const qreal distance = std::hypot(
+        position.x() - metrics.center.x(), position.y() - metrics.center.y());
     if (distance > metrics.outerRadius - metrics.ringThickness
         && distance <= metrics.outerRadius + markerRadius)
     {

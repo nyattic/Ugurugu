@@ -245,6 +245,13 @@ Document CanvasWidget::displayDocument() const
     if (!m_wobbleAnimationEnabled)
     {
         document.wobbleAmount = 0.0;
+        for (Layer &layer : document.layers)
+        {
+            if (layer.wobbleAmount)
+            {
+                layer.wobbleAmount = 0.0;
+            }
+        }
     }
     return document;
 }

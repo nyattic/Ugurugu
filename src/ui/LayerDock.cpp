@@ -7,6 +7,7 @@
 #include "ui/LayerItemDelegate.hpp"
 #include "ui/LayerListWidget.hpp"
 #include "ui/LayerThumbnailRenderer.hpp"
+#include "ui/PaletteDockTitleBar.hpp"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -54,10 +55,8 @@ LayerDock::LayerDock(DocumentController *controller, QWidget *parent)
 {
     setObjectName(QStringLiteral("LayerDock"));
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-
-    auto *title = new QLabel(tr("LAYERS"), this);
-    title->setObjectName(QStringLiteral("LayerDockTitle"));
-    setTitleBarWidget(title);
+    setMinimumWidth(200);
+    installCompactPaletteTitleBar(this);
 
     buildContent();
     connectControls();

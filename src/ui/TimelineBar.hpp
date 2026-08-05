@@ -5,6 +5,7 @@
 class QEvent;
 class QLabel;
 class QSpinBox;
+class QToolButton;
 
 namespace ugurugu
 {
@@ -24,6 +25,9 @@ public:
         QWidget *parent = nullptr);
     ~TimelineBar() override;
 
+signals:
+    void collapseRequested();
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -39,6 +43,7 @@ private:
     FrameScrubber *m_scrubber = nullptr;
     QSpinBox *m_framesSpin = nullptr;
     QSpinBox *m_fpsSpin = nullptr;
+    QToolButton *m_collapseButton = nullptr;
     bool m_syncing = false;
 };
 

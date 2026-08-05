@@ -173,32 +173,6 @@ QToolBar#ToolRail {
 QToolBar#ToolRail QToolButton {
     padding: 6px;
 }
-QToolButton[sectionHeader="true"] {
-    background: %CONTROL%;
-    color: %MUTED%;
-    border: none;
-    border-radius: 0;
-    padding: 6px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-align: left;
-}
-QToolButton[sectionHeader="true"]:hover {
-    background: %HOVER%;
-    color: %TEXT%;
-}
-/* A section header is checkable only to track its own folded state. Without
-   this it inherits the accent fill that marks a selected tool and reads as a
-   giant highlighted bar. */
-QToolButton[sectionHeader="true"]:checked {
-    background: %CONTROL%;
-    color: %MUTED%;
-}
-QToolButton[sectionHeader="true"]:checked:hover {
-    background: %HOVER%;
-    color: %TEXT%;
-}
 QToolBar QLabel {
     color: %MUTED%;
     padding: 0 2px;

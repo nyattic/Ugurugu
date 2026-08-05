@@ -31,6 +31,7 @@ public:
     Shape shape() const;
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
+    int heightForWidth(int width) const override;
 
 public Q_SLOTS:
     void setColor(const QColor &color);

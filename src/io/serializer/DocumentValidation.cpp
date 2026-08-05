@@ -181,6 +181,7 @@ bool validateDocument(const Document &document,
             || (layer.motion
                 && !isValidMotionSettings(
                     *layer.motion, document.animationFrames))
+            || layer.wobbleAmount.has_value() != layer.motion.has_value()
             || (layer.kind == LayerKind::Group
                 && (layer.wobbleAmount || layer.motion)))
         {

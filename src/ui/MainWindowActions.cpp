@@ -3,31 +3,30 @@
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BucketPopoverPanel.hpp"
 #include "ui/CanvasWidget.hpp"
-#include "ui/ColorSwatchRow.hpp"
+#include "ui/ColorDock.hpp"
+#include "ui/ColorHistoryDock.hpp"
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/HelpDialog.hpp"
 #include "ui/Icons.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
 #include "ui/MainWindow.hpp"
+#include "ui/PaletteDockAreaManager.hpp"
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
-#include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolDock.hpp"
 #include "ui/ToolPopover.hpp"
 #include "ui/WandPopoverPanel.hpp"
+#include "ui/WobbleDock.hpp"
 #include "ui/WobblePopoverPanel.hpp"
 
 #include <QActionGroup>
-#include <QColorDialog>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
-#include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -449,13 +448,12 @@ void MainWindow::createActions()
         &CanvasWidget::deleteSelection);
 
     m_fillSelectionAction = new QAction(tr("Fill selection"), this);
-    m_fillSelectionAction->setObjectName(
-        QStringLiteral("fillSelectionAction"));
+    m_fillSelectionAction->setObjectName(QStringLiteral("fillSelectionAction"));
     m_fillSelectionAction->setIcon(Icons::icon(IconGlyph::Bucket));
     m_fillSelectionAction->setToolTip(
         tr("Fill the selected area with the brush color"));
-    registerShortcut(m_fillSelectionAction,
-        QKeySequence(Qt::AltModifier | Qt::Key_Delete));
+    registerShortcut(
+        m_fillSelectionAction, QKeySequence(Qt::AltModifier | Qt::Key_Delete));
     connect(m_fillSelectionAction,
         &QAction::triggered,
         m_canvas,
@@ -590,6 +588,7 @@ void MainWindow::createActions()
     auto *fitAction = new QAction(tr("&Fit canvas"), this);
     fitAction->setObjectName(QStringLiteral("fitAction"));
     fitAction->setIcon(Icons::icon(IconGlyph::FitView));
+    fitAction->setToolTip(tr("Fit the whole canvas in the window"));
     registerShortcut(fitAction, QKeySequence(QStringLiteral("Ctrl+0")));
     connect(
         fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
@@ -599,6 +598,8 @@ void MainWindow::createActions()
     m_mirrorCanvasAction->setCheckable(true);
     m_mirrorCanvasAction->setIcon(
         Icons::toggleIcon(IconGlyph::MirrorHorizontal));
+    m_mirrorCanvasAction->setToolTip(
+        tr("Temporarily flip the canvas horizontally"));
     registerShortcut(m_mirrorCanvasAction, QKeySequence(QStringLiteral("M")));
     connect(m_mirrorCanvasAction,
         &QAction::toggled,
@@ -669,11 +670,39 @@ void MainWindow::createActions()
     m_showTimelineAction->setObjectName(QStringLiteral("showTimelineAction"));
     m_showTimelineAction->setCheckable(true);
     m_showTimelineAction->setChecked(timelineVisibleSetting());
-    registerShortcut(m_showTimelineAction, QKeySequence(QStringLiteral("Ctrl+T")));
+    registerShortcut(
+        m_showTimelineAction, QKeySequence(QStringLiteral("Ctrl+T")));
     connect(m_showTimelineAction,
         &QAction::toggled,
         this,
         &MainWindow::setTimelineVisible);
+    connect(m_timeline,
+        &TimelineBar::collapseRequested,
+        this,
+        [this]()
+        {
+            m_showTimelineAction->setChecked(false);
+        });
+
+    m_simpleModeAction = new QAction(tr("Simple mode"), this);
+    m_simpleModeAction->setObjectName(QStringLiteral("simpleModeAction"));
+    m_simpleModeAction->setCheckable(true);
+    connect(m_simpleModeAction,
+        &QAction::toggled,
+        this,
+        &MainWindow::setSimpleMode);
+
+    auto *resetPanelLayoutAction = new QAction(tr("Reset panel layout"), this);
+    resetPanelLayoutAction->setObjectName(
+        QStringLiteral("resetPanelLayoutAction"));
+    connect(resetPanelLayoutAction,
+        &QAction::triggered,
+        this,
+        [this]()
+        {
+            m_paletteDockAreaManager->resetCollapsedAreas();
+            resetDockLayout();
+        });
 
     auto *toolGroup = new QActionGroup(this);
     toolGroup->setExclusive(true);
@@ -863,10 +892,6 @@ void MainWindow::createMenus()
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
     viewMenu->addAction(m_playAction);
-    viewMenu->addSeparator();
-    viewMenu->addAction(m_showTimelineAction);
-    viewMenu->addAction(m_toolDock->toggleViewAction());
-    viewMenu->addAction(m_layerDock->toggleViewAction());
 
     QMenu *toolMenu = menuBar()->addMenu(tr("&Tools"));
     toolMenu->addAction(m_brushAction);
@@ -880,6 +905,20 @@ void MainWindow::createMenus()
         findChild<QAction *>(QStringLiteral("importWwpPresetAction")));
     toolMenu->addAction(
         findChild<QAction *>(QStringLiteral("exportWwpPresetAction")));
+
+    QMenu *windowMenu = menuBar()->addMenu(tr("&Window"));
+    windowMenu->addAction(m_simpleModeAction);
+    windowMenu->addSeparator();
+    windowMenu->addAction(m_showTimelineAction);
+    windowMenu->addSeparator();
+    windowMenu->addAction(m_toolDock->toggleViewAction());
+    windowMenu->addAction(m_colorDock->toggleViewAction());
+    windowMenu->addAction(m_colorHistoryDock->toggleViewAction());
+    windowMenu->addAction(m_wobbleDock->toggleViewAction());
+    windowMenu->addAction(m_layerDock->toggleViewAction());
+    windowMenu->addSeparator();
+    windowMenu->addAction(
+        findChild<QAction *>(QStringLiteral("resetPanelLayoutAction")));
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(findChild<QAction *>(QStringLiteral("helpAction")));
@@ -909,48 +948,25 @@ void MainWindow::createToolBars()
     rail->setIconSize(QSize(24, 24));
     addToolBar(Qt::LeftToolBarArea, rail);
 
-    const auto addRailButton = [rail](QAction *action, IconGlyph glyph)
+    const auto addRailButton =
+        [rail](QAction *action, IconGlyph glyph, const QString &label)
     {
         auto *button = new PopoverToolButton(rail);
         button->setDefaultAction(action);
+        button->setText(label);
         button->setIconSize(rail->iconSize());
         button->setHoverGlyph(glyph);
-        // Icon only. The dock names the selected tool and shows its settings,
-        // so labels here only made the rail taller without telling anyone
-        // anything the dock does not already say.
-        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         rail->addWidget(button);
         return button;
     };
 
-    // No popovers hang off these any more: every tool's options live in the
-    // always-visible ToolDock, so the rail is purely tool selection.
-    addRailButton(m_brushAction, IconGlyph::Brush);
-    addRailButton(m_eraserAction, IconGlyph::Eraser);
-    addRailButton(m_lassoAction, IconGlyph::Lasso);
-    addRailButton(m_wandAction, IconGlyph::Wand);
-    addRailButton(m_bucketAction, IconGlyph::Bucket);
-    addRailButton(m_eyedropperAction, IconGlyph::Eyedropper);
-
-    rail->addSeparator();
-    auto *wobbleButton = new QToolButton(rail);
-    wobbleButton->setObjectName(QStringLiteral("wobbleSettingsButton"));
-    wobbleButton->setIcon(Icons::icon(IconGlyph::Wobble));
-    wobbleButton->setIconSize(rail->iconSize());
-    wobbleButton->setToolTip(tr("Wobble settings"));
-    wobbleButton->setAccessibleName(tr("Wobble settings"));
-    rail->addWidget(wobbleButton);
-    // The settings themselves live in the dock now, so the rail button's job
-    // is to bring that section into view rather than to hold a copy of them.
-    connect(wobbleButton,
-        &QToolButton::clicked,
-        this,
-        [this]()
-        {
-            m_toolDock->show();
-            m_toolDock->raise();
-            m_toolDock->revealWobbleSettings();
-        });
+    addRailButton(m_brushAction, IconGlyph::Brush, tr("Brush"));
+    addRailButton(m_eraserAction, IconGlyph::Eraser, tr("Eraser"));
+    addRailButton(m_lassoAction, IconGlyph::Lasso, tr("Area select"));
+    addRailButton(m_wandAction, IconGlyph::Wand, tr("Auto select"));
+    addRailButton(m_bucketAction, IconGlyph::Bucket, tr("Paint bucket"));
+    addRailButton(m_eyedropperAction, IconGlyph::Eyedropper, tr("Eyedropper"));
 
     connect(m_canvas,
         &CanvasWidget::brushPresetChanged,
@@ -978,35 +994,35 @@ void MainWindow::createToolBars()
     quick->setMovable(false);
     quick->setIconSize(QSize(22, 22));
 
-    m_colorButton = new QPushButton(quick);
-    m_colorButton->setFixedSize(28, 28);
-    m_colorButton->setToolTip(tr("Choose brush color"));
-    m_colorButton->setAccessibleName(tr("Brush color"));
-    m_colorButton->setCursor(Qt::PointingHandCursor);
-    connect(m_colorButton,
-        &QPushButton::clicked,
-        this,
-        [this]()
-        {
-            const QColor color = QColorDialog::getColor(m_canvas->brushColor(),
-                this,
-                tr("Brush color"),
-                QColorDialog::ShowAlphaChannel);
-            if (color.isValid())
-            {
-                m_canvas->setBrushColor(color);
-            }
-        });
-    auto *colorHolder = new QWidget(quick);
-    auto *colorLayout = new QHBoxLayout(colorHolder);
-    colorLayout->setContentsMargins(4, 0, 6, 0);
-    colorLayout->addWidget(m_colorButton, 0, Qt::AlignVCenter);
-    quick->addWidget(colorHolder);
+    auto *panelsButton = new QToolButton(quick);
+    panelsButton->setObjectName(QStringLiteral("panelsButton"));
+    panelsButton->setIcon(Icons::icon(IconGlyph::Panels));
+    panelsButton->setIconSize(quick->iconSize());
+    panelsButton->setToolTip(tr("Open and close panels"));
+    panelsButton->setAccessibleName(tr("Panels"));
+    panelsButton->setPopupMode(QToolButton::InstantPopup);
+    auto *panelsMenu = new QMenu(panelsButton);
+    panelsMenu->addAction(m_simpleModeAction);
+    panelsMenu->addSeparator();
+    panelsMenu->addAction(m_showTimelineAction);
+    panelsMenu->addSeparator();
+    panelsMenu->addAction(m_toolDock->toggleViewAction());
+    panelsMenu->addAction(m_colorDock->toggleViewAction());
+    panelsMenu->addAction(m_colorHistoryDock->toggleViewAction());
+    panelsMenu->addAction(m_wobbleDock->toggleViewAction());
+    panelsMenu->addAction(m_layerDock->toggleViewAction());
+    panelsMenu->addSeparator();
+    panelsMenu->addAction(
+        findChild<QAction *>(QStringLiteral("resetPanelLayoutAction")));
+    panelsButton->setMenu(panelsMenu);
+    quick->addWidget(panelsButton);
+    auto *modeButton = new QToolButton(quick);
+    modeButton->setObjectName(QStringLiteral("modeButton"));
+    modeButton->setDefaultAction(m_simpleModeAction);
+    modeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    quick->addWidget(modeButton);
     quick->addSeparator();
 
-    // The recent-colour row lives in the tool dock alongside the wheel. A
-    // second instance here would not only duplicate it, it would race the
-    // dock's over the same stored list of recent colours.
     auto *quickSpacer = new QWidget(quick);
     quickSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     quick->addWidget(quickSpacer);
@@ -1021,15 +1037,6 @@ void MainWindow::createToolBars()
     {
         settingsButton->setObjectName(QStringLiteral("settingsButton"));
     }
-
-    connect(m_canvas,
-        &CanvasWidget::brushColorChanged,
-        this,
-        [this](const QColor &)
-        {
-            updateColorButton();
-        });
-    updateColorButton();
 }
 
 void MainWindow::createStatusBar()
@@ -1059,13 +1066,18 @@ void MainWindow::createStatusBar()
     auto *mirrorButton = new QToolButton(this);
     mirrorButton->setObjectName(QStringLiteral("mirrorCanvasButton"));
     mirrorButton->setDefaultAction(m_mirrorCanvasAction);
-    mirrorButton->setIconSize(QSize(16, 16));
+    mirrorButton->setIconSize(QSize(18, 18));
+    mirrorButton->setText(tr("Mirror"));
+    mirrorButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     statusBar()->addPermanentWidget(mirrorButton);
 
     auto *fitButton = new QToolButton(this);
+    fitButton->setObjectName(QStringLiteral("fitCanvasButton"));
     fitButton->setDefaultAction(
         findChild<QAction *>(QStringLiteral("fitAction")));
-    fitButton->setIconSize(QSize(16, 16));
+    fitButton->setIconSize(QSize(18, 18));
+    fitButton->setText(tr("Fit"));
+    fitButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     statusBar()->addPermanentWidget(fitButton);
 
     connect(m_canvas,

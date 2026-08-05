@@ -20,6 +20,11 @@ public:
         return canvas.m_cachedRenderSize;
     }
 
+    static Document displayDocument(const CanvasWidget &canvas)
+    {
+        return canvas.displayDocument();
+    }
+
     static bool zoomRenderPending(const CanvasWidget &canvas)
     {
         return canvas.m_zoomRenderTimer.isActive();
@@ -54,6 +59,12 @@ public:
         const CanvasWidget &canvas, const QPointF &widgetPosition)
     {
         return canvas.mapToDocument(widgetPosition);
+    }
+
+    static QPointF mapFromDocument(
+        const CanvasWidget &canvas, const QPointF &documentPosition)
+    {
+        return canvas.documentTransform().map(documentPosition);
     }
 };
 

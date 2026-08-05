@@ -212,13 +212,24 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
 DocumentController::AddStrokeResult CanvasWidget::commitStroke(
     const QUuid &layerId, Stroke stroke)
 {
+    const bool recordsColor =
+        stroke.mode == StrokeMode::Paint || stroke.mode == StrokeMode::Fill;
+    const QColor usedColor = stroke.color;
     const DocumentController::AddStrokeResult result =
         m_controller->addStroke(layerId, std::move(stroke));
     switch (result)
     {
     case DocumentController::AddStrokeResult::Added:
+        if (recordsColor)
+        {
+            emit colorUsed(usedColor);
+        }
         return result;
     case DocumentController::AddStrokeResult::AddedWithResampledPoints:
+        if (recordsColor)
+        {
+            emit colorUsed(usedColor);
+        }
         emit interactionMessage(tr("The stroke was simplified because the "
                                    "project point limit was reached."));
         return result;

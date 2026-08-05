@@ -16,7 +16,6 @@ class QAction;
 class QCloseEvent;
 class QEvent;
 class QLabel;
-class QPushButton;
 class QProgressDialog;
 class QSlider;
 class QSpinBox;
@@ -25,11 +24,14 @@ namespace ugurugu
 {
 
 class CanvasWidget;
-class ColorSwatchRow;
+class ColorDock;
+class ColorHistoryDock;
 class LayerDock;
 class ToolDock;
 class MainWindowTestAccess;
+class PaletteDockAreaManager;
 class TimelineBar;
+class WobbleDock;
 
 class MainWindow final : public QMainWindow
 {
@@ -66,7 +68,7 @@ private:
     void scheduleDrawingToolSettingsSave();
     void saveDrawingToolSettings();
     void updateWindowTitle();
-    void updateColorButton();
+    void resetDockLayout();
     bool hasUnsavedWork() const;
     void refreshUnsavedState();
     bool maybeSave();
@@ -113,6 +115,7 @@ private:
         const QString &error);
     void updateExportActions();
     void applyWobbleAnimationEnabled(bool enabled);
+    void setSimpleMode(bool enabled);
     void setTimelineVisible(bool visible);
     static bool timelineVisibleSetting();
     QString normalizedPath(
@@ -124,6 +127,10 @@ private:
     TimelineBar *m_timeline = nullptr;
     LayerDock *m_layerDock = nullptr;
     ToolDock *m_toolDock = nullptr;
+    ColorDock *m_colorDock = nullptr;
+    ColorHistoryDock *m_colorHistoryDock = nullptr;
+    WobbleDock *m_wobbleDock = nullptr;
+    PaletteDockAreaManager *m_paletteDockAreaManager = nullptr;
     QString m_currentFilePath;
     QString m_suggestedSavePath;
     std::optional<WawaImportSummary> m_pendingWawaImportSummary;
@@ -135,6 +142,7 @@ private:
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
     QAction *m_eyedropperAction = nullptr;
+    QAction *m_simpleModeAction = nullptr;
     QAction *m_showTimelineAction = nullptr;
     QAction *m_fillSelectionAction = nullptr;
     QAction *m_scaleSelectionAction = nullptr;
@@ -153,8 +161,9 @@ private:
     QAction *m_deleteSelectionAction = nullptr;
     QAction *m_deselectSelectionAction = nullptr;
     QAction *m_mirrorCanvasAction = nullptr;
+    QByteArray m_studioDockState;
+    bool m_studioTimelineVisible = true;
     QList<QAction *> m_shortcutActions;
-    QPushButton *m_colorButton = nullptr;
     QLabel *m_pointerLabel = nullptr;
     QSlider *m_zoomSlider = nullptr;
     QSpinBox *m_zoomSpin = nullptr;

@@ -17,7 +17,11 @@
 #include "ui/BrushSizeRow.hpp"
 #include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
-#include "ui/ColorSwatchRow.hpp"
+#include "ui/ColorDock.hpp"
+#include "ui/ColorHistoryDock.hpp"
+#include "ui/ColorHistoryGrid.hpp"
+#include "ui/ColorPairSwatch.hpp"
+#include "ui/ColorWheel.hpp"
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/EraserPresetButton.hpp"
 #include "ui/FrameScrubber.hpp"
@@ -36,8 +40,10 @@
 #include "ui/StrokePropertiesDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
+#include "ui/ToolDock.hpp"
 #include "ui/WandPopoverPanel.hpp"
 #include "ui/WandReferenceButton.hpp"
+#include "ui/WobbleDock.hpp"
 #include "ui/WobblePopoverPanel.hpp"
 #include "ui/WobblePreview.hpp"
 #include "ui/WwpPresetCodec.hpp"
@@ -61,6 +67,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QPaintEvent>
 #include <QPixmap>
 #include <QPointingDevice>

@@ -4,6 +4,7 @@
 #include "document/DocumentLimits.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/FrameScrubber.hpp"
+#include "ui/Icons.hpp"
 #include "ui/WobblePlayButton.hpp"
 
 #include <QApplication>
@@ -12,6 +13,7 @@
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QToolButton>
 
 #include <algorithm>
 #include <cmath>
@@ -125,6 +127,16 @@ void TimelineBar::buildLayout()
     m_fpsSpin->setAccessibleName(tr("Playback speed"));
     fpsLabel->setBuddy(m_fpsSpin);
     layout->addWidget(m_fpsSpin);
+
+    m_collapseButton = new QToolButton(this);
+    m_collapseButton->setObjectName(
+        QStringLiteral("collapseAnimationBarButton"));
+    m_collapseButton->setIcon(Icons::icon(IconGlyph::MoveDown));
+    m_collapseButton->setText(tr("Hide"));
+    m_collapseButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_collapseButton->setToolTip(tr("Hide animation bar (Ctrl+T)"));
+    m_collapseButton->setAccessibleName(tr("Hide animation bar"));
+    layout->addWidget(m_collapseButton);
 }
 
 void TimelineBar::connectControls()
@@ -138,6 +150,10 @@ void TimelineBar::connectControls()
         &CanvasWidget::animatingChanged,
         m_playButton,
         &WobblePlayButton::setChecked);
+    connect(m_collapseButton,
+        &QToolButton::clicked,
+        this,
+        &TimelineBar::collapseRequested);
 
     connect(m_currentFrameSpin,
         &QSpinBox::valueChanged,

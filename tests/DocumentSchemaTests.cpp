@@ -130,6 +130,30 @@ private slots:
         }
     }
 
+    void rejectsIncompleteLayerWobbleOverrides()
+    {
+        Document source = Document::createDefault(QSize(64, 64));
+        Layer &layer = source.layers.first();
+        layer.wobbleAmount = 2.5;
+        layer.motion = source.motion;
+        const QByteArray json = DocumentSerializer::toJson(source);
+        QVERIFY(!json.isEmpty());
+
+        QJsonObject root = QJsonDocument::fromJson(json).object();
+        QJsonArray layers = root.value(QStringLiteral("layers")).toArray();
+        QJsonObject serializedLayer = layers.first().toObject();
+        serializedLayer.remove(QStringLiteral("motion"));
+        layers[0] = serializedLayer;
+        root.insert(QStringLiteral("layers"), layers);
+        QString error;
+        QVERIFY(!DocumentSerializer::fromJson(
+            QJsonDocument(root).toJson(QJsonDocument::Compact), &error));
+        QVERIFY(error.contains(QStringLiteral("wobble override")));
+
+        source.layers.first().motion.reset();
+        QVERIFY(DocumentSerializer::toJson(source).isEmpty());
+    }
+
     void roundTripsSchemaTenFrozenFillCoverage()
     {
         Document source = Document::createDefault(QSize(48, 36));

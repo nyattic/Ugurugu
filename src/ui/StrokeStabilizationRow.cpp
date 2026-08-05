@@ -31,7 +31,7 @@ StrokeStabilizationRow::StrokeStabilizationRow(CanvasWidget *canvas,
     auto *slider = new QSlider(Qt::Horizontal, this);
     slider->setObjectName(objectNamePrefix + QStringLiteral("Slider"));
     slider->setRange(0, 100);
-    slider->setMinimumWidth(140);
+    slider->setMinimumWidth(40);
     slider->setToolTip(accessibleName);
     slider->setAccessibleName(accessibleName);
     layout->addWidget(slider, 1);

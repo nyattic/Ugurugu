@@ -267,9 +267,8 @@ Glyph bucketGlyph()
 Glyph eyedropperGlyph()
 {
     Glyph glyph;
-    QPolygonF outline =
-        polyline({{4.6, 19.4}, {5.7, 15.7}, {10.0, 11.4}, {9.0, 10.4},
-            {15.4, 4.0}});
+    QPolygonF outline = polyline(
+        {{4.6, 19.4}, {5.7, 15.7}, {10.0, 11.4}, {9.0, 10.4}, {15.4, 4.0}});
     outline += sampleQuad({15.4, 4.0}, {20.3, 3.7}, {20.0, 8.6}, 10);
     outline += polyline({{13.6, 15.0}, {12.7, 14.0}, {8.3, 18.3}, {4.6, 19.4}});
     glyph.lines.append(outline);
@@ -311,6 +310,16 @@ Glyph settingsGlyph()
             12.0 + radius * std::cos(angle), 12.0 + radius * std::sin(angle)));
     }
     glyph.lines.append(outer);
+    return glyph;
+}
+
+Glyph panelsGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline(
+        {{4.4, 4.8}, {19.6, 4.8}, {19.6, 19.2}, {4.4, 19.2}, {4.4, 4.8}}));
+    glyph.lines.append(polyline({{13.2, 4.8}, {13.2, 19.2}}));
+    glyph.lines.append(polyline({{13.2, 12.0}, {19.6, 12.0}}));
     return glyph;
 }
 
@@ -454,6 +463,8 @@ Glyph glyphFor(IconGlyph glyph)
         return eyedropperGlyph();
     case IconGlyph::Wobble:
         return wobbleGlyph();
+    case IconGlyph::Panels:
+        return panelsGlyph();
     case IconGlyph::Settings:
         return settingsGlyph();
     case IconGlyph::Move:

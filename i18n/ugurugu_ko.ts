@@ -128,21 +128,57 @@
     </message>
 </context>
 <context>
+    <name>PaletteDockTitleBar</name>
+    <message>
+        <source>Expand panel</source>
+        <translation type="vanished">패널 펼치기</translation>
+    </message>
+    <message>
+        <source>Collapse panel</source>
+        <translation type="vanished">패널 접기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/PaletteDockTitleBar.cpp" line="81"/>
+        <source>Collapse</source>
+        <translation>접기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/PaletteDockTitleBar.cpp" line="95"/>
+        <source>Expand panel dock</source>
+        <translation>패널 영역 펼치기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/PaletteDockTitleBar.cpp" line="96"/>
+        <source>Collapse panel dock</source>
+        <translation>패널 영역 접기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/PaletteDockTitleBar.cpp" line="192"/>
+        <source>%1 panel drag handle</source>
+        <translation>%1 패널 이동 손잡이</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/PaletteDockTitleBar.cpp" line="208"/>
+        <source>Close panel</source>
+        <translation>패널 닫기</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
-        <location filename="../src/main.cpp" line="135"/>
-        <location filename="../src/main.cpp" line="143"/>
-        <location filename="../src/main.cpp" line="215"/>
+        <location filename="../src/main.cpp" line="178"/>
+        <location filename="../src/main.cpp" line="186"/>
+        <location filename="../src/main.cpp" line="257"/>
         <source>Ugurugu</source>
         <translation>Ugurugu</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="136"/>
+        <location filename="../src/main.cpp" line="179"/>
         <source>Ugurugu is already running.</source>
         <translation>Ugurugu가 이미 실행 중입니다.</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="144"/>
+        <location filename="../src/main.cpp" line="187"/>
         <source>Ugurugu could not start.
 
 %1</source>
@@ -151,23 +187,23 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/main.cpp" line="216"/>
+        <location filename="../src/main.cpp" line="258"/>
         <source>The application encountered an unexpected error.</source>
         <translation>애플리케이션에 예기치 않은 오류가 발생했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="127"/>
-        <location filename="../src/ui/MainWindow.cpp" line="128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="138"/>
+        <location filename="../src/ui/MainWindow.cpp" line="139"/>
         <source> px</source>
         <translation> px</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="129"/>
+        <location filename="../src/ui/MainWindow.cpp" line="140"/>
         <source>Width</source>
         <translation>너비</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="130"/>
+        <location filename="../src/ui/MainWindow.cpp" line="141"/>
         <source>Height</source>
         <translation>높이</translation>
     </message>
@@ -475,8 +511,8 @@
         <translation>활성 레이어가 숨겨져 있습니다. 표시한 후 그릴 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="622"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="356"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="635"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="364"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="500"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="38"/>
         <source>Add a layer before using this tool.</source>
@@ -488,98 +524,99 @@
         <translation>문서가 변경되어 대기 중인 선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="415"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="428"/>
         <source>The selection could not be scaled.</source>
         <translation>선택 영역의 크기를 조절할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="446"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="459"/>
         <source>The selection could not be rotated.</source>
         <translation>선택 영역을 회전할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="487"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="500"/>
         <source>The selection transform could not be applied.</source>
         <translation>선택 영역 변형을 적용할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="490"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="503"/>
         <source>Selection transform applied.</source>
         <translation>선택 영역 변형을 적용했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="503"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="516"/>
         <source>Selection transform canceled.</source>
         <translation>선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="542"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="555"/>
         <source>Apply or cancel the selection transform before copying.</source>
         <translation>복사하기 전에 선택 영역 변형을 적용하거나 취소하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="519"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="532"/>
         <source>The selection could not be copied.</source>
         <translation>선택 영역을 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="574"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="587"/>
         <source>Apply or cancel the selection transform before cutting.</source>
         <translation>잘라내기 전에 선택 영역 변형을 적용하거나 취소하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="583"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="596"/>
         <source>Cut selection</source>
         <translation>선택 영역 잘라내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="590"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="603"/>
         <source>The selection could not be cut.</source>
         <translation>선택 영역을 잘라낼 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="593"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="606"/>
         <source>Selection cut.</source>
         <translation>선택 영역을 잘라냈습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="604"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="617"/>
         <source>The pending transform was canceled before deleting.</source>
         <translation>삭제하기 전에 대기 중인 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="633"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="646"/>
         <source>Select all</source>
         <translation>전체 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="643"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="656"/>
         <source>The pending transform was canceled before inverting.</source>
         <translation>반전하기 전에 대기 중인 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="649"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="662"/>
         <source>Invert selection</source>
         <translation>선택 반전</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="660"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="673"/>
         <source>The pending transform was canceled before deselecting.</source>
         <translation>선택을 해제하기 전에 대기 중인 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="696"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="709"/>
         <source>The pending selection transform was canceled when changing tools.</source>
         <translation>도구를 변경하여 대기 중인 선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetEvents.cpp" line="348"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="571"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="581"/>
         <source>Drag inside the selection to move it.</source>
         <translation>선택 영역 안을 드래그해 이동하세요.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="506"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="586"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="44"/>
         <source>Groups can&apos;t be painted on. Select a paint layer to draw.</source>
         <translation>그룹에는 그릴 수 없습니다. 그리려면 페인트 레이어를 선택하세요.</translation>
@@ -596,7 +633,7 @@
         <translation>활성 레이어의 불투명도가 0%입니다. 높인 후 그릴 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="626"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="639"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="108"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="416"/>
         <source>The pending selection transform was canceled before selecting.</source>
@@ -647,22 +684,22 @@
         <translation>영역 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="556"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="569"/>
         <source>The copy could not be placed on a new layer.</source>
         <translation>복사본을 새 레이어에 놓을 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="561"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="574"/>
         <source>Copied to a new layer. Drag inside the selection to move it.</source>
         <translation>새 레이어로 복사했습니다. 선택 영역 안을 드래그해 옮길 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="612"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="625"/>
         <source>The selected content could not be deleted.</source>
         <translation>선택한 내용을 삭제할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidget.cpp" line="662"/>
+        <location filename="../src/ui/CanvasWidget.cpp" line="675"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="167"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="428"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="454"/>
@@ -672,67 +709,142 @@
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="510"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="576"/>
         <source>The pending selection transform was canceled before filling.</source>
         <translation>채우기 전에 대기 중인 선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="566"/>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="588"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="612"/>
         <source>No fillable area was found.</source>
         <translation>채울 수 있는 영역을 찾지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="581"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="580"/>
+        <source>Select an area on this layer to fill.</source>
+        <translation>이 레이어에서 채울 영역을 선택하세요.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="605"/>
         <source>The fill could not be added.</source>
         <translation>채우기를 추가할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="622"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="646"/>
         <source>The selection transform could not be started.</source>
         <translation>선택 영역 변형을 시작할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="1006"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="1030"/>
         <source>The pending selection transform was canceled before resizing.</source>
         <translation>크기를 변경하기 전에 대기 중인 선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="1087"/>
+        <location filename="../src/ui/CanvasWidgetSelection.cpp" line="1111"/>
         <source>The selected content could not be flipped.</source>
         <translation>선택한 내용을 반전할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="216"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="233"/>
         <source>The stroke was simplified because the project point limit was reached.</source>
         <translation>프로젝트의 점 한도에 도달하여 스트로크를 단순화했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="220"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="237"/>
         <source>The stroke could not be added because its layer is no longer available.</source>
         <translation>레이어를 더 이상 사용할 수 없어 스트로크를 추가하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="224"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="241"/>
         <source>The stroke could not be added because the project stroke limit was reached.</source>
         <translation>프로젝트의 스트로크 한도에 도달하여 스트로크를 추가하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="228"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="245"/>
         <source>The stroke could not be added because the project point limit was reached.</source>
         <translation>프로젝트의 점 한도에 도달하여 스트로크를 추가하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetTools.cpp" line="234"/>
+        <location filename="../src/ui/CanvasWidgetTools.cpp" line="251"/>
         <source>The stroke could not be added.</source>
         <translation>스트로크를 추가하지 못했습니다.</translation>
     </message>
 </context>
 <context>
+    <name>ugurugu::ColorDock</name>
+    <message>
+        <location filename="../src/ui/ColorDock.cpp" line="28"/>
+        <source>Color</source>
+        <translation>색상</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorDock.cpp" line="52"/>
+        <source>HSV Square</source>
+        <translation>HSV 사각 필드</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorDock.cpp" line="57"/>
+        <source>HSV Triangle</source>
+        <translation>HSV 삼각 필드</translation>
+    </message>
+    <message>
+        <source>Square</source>
+        <translation type="vanished">사각형</translation>
+    </message>
+    <message>
+        <source>Triangle</source>
+        <translation type="vanished">삼각형</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorDock.cpp" line="78"/>
+        <source>Current color</source>
+        <translation>현재 색상</translation>
+    </message>
+</context>
+<context>
+    <name>ugurugu::ColorHistoryDock</name>
+    <message>
+        <location filename="../src/ui/ColorHistoryDock.cpp" line="16"/>
+        <source>Color history</source>
+        <translation>색상 기록</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorHistoryDock.cpp" line="36"/>
+        <source>Clear history</source>
+        <translation>기록 지우기</translation>
+    </message>
+</context>
+<context>
+    <name>ugurugu::ColorHistoryGrid</name>
+    <message>
+        <location filename="../src/ui/ColorHistoryGrid.cpp" line="130"/>
+        <source>Empty color history slot</source>
+        <translation>빈 색상 기록 칸</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorHistoryGrid.cpp" line="140"/>
+        <source>History color %1</source>
+        <translation>기록 색상 %1</translation>
+    </message>
+</context>
+<context>
+    <name>ugurugu::ColorPairSwatch</name>
+    <message>
+        <location filename="../src/ui/ColorPairSwatch.cpp" line="18"/>
+        <source>Current and previous color. Click the rear swatch to swap.</source>
+        <translation>현재 색상과 이전 색상입니다. 뒤쪽 색상 칸을 누르면 서로 바뀝니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ColorPairSwatch.cpp" line="113"/>
+        <source>Current color %1, previous color %2</source>
+        <translation>현재 색상 %1, 이전 색상 %2</translation>
+    </message>
+</context>
+<context>
     <name>ugurugu::ColorSwatchRow</name>
     <message>
-        <location filename="../src/ui/ColorSwatchRow.cpp" line="126"/>
         <source>Recent color %1</source>
-        <translation>최근 색 %1</translation>
+        <translation type="vanished">최근 색 %1</translation>
     </message>
 </context>
 <context>
@@ -807,82 +919,92 @@
         <translation>선택 삭제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="103"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="169"/>
         <source>Add layer</source>
         <translation>레이어 추가</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="262"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="328"/>
         <source>Insert image</source>
         <translation>이미지 삽입</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="316"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="382"/>
         <source>Transform image</source>
         <translation>이미지 변형</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="349"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="415"/>
         <source>%1 copy</source>
         <translation>%1 사본</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="371"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="437"/>
         <source>Duplicate layer</source>
         <translation>레이어 복제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="450"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="525"/>
         <source>Merge layer down</source>
         <translation>아래 레이어와 병합</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="603"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="678"/>
         <source>Paste</source>
         <translation>붙여넣기</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="603"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="678"/>
         <source>Copy selection</source>
         <translation>선택 영역 복사</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="673"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="748"/>
         <source>Delete layer</source>
         <translation>레이어 삭제</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="697"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="772"/>
         <source>Clear layer</source>
         <translation>레이어 비우기</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="729"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="804"/>
         <source>Rename layer</source>
         <translation>레이어 이름 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="748"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="823"/>
         <source>Toggle layer visibility</source>
         <translation>레이어 표시 전환</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="765"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="840"/>
         <source>Set reference layer</source>
         <translation>참조 레이어 설정</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="788"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="863"/>
         <source>Change layer opacity</source>
         <translation>레이어 불투명도 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="810"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="941"/>
+        <source>Change layer wobble</source>
+        <translation>레이어 우글거림 변경</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="942"/>
+        <source>Follow document wobble</source>
+        <translation>문서 우글거림 따르기</translation>
+    </message>
+    <message>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="964"/>
         <source>Change layer blend mode</source>
         <translation>레이어 합성 모드 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="890"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="1044"/>
         <source>Move layer</source>
         <translation>레이어 순서 이동</translation>
     </message>
@@ -942,17 +1064,17 @@
         <translation>WWP 프리셋 적용</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="1130"/>
+        <location filename="../src/document/DocumentController.cpp" line="1139"/>
         <source>Change animation frames</source>
         <translation>프레임 수 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="1155"/>
+        <location filename="../src/document/DocumentController.cpp" line="1164"/>
         <source>Change animation speed</source>
         <translation>재생 속도 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentController.cpp" line="1689"/>
+        <location filename="../src/document/DocumentController.cpp" line="1698"/>
         <source>Layer %1</source>
         <translation>레이어 %1</translation>
     </message>
@@ -984,22 +1106,22 @@
         <translation>문서를 준비할 메모리가 부족합니다.</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="125"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="191"/>
         <source>Group %1</source>
         <translation>그룹 %1</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="148"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="214"/>
         <source>Add layer group</source>
         <translation>레이어 그룹 추가</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="831"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="985"/>
         <source>Change layer clipping</source>
         <translation>레이어 클리핑 변경</translation>
     </message>
     <message>
-        <location filename="../src/document/DocumentControllerLayers.cpp" line="854"/>
+        <location filename="../src/document/DocumentControllerLayers.cpp" line="1008"/>
         <source>Move layer into group</source>
         <translation>레이어를 그룹으로 이동</translation>
     </message>
@@ -1013,23 +1135,23 @@
 <context>
     <name>ugurugu::DocumentSerializer</name>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="178"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="265"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="189"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="274"/>
         <source>A layer contains invalid data.</source>
         <translation>레이어에 잘못된 데이터가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1506"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1567"/>
         <source>A layer contains invalid fields.</source>
         <translation>레이어에 잘못된 필드가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1514"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1575"/>
         <source>A layer contains too many strokes.</source>
         <translation>레이어에 스트로크가 너무 많습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1483"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1544"/>
         <source>A layer entry is not an object.</source>
         <translation>레이어 항목이 객체가 아닙니다.</translation>
     </message>
@@ -1041,146 +1163,157 @@
         <translation>모션 설정이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="663"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="682"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="702"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="310"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="319"/>
+        <source>A layer has an invalid wobble.</source>
+        <translation>레이어의 우글거림 설정이 올바르지 않습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="338"/>
+        <source>A layer has an incomplete wobble override.</source>
+        <translation>레이어의 우글거림 덮어쓰기가 불완전합니다.</translation>
+    </message>
+    <message>
         <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="722"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="741"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="761"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="781"/>
         <source>The project contains an invalid binary mask table.</source>
         <translation>프로젝트의 바이너리 마스크 테이블이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="671"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="730"/>
         <source>The project contains too many binary masks.</source>
         <translation>프로젝트에 바이너리 마스크가 너무 많습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="734"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="745"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="770"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="793"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="804"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="829"/>
         <source>The project contains an invalid binary mask.</source>
         <translation>프로젝트에 올바르지 않은 바이너리 마스크가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="760"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="248"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="819"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="259"/>
         <source>The project contains too much binary mask data.</source>
         <translation>프로젝트의 바이너리 마스크 데이터가 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1080"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1088"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1110"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1139"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1147"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1169"/>
         <source>A stroke has an invalid visibility clip.</source>
         <translation>스트로크의 표시 클립이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1125"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1184"/>
         <source>A stroke has an invalid fill mask reference.</source>
         <translation>스트로크의 채우기 마스크 참조가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1134"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1193"/>
         <source>A stroke references a missing fill mask.</source>
         <translation>스트로크가 존재하지 않는 채우기 마스크를 참조합니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1147"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1206"/>
         <source>A stroke references unsupported fill coverage.</source>
         <translation>획이 지원하지 않는 채우기 영역을 참조합니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1157"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1216"/>
         <source>A stroke has an invalid fill coverage reference.</source>
         <translation>선에 올바르지 않은 채우기 영역 참조가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1166"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1225"/>
         <source>A stroke references missing fill coverage.</source>
         <translation>선이 존재하지 않는 채우기 영역을 참조합니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1186"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1245"/>
         <source>A stroke contains an operation payload for the wrong mode.</source>
         <translation>획의 작업 모드와 작업 데이터가 일치하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1197"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1220"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1238"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="290"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1256"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1279"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1297"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="301"/>
         <source>A pixel selection operation is invalid.</source>
         <translation>픽셀 선택 작업이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1251"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1281"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1296"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="307"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1310"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1340"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1355"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="318"/>
         <source>A reframe operation is invalid.</source>
         <translation>캔버스 재구성 작업이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1308"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1326"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1335"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="324"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1367"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1385"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1394"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="335"/>
         <source>An image operation is invalid.</source>
         <translation>이미지 작업이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1522"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1583"/>
         <source>A layer has an invalid ID.</source>
         <translation>레이어의 ID가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1530"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1591"/>
         <source>A layer has an invalid name.</source>
         <translation>레이어의 이름이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1563"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1624"/>
         <source>A layer has an invalid opacity.</source>
         <translation>레이어의 불투명도가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1573"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1634"/>
         <source>A layer has an invalid blend mode.</source>
         <translation>레이어의 합성 모드가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="497"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="556"/>
         <source>A stroke clip mask is too large.</source>
         <translation>스트로크 클립 마스크가 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1027"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="386"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1086"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="397"/>
         <source>A stroke contains an invalid point.</source>
         <translation>스트로크에 잘못된 점이 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="275"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="364"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="286"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="375"/>
         <source>A stroke contains invalid data.</source>
         <translation>스트로크에 잘못된 데이터가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="915"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="974"/>
         <source>A stroke contains invalid fields.</source>
         <translation>스트로크에 잘못된 필드가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1046"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1105"/>
         <source>A stroke contains a legacy clip mask in a current project.</source>
         <translation>현재 프로젝트의 스트로크에 이전 형식의 클립 마스크가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="902"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="961"/>
         <source>A stroke entry is not an object.</source>
         <translation>스트로크 항목이 객체가 아닙니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="930"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="989"/>
         <source>A stroke has an invalid ID.</source>
         <translation>스트로크의 ID가 잘못되었습니다.</translation>
     </message>
@@ -1195,43 +1328,43 @@
         <translation>스트로크의 브러시 팁이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="435"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="450"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="459"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="474"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="504"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="494"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="509"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="518"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="533"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="563"/>
         <source>A stroke has an invalid clip mask.</source>
         <translation>스트로크의 클립 마스크가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1057"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1116"/>
         <source>A stroke has an invalid clip mask reference.</source>
         <translation>스트로크의 클립 마스크 참조가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="996"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1055"/>
         <source>A stroke has an invalid color.</source>
         <translation>스트로크의 색상이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="965"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1024"/>
         <source>A stroke has an invalid mode.</source>
         <translation>스트로크의 모드가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="922"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1038"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="981"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1097"/>
         <source>A stroke has an invalid point count.</source>
         <translation>스트로크의 점 개수가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="945"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="953"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1004"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1012"/>
         <source>A stroke has an invalid seed.</source>
         <translation>스트로크의 시드 값이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1006"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1065"/>
         <source>A stroke has an invalid width.</source>
         <translation>스트로크의 굵기가 잘못되었습니다.</translation>
     </message>
@@ -1245,14 +1378,14 @@
         <translation>스트로크의 브러시 설정이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1065"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1124"/>
         <source>A stroke references a missing clip mask.</source>
         <translation>스트로크가 존재하지 않는 클립 마스크를 참조합니다.</translation>
     </message>
     <message>
         <location filename="../src/io/DocumentSerializer.cpp" line="965"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="418"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="289"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="429"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="298"/>
         <source>The active layer ID is invalid.</source>
         <translation>활성 레이어 ID가 잘못되었습니다.</translation>
     </message>
@@ -1278,8 +1411,8 @@
         <translation>캔버스 크기가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1590"/>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="193"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1656"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="204"/>
         <source>A layer has an invalid initial canvas size.</source>
         <translation>레이어의 초기 캔버스 크기가 올바르지 않습니다.</translation>
     </message>
@@ -1290,7 +1423,7 @@
         <translation>레이어 개수가 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="395"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="406"/>
         <source>A layer does not end at the document canvas size.</source>
         <translation>레이어의 최종 크기가 문서 캔버스 크기와 일치하지 않습니다.</translation>
     </message>
@@ -1301,7 +1434,7 @@
         <location filename="../src/io/DocumentSerializer.cpp" line="578"/>
         <location filename="../src/io/DocumentSerializer.cpp" line="594"/>
         <location filename="../src/io/DocumentSerializer.cpp" line="975"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="357"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="366"/>
         <source>The project contains invalid operations or too much mask data.</source>
         <translation>프로젝트에 올바르지 않은 작업이 있거나 마스크 데이터가 너무 큽니다.</translation>
     </message>
@@ -1343,27 +1476,27 @@
         <translation>프로젝트에 잘못된 레이어 ID가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="203"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="214"/>
         <source>The project contains invalid stroke IDs.</source>
         <translation>프로젝트에 잘못된 스트로크 ID가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="596"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="614"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="631"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="640"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="655"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="673"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="690"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="699"/>
         <source>The project contains an invalid selection mask.</source>
         <translation>프로젝트에 잘못된 선택 영역 마스크가 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="544"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="564"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="586"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="603"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="623"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="645"/>
         <source>The project contains an invalid selection mask table.</source>
         <translation>프로젝트의 선택 영역 마스크 테이블이 잘못되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="552"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="611"/>
         <source>The project contains too many selection masks.</source>
         <translation>프로젝트에 선택 영역 마스크가 너무 많습니다.</translation>
     </message>
@@ -1379,8 +1512,8 @@
         <translation>프로젝트에 스트로크가 너무 많습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="488"/>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="622"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="547"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="681"/>
         <source>The project contains too much selection data.</source>
         <translation>프로젝트에 선택 영역 데이터가 너무 많습니다.</translation>
     </message>
@@ -1397,10 +1530,10 @@
     <message>
         <location filename="../src/io/DocumentSerializer.cpp" line="371"/>
         <location filename="../src/io/DocumentSerializer.cpp" line="587"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="312"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="330"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="345"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="366"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="321"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="339"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="354"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="375"/>
         <source>The project is too large to save.</source>
         <translation>프로젝트가 너무 커서 저장할 수 없습니다.</translation>
     </message>
@@ -1415,18 +1548,18 @@
         <translation>지원하지 않는 렌더링 알고리즘 버전입니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="403"/>
-        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="273"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="414"/>
+        <location filename="../src/io/serializer/PreparedPlanBuilder.cpp" line="282"/>
         <source>The layer hierarchy is invalid.</source>
         <translation>레이어 계층이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1544"/>
+        <location filename="../src/io/serializer/DocumentJsonCodec.cpp" line="1605"/>
         <source>A layer has invalid hierarchy fields.</source>
         <translation>레이어 계층 필드가 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/serializer/DocumentValidation.cpp" line="220"/>
+        <location filename="../src/io/serializer/DocumentValidation.cpp" line="231"/>
         <source>The project contains too much mask data.</source>
         <translation>프로젝트의 마스크 데이터가 너무 큽니다.</translation>
     </message>
@@ -1577,7 +1710,7 @@
         <translation>Ugurugu 도움말</translation>
     </message>
     <message>
-        <location filename="../src/ui/HelpDialog.cpp" line="23"/>
+        <location filename="../src/ui/HelpDialog.cpp" line="22"/>
         <source>&lt;h1&gt;Ugurugu&lt;/h1&gt;&lt;p&gt;Draw a stroke, then play the timeline to see it wobble.&lt;/p&gt;&lt;h2&gt;Drawing&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Choose Brush, Eraser, Area Select, Auto Select, or Paint Bucket from the tool rail.&lt;/li&gt;&lt;li&gt;Open Wobble settings to choose Classic, Smooth, or Stepped motion and adjust line detail.&lt;/li&gt;&lt;li&gt;Use the timeline for frame count, playback speed, and the current frame.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Selection and layers&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Area Select can select content or paint a filled lasso shape.&lt;/li&gt;&lt;li&gt;Merge Down is available only when the two layers can be combined without changing their appearance.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;Files and export&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;Projects use .ugu, and older .wagle or .wobble projects still open. Native version 10 .wawa files open as new unsaved projects.&lt;/li&gt;&lt;li&gt;Insert image keeps the original pixels for later non-destructive transforms.&lt;/li&gt;&lt;li&gt;Export the current frame as PNG or JPEG, or the animation as GIF or WebP.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Press F1 to open this help again.&lt;/p&gt;</source>
         <translation>&lt;h1&gt;Ugurugu&lt;/h1&gt;&lt;p&gt;선을 그린 다음 타임라인을 재생해 우글거리는 모습을 확인하세요.&lt;/p&gt;&lt;h2&gt;그리기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;도구 막대에서 브러시, 지우개, 영역 선택, 자동 선택 또는 페인트 통을 고르세요.&lt;/li&gt;&lt;li&gt;우글거림 설정을 열어 클래식, 부드럽게 또는 단계별 모션을 고르고 선의 디테일을 조절하세요.&lt;/li&gt;&lt;li&gt;타임라인에서 프레임 수, 재생 속도와 현재 프레임을 조절하세요.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;선택과 레이어&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;영역 선택으로 내용을 선택하거나 채워진 올가미 모양을 그릴 수 있습니다.&lt;/li&gt;&lt;li&gt;아래 레이어와 병합은 두 레이어의 모양을 바꾸지 않고 합칠 수 있을 때만 사용할 수 있습니다.&lt;/li&gt;&lt;/ul&gt;&lt;h2&gt;파일과 내보내기&lt;/h2&gt;&lt;ul&gt;&lt;li&gt;프로젝트는 .ugu 형식을 사용하며, 이전 .wagle과 .wobble 프로젝트도 그대로 열립니다. native 버전 10 .wawa 파일은 저장되지 않은 새 프로젝트로 열립니다.&lt;/li&gt;&lt;li&gt;이미지 삽입은 이후 비파괴 변형을 위해 원본 픽셀을 유지합니다.&lt;/li&gt;&lt;li&gt;현재 프레임은 PNG 또는 JPEG로, 애니메이션은 GIF 또는 WebP로 내보내세요.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;이 도움말을 다시 열려면 F1을 누르세요.&lt;/p&gt;</translation>
     </message>
@@ -1738,165 +1871,169 @@
 <context>
     <name>ugurugu::LayerDock</name>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="52"/>
-        <location filename="../src/ui/LayerDock.cpp" line="85"/>
+        <location filename="../src/ui/LayerDock.cpp" line="53"/>
+        <location filename="../src/ui/LayerDock.cpp" line="83"/>
         <source>Layers</source>
         <translation>레이어</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="58"/>
         <source>LAYERS</source>
-        <translation>레이어</translation>
+        <translation type="vanished">레이어</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="98"/>
+        <location filename="../src/ui/LayerDock.cpp" line="96"/>
         <source>Add layer</source>
         <translation>레이어 추가</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="112"/>
+        <location filename="../src/ui/LayerDock.cpp" line="110"/>
         <source>Duplicate layer</source>
         <translation>레이어 복제</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="118"/>
-        <location filename="../src/ui/LayerDock.cpp" line="726"/>
+        <location filename="../src/ui/LayerDock.cpp" line="116"/>
+        <location filename="../src/ui/LayerDock.cpp" line="724"/>
         <source>Merge with layer below</source>
         <translation>아래 레이어와 병합</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="124"/>
+        <location filename="../src/ui/LayerDock.cpp" line="122"/>
         <source>Delete layer</source>
         <translation>레이어 삭제</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="132"/>
+        <location filename="../src/ui/LayerDock.cpp" line="130"/>
         <source>Move layer up</source>
         <translation>레이어 위로 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="138"/>
+        <location filename="../src/ui/LayerDock.cpp" line="136"/>
         <source>Move layer down</source>
         <translation>레이어 아래로 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="198"/>
+        <location filename="../src/ui/LayerDock.cpp" line="196"/>
         <source>OPACITY</source>
         <translation>불투명도</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="732"/>
+        <location filename="../src/ui/LayerDock.cpp" line="730"/>
         <source>Select a paint layer to merge</source>
         <translation>병합할 페인트 레이어를 선택하세요</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="735"/>
+        <location filename="../src/ui/LayerDock.cpp" line="733"/>
         <source>No paint layer is directly below</source>
         <translation>바로 아래에 페인트 레이어가 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="738"/>
+        <location filename="../src/ui/LayerDock.cpp" line="736"/>
         <source>Both layers must use matching safe properties</source>
         <translation>두 레이어가 동일한 안전 속성을 사용해야 합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="741"/>
+        <location filename="../src/ui/LayerDock.cpp" line="740"/>
+        <source>This layer&apos;s eraser or moved pixels overlap the layer below, so merging would erase its artwork</source>
+        <translation>이 레이어의 지우개 또는 이동한 픽셀이 아래 레이어와 겹쳐 병합하면 아래 그림이 지워집니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LayerDock.cpp" line="744"/>
         <source>The layers use incompatible canvas histories</source>
         <translation>레이어의 캔버스 기록이 서로 호환되지 않습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="744"/>
+        <location filename="../src/ui/LayerDock.cpp" line="747"/>
         <source>The merged layer would exceed the stroke limit</source>
         <translation>병합한 레이어가 선 개수 한도를 초과합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="1117"/>
+        <location filename="../src/ui/LayerDock.cpp" line="1120"/>
         <source>Move layer</source>
         <translation>레이어 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="147"/>
+        <location filename="../src/ui/LayerDock.cpp" line="145"/>
         <source>BLEND MODE</source>
         <translation>합성 모드</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="153"/>
+        <location filename="../src/ui/LayerDock.cpp" line="151"/>
         <source>Layer blend mode</source>
         <translation>레이어 합성 모드</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="155"/>
+        <location filename="../src/ui/LayerDock.cpp" line="153"/>
         <source>Normal</source>
         <translation>일반</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="157"/>
+        <location filename="../src/ui/LayerDock.cpp" line="155"/>
         <source>Multiply</source>
         <translation>곱하기</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="159"/>
+        <location filename="../src/ui/LayerDock.cpp" line="157"/>
         <source>Screen</source>
         <translation>스크린</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="161"/>
+        <location filename="../src/ui/LayerDock.cpp" line="159"/>
         <source>Overlay</source>
         <translation>오버레이</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="426"/>
-        <location filename="../src/ui/LayerDock.cpp" line="812"/>
+        <location filename="../src/ui/LayerDock.cpp" line="424"/>
+        <location filename="../src/ui/LayerDock.cpp" line="815"/>
         <source>%1%</source>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="104"/>
+        <location filename="../src/ui/LayerDock.cpp" line="102"/>
         <source>Add group containing the selected layer</source>
         <translation>선택한 레이어를 포함하는 그룹 추가</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="171"/>
+        <location filename="../src/ui/LayerDock.cpp" line="169"/>
         <source>GROUP</source>
         <translation>그룹</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="177"/>
+        <location filename="../src/ui/LayerDock.cpp" line="175"/>
         <source>Parent layer group</source>
         <translation>상위 레이어 그룹</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="182"/>
+        <location filename="../src/ui/LayerDock.cpp" line="180"/>
         <source>Clip to layer below</source>
         <translation>아래 레이어에 클리핑</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="188"/>
+        <location filename="../src/ui/LayerDock.cpp" line="186"/>
         <source>Reference layer</source>
         <translation>참조 레이어</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="191"/>
+        <location filename="../src/ui/LayerDock.cpp" line="189"/>
         <source>Use this layer when a selection tool references marked layers</source>
         <translation>표시한 레이어를 참조하는 선택 도구에서 이 레이어 사용</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="185"/>
+        <location filename="../src/ui/LayerDock.cpp" line="183"/>
         <source>Limit this layer to the opacity of the base layer below it</source>
         <translation>이 레이어를 아래 기준 레이어의 불투명 영역 안에 표시합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="762"/>
+        <location filename="../src/ui/LayerDock.cpp" line="765"/>
         <source>No group</source>
         <translation>그룹 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="620"/>
+        <location filename="../src/ui/LayerDock.cpp" line="618"/>
         <source>Layer is visible</source>
         <translation>레이어가 표시되어 있습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="620"/>
+        <location filename="../src/ui/LayerDock.cpp" line="618"/>
         <source>Layer is hidden</source>
         <translation>레이어가 숨겨져 있습니다</translation>
     </message>
@@ -1904,25 +2041,25 @@
 <context>
     <name>ugurugu::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="238"/>
-        <location filename="../src/ui/MainWindow.cpp" line="303"/>
-        <location filename="../src/ui/MainWindow.cpp" line="312"/>
-        <location filename="../src/ui/MainWindow.cpp" line="334"/>
+        <location filename="../src/ui/MainWindow.cpp" line="271"/>
+        <location filename="../src/ui/MainWindow.cpp" line="336"/>
+        <location filename="../src/ui/MainWindow.cpp" line="345"/>
+        <location filename="../src/ui/MainWindow.cpp" line="367"/>
         <source>Open failed</source>
         <translation>열기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="269"/>
+        <location filename="../src/ui/MainWindow.cpp" line="302"/>
         <source>The .wawa project could not be read or is too large.</source>
         <translation>.wawa 프로젝트를 읽을 수 없거나 파일이 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="290"/>
+        <location filename="../src/ui/MainWindow.cpp" line="323"/>
         <source>Import failed</source>
         <translation>가져오기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="291"/>
+        <location filename="../src/ui/MainWindow.cpp" line="324"/>
         <source>Could not import the .wawa project.
 
 %1</source>
@@ -1931,7 +2068,7 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="304"/>
+        <location filename="../src/ui/MainWindow.cpp" line="337"/>
         <source>Could not open the project.
 
 %1</source>
@@ -1940,7 +2077,7 @@
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="349"/>
+        <location filename="../src/ui/MainWindow.cpp" line="382"/>
         <source>Imported native .wawa version 10 as a new, unsaved Ugurugu document.
 
 Layers: %1
@@ -1957,7 +2094,7 @@ Polygon fills: %5</source>
 다각형 채우기: %5</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="360"/>
+        <location filename="../src/ui/MainWindow.cpp" line="393"/>
         <source>
 Skipped operations: %1
 Clamped widths: %2</source>
@@ -1966,7 +2103,7 @@ Clamped widths: %2</source>
 제한된 굵기: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="364"/>
+        <location filename="../src/ui/MainWindow.cpp" line="397"/>
         <source>
 
 Wobble, airbrush, and polygon fills are best-effort conversions and may look different from WiggleWiggleTool.</source>
@@ -1975,68 +2112,68 @@ Wobble, airbrush, and polygon fills are best-effort conversions and may look dif
 우글거림, 에어브러시와 다각형 채우기는 최선형 변환이므로 WiggleWiggleTool과 다르게 보일 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="367"/>
+        <location filename="../src/ui/MainWindow.cpp" line="400"/>
         <source>.wawa import complete</source>
         <translation>.wawa 가져오기 완료</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="368"/>
+        <location filename="../src/ui/MainWindow.cpp" line="401"/>
         <source>Imported %1 as a new document</source>
         <translation>%1을 새 문서로 가져왔습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="376"/>
+        <location filename="../src/ui/MainWindow.cpp" line="409"/>
         <source>Opened %1</source>
         <translation>%1 열림</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="415"/>
+        <location filename="../src/ui/MainWindow.cpp" line="448"/>
         <source>Recover unsaved work</source>
         <translation>저장하지 않은 작업 복구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="417"/>
+        <location filename="../src/ui/MainWindow.cpp" line="449"/>
         <source>Ugurugu found work from a previous session. Choose what to do before opening %1.</source>
         <translation>Ugurugu에서 이전 세션의 작업을 발견했습니다. %1 파일을 열기 전에 복구 작업 처리 방법을 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="420"/>
+        <location filename="../src/ui/MainWindow.cpp" line="452"/>
         <source>Ugurugu found work from a previous session. Choose whether to recover or discard it.</source>
         <translation>Ugurugu에서 이전 세션의 작업을 발견했습니다. 복구하거나 폐기할지 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="425"/>
+        <location filename="../src/ui/MainWindow.cpp" line="457"/>
         <source>Recover</source>
         <translation>복구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="432"/>
+        <location filename="../src/ui/MainWindow.cpp" line="464"/>
         <source>Keep Recovery and Open File</source>
         <translation>복구 파일을 보존하고 파일 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="436"/>
+        <location filename="../src/ui/MainWindow.cpp" line="468"/>
         <source>Discard Recovery and Open File</source>
         <translation>복구 파일을 폐기하고 파일 열기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="441"/>
+        <location filename="../src/ui/MainWindow.cpp" line="473"/>
         <source>Discard</source>
         <translation>폐기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="483"/>
+        <location filename="../src/ui/MainWindow.cpp" line="515"/>
         <source>Opened %1. Recovery preserved at %2</source>
         <translation>%1 열림. 복구 파일 보존 위치: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="556"/>
-        <location filename="../src/ui/MainWindow.cpp" line="576"/>
+        <location filename="../src/ui/MainWindow.cpp" line="588"/>
+        <location filename="../src/ui/MainWindow.cpp" line="608"/>
         <source>Recovery failed</source>
         <translation>복구 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="557"/>
+        <location filename="../src/ui/MainWindow.cpp" line="589"/>
         <source>The recovery file could not be opened.
 
 %1
@@ -2051,74 +2188,95 @@ The recovery file was not deleted. You can find it at:
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="588"/>
+        <location filename="../src/ui/MainWindow.cpp" line="620"/>
         <source>Recovered unsaved work.</source>
         <translation>저장하지 않은 작업을 복구했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="635"/>
+        <location filename="../src/ui/MainWindow.cpp" line="671"/>
         <source>Shortcut change</source>
         <translation>단축키 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="843"/>
+        <location filename="../src/ui/MainWindow.cpp" line="809"/>
+        <source>Studio mode</source>
+        <translation>스튜디오 모드</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="809"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="687"/>
+        <source>Simple mode</source>
+        <translation>심플 모드</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="845"/>
+        <source>Simple mode: essential panels only</source>
+        <translation>심플 모드: 필수 패널만 표시합니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="864"/>
+        <source>Studio mode: all panels available</source>
+        <translation>스튜디오 모드: 모든 패널을 사용할 수 있습니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="962"/>
         <source>Ugurugu projects (*.%1)</source>
         <translation>Ugurugu 프로젝트 (*.%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1032"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1151"/>
         <source>Canvas background</source>
         <translation>캔버스 배경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1050"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1064"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1169"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1183"/>
         <source>There is nothing to paste.</source>
         <translation>붙여넣을 내용이 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1060"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1179"/>
         <source>Pasting images from other apps is not supported yet.</source>
         <translation>다른 앱에서 복사한 이미지 붙여넣기는 아직 지원하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1075"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1102"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1194"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1221"/>
         <source>The clipboard content could not be pasted.</source>
         <translation>클립보드 내용을 붙여넣을 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1082"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1201"/>
         <source>Pasted as a new layer.</source>
         <translation>새 레이어로 붙여넣었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1085"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1204"/>
         <source>The paste was rejected because the document already has the maximum number of layers.</source>
         <translation>문서가 이미 최대 레이어 수에 도달해 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1089"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1208"/>
         <source>The paste was rejected because it would exceed the stroke limit.</source>
         <translation>스트로크 한도를 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1093"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1212"/>
         <source>The paste was rejected because it would exceed the point limit.</source>
         <translation>점 한도를 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1097"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1216"/>
         <source>The paste was rejected because it would exceed the mask budget.</source>
         <translation>마스크 예산을 넘게 되어 붙여넣기가 거부되었습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1290"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1409"/>
         <source>Recovery could not be discarded</source>
         <translation>복구 파일을 폐기할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1291"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1410"/>
         <source>The recovery file was not deleted.
 
 %1</source>
@@ -2127,12 +2285,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1317"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1436"/>
         <source>Recovery could not be preserved</source>
         <translation>복구 파일을 보존할 수 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1318"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1437"/>
         <source>The recovery file was left unchanged.
 
 %1</source>
@@ -2141,28 +2299,28 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1378"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1497"/>
         <source>Supported projects (%1 *.wawa);;Ugurugu projects (%1);;WiggleWiggleTool projects (*.wawa);;All files (*)</source>
         <translation>지원하는 프로젝트 (%1 *.wawa);;Ugurugu 프로젝트 (%1);;WiggleWiggleTool 프로젝트 (*.wawa);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1391"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1510"/>
         <source>Insert image</source>
         <translation>이미지 삽입</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1393"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1512"/>
         <source>Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff);;All files (*)</source>
         <translation>이미지 파일 (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff);;모든 파일 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1406"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1439"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1525"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1558"/>
         <source>Could not insert image</source>
         <translation>이미지를 삽입할 수 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1407"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1526"/>
         <source>The image could not be decoded.
 
 %1</source>
@@ -2171,27 +2329,27 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1417"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1536"/>
         <source>Inserted %1</source>
         <translation>%1 삽입됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1427"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1546"/>
         <source>The image dimensions or pixel data are not supported.</source>
         <translation>이미지 크기 또는 픽셀 데이터를 지원하지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1430"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1549"/>
         <source>The document has reached its layer limit.</source>
         <translation>문서가 레이어 한도에 도달했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1433"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1552"/>
         <source>The document has reached its image asset limit.</source>
         <translation>문서가 이미지 자산 한도에 도달했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1436"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1555"/>
         <source>The image would exceed the project size limit.</source>
         <translation>이미지를 추가하면 프로젝트 크기 한도를 초과합니다.</translation>
     </message>
@@ -2201,7 +2359,7 @@ The recovery file was not deleted. You can find it at:
         <translation>새로 만들기(&amp;N)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="335"/>
+        <location filename="../src/ui/MainWindow.cpp" line="368"/>
         <source>The project could not be prepared.
 
 %1</source>
@@ -2210,7 +2368,7 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="577"/>
+        <location filename="../src/ui/MainWindow.cpp" line="609"/>
         <source>The recovered document could not be prepared.
 
 %1</source>
@@ -2421,170 +2579,240 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="450"/>
+        <source>Fill selection</source>
+        <translation>선택 영역 채우기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="454"/>
+        <source>Fill the selected area with the brush color</source>
+        <translation>브러시 색상으로 선택 영역 채우기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="462"/>
         <source>Deselect</source>
         <translation>선택 해제</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="454"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="466"/>
         <source>Deselect (Ctrl+D)</source>
         <translation>선택 해제 (Ctrl+D)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="463"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="475"/>
         <source>Cancel current canvas action</source>
         <translation>현재 캔버스 작업 취소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="530"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="546"/>
         <source>Clear active layer</source>
         <translation>활성 레이어 비우기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="550"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="566"/>
         <source>Zoom &amp;in</source>
         <translation>확대(&amp;I)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="557"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="573"/>
         <source>Zoom &amp;out</source>
         <translation>축소(&amp;O)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="563"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="579"/>
         <source>Actual &amp;pixels</source>
         <translation>실제 픽셀(&amp;P)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="565"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="581"/>
         <source>Show the canvas at 100%</source>
         <translation>캔버스를 100%로 표시</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="572"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="588"/>
         <source>&amp;Fit canvas</source>
         <translation>캔버스 맞추기(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="579"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="591"/>
+        <source>Fit the whole canvas in the window</source>
+        <translation>전체 캔버스를 창에 맞추기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="596"/>
         <source>Flip canvas horizontally</source>
         <translation>캔버스 좌우반전</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="594"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="602"/>
+        <source>Temporarily flip the canvas horizontally</source>
+        <translation>캔버스를 임시로 좌우 반전</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="613"/>
         <source>&amp;Animate preview</source>
         <translation>미리보기 재생(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="609"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="628"/>
         <source>&amp;Brush</source>
         <translation>브러시(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="615"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="634"/>
         <source>&amp;Eraser</source>
         <translation>지우개(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="621"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="640"/>
         <source>&amp;Area select</source>
         <translation>영역 선택(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="627"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="646"/>
         <source>Auto se&amp;lect</source>
         <translation>자동 선택(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="633"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="652"/>
         <source>Paint &amp;bucket</source>
         <translation>페인트 통(&amp;G)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="750"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="658"/>
+        <source>E&amp;yedropper</source>
+        <translation>스포이드(&amp;Y)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="663"/>
+        <source>Pick a color from the canvas. Alt+click does the same from any paint tool.</source>
+        <translation>캔버스에서 색상을 추출합니다. 페인트 도구에서 Alt+클릭해도 같습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="669"/>
+        <source>Show &amp;animation bar</source>
+        <translation>애니메이션 바 표시(&amp;A)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="695"/>
+        <source>Reset panel layout</source>
+        <translation>패널 배치 초기화</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="838"/>
         <source>&amp;File</source>
         <translation>파일(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="768"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="856"/>
         <source>&amp;Edit</source>
         <translation>편집(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="783"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="871"/>
         <source>&amp;Selection</source>
         <translation>선택(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="806"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="895"/>
         <source>&amp;View</source>
         <translation>보기(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="817"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="904"/>
         <source>&amp;Tools</source>
         <translation>도구(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="829"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="917"/>
+        <source>&amp;Window</source>
+        <translation>창(&amp;W)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="931"/>
         <source>&amp;Help</source>
         <translation>도움말(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="851"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="953"/>
         <source>Tools</source>
         <translation>도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="918"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="919"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="972"/>
+        <source>Brush</source>
+        <translation>브러시</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="973"/>
+        <source>Eraser</source>
+        <translation>지우개</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="974"/>
+        <source>Area select</source>
+        <translation>영역 선택</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="975"/>
+        <source>Auto select</source>
+        <translation>자동 선택</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="976"/>
+        <source>Paint bucket</source>
+        <translation>페인트 통</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="977"/>
+        <source>Eyedropper</source>
+        <translation>스포이드</translation>
+    </message>
+    <message>
         <source>Wobble settings</source>
-        <translation>우글거림 설정</translation>
+        <translation type="vanished">우글거림 설정</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="959"/>
         <source>Choose brush color</source>
-        <translation>브러시 색 선택</translation>
+        <translation type="vanished">브러시 색 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="960"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="969"/>
         <source>Brush color</source>
-        <translation>브러시 색</translation>
+        <translation type="vanished">브러시 색</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1027"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1028"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1060"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1061"/>
         <source>Canvas zoom</source>
         <translation>캔버스 확대/축소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1034"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1067"/>
         <source>%</source>
         <translation>%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1037"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1038"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1070"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1071"/>
         <source>Canvas zoom percentage</source>
         <translation>캔버스 확대/축소 배율</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="865"/>
+        <location filename="../src/ui/MainWindow.cpp" line="984"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then save again.</source>
         <translation>대기 중인 선택 영역 변형을 적용할 수 없습니다. 변형을 조정하거나 취소한 뒤 다시 저장하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="900"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1019"/>
         <source>The recovery file location is reserved. Choose a different project path.</source>
         <translation>복구 파일 위치는 예약되어 있습니다. 다른 프로젝트 경로를 선택하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1347"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1466"/>
         <source>Layer group nesting limit</source>
         <translation>레이어 그룹 중첩 제한</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1348"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1467"/>
         <source>Some layers in this project are nested %1 levels deep inside layer groups. The structure will be preserved, but edits cannot increase the document&apos;s maximum nesting depth. New documents allow up to %2 levels.</source>
         <translation>이 프로젝트의 일부 레이어는 그룹 안에 %1단계 깊이로 중첩되어 있습니다. 현재 구조는 그대로 보존되지만, 편집으로 문서의 최대 중첩 단계를 더 늘릴 수는 없습니다. 새 문서는 최대 %2단계까지 사용할 수 있습니다.</translation>
     </message>
@@ -2599,12 +2827,12 @@ The recovery file was not deleted. You can find it at:
         <translation>이 이미지를 렌더링하려면 약 %1 MiB의 작업 메모리가 필요합니다. 내보내기 전에 캔버스 크기나 레이어 그룹의 중첩 단계를 줄이세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="923"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1042"/>
         <source>New document failed</source>
         <translation>새 문서 만들기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="924"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1043"/>
         <source>The new document could not be prepared.
 
 %1</source>
@@ -2613,45 +2841,45 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="953"/>
-        <location filename="../src/ui/MainWindow.cpp" line="998"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1072"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1117"/>
         <source>The pending selection transform could not be applied. Adjust or cancel the transform, then change the size again.</source>
         <translation>대기 중인 선택 영역 변형을 적용할 수 없습니다. 변형을 조정하거나 취소한 뒤 다시 크기를 변경하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="963"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1082"/>
         <source>Resize canvas</source>
         <translation>캔버스 크기 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="952"/>
-        <location filename="../src/ui/MainWindow.cpp" line="975"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1071"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1094"/>
         <source>Canvas size</source>
         <translation>캔버스 크기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="636"/>
+        <location filename="../src/ui/MainWindow.cpp" line="672"/>
         <source>Ctrl+D now deselects, matching the convention of other drawing tools. To duplicate content, copy it with Ctrl+C: the copy is placed on a new layer and can be dragged right away.</source>
         <translation>Ctrl+D가 다른 그림 도구의 관례대로 선택 해제로 동작합니다. 내용을 복제하려면 Ctrl+C로 복사하세요. 복사본이 새 레이어에 놓이며 바로 드래그해 옮길 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="976"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1095"/>
         <source>The canvas size could not be changed. Try a smaller size or offset.</source>
         <translation>캔버스 크기를 변경할 수 없습니다. 더 작은 크기나 오프셋으로 시도하세요.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1008"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1127"/>
         <source>Resize image</source>
         <translation>이미지 크기 변경</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="997"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1019"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1116"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1138"/>
         <source>Image size</source>
         <translation>이미지 크기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1020"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1139"/>
         <source>The image size could not be changed. Try smaller dimensions.</source>
         <translation>이미지 크기를 변경할 수 없습니다. 더 작은 크기로 시도하세요.</translation>
     </message>
@@ -2670,52 +2898,72 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1456"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1575"/>
         <source>Export &amp;image…</source>
         <translation>이미지로 내보내기(&amp;I)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="952"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1000"/>
         <source>Quick access</source>
         <translation>빠른 도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1058"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1009"/>
+        <source>Open and close panels</source>
+        <translation>패널 열기 및 닫기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1010"/>
+        <source>Panels</source>
+        <translation>패널</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1078"/>
+        <source>Mirror</source>
+        <translation>좌우 반전</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1087"/>
+        <source>Fit</source>
+        <translation>맞춤</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1096"/>
         <source>x %1  y %2</source>
         <translation>x %1  y %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1094"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1132"/>
         <source>Ready</source>
         <translation>준비됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="727"/>
+        <location filename="../src/ui/MainWindow.cpp" line="763"/>
         <source>Untitled</source>
         <translation>제목 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="729"/>
+        <location filename="../src/ui/MainWindow.cpp" line="765"/>
         <source>%1[*] — Ugurugu</source>
         <translation>%1[*] — Ugurugu</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="767"/>
+        <location filename="../src/ui/MainWindow.cpp" line="886"/>
         <source>Unsaved changes</source>
         <translation>저장되지 않은 변경 사항</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="772"/>
+        <location filename="../src/ui/MainWindow.cpp" line="891"/>
         <source>The document has unsaved changes.</source>
         <translation>문서에 저장되지 않은 변경 사항이 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="777"/>
+        <location filename="../src/ui/MainWindow.cpp" line="896"/>
         <source>Save (S)</source>
         <translation>저장(S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="781"/>
+        <location filename="../src/ui/MainWindow.cpp" line="900"/>
         <source>Don&apos;t Save (N)</source>
         <translation>저장 안 함(N)</translation>
     </message>
@@ -2725,7 +2973,7 @@ The recovery file was not deleted. You can find it at:
         <translation>취소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="784"/>
+        <location filename="../src/ui/MainWindow.cpp" line="903"/>
         <source>Cancel (ESC)</source>
         <translation>취소(ESC)</translation>
     </message>
@@ -2750,19 +2998,19 @@ The recovery file was not deleted. You can find it at:
         <translation>드래그하여 선택 내용 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="841"/>
+        <location filename="../src/ui/MainWindow.cpp" line="960"/>
         <source>Save project</source>
         <translation>프로젝트 저장</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="853"/>
-        <location filename="../src/ui/MainWindow.cpp" line="864"/>
-        <location filename="../src/ui/MainWindow.cpp" line="877"/>
+        <location filename="../src/ui/MainWindow.cpp" line="972"/>
+        <location filename="../src/ui/MainWindow.cpp" line="983"/>
+        <location filename="../src/ui/MainWindow.cpp" line="996"/>
         <source>Save failed</source>
         <translation>저장 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="878"/>
+        <location filename="../src/ui/MainWindow.cpp" line="997"/>
         <source>Could not save the project.
 
 %1</source>
@@ -2771,37 +3019,37 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="886"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1005"/>
         <source>Saved %1</source>
         <translation>%1 저장됨</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="912"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1031"/>
         <source>New document</source>
         <translation>새 문서</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1111"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1230"/>
         <source>Scale selection</source>
         <translation>선택 영역 크기 조절</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1112"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1231"/>
         <source>Scale (%)</source>
         <translation>배율 (%)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1128"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1247"/>
         <source>Rotate selection</source>
         <translation>선택 영역 회전</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1248"/>
         <source>Angle (degrees)</source>
         <translation>각도 (도)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1376"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1495"/>
         <source>Open project</source>
         <translation>프로젝트 열기</translation>
     </message>
@@ -2876,7 +3124,7 @@ The recovery file was not deleted. You can find it at:
         <translation>PNG 이미지 (*.png)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1455"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1574"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="133"/>
         <source>Export current frame as &amp;image…</source>
         <translation>현재 프레임을 이미지로 내보내기(&amp;I)…</translation>
@@ -2897,29 +3145,29 @@ The recovery file was not deleted. You can find it at:
         <translation>선택한 선의 색상 또는 굵기를 변경합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="335"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="354"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="362"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="381"/>
         <source>Preset export failed</source>
         <translation>프리셋 내보내기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="336"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="363"/>
         <source>Could not prepare the preset.</source>
         <translation>프리셋을 준비할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="340"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="367"/>
         <source>Export WWP preset</source>
         <translation>WWP 프리셋 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="342"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="366"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="369"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="393"/>
         <source>Ugurugu presets (*.wwpreset)</source>
         <translation>Ugurugu 프리셋 (*.wwpreset)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="355"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="382"/>
         <source>Could not write the preset.
 
 %1</source>
@@ -2928,27 +3176,27 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="358"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="385"/>
         <source>Exported preset %1</source>
         <translation>프리셋 %1 내보냄</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="364"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="391"/>
         <source>Import WWP preset</source>
         <translation>WWP 프리셋 가져오기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="377"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="404"/>
         <source>The preset could not be read or is too large.</source>
         <translation>프리셋을 읽을 수 없거나 파일이 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="388"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="415"/>
         <source>Preset import failed</source>
         <translation>프리셋 가져오기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="389"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="416"/>
         <source>Could not import the preset.
 
 %1</source>
@@ -2957,12 +3205,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="390"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="417"/>
         <source>The preset settings are invalid.</source>
         <translation>프리셋 설정이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="399"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="425"/>
         <source>Imported preset %1</source>
         <translation>프리셋 %1 가져옴</translation>
     </message>
@@ -2970,28 +3218,28 @@ The recovery file was not deleted. You can find it at:
 <context>
     <name>ugurugu::SelectionClipboardCodec</name>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="63"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="65"/>
         <source>The selected layer cannot be copied.</source>
         <translation>선택한 레이어는 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="69"/>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="130"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="71"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="132"/>
         <source>The selection could not be copied.</source>
         <translation>선택 영역을 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="76"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="78"/>
         <source>The selection is empty.</source>
         <translation>선택 영역이 비어 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="100"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="102"/>
         <source>The layer is too complex to copy.</source>
         <translation>레이어가 너무 복잡해 복사할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/SelectionClipboardCodec.cpp" line="153"/>
+        <location filename="../src/io/SelectionClipboardCodec.cpp" line="155"/>
         <source>The clipboard content is not supported.</source>
         <translation>지원하지 않는 클립보드 내용입니다.</translation>
     </message>
@@ -3169,54 +3417,84 @@ The recovery file was not deleted. You can find it at:
 <context>
     <name>ugurugu::TimelineBar</name>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="84"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="86"/>
         <source>Play preview (P)</source>
         <translation>미리보기 재생 (P)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="85"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="87"/>
         <source>Play preview</source>
         <translation>미리보기 재생</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="91"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="93"/>
         <source>Current frame</source>
         <translation>현재 프레임</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="103"/>
-        <location filename="../src/ui/TimelineBar.cpp" line="104"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="105"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="106"/>
         <source>Animation frames</source>
         <translation>애니메이션 프레임 수</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="124"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="126"/>
         <source>Playback speed (frames per second)</source>
         <translation>재생 속도 (초당 프레임 수)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="125"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="127"/>
         <source>Playback speed</source>
         <translation>재생 속도</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineBar.cpp" line="116"/>
+        <location filename="../src/ui/TimelineBar.cpp" line="135"/>
+        <source>Hide</source>
+        <translation>접기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineBar.cpp" line="137"/>
+        <source>Hide animation bar (Ctrl+T)</source>
+        <translation>애니메이션 바 접기 (Ctrl+T)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineBar.cpp" line="138"/>
+        <source>Hide animation bar</source>
+        <translation>애니메이션 바 접기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineBar.cpp" line="118"/>
         <source>FPS</source>
         <translation>FPS</translation>
     </message>
 </context>
 <context>
+    <name>ugurugu::ToolDock</name>
+    <message>
+        <location filename="../src/ui/ToolDock.cpp" line="34"/>
+        <source>Tool settings</source>
+        <translation>도구 설정</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ToolDock.cpp" line="70"/>
+        <source>Click the canvas to pick up its color.
+Alt+click does the same from the brush, eraser or paint bucket.</source>
+        <translation>캔버스를 클릭하여 색상을 추출합니다.
+브러시, 지우개 또는 페인트 통에서 Alt+클릭해도 같습니다.</translation>
+    </message>
+</context>
+<context>
     <name>ugurugu::UpdateController</name>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="117"/>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="239"/>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="290"/>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="319"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="123"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="281"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="332"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="361"/>
         <source>Update failed</source>
         <translation>업데이트 실패</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="118"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="124"/>
         <source>Could not check for updates.
 
 %1</source>
@@ -3225,42 +3503,51 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="135"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="141"/>
         <source>You&apos;re up to date</source>
         <translation>최신 버전입니다</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="136"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="142"/>
         <source>Ugurugu %1 is the latest version.</source>
         <translation>Ugurugu %1이 최신 버전입니다.</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="166"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="189"/>
         <source>Update available</source>
         <translation>업데이트가 있습니다</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="167"/>
-        <source>Ugurugu %1 is available. Download and install it now?</source>
-        <translation>Ugurugu %1을 사용할 수 있습니다. 지금 다운로드하고 설치할까요?</translation>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="193"/>
+        <source>Ugurugu %1 is available.</source>
+        <translation>Ugurugu %1 버전을 사용할 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="193"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="212"/>
+        <source>Download and install it now?</source>
+        <translation>지금 다운로드하고 설치할까요?</translation>
+    </message>
+    <message>
+        <source>Ugurugu %1 is available. Download and install it now?</source>
+        <translation type="vanished">Ugurugu %1을 사용할 수 있습니다. 지금 다운로드하고 설치할까요?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="236"/>
         <source>Downloading update…</source>
         <translation>업데이트 다운로드 중…</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="199"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="241"/>
         <source>Ugurugu update</source>
         <translation>Ugurugu 업데이트</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="226"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="268"/>
         <source>The update download failed unexpectedly.</source>
         <translation>업데이트를 다운로드하는 중 예기치 않은 오류가 발생했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="240"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="282"/>
         <source>Could not download the update.
 
 %1</source>
@@ -3269,8 +3556,8 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="291"/>
-        <location filename="../src/app/UpdateControllerWindows.cpp" line="320"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="333"/>
+        <location filename="../src/app/UpdateControllerWindows.cpp" line="362"/>
         <source>The update was downloaded but could not be installed.
 
 %1</source>
@@ -3364,70 +3651,98 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
+    <name>ugurugu::WobbleDock</name>
+    <message>
+        <location filename="../src/ui/WobbleDock.cpp" line="16"/>
+        <source>Wobble</source>
+        <translation>우글거림</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/WobbleDock.cpp" line="33"/>
+        <source>Whole drawing</source>
+        <translation>전체 그림</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/WobbleDock.cpp" line="34"/>
+        <source>Active layer</source>
+        <translation>활성 레이어</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/WobbleDock.cpp" line="38"/>
+        <source>Follow drawing settings</source>
+        <translation>전체 그림 설정 따르기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/WobbleDock.cpp" line="42"/>
+        <source>Remove this layer&apos;s override and use the whole drawing settings.</source>
+        <translation>이 레이어의 개별 설정을 제거하고 전체 그림 설정을 사용합니다.</translation>
+    </message>
+</context>
+<context>
     <name>ugurugu::WobblePopoverPanel</name>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="64"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="65"/>
         <source>WOBBLE</source>
         <translation>우글거림</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="83"/>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="124"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="84"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="125"/>
         <source> px</source>
         <translation> px</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="92"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="93"/>
         <source>Classic</source>
         <translation>클래식</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="93"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="94"/>
         <source>Smooth</source>
         <translation>부드럽게</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="94"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="95"/>
         <source>Stepped</source>
         <translation>단계별</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="95"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="96"/>
         <source>Motion style</source>
         <translation>모션 스타일</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="101"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="102"/>
         <source>Pose count</source>
         <translation>포즈 수</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="107"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="108"/>
         <source>Detail</source>
         <translation>디테일</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="110"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="111"/>
         <source>Linked</source>
         <translation>연결</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="112"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="113"/>
         <source>Randomness</source>
         <translation>무작위성</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="114"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="115"/>
         <source>Broken line</source>
         <translation>끊어진 선</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="118"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="119"/>
         <source>Break amount</source>
         <translation>끊김 정도</translation>
     </message>
     <message>
-        <location filename="../src/ui/WobblePopoverPanel.cpp" line="125"/>
+        <location filename="../src/ui/WobblePopoverPanel.cpp" line="126"/>
         <source>Break range</source>
         <translation>끊김 범위</translation>
     </message>

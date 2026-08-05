@@ -14,22 +14,24 @@
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/CanvasSizeDialog.hpp"
 #include "ui/CanvasWidget.hpp"
-#include "ui/ColorSwatchRow.hpp"
+#include "ui/ColorDock.hpp"
+#include "ui/ColorHistoryDock.hpp"
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/Icons.hpp"
 #include "ui/ImageSizeDialog.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/LayerDock.hpp"
-#include "ui/ToolDock.hpp"
+#include "ui/PaletteDockAreaManager.hpp"
 #include "ui/PopoverToolButton.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
-#include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"
+#include "ui/ToolDock.hpp"
 #include "ui/ToolPopover.hpp"
 #include "ui/WandPopoverPanel.hpp"
+#include "ui/WobbleDock.hpp"
 
 #ifdef Q_OS_MACOS
 #include "ui/MacWindowChrome.hpp"
@@ -68,6 +70,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QStringList>
+#include <QTabWidget>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -86,6 +89,9 @@ namespace ugurugu
 
 namespace
 {
+
+constexpr int dockLayoutVersion = 3;
+constexpr QLatin1StringView simpleModeKey("window/simpleMode");
 
 QString projectExtension()
 {
@@ -158,6 +164,10 @@ MainWindow::MainWindow(QWidget *parent)
     setObjectName(QStringLiteral("MainWindow"));
     setAcceptDrops(false);
     setMinimumSize(900, 640);
+    setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks
+                   | QMainWindow::AllowTabbedDocks
+                   | QMainWindow::GroupedDragging);
+    setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
     auto *central = new QWidget(this);
     auto *centralLayout = new QVBoxLayout(central);
@@ -170,10 +180,12 @@ MainWindow::MainWindow(QWidget *parent)
     centralLayout->addWidget(m_timeline);
     setCentralWidget(central);
 
-    m_toolDock = new ToolDock(&m_controller, m_canvas, this);
-    addDockWidget(Qt::RightDockWidgetArea, m_toolDock);
+    m_toolDock = new ToolDock(m_canvas, this);
+    m_colorDock = new ColorDock(m_canvas, this);
+    m_colorHistoryDock = new ColorHistoryDock(m_canvas, this);
+    m_wobbleDock = new WobbleDock(&m_controller, this);
     m_layerDock = new LayerDock(&m_controller, this);
-    addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
+    resetDockLayout();
     connect(m_layerDock,
         &LayerDock::groupSelectionChanged,
         m_canvas,
@@ -216,20 +228,39 @@ MainWindow::MainWindow(QWidget *parent)
     const QSettings settings;
     const bool geometryRestored = restoreGeometry(
         settings.value(QStringLiteral("window/geometry")).toByteArray());
-    restoreState(settings.value(QStringLiteral("window/state")).toByteArray());
+    const bool stateRestored = restoreState(
+        settings.value(QStringLiteral("window/state")).toByteArray(),
+        dockLayoutVersion);
+    if (!stateRestored)
+    {
+        resetDockLayout();
+    }
     if (!geometryRestored)
     {
         resize(1280, 820);
     }
-    // Qt splits a dock area evenly by default, which left the tool dock too
-    // short to reach its colour and wobble sections without scrolling. The
-    // tool dock carries three sections to the layer dock's one, so it gets the
-    // larger share, and its column is held to a readable width.
     resizeDocks({m_toolDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
-    resizeDocks({m_toolDock, m_layerDock}, {6, 4}, Qt::Vertical);
+    resizeDocks(
+        {m_toolDock, m_colorDock, m_colorHistoryDock}, {3, 3, 4}, Qt::Vertical);
+
+    m_paletteDockAreaManager =
+        new PaletteDockAreaManager(this, dockLayoutVersion);
+    for (QDockWidget *dock : {static_cast<QDockWidget *>(m_toolDock),
+             static_cast<QDockWidget *>(m_colorDock),
+             static_cast<QDockWidget *>(m_colorHistoryDock),
+             static_cast<QDockWidget *>(m_wobbleDock),
+             static_cast<QDockWidget *>(m_layerDock)})
+    {
+        m_paletteDockAreaManager->registerDock(dock);
+    }
+    m_paletteDockAreaManager->restorePersistedState();
 
     m_canvas->setAnimateWhileDrawing(SettingsDialog::animateWhileDrawing());
     setTimelineVisible(m_showTimelineAction->isChecked());
+    if (settings.value(simpleModeKey, false).toBool())
+    {
+        m_simpleModeAction->setChecked(true);
+    }
     updateWindowTitle();
     m_canvas->setFocus(Qt::OtherFocusReason);
     qApp->installEventFilter(this);
@@ -612,8 +643,17 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
-    settings.setValue(QStringLiteral("window/state"), saveState());
-    m_toolDock->saveState();
+    QByteArray dockState;
+    if (m_simpleModeAction->isChecked() && !m_studioDockState.isEmpty())
+    {
+        dockState = m_studioDockState;
+    }
+    else
+    {
+        dockState = m_paletteDockAreaManager->layoutStateForPersistence();
+    }
+    settings.setValue(QStringLiteral("window/state"), dockState);
+    m_toolDock->rememberWidth();
     saveDrawingToolSettings();
     clearAutosave();
     event->accept();
@@ -745,19 +785,104 @@ void MainWindow::updateWindowTitle()
     setWindowFilePath(m_currentFilePath);
 }
 
-void MainWindow::updateColorButton()
+void MainWindow::resetDockLayout()
 {
-    if (!m_colorButton)
+    removeDockWidget(m_toolDock);
+    removeDockWidget(m_colorDock);
+    removeDockWidget(m_colorHistoryDock);
+    removeDockWidget(m_wobbleDock);
+    removeDockWidget(m_layerDock);
+
+    m_toolDock->setFloating(false);
+    m_colorDock->setFloating(false);
+    m_colorHistoryDock->setFloating(false);
+    m_wobbleDock->setFloating(false);
+    m_layerDock->setFloating(false);
+
+    addDockWidget(Qt::RightDockWidgetArea, m_toolDock);
+    addDockWidget(Qt::RightDockWidgetArea, m_colorDock);
+    splitDockWidget(m_toolDock, m_colorDock, Qt::Vertical);
+    addDockWidget(Qt::RightDockWidgetArea, m_colorHistoryDock);
+    splitDockWidget(m_colorDock, m_colorHistoryDock, Qt::Vertical);
+    addDockWidget(Qt::RightDockWidgetArea, m_wobbleDock);
+    tabifyDockWidget(m_toolDock, m_wobbleDock);
+    addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
+    tabifyDockWidget(m_colorHistoryDock, m_layerDock);
+
+    m_toolDock->show();
+    m_colorDock->show();
+    m_colorHistoryDock->show();
+    m_wobbleDock->show();
+    m_layerDock->show();
+    m_toolDock->raise();
+    m_colorHistoryDock->raise();
+    resizeDocks({m_toolDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
+    resizeDocks(
+        {m_toolDock, m_colorDock, m_colorHistoryDock}, {3, 3, 4}, Qt::Vertical);
+}
+
+void MainWindow::setSimpleMode(bool enabled)
+{
+    QSettings().setValue(simpleModeKey, enabled);
+    m_simpleModeAction->setText(
+        enabled ? tr("Studio mode") : tr("Simple mode"));
+
+    QAction *resetAction =
+        findChild<QAction *>(QStringLiteral("resetPanelLayoutAction"));
+    const QList<QDockWidget *> advancedDocks{
+        m_toolDock, m_wobbleDock, m_colorHistoryDock};
+
+    if (enabled)
     {
+        m_studioDockState =
+            m_paletteDockAreaManager->layoutStateForPersistence();
+        m_studioTimelineVisible = m_showTimelineAction->isChecked();
+        for (QDockWidget *dock : advancedDocks)
+        {
+            dock->hide();
+            dock->toggleViewAction()->setEnabled(false);
+        }
+        m_showTimelineAction->setEnabled(false);
+        if (resetAction)
+        {
+            resetAction->setEnabled(false);
+        }
+        m_timeline->hide();
+
+        removeDockWidget(m_colorDock);
+        removeDockWidget(m_layerDock);
+        m_colorDock->setFloating(false);
+        m_layerDock->setFloating(false);
+        addDockWidget(Qt::RightDockWidgetArea, m_colorDock);
+        addDockWidget(Qt::RightDockWidgetArea, m_layerDock);
+        splitDockWidget(m_colorDock, m_layerDock, Qt::Vertical);
+        m_colorDock->show();
+        m_layerDock->show();
+        resizeDocks(
+            {m_colorDock}, {m_toolDock->preferredWidth()}, Qt::Horizontal);
+        resizeDocks({m_colorDock, m_layerDock}, {1, 1}, Qt::Vertical);
+        statusBar()->showMessage(
+            tr("Simple mode: essential panels only"), 3000);
         return;
     }
-    const QColor color = m_canvas->brushColor();
-    m_colorButton->setStyleSheet(
-        QStringLiteral("QPushButton { background: %1; border: 2px solid "
-                       "rgba(255, 255, 255, 70); border-radius: 14px; }"
-                       "QPushButton:hover { border-color: %2; }"
-                       "QPushButton:focus { border-color: %2; }")
-            .arg(color.name(QColor::HexArgb), Theme::accent().name()));
+
+    for (QDockWidget *dock : advancedDocks)
+    {
+        dock->toggleViewAction()->setEnabled(true);
+    }
+    m_showTimelineAction->setEnabled(true);
+    if (resetAction)
+    {
+        resetAction->setEnabled(true);
+    }
+    if (!m_studioDockState.isEmpty())
+    {
+        restoreState(m_studioDockState, dockLayoutVersion);
+    }
+    m_paletteDockAreaManager->resumeCollapsedAreas();
+    m_showTimelineAction->setChecked(m_studioTimelineVisible);
+    setTimelineVisible(m_studioTimelineVisible);
+    statusBar()->showMessage(tr("Studio mode: all panels available"), 3000);
 }
 
 bool MainWindow::hasUnsavedWork() const

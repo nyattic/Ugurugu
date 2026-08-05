@@ -6,6 +6,9 @@
 #include <QMessageBox>
 #include <QMimeData>
 
+#include <cmath>
+#include <numbers>
+
 namespace ugurugu
 {
 
@@ -45,6 +48,25 @@ void dragFreehandQuad(CanvasWidget *canvas,
     QTest::mouseRelease(canvas, Qt::LeftButton, modifiers, topLeft);
 }
 
+Document outlinedCircleDocument()
+{
+    Document document = Document::createDefault(QSize(128, 128));
+    document.wobbleAmount = 0.0;
+    Stroke outline;
+    outline.color = Qt::black;
+    outline.width = 6.0;
+    outline.brush.antialiasing = false;
+    for (int sample = 0; sample <= 64; ++sample)
+    {
+        const qreal angle = 2.0 * std::numbers::pi_v<qreal> * sample / 64.0;
+        outline.points.append({QPointF(64.0 + std::cos(angle) * 36.0,
+                                   64.0 + std::sin(angle) * 36.0),
+            1.0});
+    }
+    document.layers.first().strokes.append(outline);
+    return document;
+}
+
 }
 
 class UiSelectionTests final : public QObject
@@ -57,6 +79,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
@@ -66,6 +89,7 @@ private slots:
         QSettings settings;
         settings.remove(QStringLiteral("drawingTools"));
         settings.remove(QStringLiteral("brush/recentColors"));
+        settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
         settings.sync();
     }
@@ -122,6 +146,92 @@ private slots:
         redoAction->trigger();
         QTRY_VERIFY(canvas->hasSelection());
         QVERIFY(!window.isWindowModified());
+    }
+
+    void fillsAnOutlinedAreaInsideALassoWithoutLosingTheBorder()
+    {
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(outlinedCircleDocument()));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentPoint)
+                .toPoint();
+        };
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        QTest::mousePress(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(20.0, 20.0)));
+        QTest::mouseRelease(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(108.0, 108.0)));
+        QTRY_VERIFY(canvas.hasSelection());
+
+        canvas.setBrushColor(QColor(220, 40, 70));
+        canvas.setTool(CanvasWidget::Tool::Bucket);
+        QTest::mouseClick(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(64.0, 64.0)));
+        QTRY_COMPARE(controller.document().layers.first().strokes.size(), 2);
+
+        const QImage rendered = RenderEngine::render(controller.document(), 0);
+        const QColor center = rendered.pixelColor(64, 64);
+        const QColor border = rendered.pixelColor(100, 64);
+        const QColor outside = rendered.pixelColor(112, 64);
+        QVERIFY(center.red() > 180 && center.green() < 80);
+        QVERIFY(border.red() < 40 && border.green() < 40 && border.blue() < 40);
+        QVERIFY(outside.red() > 240 && outside.green() > 240
+                && outside.blue() > 240);
+    }
+
+    void fillsTheSelectionWithTheBrushColor()
+    {
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(outlinedCircleDocument()));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentPoint)
+                .toPoint();
+        };
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        QTest::mousePress(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(36.0, 36.0)));
+        QTest::mouseRelease(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(92.0, 92.0)));
+        QTRY_VERIFY(canvas.hasSelection());
+
+        canvas.setBrushColor(QColor(40, 100, 220));
+        QVERIFY(canvas.fillSelection());
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        const QImage rendered = RenderEngine::render(controller.document(), 0);
+        const QColor center = rendered.pixelColor(64, 64);
+        const QColor border = rendered.pixelColor(100, 64);
+        QVERIFY(center.blue() > 180 && center.red() < 80);
+        QVERIFY(border.red() < 40 && border.green() < 40 && border.blue() < 40);
     }
 
     void copyPasteCreatesNewLayerWithoutTouchingTheActiveLayer()

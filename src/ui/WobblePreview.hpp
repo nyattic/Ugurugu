@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QTimer>
+#include <QUuid>
 #include <QWidget>
 
 namespace ugurugu
@@ -18,6 +19,7 @@ public:
 
     QSize sizeHint() const override;
     bool isAnimationActive() const;
+    void setScopeLayer(const QUuid &layerId);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -26,9 +28,11 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
+    qreal currentAmount() const;
     void syncAnimationState();
 
     DocumentController *m_controller;
+    QUuid m_scopeLayer;
     QTimer m_timer;
     QTimer m_settleTimer;
     qreal m_phase = 0.0;

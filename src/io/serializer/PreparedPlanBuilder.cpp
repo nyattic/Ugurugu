@@ -265,6 +265,7 @@ MetadataReuseResult reusePreparedContentForMetadataEdit(const Document &source,
             || (layer.motion
                 && !isValidMotionSettings(
                     *layer.motion, source.animationFrames))
+            || layer.wobbleAmount.has_value() != layer.motion.has_value()
             || (layer.kind == LayerKind::Group
                 && (!layer.strokes.isEmpty() || layer.clipToLayerBelow
                     || layer.reference || layer.wobbleAmount || layer.motion)))

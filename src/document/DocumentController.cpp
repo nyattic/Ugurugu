@@ -1127,6 +1127,15 @@ void DocumentController::setAnimationFrames(int frames)
         candidate.motion.poseCount = normalized;
         mergeId = 0;
     }
+    for (Layer &layer : candidate.layers)
+    {
+        if (layer.motion && layer.motion->style != MotionStyle::Classic
+            && layer.motion->poseCount > normalized)
+        {
+            layer.motion->poseCount = normalized;
+            mergeId = 0;
+        }
+    }
     tryCommitCandidate(tr("Change animation frames"),
         std::move(candidate),
         {},
