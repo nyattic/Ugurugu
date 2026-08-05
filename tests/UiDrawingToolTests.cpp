@@ -1,3 +1,4 @@
+#include "support/DocumentControllerTestAccess.hpp"
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
@@ -808,6 +809,215 @@ private slots:
         QTest::mouseRelease(
             &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
         QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+    }
+
+    void undoDuringActiveStrokeCancelsStrokeAndPreservesRedoTail()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *redoAction =
+            window.findChild<QAction *>(QStringLiteral("redoAction"));
+        QVERIFY(canvas);
+        QVERIFY(undoAction);
+        QVERIFY(redoAction);
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        DocumentUndoStack *history = controller.undoStack();
+        const QSize documentSize = controller.document().size;
+        QVERIFY(!documentSize.isEmpty());
+
+        const auto activeLayerStrokeCount = [&controller]() -> qsizetype
+        {
+            const Document &document = controller.document();
+            const Layer *layer = document.layer(document.activeLayerId);
+            return layer ? layer->strokes.size() : -1;
+        };
+        const auto widgetPoint = [canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                *canvas, QPointF(x, y))
+                .toPoint();
+        };
+        const auto drawStroke = [canvas, &widgetPoint](qreal y)
+        {
+            const QPoint start = widgetPoint(20.0, y);
+            const QPoint end = widgetPoint(80.0, y);
+            QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(canvas, end, 5);
+            QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, end);
+        };
+
+        const qreal firstY = documentSize.height() * 0.25;
+        const qreal secondY = documentSize.height() * 0.5;
+        const qreal thirdY = documentSize.height() * 0.75;
+        drawStroke(firstY);
+        drawStroke(secondY);
+        QCOMPARE(activeLayerStrokeCount(), qsizetype(2));
+        QCOMPARE(history->count(), 2);
+        QCOMPARE(history->index(), 2);
+        QVERIFY(history->canUndo());
+        QVERIFY(!history->canRedo());
+        QVERIFY(undoAction->isEnabled());
+        QVERIFY(!redoAction->isEnabled());
+
+        const QPoint thirdStart = widgetPoint(20.0, thirdY);
+        const QPoint thirdEnd = widgetPoint(80.0, thirdY);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, thirdStart);
+        QTest::mouseMove(canvas, thirdEnd, 5);
+        QVERIFY(CanvasWidgetTestAccess::drawing(*canvas));
+
+        QVERIFY(undoAction->isEnabled());
+        undoAction->trigger();
+
+        QVERIFY(history->canUndo());
+        QVERIFY(history->canRedo());
+        QVERIFY(redoAction->isEnabled());
+        const qsizetype strokesAfterUndo = activeLayerStrokeCount();
+        const int historyCountAfterUndo = history->count();
+        const int historyIndexAfterUndo = history->index();
+        const quint64 revisionAfterUndo =
+            DocumentControllerTestAccess::contentRevision(controller);
+        const QByteArray documentAfterUndo =
+            DocumentSerializer::toJson(controller.document());
+        QCOMPARE(strokesAfterUndo, qsizetype(1));
+        QCOMPARE(historyCountAfterUndo, 2);
+        QCOMPARE(historyIndexAfterUndo, 1);
+
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, thirdEnd);
+
+        QVERIFY(!CanvasWidgetTestAccess::drawing(*canvas));
+        QVERIFY2(activeLayerStrokeCount() == strokesAfterUndo,
+            qPrintable(
+                QStringLiteral("release committed the canceled stroke: "
+                               "strokes=%1 (expected %2), historyCount=%3, "
+                               "historyIndex=%4, canUndo=%5, canRedo=%6")
+                    .arg(activeLayerStrokeCount())
+                    .arg(strokesAfterUndo)
+                    .arg(history->count())
+                    .arg(history->index())
+                    .arg(history->canUndo())
+                    .arg(history->canRedo())));
+        QVERIFY2(history->canRedo(),
+            qPrintable(QStringLiteral("the redo tail was discarded: "
+                                      "historyCount=%1, historyIndex=%2")
+                    .arg(history->count())
+                    .arg(history->index())));
+        QVERIFY(history->canUndo());
+        QVERIFY(undoAction->isEnabled());
+        QVERIFY(redoAction->isEnabled());
+        QCOMPARE(history->count(), historyCountAfterUndo);
+        QCOMPARE(history->index(), historyIndexAfterUndo);
+        QCOMPARE(DocumentControllerTestAccess::contentRevision(controller),
+            revisionAfterUndo);
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
+            documentAfterUndo);
+
+        redoAction->trigger();
+        QCOMPARE(activeLayerStrokeCount(), qsizetype(2));
+        QVERIFY(!history->canRedo());
+        QCOMPARE(history->index(), 2);
+    }
+
+    void undoDuringActiveLassoCancelsSelectionAndPreservesRedoTail()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *undoAction =
+            window.findChild<QAction *>(QStringLiteral("undoAction"));
+        QAction *redoAction =
+            window.findChild<QAction *>(QStringLiteral("redoAction"));
+        QVERIFY(canvas);
+        QVERIFY(undoAction);
+        QVERIFY(redoAction);
+
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        DocumentUndoStack *history = controller.undoStack();
+        const QSize documentSize = controller.document().size;
+        QVERIFY(!documentSize.isEmpty());
+
+        const auto activeLayerStrokeCount = [&controller]() -> qsizetype
+        {
+            const Document &document = controller.document();
+            const Layer *layer = document.layer(document.activeLayerId);
+            return layer ? layer->strokes.size() : -1;
+        };
+        const auto widgetPoint = [canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                *canvas, QPointF(x, y))
+                .toPoint();
+        };
+
+        for (const qreal y :
+            {documentSize.height() * 0.25, documentSize.height() * 0.5})
+        {
+            const QPoint start = widgetPoint(20.0, y);
+            const QPoint end = widgetPoint(80.0, y);
+            QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(canvas, end, 5);
+            QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, end);
+        }
+        QCOMPARE(activeLayerStrokeCount(), qsizetype(2));
+        QCOMPARE(history->count(), 2);
+        QCOMPARE(history->index(), 2);
+        QVERIFY(!history->canRedo());
+
+        canvas->setTool(CanvasWidget::Tool::Lasso);
+        QVERIFY(!canvas->hasSelection());
+        const QPoint topLeft = widgetPoint(20.0, 20.0);
+        const QPoint topRight = widgetPoint(80.0, 20.0);
+        const QPoint bottomRight = widgetPoint(80.0, 80.0);
+        const QPoint bottomLeft = widgetPoint(20.0, 80.0);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+        QTest::mouseMove(canvas, topRight, 5);
+        QTest::mouseMove(canvas, bottomRight, 5);
+        QTest::mouseMove(canvas, bottomLeft, 5);
+        QVERIFY(CanvasWidgetTestAccess::areaSelectionActive(*canvas));
+
+        QVERIFY(undoAction->isEnabled());
+        undoAction->trigger();
+
+        QVERIFY(history->canRedo());
+        const qsizetype strokesAfterUndo = activeLayerStrokeCount();
+        const int historyCountAfterUndo = history->count();
+        const int historyIndexAfterUndo = history->index();
+        const QByteArray documentAfterUndo =
+            DocumentSerializer::toJson(controller.document());
+        QCOMPARE(strokesAfterUndo, qsizetype(1));
+        QCOMPARE(historyIndexAfterUndo, 1);
+
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, topLeft);
+
+        QVERIFY2(!canvas->hasSelection(),
+            qPrintable(QStringLiteral("release finished the canceled lasso: "
+                                      "historyCount=%1, historyIndex=%2, "
+                                      "canRedo=%3")
+                    .arg(history->count())
+                    .arg(history->index())
+                    .arg(history->canRedo())));
+        QVERIFY(history->canRedo());
+        QVERIFY(redoAction->isEnabled());
+        QCOMPARE(history->count(), historyCountAfterUndo);
+        QCOMPARE(history->index(), historyIndexAfterUndo);
+        QCOMPARE(activeLayerStrokeCount(), strokesAfterUndo);
+        QCOMPARE(DocumentSerializer::toJson(controller.document()),
+            documentAfterUndo);
+
+        redoAction->trigger();
+        QCOMPARE(activeLayerStrokeCount(), qsizetype(2));
+        QVERIFY(!history->canRedo());
     }
 
     void deactivationRestoresLassoAndCancelsSelectionMove()

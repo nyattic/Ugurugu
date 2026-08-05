@@ -266,6 +266,11 @@ public:
 
 signals:
     void documentReplaced();
+    // Emitted while the outgoing state is still installed, before the undo or
+    // redo applies its own state and its documentChanged. Live input captured
+    // identities from the outgoing state, so this is the only point at which a
+    // receiver can still cancel against the state the interaction began in.
+    void historyMovementStarting();
     void documentChanged();
     void activeLayerChanged(const QUuid &id);
     void modifiedChanged(bool modified);

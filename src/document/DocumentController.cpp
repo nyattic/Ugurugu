@@ -1389,6 +1389,7 @@ void DocumentController::applyHistoryMovement(
     {
         return;
     }
+    emit historyMovementStarting();
     if (forward)
     {
         command->redo();

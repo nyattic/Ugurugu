@@ -73,6 +73,10 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
             pruneSelection();
         });
     connect(m_controller,
+        &DocumentController::historyMovementStarting,
+        this,
+        &CanvasWidget::cancelActiveInteraction);
+    connect(m_controller,
         &DocumentController::documentReplaced,
         this,
         &CanvasWidget::clearSelection);

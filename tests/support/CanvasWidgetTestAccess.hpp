@@ -55,6 +55,16 @@ public:
         return canvas.m_selectionMask;
     }
 
+    static bool drawing(const CanvasWidget &canvas)
+    {
+        return canvas.m_drawing;
+    }
+
+    static bool areaSelectionActive(const CanvasWidget &canvas)
+    {
+        return canvas.m_areaSelectionActive;
+    }
+
     static QPointF mapToDocument(
         const CanvasWidget &canvas, const QPointF &widgetPosition)
     {
