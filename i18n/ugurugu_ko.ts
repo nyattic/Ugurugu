@@ -1938,8 +1938,8 @@
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="740"/>
-        <source>This layer&apos;s eraser or moved pixels overlap the layer below, so merging would erase its artwork</source>
-        <translation>이 레이어의 지우개 또는 이동한 픽셀이 아래 레이어와 겹쳐 병합하면 아래 그림이 지워집니다</translation>
+        <source>This layer resizes the canvas or erased merged artwork, so merging would change the picture</source>
+        <translation>이 레이어는 캔버스 크기를 바꾸거나 합쳐진 그림을 지운 적이 있어 병합하면 그림이 달라집니다</translation>
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="744"/>

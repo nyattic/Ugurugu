@@ -34,7 +34,8 @@ bool RenderEngine::renderStrokesOnLayer(QImage &layerImage,
         [](const Stroke &stroke)
         {
             return stroke.mode == StrokeMode::PixelSelection
-                   || stroke.mode == StrokeMode::Reframe;
+                   || stroke.mode == StrokeMode::Reframe
+                   || stroke.mode == StrokeMode::CompositeBoundary;
         });
     if (containsFramebufferOperations)
     {
@@ -122,6 +123,7 @@ bool RenderEngine::renderStrokesOnLayerRegion(QImage &layerImage,
             {
                 return stroke.mode == StrokeMode::PixelSelection
                        || stroke.mode == StrokeMode::Reframe
+                       || stroke.mode == StrokeMode::CompositeBoundary
                        || stroke.mode == StrokeMode::Fill;
             }))
     {
@@ -206,6 +208,18 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
                           ? layer.initialCanvasSize
                           : DocumentOperations::initialCanvasSize(
                                 layer.strokes, document.size);
+    // Erase and pixel-selection effects reach a stroke only from its own
+    // section or from the strokes after the last composite boundary, which
+    // draw on the flattened composite.
+    int totalBoundaries = 0;
+    for (const Stroke &operation : layer.strokes)
+    {
+        if (operation.mode == StrokeMode::CompositeBoundary)
+        {
+            ++totalBoundaries;
+        }
+    }
+    int sourceSection = 0;
     for (int index = 0; index < strokeIndex; ++index)
     {
         const Stroke &operation = layer.strokes[index];
@@ -217,6 +231,10 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
                 return {};
             }
             epochSize = operation.reframeOp->targetSize;
+        }
+        else if (operation.mode == StrokeMode::CompositeBoundary)
+        {
+            ++sourceSection;
         }
     }
     if (!epochSize.isValid())
@@ -268,11 +286,23 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
             scaledClipMasks);
     }
 
+    int currentSection = sourceSection;
     for (int index = strokeIndex + 1; index < layer.strokes.size(); ++index)
     {
         const Stroke &operation = layer.strokes[index];
+        if (operation.mode == StrokeMode::CompositeBoundary)
+        {
+            ++currentSection;
+            continue;
+        }
+        const bool reachesSource = currentSection == sourceSection
+                                   || currentSection == totalBoundaries;
         if (operation.mode == StrokeMode::PixelSelection)
         {
+            if (!reachesSource)
+            {
+                continue;
+            }
             if (!operation.pixelSelectionOp
                 || !applyPixelSelectionOperation(
                     coverage, *operation.pixelSelectionOp))
@@ -288,7 +318,7 @@ QImage RenderEngine::renderStrokeCoverage(const Document &document,
                 return {};
             }
         }
-        else if (operation.mode == StrokeMode::Erase)
+        else if (operation.mode == StrokeMode::Erase && reachesSource)
         {
             renderLayerStrokes(coverage,
                 layerDocument,

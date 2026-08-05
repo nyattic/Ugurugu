@@ -138,6 +138,23 @@ int estimatedPeakSurfaceCount(const Document &document,
         discardFreeSurfaces();
         ++residentSurfaces;
         notePeak();
+        // Composite-boundary sections hold their own surfaces until the last
+        // boundary flattens them, so a merged layer briefly needs one surface
+        // per boundary instead of one.
+        int boundaries = 0;
+        for (const Stroke &stroke : layer.strokes)
+        {
+            if (stroke.mode == StrokeMode::CompositeBoundary)
+            {
+                ++boundaries;
+            }
+        }
+        if (boundaries > 1)
+        {
+            residentSurfaces += boundaries - 1;
+            notePeak();
+            residentSurfaces -= boundaries - 1;
+        }
         if (layer.clipToLayerBelow)
         {
             recycleSurface();

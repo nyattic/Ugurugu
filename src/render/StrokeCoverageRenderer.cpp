@@ -724,14 +724,27 @@ RenderEngine::StrokeCoveragePlan StrokeCoverageRenderer::prepare(
     plan.canvasBefore.resize(layer.strokes.size());
     plan.primitiveBounds.resize(layer.strokes.size());
     plan.epochBefore.resize(layer.strokes.size());
+    plan.sectionBefore.resize(layer.strokes.size());
     plan.epochs.append(coverageEpoch(canvasSize));
     int epochIndex = 0;
+    int sectionIndex = 0;
     QHash<qint64, QRect> maskBoundsCache;
     for (int index = 0; index < layer.strokes.size(); ++index)
     {
         const Stroke &stroke = layer.strokes[index];
         plan.canvasBefore[index] = canvasSize;
         plan.epochBefore[index] = epochIndex;
+        plan.sectionBefore[index] = sectionIndex;
+        if (stroke.mode == StrokeMode::CompositeBoundary)
+        {
+            if (stroke.pixelSelectionOp || stroke.reframeOp || stroke.imageOp
+                || !stroke.points.isEmpty())
+            {
+                return {};
+            }
+            ++sectionIndex;
+            continue;
+        }
         if (stroke.mode == StrokeMode::Paint || stroke.mode == StrokeMode::Erase
             || stroke.mode == StrokeMode::Fill
             || stroke.mode == StrokeMode::Image)
@@ -779,6 +792,7 @@ RenderEngine::StrokeCoveragePlan StrokeCoverageRenderer::prepare(
         plan.epochs.append(coverageEpoch(canvasSize));
         ++epochIndex;
     }
+    plan.tailSection = sectionIndex;
     plan.valid = canvasSize == document.size;
     return plan;
 }
@@ -791,7 +805,8 @@ QRect StrokeCoverageRenderer::conservativeBounds(const Document &document,
     if (!plan.valid || strokeIndex < 0 || strokeIndex >= layer.strokes.size()
         || plan.canvasBefore.size() != layer.strokes.size()
         || plan.primitiveBounds.size() != layer.strokes.size()
-        || plan.epochBefore.size() != layer.strokes.size())
+        || plan.epochBefore.size() != layer.strokes.size()
+        || plan.sectionBefore.size() != layer.strokes.size())
     {
         return {};
     }
@@ -813,8 +828,15 @@ QRect StrokeCoverageRenderer::conservativeBounds(const Document &document,
         }
         afterIndex = effect;
         const Stroke &operation = layer.strokes[effect];
+        const bool reachesSource =
+            plan.sectionBefore[effect] == plan.sectionBefore[strokeIndex]
+            || plan.sectionBefore[effect] == plan.tailSection;
         if (operation.mode == StrokeMode::PixelSelection)
         {
+            if (!reachesSource)
+            {
+                continue;
+            }
             if (!operation.pixelSelectionOp
                 || operation.pixelSelectionOp->canvasSize != canvasSize)
             {
@@ -931,7 +953,8 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
 
     if (!plan.valid || plan.canvasBefore.size() != layer.strokes.size()
         || plan.primitiveBounds.size() != layer.strokes.size()
-        || plan.epochBefore.size() != layer.strokes.size())
+        || plan.epochBefore.size() != layer.strokes.size()
+        || plan.sectionBefore.size() != layer.strokes.size())
     {
         return exactRegion();
     }
@@ -1025,16 +1048,18 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
         }
         afterIndex = effect;
         const Stroke &operation = layer.strokes[effect];
+        const bool reachesSource =
+            plan.sectionBefore[effect] == plan.sectionBefore[strokeIndex]
+            || plan.sectionBefore[effect] == plan.tailSection;
         if (operation.mode == StrokeMode::PixelSelection)
         {
-            if (!operation.pixelSelectionOp
+            if (!reachesSource || !operation.pixelSelectionOp
                 || !frame.bounds.intersects(
                     operation.pixelSelectionOp->sourceBounds))
             {
                 continue;
             }
-            if (!operation.pixelSelectionOp
-                || !applyPixelSelectionOperation(
+            if (!applyPixelSelectionOperation(
                     frame, *operation.pixelSelectionOp, stats))
             {
                 return exactRegion();
@@ -1051,7 +1076,8 @@ RenderEngine::StrokeCoverageRegion StrokeCoverageRenderer::render(
         }
         else if (operation.mode == StrokeMode::Erase && !frame.bounds.isEmpty())
         {
-            if (!plan.primitiveBounds[effect].intersects(frame.bounds))
+            if (!reachesSource
+                || !plan.primitiveBounds[effect].intersects(frame.bounds))
             {
                 continue;
             }

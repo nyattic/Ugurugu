@@ -647,7 +647,9 @@ private slots:
         QVERIFY(controller.mergeLayerDown(upperId));
         QCOMPARE(controller.document().layers.size(), 1);
         QCOMPARE(controller.document().activeLayerId, lowerId);
-        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        // Two strokes plus the composite-boundary pair sealing the merged
+        // layer's section.
+        QCOMPARE(controller.document().layers.first().strokes.size(), 4);
         QCOMPARE(RenderEngine::render(controller.document(), 0), before);
 
         controller.undoStack()->undo();
@@ -674,7 +676,9 @@ private slots:
 
         QVERIFY(controller.mergeLayerDown(upperId));
         QCOMPARE(controller.document().layers.size(), 1);
-        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        // One stroke plus the composite-boundary pair sealing the merged
+        // layer's section.
+        QCOMPARE(controller.document().layers.first().strokes.size(), 3);
         QCOMPARE(RenderEngine::render(controller.document(), 0), before);
         QCOMPARE(RenderEngine::render(controller.document(), 11), laterBefore);
     }
@@ -782,7 +786,10 @@ private slots:
         QCOMPARE(controller.document().layer(layerId)->motion->poseCount, 20);
     }
 
-    void refusesToMergeALayerWhoseEraserWouldEatTheLayerBelow()
+    // The one merge a composite boundary cannot express: an eraser drawn
+    // after a merge acted on the flattened artwork, and sealing it into its
+    // own section would give that reach up and change the picture.
+    void refusesToMergeWhenATailEraserAlreadyReachedMergedArtwork()
     {
         DocumentController controller;
         controller.newDocument(QSize(64, 64));
@@ -794,16 +801,32 @@ private slots:
             {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
         controller.addStroke(lowerId, lowerStroke);
         controller.addLayer();
-        const QUuid upperId = controller.document().activeLayerId;
-        // Erasing on its own layer leaves the layer below untouched. Appending
-        // that stroke to the layer below would let it cut into pixels it never
-        // covered before.
-        Stroke upperErase;
-        upperErase.mode = StrokeMode::Erase;
-        upperErase.width = 24.0;
-        upperErase.points = {
+        const QUuid middleId = controller.document().activeLayerId;
+        Stroke middleStroke;
+        middleStroke.color = QColor(30, 60, 200);
+        middleStroke.width = 24.0;
+        middleStroke.points = {
             {QPointF(8.0, 32.0), 1.0}, {QPointF(56.0, 32.0), 1.0}};
-        controller.addStroke(upperId, upperErase);
+        controller.addStroke(middleId, middleStroke);
+        QVERIFY(controller.mergeLayerDown(middleId));
+        const QUuid mergedId = controller.document().activeLayerId;
+
+        Stroke tailErase;
+        tailErase.mode = StrokeMode::Erase;
+        tailErase.width = 24.0;
+        tailErase.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        QCOMPARE(controller.addStroke(mergedId, tailErase),
+            DocumentController::AddStrokeResult::Added);
+
+        controller.addLayer();
+        const QUuid upperId = controller.document().activeLayerId;
+        Stroke upperStroke;
+        upperStroke.color = QColor(40, 180, 90);
+        upperStroke.width = 8.0;
+        upperStroke.points = {
+            {QPointF(8.0, 8.0), 1.0}, {QPointF(56.0, 8.0), 1.0}};
+        controller.addStroke(upperId, upperStroke);
         controller.undoStack()->setClean();
         const QImage before = RenderEngine::render(controller.document(), 0);
 
@@ -852,12 +875,6 @@ private slots:
             before.append(RenderEngine::render(controller.document(), frame));
         }
 
-        QEXPECT_FAIL("",
-            "Contract for the erase-scope plan: merge stays blocked until "
-            "composite-boundary rendering lands (stage 5). An XPASS means "
-            "the guard came off; remove this marker and let the full "
-            "contract run.",
-            Abort);
         QCOMPARE(controller.mergeLayerDownStatus(upperId),
             DocumentController::MergeLayerDownStatus::Available);
         QVERIFY(controller.mergeLayerDown(upperId));
@@ -900,12 +917,6 @@ private slots:
             {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
         controller.addStroke(upperId, upperErase);
 
-        QEXPECT_FAIL("",
-            "Contract for the erase-scope plan: merge stays blocked until "
-            "composite-boundary rendering lands (stage 5). An XPASS means "
-            "the guard came off; remove this marker and let the full "
-            "contract run.",
-            Abort);
         QCOMPARE(controller.mergeLayerDownStatus(upperId),
             DocumentController::MergeLayerDownStatus::Available);
         QVERIFY(controller.mergeLayerDown(upperId));

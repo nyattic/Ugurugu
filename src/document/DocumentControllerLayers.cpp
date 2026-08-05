@@ -9,6 +9,7 @@
 
 #include <QFileInfo>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -52,63 +53,54 @@ QSize finalCanvasSize(const Layer &layer)
     return size;
 }
 
-// Where a layer's strokes put ink on the canvas. Erase strokes take pixels
-// away rather than adding any, so they do not extend it. An unreadable
-// coverage plan reports the whole canvas so callers stay conservative.
-QRect paintedContentBounds(const Document &document, const Layer &layer)
+// A merge wraps the upper layer's strokes in a composite-boundary pair, so
+// every stroke keeps exactly the reach it had while the layers were separate.
+// The one thing sealing changes is a layer's tail — the strokes after its
+// last boundary, which erased and moved pixels on the flattened composite.
+// If such a stroke already reached artwork in an earlier section, sealing
+// would take that reach away and silently change the picture, so that merge
+// stays refused. Bounds carry the same wobble margin the renderer uses,
+// which keeps the answer conservative for every frame.
+bool sealedTailClearOfEarlierSections(
+    const Document &document, const Layer &layer)
 {
-    const RenderEngine::StrokeCoveragePlan plan =
-        RenderEngine::prepareStrokeCoverage(document, layer);
-    if (!plan.valid || plan.primitiveBounds.size() != layer.strokes.size())
-    {
-        return QRect(QPoint(), document.size);
-    }
-    QRect bounds;
+    int lastBoundary = -1;
     for (int index = 0; index < layer.strokes.size(); ++index)
     {
-        if (layer.strokes[index].mode == StrokeMode::Erase)
+        if (layer.strokes[index].mode == StrokeMode::CompositeBoundary)
         {
-            continue;
+            lastBoundary = index;
         }
-        bounds = bounds.united(plan.primitiveBounds[index]);
     }
-    return bounds;
-}
-
-// A merge appends the upper layer's strokes to the lower one, so any stroke
-// that removes or relocates pixels already on the layer starts acting on the
-// lower layer's artwork too. That is invisible in the layer list and destroys
-// work, so the merge is only offered while those strokes cannot reach it.
-// Bounds carry the same wobble margin the renderer uses, which keeps the
-// answer conservative for every frame rather than only the current one.
-bool destructiveStrokesClearOf(
-    const Document &document, const Layer &layer, const QRect &painted)
-{
+    if (lastBoundary < 0)
+    {
+        return true;
+    }
     const RenderEngine::StrokeCoveragePlan plan =
         RenderEngine::prepareStrokeCoverage(document, layer);
     if (!plan.valid || plan.primitiveBounds.size() != layer.strokes.size())
     {
         return false;
     }
-    for (int index = 0; index < layer.strokes.size(); ++index)
+    QRect painted;
+    for (int index = 0; index < lastBoundary; ++index)
+    {
+        if (layer.strokes[index].mode != StrokeMode::Erase)
+        {
+            painted = painted.united(plan.primitiveBounds[index]);
+        }
+    }
+    for (int index = lastBoundary + 1; index < layer.strokes.size(); ++index)
     {
         const Stroke &stroke = layer.strokes[index];
-        if (stroke.mode == StrokeMode::Reframe)
-        {
-            // Would re-frame the lower layer's strokes along with its own.
-            return false;
-        }
-        if (stroke.mode == StrokeMode::PixelSelection)
-        {
-            if (!stroke.pixelSelectionOp
-                || stroke.pixelSelectionOp->sourceBounds.intersects(painted))
-            {
-                return false;
-            }
-            continue;
-        }
         if (stroke.mode == StrokeMode::Erase
             && plan.primitiveBounds[index].intersects(painted))
+        {
+            return false;
+        }
+        if (stroke.mode == StrokeMode::PixelSelection
+            && (!stroke.pixelSelectionOp
+                || stroke.pixelSelectionOp->sourceBounds.intersects(painted)))
         {
             return false;
         }
@@ -483,13 +475,23 @@ DocumentController::mergeLayerDownStatus(const QUuid &id) const
     {
         return MergeLayerDownStatus::IncompatibleCanvasEpoch;
     }
-    if (!destructiveStrokesClearOf(
-            current, *source, paintedContentBounds(current, target)))
+    // A reframe spans the whole layer, so merging would re-frame the lower
+    // layer's strokes along with the upper's. Erasers and pixel moves merge
+    // freely: the boundary pair keeps them inside their own section.
+    const bool sourceReframes = std::any_of(source->strokes.cbegin(),
+        source->strokes.cend(),
+        [](const Stroke &stroke)
+        {
+            return stroke.mode == StrokeMode::Reframe;
+        });
+    if (sourceReframes || !sealedTailClearOfEarlierSections(current, *source)
+        || !sealedTailClearOfEarlierSections(current, target))
     {
         return MergeLayerDownStatus::UnsupportedStrokes;
     }
     if (source->strokes.size()
-        > DocumentLimits::maximumStrokesPerLayer - target.strokes.size())
+            > DocumentLimits::maximumStrokesPerLayer - target.strokes.size() - 2
+        || totalStrokeCount(current) > DocumentLimits::maximumTotalStrokes - 2)
     {
         return MergeLayerDownStatus::StrokeLimit;
     }
@@ -514,8 +516,18 @@ bool DocumentController::mergeLayerDown(const QUuid &id)
     const QUuid targetId = current.layers[targetIndex].id;
     Document candidate = current;
     Layer &target = candidate.layers[targetIndex];
-    target.strokes.reserve(target.strokes.size() + source.strokes.size());
+    // The pair seals the upper layer's strokes into their own composited
+    // section: its erasers keep acting only on what they erased before the
+    // merge, while strokes added after the merge land behind the trailing
+    // boundary and reach everything already on the layer.
+    Stroke enterSourceSection;
+    enterSourceSection.mode = StrokeMode::CompositeBoundary;
+    Stroke sealSourceSection;
+    sealSourceSection.mode = StrokeMode::CompositeBoundary;
+    target.strokes.reserve(target.strokes.size() + source.strokes.size() + 2);
+    target.strokes.append(std::move(enterSourceSection));
     target.strokes.append(source.strokes);
+    target.strokes.append(std::move(sealSourceSection));
     candidate.layers.removeAt(sourceIndex);
     candidate.activeLayerId = targetId;
     auto effects = std::make_shared<HistoryEffects>();

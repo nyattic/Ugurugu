@@ -262,6 +262,7 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
     QSize nativeCanvasSize = initialCanvasSize;
     QHash<qint64, QPainterPath> clipPaths;
     QHash<qint64, QImage> scaledClipMasks;
+    QVector<QImage> completedSections;
     QVector<Stroke> primitiveRun;
     const auto flush = [&]()
     {
@@ -287,8 +288,21 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
         notePreviewImage(stats, layerImage);
     };
 
-    for (const Stroke &operation : operations)
+    // Sections sealed by composite boundaries render on their own transparent
+    // surfaces; strokes after the last boundary draw directly on the
+    // flattened composite. Mirrors renderLayerOperations.
+    int lastBoundaryIndex = -1;
+    for (int index = 0; index < operations.size(); ++index)
     {
+        if (operations[index].mode == StrokeMode::CompositeBoundary)
+        {
+            lastBoundaryIndex = index;
+        }
+    }
+
+    for (int index = 0; index < operations.size(); ++index)
+    {
+        const Stroke &operation = operations[index];
         if (operation.mode == StrokeMode::PixelSelection)
         {
             flush();
@@ -314,11 +328,72 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
             {
                 return false;
             }
+            // A reframe spans the whole layer, not just the section it was
+            // recorded in, so completed sections must follow the canvas too.
+            for (QImage &section : completedSections)
+            {
+                if (!applyReframeOperationAtDisplayScale(section,
+                        *operation.reframeOp,
+                        mapping,
+                        nativeCanvasSize,
+                        stats))
+                {
+                    return false;
+                }
+            }
             nativeCanvasSize = operation.reframeOp->targetSize;
             // Cached masks and paths belong to the previous framebuffer
             // epoch and therefore to a different display surface.
             clipPaths.clear();
             scaledClipMasks.clear();
+        }
+        else if (operation.mode == StrokeMode::CompositeBoundary)
+        {
+            flush();
+            if (operation.pixelSelectionOp || operation.reframeOp
+                || operation.imageOp || !operation.points.isEmpty())
+            {
+                return false;
+            }
+            completedSections.append(std::move(layerImage));
+            if (index == lastBoundaryIndex)
+            {
+                QImage composed = std::move(completedSections.first());
+                QPainter painter(&composed);
+                painter.setRenderHint(QPainter::Antialiasing, false);
+                painter.setCompositionMode(
+                    QPainter::CompositionMode_SourceOver);
+                for (int section = 1; section < completedSections.size();
+                    ++section)
+                {
+                    painter.drawImage(QPoint(), completedSections.at(section));
+                }
+                painter.end();
+                layerImage = std::move(composed);
+                completedSections.clear();
+            }
+            else
+            {
+                QImage next(completedSections.last().size(),
+                    QImage::Format_ARGB32_Premultiplied);
+                if (next.isNull())
+                {
+                    return false;
+                }
+                next.fill(Qt::transparent);
+                notePreviewImage(stats, next);
+                layerImage = std::move(next);
+            }
+            if (stats)
+            {
+                quint64 bytes = static_cast<quint64>(layerImage.sizeInBytes());
+                for (const QImage &section : completedSections)
+                {
+                    bytes += static_cast<quint64>(section.sizeInBytes());
+                }
+                stats->maximumEstimatedWorkingSetBytes =
+                    std::max(stats->maximumEstimatedWorkingSetBytes, bytes);
+            }
         }
         else if (operation.mode == StrokeMode::Image)
         {

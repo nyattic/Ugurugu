@@ -80,6 +80,11 @@ public:
         QVector<QSize> canvasBefore;
         QVector<QRect> primitiveBounds;
         QVector<int> epochBefore;
+        // Composite-boundary section each stroke belongs to. Erase and
+        // pixel-selection effects reach a stroke only from its own section or
+        // from the tail section, which draws on the flattened composite.
+        QVector<int> sectionBefore;
+        int tailSection = 0;
         QVector<Epoch> epochs;
         bool valid = false;
     };

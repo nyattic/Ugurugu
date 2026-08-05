@@ -817,8 +817,8 @@ void LayerDock::updateControls()
         break;
     case DocumentController::MergeLayerDownStatus::UnsupportedStrokes:
         mergeToolTip =
-            tr("This layer's eraser or moved pixels overlap the layer below, "
-               "so merging would erase its artwork");
+            tr("This layer resizes the canvas or erased merged artwork, "
+               "so merging would change the picture");
         break;
     case DocumentController::MergeLayerDownStatus::IncompatibleCanvasEpoch:
         mergeToolTip = tr("The layers use incompatible canvas histories");

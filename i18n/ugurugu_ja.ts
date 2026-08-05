@@ -1938,8 +1938,8 @@
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="740"/>
-        <source>This layer&apos;s eraser or moved pixels overlap the layer below, so merging would erase its artwork</source>
-        <translation>このレイヤーの消しゴムまたは移動したピクセルが下のレイヤーと重なるため、結合すると下の絵が消去されます</translation>
+        <source>This layer resizes the canvas or erased merged artwork, so merging would change the picture</source>
+        <translation>このレイヤーはキャンバスサイズを変更するか、結合済みの絵を消したことがあるため、結合すると絵が変わります</translation>
     </message>
     <message>
         <location filename="../src/ui/LayerDock.cpp" line="744"/>
