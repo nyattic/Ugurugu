@@ -48,7 +48,7 @@ normal installation, you only need the installer in the table above.
 
 1. Open the app and create a canvas, or open an existing drawing.
 2. Choose a brush from the left side and draw a line.
-3. Pick a movement from the Wobble button, then press `P` to play it.
+3. Pick a movement in the **Wobble** panel, then press `P` to play it.
 4. Use the **File** menu to export a moving GIF or WebP, or a PNG or JPG image.
 
 Press `F1` at any time to open the built-in help.
@@ -66,7 +66,8 @@ Press `F1` at any time to open the built-in help.
 
 #### Wobble settings in detail
 
-The **Wobble** button on the tool rail opens these settings.
+The **Wobble** panel holds these settings. Switch the range at the top of
+the panel to **Active layer** to apply them to the selected layer only.
 
 | Setting | Range (default) | What it does |
 | --- | --- | --- |
@@ -99,7 +100,10 @@ The **Wobble** button on the tool rail opens these settings.
 ### Work with layers and images
 
 - Stack layers, organize them into groups, and change their transparency or
-  how their colors mix.
+  how their colors mix. The list shows each layer's opacity and blend mode
+  at a glance.
+- Switch wobble off one layer at a time, so a background can hold still
+  while the lines above it keep moving.
 - Merge with the layer below when the result can stay exactly as it looks.
 - Place a photo or another drawing on a new layer, then move, resize, or rotate
   it. Repeated resizing always starts from the original image.
@@ -118,6 +122,12 @@ The **Wobble** button on the tool rail opens these settings.
 
 ### Make the app yours
 
+- Drag panels wherever you want them. Drop one **above or below** another to
+  stack them, or on its **left or right edge** to put them side by side in
+  two columns. Drop one on a title bar to join them as tabs.
+- One button folds the whole right or left panel away for more drawing room.
+  Your arrangement and folded state come back the next time you open the app.
+- **Window → Reset panel layout** puts everything back where it started.
 - Pick the highlight color used around the app.
 - Change any shortcut and restore the defaults whenever you want.
 - Use the app in English, Korean, or Japanese.
