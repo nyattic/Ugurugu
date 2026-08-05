@@ -29,6 +29,7 @@
 
 #include <cmath>
 #include <functional>
+#include <optional>
 #include <utility>
 
 namespace ugurugu
@@ -36,6 +37,33 @@ namespace ugurugu
 
 namespace
 {
+
+QString blendModeName(LayerBlendMode mode)
+{
+    switch (mode)
+    {
+    case LayerBlendMode::Multiply:
+        return LayerDock::tr("Multiply");
+    case LayerBlendMode::Screen:
+        return LayerDock::tr("Screen");
+    case LayerBlendMode::Overlay:
+        return LayerDock::tr("Overlay");
+    case LayerBlendMode::Normal:
+        break;
+    }
+    return LayerDock::tr("Normal");
+}
+
+// A layer is held still by overriding the drawing with a zero amount. Leaving
+// the override unset means it follows the drawing instead.
+bool holdsStill(const std::optional<qreal> &wobbleAmount)
+{
+    if (!wobbleAmount.has_value())
+    {
+        return false;
+    }
+    return wobbleAmount.value() <= 0.0;
+}
 
 QToolButton *makeLayerButton(
     QWidget *parent, IconGlyph glyph, const QString &name, const QString &label)
@@ -149,14 +177,13 @@ void LayerDock::buildContent()
     m_blendModeCombo = new QComboBox(content);
     m_blendModeCombo->setObjectName(QStringLiteral("layerBlendModeCombo"));
     m_blendModeCombo->setAccessibleName(tr("Layer blend mode"));
-    m_blendModeCombo->addItem(
-        tr("Normal"), static_cast<int>(LayerBlendMode::Normal));
-    m_blendModeCombo->addItem(
-        tr("Multiply"), static_cast<int>(LayerBlendMode::Multiply));
-    m_blendModeCombo->addItem(
-        tr("Screen"), static_cast<int>(LayerBlendMode::Screen));
-    m_blendModeCombo->addItem(
-        tr("Overlay"), static_cast<int>(LayerBlendMode::Overlay));
+    for (LayerBlendMode mode : {LayerBlendMode::Normal,
+             LayerBlendMode::Multiply,
+             LayerBlendMode::Screen,
+             LayerBlendMode::Overlay})
+    {
+        m_blendModeCombo->addItem(blendModeName(mode), static_cast<int>(mode));
+    }
     blendModeLabel->setBuddy(m_blendModeCombo);
     properties->addRow(blendModeLabel, m_blendModeCombo);
 
@@ -294,6 +321,33 @@ void LayerDock::connectControls()
         &LayerListWidget::visibilityToggleRequested,
         this,
         toggleVisibility);
+    connect(delegate,
+        &LayerItemDelegate::wobbleToggled,
+        this,
+        [this](const QModelIndex &index)
+        {
+            if (!m_controller)
+            {
+                return;
+            }
+            const QUuid id = index.data(LayerItemRoles::LayerId).toUuid();
+            const Layer *layer = m_controller->document().layer(id);
+            if (!layer)
+            {
+                return;
+            }
+            // An override carries both halves or neither, so stopping a layer
+            // pins the drawing's motion alongside the zero amount and
+            // restarting it drops the pair.
+            if (holdsStill(layer->wobbleAmount))
+            {
+                m_controller->setLayerWobbleOverride(id, {}, {});
+                return;
+            }
+            m_controller->setLayerWobbleOverride(id,
+                0.0,
+                layer->motion.value_or(m_controller->document().motion));
+        });
 
     connect(m_layerList,
         &LayerListWidget::dropRequested,
@@ -613,6 +667,14 @@ void LayerDock::rebuild()
         item->setData(LayerItemRoles::Depth, display.depth);
         item->setData(LayerItemRoles::Clipped, layer.clipToLayerBelow);
         item->setData(LayerItemRoles::Reference, layer.reference);
+        item->setData(LayerItemRoles::OpacityPercent,
+            qRound(std::clamp(layer.opacity, 0.0, 1.0) * 100.0));
+        item->setData(
+            LayerItemRoles::BlendModeName, blendModeName(layer.blendMode));
+        item->setData(
+            LayerItemRoles::WobbleToggleable, layer.kind == LayerKind::Paint);
+        item->setData(
+            LayerItemRoles::WobbleStopped, holdsStill(layer.wobbleAmount));
         item->setFlags(
             item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         if (layer.id == m_selectedLayerId)

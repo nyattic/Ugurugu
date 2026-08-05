@@ -1936,6 +1936,82 @@ private slots:
         QVERIFY(!controller.document().layer(layerId)->motion);
     }
 
+    void showsLayerCompositingAndTogglesWobblePerLayer()
+    {
+        MainWindow window;
+        window.resize(1100, 820);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        LayerDock *layerDock = window.findChild<LayerDock *>();
+        QVERIFY(layerDock);
+        auto *layerList = layerDock->findChild<LayerListWidget *>();
+        QVERIFY(layerList);
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        const QUuid layerId = controller.document().activeLayerId;
+
+        controller.setLayerOpacity(layerId, 0.8);
+        controller.setLayerBlendMode(layerId, LayerBlendMode::Multiply);
+        QCoreApplication::processEvents();
+
+        const auto rowFor = [layerList](const QUuid &id) -> QListWidgetItem *
+        {
+            for (int row = 0; row < layerList->count(); ++row)
+            {
+                QListWidgetItem *item = layerList->item(row);
+                if (item->data(LayerItemRoles::LayerId).toUuid() == id)
+                {
+                    return item;
+                }
+            }
+            return nullptr;
+        };
+
+        QListWidgetItem *item = rowFor(layerId);
+        QVERIFY(item);
+        QCOMPARE(item->data(LayerItemRoles::OpacityPercent).toInt(), 80);
+        QCOMPARE(item->data(LayerItemRoles::BlendModeName).toString(),
+            LayerDock::tr("Multiply"));
+        QVERIFY(item->data(LayerItemRoles::WobbleToggleable).toBool());
+        QVERIFY(!item->data(LayerItemRoles::WobbleStopped).toBool());
+
+        auto *delegate =
+            qobject_cast<LayerItemDelegate *>(layerList->itemDelegate());
+        QVERIFY(delegate);
+        const QModelIndex index = layerList->indexFromItem(item);
+
+        emit delegate->wobbleToggled(index);
+        QCoreApplication::processEvents();
+        const Layer *stopped = controller.document().layer(layerId);
+        QVERIFY(stopped->wobbleAmount);
+        QCOMPARE(*stopped->wobbleAmount, 0.0);
+        // The override is only meaningful with both halves present.
+        QVERIFY(stopped->motion);
+        QVERIFY(rowFor(layerId)->data(LayerItemRoles::WobbleStopped).toBool());
+
+        emit delegate->wobbleToggled(layerList->indexFromItem(rowFor(layerId)));
+        QCoreApplication::processEvents();
+        const Layer *following = controller.document().layer(layerId);
+        QVERIFY(!following->wobbleAmount);
+        QVERIFY(!following->motion);
+        QVERIFY(!rowFor(layerId)->data(LayerItemRoles::WobbleStopped).toBool());
+
+        controller.addLayerGroup(layerId);
+        QCoreApplication::processEvents();
+        for (const Layer &layer : controller.document().layers)
+        {
+            if (layer.kind != LayerKind::Group)
+            {
+                continue;
+            }
+            QListWidgetItem *groupItem = rowFor(layer.id);
+            QVERIFY(groupItem);
+            QVERIFY(
+                !groupItem->data(LayerItemRoles::WobbleToggleable).toBool());
+        }
+    }
+
     void ignoresRetiredSimpleModeSetting()
     {
         QSettings().setValue(QStringLiteral("window/simpleMode"), true);

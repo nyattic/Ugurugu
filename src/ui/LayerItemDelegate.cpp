@@ -19,12 +19,15 @@ namespace ugurugu
 namespace
 {
 
-constexpr int rowHeight = 46;
+constexpr int rowHeight = 56;
 constexpr int rowPadding = 8;
 constexpr int accentBarWidth = 3;
 constexpr int thumbnailWidth = 48;
 constexpr int thumbnailHeight = 32;
 constexpr int eyeSize = 20;
+constexpr int wobbleSize = 18;
+constexpr int metaHeight = 15;
+constexpr int metaFontPixelSize = 10;
 constexpr int depthIndent = 14;
 
 const QPixmap &eyeOpenPixmap()
@@ -38,6 +41,20 @@ const QPixmap &eyeClosedPixmap()
 {
     static const QPixmap pixmap = Icons::pixmap(
         IconGlyph::EyeClosed, eyeSize, Theme::textDisabled(), 0.0, 2.0);
+    return pixmap;
+}
+
+const QPixmap &wobbleOnPixmap()
+{
+    static const QPixmap pixmap =
+        Icons::pixmap(IconGlyph::Wobble, wobbleSize, Theme::accent(), 0.0, 2.0);
+    return pixmap;
+}
+
+const QPixmap &wobbleOffPixmap()
+{
+    static const QPixmap pixmap = Icons::pixmap(
+        IconGlyph::Wobble, wobbleSize, Theme::textDisabled(), 0.0, 2.0);
     return pixmap;
 }
 
@@ -64,14 +81,37 @@ QRect LayerItemDelegate::eyeRect(const QRect &rowRect) const
     return QRect(rowRect.right() - rowPadding - eyeSize, y, eyeSize, eyeSize);
 }
 
-QRect LayerItemDelegate::nameRect(const QRect &rowRect, int depth) const
+QRect LayerItemDelegate::wobbleRect(const QRect &rowRect) const
+{
+    const QRect eye = eyeRect(rowRect);
+    return QRect(eye.left() - 6 - wobbleSize,
+        rowRect.top() + (rowRect.height() - wobbleSize) / 2,
+        wobbleSize,
+        wobbleSize);
+}
+
+QRect LayerItemDelegate::textColumnRect(const QRect &rowRect, int depth) const
 {
     const QRect thumb = thumbnailRect(rowRect, depth);
-    const QRect eye = eyeRect(rowRect);
+    const QRect wobble = wobbleRect(rowRect);
     return QRect(thumb.right() + 10,
-        rowRect.top(),
-        eye.left() - thumb.right() - 16,
-        rowRect.height());
+        rowRect.top() + 4,
+        wobble.left() - thumb.right() - 16,
+        rowRect.height() - 8);
+}
+
+QRect LayerItemDelegate::metaRect(const QRect &rowRect, int depth) const
+{
+    QRect column = textColumnRect(rowRect, depth);
+    column.setHeight(metaHeight);
+    return column;
+}
+
+QRect LayerItemDelegate::nameRect(const QRect &rowRect, int depth) const
+{
+    QRect column = textColumnRect(rowRect, depth);
+    column.setTop(column.top() + metaHeight);
+    return column;
 }
 
 void LayerItemDelegate::paint(QPainter *painter,
@@ -128,6 +168,27 @@ void LayerItemDelegate::paint(QPainter *painter,
     painter->drawRoundedRect(
         QRectF(thumbRect).adjusted(0.5, 0.5, -0.5, -0.5), 4.0, 4.0);
 
+    const QString blendModeName =
+        index.data(LayerItemRoles::BlendModeName).toString();
+    if (!blendModeName.isEmpty())
+    {
+        QFont metaFont = option.font;
+        metaFont.setPixelSize(metaFontPixelSize);
+        painter->save();
+        painter->setFont(metaFont);
+        painter->setPen(Theme::textMuted());
+        const QRect meta = metaRect(option.rect, depth);
+        const QString metaText =
+            QStringLiteral("%1 %  %2")
+                .arg(index.data(LayerItemRoles::OpacityPercent).toInt())
+                .arg(blendModeName);
+        painter->drawText(meta,
+            Qt::AlignLeft | Qt::AlignVCenter,
+            QFontMetrics(metaFont).elidedText(
+                metaText, Qt::ElideRight, meta.width()));
+        painter->restore();
+    }
+
     painter->setPen(visible ? Theme::textPrimary() : Theme::textMuted());
     const QString name = index.data(Qt::DisplayRole).toString();
     QRect textRect = nameRect(option.rect, depth);
@@ -161,6 +222,12 @@ void LayerItemDelegate::paint(QPainter *painter,
         option.fontMetrics.elidedText(name, Qt::ElideRight, textRect.width()));
 
     painter->setOpacity(1.0);
+    if (index.data(LayerItemRoles::WobbleToggleable).toBool())
+    {
+        const bool stopped = index.data(LayerItemRoles::WobbleStopped).toBool();
+        painter->drawPixmap(wobbleRect(option.rect),
+            stopped ? wobbleOffPixmap() : wobbleOnPixmap());
+    }
     const QPixmap &eye = visible ? eyeOpenPixmap() : eyeClosedPixmap();
     painter->drawPixmap(eyeRect(option.rect), eye);
 
@@ -183,14 +250,25 @@ bool LayerItemDelegate::editorEvent(QEvent *event,
         || event->type() == QEvent::MouseButtonRelease)
     {
         const auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        const QPoint position = mouseEvent->position().toPoint();
         if (mouseEvent->button() == Qt::LeftButton
-            && eyeRect(option.rect)
-                .adjusted(-3, -3, 3, 3)
-                .contains(mouseEvent->position().toPoint()))
+            && eyeRect(option.rect).adjusted(-3, -3, 3, 3).contains(position))
         {
             if (event->type() == QEvent::MouseButtonRelease)
             {
                 emit visibilityToggled(index);
+            }
+            return true;
+        }
+        if (mouseEvent->button() == Qt::LeftButton
+            && index.data(LayerItemRoles::WobbleToggleable).toBool()
+            && wobbleRect(option.rect)
+                .adjusted(-3, -3, 3, 3)
+                .contains(position))
+        {
+            if (event->type() == QEvent::MouseButtonRelease)
+            {
+                emit wobbleToggled(index);
             }
             return true;
         }
