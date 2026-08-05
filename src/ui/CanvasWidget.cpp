@@ -1110,22 +1110,18 @@ void CanvasWidget::setAnimating(bool animating)
     {
         invalidateFrames();
     }
-    else if (!m_animating)
-    {
-        cancelFrameCacheWarmup();
-    }
     if (m_animating)
     {
         updateTimerInterval();
         m_animationTimer.start();
-        if (!previewSizeChanged)
-        {
-            scheduleFrameCacheWarmup();
-        }
     }
     else
     {
         m_animationTimer.stop();
+    }
+    if (!previewSizeChanged)
+    {
+        scheduleFrameCacheWarmup();
     }
     emit animatingChanged(animating);
     update();

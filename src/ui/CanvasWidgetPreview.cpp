@@ -482,7 +482,11 @@ void CanvasWidget::scheduleFrameCacheWarmup()
         this,
         [this, generation]()
         {
-            if (generation != m_frameCacheWarmupGeneration || !m_animating
+            // Warmed while paused too: every edit clears the cache, so gating
+            // this on playback left the cache empty for the whole time the
+            // user was drawing and made the next play re-render every frame on
+            // the GUI thread as playback reached it.
+            if (generation != m_frameCacheWarmupGeneration
                 || !m_wobbleAnimationEnabled
                 || (m_drawing && !m_animateWhileDrawing))
             {
