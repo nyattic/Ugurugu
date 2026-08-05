@@ -154,6 +154,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/ToolDock.hpp
     src/ui/ElidingCheckBox.cpp
     src/ui/ElidingCheckBox.hpp
+    src/ui/ElidingToolButton.cpp
+    src/ui/ElidingToolButton.hpp
     src/ui/EraserPopoverPanel.cpp
     src/ui/EraserPopoverPanel.hpp
     src/ui/EraserPresetButton.cpp

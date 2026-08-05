@@ -1985,6 +1985,45 @@ private slots:
         QCOMPARE(layerDock->minimumWidth(), declaredPaletteDockWidth);
     }
 
+    // Windows measured the shipped labels wide enough that panels whose
+    // minimum followed their own text pinned the whole palette area open,
+    // while macOS stayed under the declared width and never noticed. An
+    // inflated font reproduces that platform difference on any host, so no
+    // palette panel may report a minimum that moves with its text at all.
+    void keepsPaletteDockMinimumWidthIndependentOfFontMetrics()
+    {
+        const ApplicationFontGuard inflatedText(4);
+
+        MainWindow window;
+        window.resize(1100, 720);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCoreApplication::processEvents();
+
+        ToolDock *toolDock = window.findChild<ToolDock *>();
+        ColorDock *colorDock = window.findChild<ColorDock *>();
+        ColorHistoryDock *colorHistoryDock =
+            window.findChild<ColorHistoryDock *>();
+        WobbleDock *wobbleDock = window.findChild<WobbleDock *>();
+        LayerDock *layerDock = window.findChild<LayerDock *>();
+        QVERIFY(toolDock);
+        QVERIFY(colorDock);
+        QVERIFY(colorHistoryDock);
+        QVERIFY(wobbleDock);
+        QVERIFY(layerDock);
+
+        const QList<QDockWidget *> paletteDocks{
+            toolDock, colorDock, colorHistoryDock, wobbleDock, layerDock};
+        for (const QDockWidget *dock : paletteDocks)
+        {
+            QVERIFY2(dock->minimumWidth() <= declaredPaletteDockWidth,
+                qPrintable(QStringLiteral("%1 contents demand %2 at %3pt")
+                        .arg(dock->objectName())
+                        .arg(dock->minimumWidth())
+                        .arg(QApplication::font().pointSize())));
+        }
+    }
+
     void showsLayerCompositingAndTogglesWobblePerLayer()
     {
         MainWindow window;

@@ -41,14 +41,28 @@ namespace
 
 constexpr int propertyComboContentsLength = 6;
 
-// Layer and group names come from the user, and a combo box otherwise reports
-// its widest entry as its minimum width, which would let one long name pin the
-// palette dock area open. A combo box is horizontally QSizePolicy::Minimum by
-// default, so the shorter minimum only counts once the policy can shrink.
+// Enough for a drop-down arrow or the opacity readout at normal metrics.
+// Below it the control clips, which only happens once the panel is squeezed
+// to the width the dock declares.
+constexpr int paletteControlMinimumWidth = 48;
+
+// A control that reports a text-derived minimum pins the whole palette dock
+// area open: a combo box reports its widest entry, which the user names, and a
+// label reports the digits it reserves. Both grow with the platform's font
+// metrics and the active translation. An explicit minimum width replaces that
+// hint outright in the layout, so the panel stops following its own text; the
+// policy change is what lets the layout shrink the control that far.
+void pinPaletteControlWidth(QWidget *control)
+{
+    control->setSizePolicy(
+        QSizePolicy::Preferred, control->sizePolicy().verticalPolicy());
+    control->setMinimumWidth(paletteControlMinimumWidth);
+}
+
 void makePropertyComboShrinkable(QComboBox *combo)
 {
     combo->setMinimumContentsLength(propertyComboContentsLength);
-    combo->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    pinPaletteControlWidth(combo);
 }
 
 QString blendModeName(LayerBlendMode mode)
@@ -238,9 +252,7 @@ void LayerDock::buildContent()
     opacityLayout->addWidget(m_opacitySlider, 1);
 
     m_opacityValue = new QLabel(content);
-    m_opacityValue->setMinimumWidth(
-        m_opacityValue->fontMetrics().horizontalAdvance(
-            QStringLiteral("100%")));
+    pinPaletteControlWidth(m_opacityValue);
     m_opacityValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     opacityLayout->addWidget(m_opacityValue);
 

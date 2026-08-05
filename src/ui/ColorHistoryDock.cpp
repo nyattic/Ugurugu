@@ -2,11 +2,11 @@
 
 #include "ui/CanvasWidget.hpp"
 #include "ui/ColorHistoryGrid.hpp"
+#include "ui/ElidingToolButton.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
 
 #include <QHBoxLayout>
 #include <QScrollArea>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace ugurugu
@@ -31,10 +31,8 @@ ColorHistoryDock::ColorHistoryDock(CanvasWidget *canvas, QWidget *parent)
     auto *actions = new QHBoxLayout;
     actions->setContentsMargins(0, 0, 0, 0);
     actions->addStretch(1);
-    auto *clearButton = new QToolButton(body);
+    auto *clearButton = new ElidingToolButton(tr("Clear history"), body);
     clearButton->setObjectName(QStringLiteral("clearColorHistoryButton"));
-    clearButton->setText(tr("Clear history"));
-    clearButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     actions->addWidget(clearButton);
     layout->addLayout(actions);
 
