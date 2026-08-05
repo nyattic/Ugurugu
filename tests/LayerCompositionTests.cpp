@@ -426,6 +426,7 @@ private slots:
         group.opacity = 0.5;
         group.initialCanvasSize = document.size;
         child.parentGroupId = group.id;
+        const QUuid childId = child.id;
         document.layers.append(group);
 
         const QImage rendered = RenderEngine::render(document, 0);
@@ -437,7 +438,7 @@ private slots:
 
         const RenderEngine::LayerSplitFrame split =
             RenderEngine::renderLayerSplit(
-                document, 0, document.size, child.id);
+                document, 0, document.size, childId);
         QVERIFY(!split.valid);
     }
 
