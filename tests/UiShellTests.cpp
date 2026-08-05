@@ -2286,6 +2286,55 @@ private slots:
             restored.tabifiedDockWidgets(toolDock).contains(wobbleDock));
         QCOMPARE(dockTabOrder(restored, toolDock), savedToolTabOrder);
     }
+
+    // Removing a dock widget between restoreState() and the first show
+    // crashes inside Qt 6.11's dock layout, so a persisted collapse may only
+    // hide the docks before the window is shown and must complete afterwards.
+    void collapsesARestoredCollapsedAreaOnlyAfterFirstShow()
+    {
+        {
+            MainWindow window;
+            window.resize(1100, 720);
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            ToolDock *toolDock = window.findChild<ToolDock *>();
+            QVERIFY(toolDock);
+            QToolButton *collapseRightPaletteButton =
+                toolDock->findChild<QToolButton *>(
+                    QStringLiteral("collapsePaletteButton"));
+            QVERIFY(collapseRightPaletteButton);
+            collapseRightPaletteButton->click();
+            QTRY_VERIFY(isPaletteDockCollapsed(toolDock));
+            QVERIFY(window.close());
+        }
+
+        MainWindow restored;
+        ToolDock *toolDock = restored.findChild<ToolDock *>();
+        QVERIFY(toolDock);
+        QCoreApplication::processEvents();
+        QCOMPARE(restored.dockWidgetArea(toolDock), Qt::RightDockWidgetArea);
+        QVERIFY(toolDock->isHidden());
+        QVERIFY(!isPaletteDockCollapsed(toolDock));
+
+        restored.resize(1100, 720);
+        restored.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&restored));
+        QTRY_VERIFY(isPaletteDockCollapsed(toolDock));
+        QCOMPARE(restored.dockWidgetArea(toolDock), Qt::NoDockWidgetArea);
+        QDockWidget *rightPaletteRail = restored.findChild<QDockWidget *>(
+            QStringLiteral("RightPaletteRailDock"));
+        QVERIFY(rightPaletteRail);
+        QTRY_VERIFY(rightPaletteRail->isVisible());
+
+        QToolButton *expandRightPaletteAreaButton =
+            restored.findChild<QToolButton *>(
+                QStringLiteral("expandRightPaletteAreaButton"));
+        QVERIFY(expandRightPaletteAreaButton);
+        expandRightPaletteAreaButton->click();
+        QTRY_VERIFY(!isPaletteDockCollapsed(toolDock));
+        QVERIFY(!toolDock->isHidden());
+        QCOMPARE(restored.dockWidgetArea(toolDock), Qt::RightDockWidgetArea);
+    }
 };
 
 int runUiShellTests(int argc, char **argv)

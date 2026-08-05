@@ -23,6 +23,8 @@ class PaletteDockAreaManager final : public QObject
 public:
     explicit PaletteDockAreaManager(QMainWindow *window, int layoutVersion);
 
+    bool eventFilter(QObject *object, QEvent *event) override;
+
     void registerDock(QDockWidget *dock);
     bool isCollapsed(Qt::DockWidgetArea area) const;
     bool isDockCollapsed(const QDockWidget *dock) const;
@@ -51,6 +53,7 @@ private:
     const AreaState &state(Qt::DockWidgetArea area) const;
     QList<QDockWidget *> docksInArea(Qt::DockWidgetArea area) const;
     QList<QTabBar *> dockAreaTabBars() const;
+    void scheduleCollapse(Qt::DockWidgetArea area);
     void collapseArea(Qt::DockWidgetArea area, bool persist);
     void restoreExpandedLayout(Qt::DockWidgetArea expandedArea, bool persist);
     void restoreDockActions(AreaState &areaState);
@@ -64,6 +67,7 @@ private:
     int m_layoutVersion;
     QByteArray m_expandedLayoutState;
     QList<QDockWidget *> m_docks;
+    QList<Qt::DockWidgetArea> m_pendingCollapsedAreas;
     AreaState m_left;
     AreaState m_right;
 };

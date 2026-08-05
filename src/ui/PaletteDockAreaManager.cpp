@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QEvent>
 #include <QMainWindow>
 #include <QSet>
 #include <QSettings>
@@ -156,16 +157,51 @@ void PaletteDockAreaManager::restorePersistedState()
         {
             continue;
         }
-        QTimer::singleShot(0,
-            this,
-            [this, area]()
-            {
-                if (!isCollapsed(area))
-                {
-                    collapseArea(area, false);
-                }
-            });
+        if (m_window->isVisible())
+        {
+            scheduleCollapse(area);
+            continue;
+        }
+        // Removing a dock widget between restoreState() and the first show
+        // corrupts the dock layout in Qt 6.11 and the show then crashes in
+        // QDockAreaLayoutItem::skip(). The docks are only hidden here so the
+        // area does not flash open; the collapse itself waits for the first
+        // show event.
+        m_pendingCollapsedAreas.append(area);
+        for (QDockWidget *dock : docksInArea(area))
+        {
+            dock->hide();
+        }
+        m_window->installEventFilter(this);
     }
+}
+
+bool PaletteDockAreaManager::eventFilter(QObject *object, QEvent *event)
+{
+    if (object == m_window && event->type() == QEvent::Show)
+    {
+        m_window->removeEventFilter(this);
+        const QList<Qt::DockWidgetArea> pendingAreas = m_pendingCollapsedAreas;
+        m_pendingCollapsedAreas.clear();
+        for (const Qt::DockWidgetArea area : pendingAreas)
+        {
+            scheduleCollapse(area);
+        }
+    }
+    return QObject::eventFilter(object, event);
+}
+
+void PaletteDockAreaManager::scheduleCollapse(Qt::DockWidgetArea area)
+{
+    QTimer::singleShot(0,
+        this,
+        [this, area]()
+        {
+            if (!isCollapsed(area))
+            {
+                collapseArea(area, false);
+            }
+        });
 }
 
 void PaletteDockAreaManager::resetCollapsedAreas()
