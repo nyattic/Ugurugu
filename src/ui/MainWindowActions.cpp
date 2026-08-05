@@ -27,8 +27,8 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
-#include <QSlider>
 #include <QSizePolicy>
+#include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>

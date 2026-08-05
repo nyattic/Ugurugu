@@ -40,21 +40,19 @@ static_assert(
     MemoryBudget::historyResidentBytes + MemoryBudget::rasterAssetEncodedBytes
         + static_cast<qint64>(MemoryBudget::animationExportWorkingBytes)
     <= MemoryBudget::residentTargetBytes);
-static_assert(MemoryBudget::historyResidentBytes
-                  + MemoryBudget::serializationCacheBytes
-                  + MemoryBudget::rasterAssetEncodedBytes
-                  + MemoryBudget::rasterDecodeCacheBytes
-                  + static_cast<qint64>(MemoryBudget::maximumPreviewCacheKiB)
-                        * 1024LL
-              <= MemoryBudget::residentTargetBytes);
-static_assert(MemoryBudget::historyResidentBytes
-                  + MemoryBudget::serializationCacheBytes
-                  + MemoryBudget::rasterAssetEncodedBytes
-                  + MemoryBudget::projectSerializationWorkingBytes
-                  + static_cast<qint64>(MemoryBudget::maximumPreviewCacheKiB)
-                        * 1024LL
-              <= MemoryBudget::residentTargetBytes);
 static_assert(
-    MemoryBudget::minimumPreviewCacheKiB <= MemoryBudget::maximumPreviewCacheKiB);
+    MemoryBudget::historyResidentBytes + MemoryBudget::serializationCacheBytes
+        + MemoryBudget::rasterAssetEncodedBytes
+        + MemoryBudget::rasterDecodeCacheBytes
+        + static_cast<qint64>(MemoryBudget::maximumPreviewCacheKiB) * 1024LL
+    <= MemoryBudget::residentTargetBytes);
+static_assert(
+    MemoryBudget::historyResidentBytes + MemoryBudget::serializationCacheBytes
+        + MemoryBudget::rasterAssetEncodedBytes
+        + MemoryBudget::projectSerializationWorkingBytes
+        + static_cast<qint64>(MemoryBudget::maximumPreviewCacheKiB) * 1024LL
+    <= MemoryBudget::residentTargetBytes);
+static_assert(MemoryBudget::minimumPreviewCacheKiB
+              <= MemoryBudget::maximumPreviewCacheKiB);
 
 }

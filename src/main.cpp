@@ -73,8 +73,8 @@ void logPointingDevices()
     }
     else if (withPressure == 0)
     {
-        spdlog::warn("{} tablet device(s) found but none reports pressure.",
-            styluses);
+        spdlog::warn(
+            "{} tablet device(s) found but none reports pressure.", styluses);
     }
 }
 

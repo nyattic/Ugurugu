@@ -3,8 +3,8 @@
 #include <QCoreApplication>
 #include <QDockWidget>
 #include <QMainWindow>
-#include <QSettings>
 #include <QSet>
+#include <QSettings>
 #include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
@@ -189,8 +189,7 @@ QByteArray PaletteDockAreaManager::layoutStateForPersistence()
 
 void PaletteDockAreaManager::requestAreaControlsUpdate()
 {
-    QTimer::singleShot(
-        0, this, &PaletteDockAreaManager::updateAreaControls);
+    QTimer::singleShot(0, this, &PaletteDockAreaManager::updateAreaControls);
 }
 
 PaletteDockAreaManager *PaletteDockAreaManager::find(const QDockWidget *dock)
@@ -254,8 +253,7 @@ void PaletteDockAreaManager::collapseArea(Qt::DockWidgetArea area, bool persist)
     areaState.collapsed = true;
     for (QDockWidget *dock : docksInArea(area))
     {
-        areaState.docks.insert(
-            dock, {dock->toggleViewAction()->isEnabled()});
+        areaState.docks.insert(dock, {dock->toggleViewAction()->isEnabled()});
         dock->hide();
         m_window->removeDockWidget(dock);
         dock->toggleViewAction()->setEnabled(false);

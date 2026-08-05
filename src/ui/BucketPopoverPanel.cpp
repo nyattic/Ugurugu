@@ -105,8 +105,7 @@ BucketPopoverPanel::BucketPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     auto *toleranceControls = new QWidget(this);
     auto *toleranceControlsLayout = new QHBoxLayout(toleranceControls);
     toleranceControlsLayout->setContentsMargins(0, 0, 0, 0);
-    auto *toleranceSlider =
-        new QSlider(Qt::Horizontal, toleranceControls);
+    auto *toleranceSlider = new QSlider(Qt::Horizontal, toleranceControls);
     toleranceSlider->setObjectName(QStringLiteral("bucketToleranceSlider"));
     toleranceSlider->setRange(0, 255);
     toleranceSlider->setValue(canvas->fillTolerance());

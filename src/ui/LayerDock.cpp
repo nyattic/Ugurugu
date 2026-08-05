@@ -13,8 +13,8 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFutureWatcher>
 #include <QFormLayout>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidgetItem>

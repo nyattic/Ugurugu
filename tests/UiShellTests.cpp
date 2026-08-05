@@ -27,8 +27,8 @@ bool hasOnScreenTabBar(const QMainWindow &window)
 
 bool visibleChildrenFit(const QWidget *container)
 {
-    return std::ranges::all_of(
-        container->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly),
+    return std::ranges::all_of(container->findChildren<QWidget *>(
+                                   QString(), Qt::FindDirectChildrenOnly),
         [container](const QWidget *child)
         {
             return !child->isVisible()
@@ -1748,7 +1748,7 @@ private slots:
         {
             QVERIFY(!button->text().contains(QLatin1Char('(')));
             QVERIFY(std::abs(button->geometry().center().x()
-                        - toolRail->contentsRect().center().x())
+                             - toolRail->contentsRect().center().x())
                     <= 1);
         }
         const QList<QDockWidget *> paletteDocks{
@@ -1759,13 +1759,13 @@ private slots:
             QVERIFY(dock->titleBarWidget()->height() > 0);
             QVERIFY(dock->titleBarWidget()->height() <= 24);
         }
-        QTRY_COMPARE(std::ranges::count_if(
-                         window.findChildren<QToolButton *>(
-                             QStringLiteral("collapsePaletteButton")),
-                         [](const QToolButton *button)
-                         {
-                             return button->isVisible();
-                         }),
+        QTRY_COMPARE(
+            std::ranges::count_if(window.findChildren<QToolButton *>(
+                                      QStringLiteral("collapsePaletteButton")),
+                [](const QToolButton *button)
+                {
+                    return button->isVisible();
+                }),
             1);
 
         window.resizeDocks(
@@ -1841,8 +1841,9 @@ private slots:
                 QStringLiteral("expandRightPaletteAreaButton"));
         QVERIFY(rightPaletteRail);
         QVERIFY(expandRightPaletteAreaButton);
-        QCOMPARE(window.findChildren<QToolButton *>(
-                     QStringLiteral("expandRightPaletteAreaButton"))
+        QCOMPARE(window
+                     .findChildren<QToolButton *>(
+                         QStringLiteral("expandRightPaletteAreaButton"))
                      .size(),
             1);
         QVERIFY(rightPaletteRail->isVisible());
@@ -1956,7 +1957,8 @@ private slots:
         QVERIFY(wobbleDock);
         QVERIFY(layerDock);
         QVERIFY(timeline);
-        QVERIFY(!window.findChild<QAction *>(QStringLiteral("simpleModeAction")));
+        QVERIFY(
+            !window.findChild<QAction *>(QStringLiteral("simpleModeAction")));
         QVERIFY(!toolDock->isHidden());
         QVERIFY(!wobbleDock->isHidden());
         QVERIFY(!colorHistoryDock->isHidden());
@@ -2054,7 +2056,8 @@ private slots:
         // but QMainWindow only reports tabified docks that are on screen.
         wobbleDock->toggleViewAction()->trigger();
         QTRY_VERIFY(!wobbleDock->isHidden());
-        QTRY_VERIFY(restored.tabifiedDockWidgets(toolDock).contains(wobbleDock));
+        QTRY_VERIFY(
+            restored.tabifiedDockWidgets(toolDock).contains(wobbleDock));
         QCOMPARE(dockTabOrder(restored, toolDock), savedToolTabOrder);
     }
 };

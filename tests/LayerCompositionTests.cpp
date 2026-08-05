@@ -437,8 +437,7 @@ private slots:
         QVERIFY(std::abs(center.blue() - 147) <= 1);
 
         const RenderEngine::LayerSplitFrame split =
-            RenderEngine::renderLayerSplit(
-                document, 0, document.size, childId);
+            RenderEngine::renderLayerSplit(document, 0, document.size, childId);
         QVERIFY(!split.valid);
     }
 

@@ -179,9 +179,9 @@ public:
         const QString notes =
             update.TargetFullRelease.NotesMarkdown.empty()
                 ? QString()
-                : localizedReleaseNotes(QString::fromStdString(
-                                            update.TargetFullRelease
-                                                .NotesMarkdown),
+                : localizedReleaseNotes(
+                      QString::fromStdString(
+                          update.TargetFullRelease.NotesMarkdown),
                       language);
 
         QDialog dialog(window);

@@ -53,11 +53,11 @@ void ResponsiveGrid::resizeEvent(QResizeEvent *event)
 
 void ResponsiveGrid::relayout()
 {
-    const int columns = std::clamp(
-        (std::max(1, contentsRect().width()) + m_spacing)
-            / (m_minimumColumnWidth + m_spacing),
-        1,
-        m_maximumColumnCount);
+    const int columns =
+        std::clamp((std::max(1, contentsRect().width()) + m_spacing)
+                       / (m_minimumColumnWidth + m_spacing),
+            1,
+            m_maximumColumnCount);
     if (columns == m_columnCount)
     {
         return;

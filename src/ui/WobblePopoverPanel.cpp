@@ -2,8 +2,8 @@
 
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
-#include "ui/WobblePreview.hpp"
 #include "ui/ResponsiveGrid.hpp"
+#include "ui/WobblePreview.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>

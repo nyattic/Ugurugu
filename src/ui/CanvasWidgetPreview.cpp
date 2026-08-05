@@ -130,7 +130,8 @@ QImage CanvasWidget::activeStrokePreview(
     {
         // The live stroke has to wobble the way its own layer does, not the
         // way the document does.
-        const Document strokeDocument = documentForLayer(document, *strokeLayer);
+        const Document strokeDocument =
+            documentForLayer(document, *strokeLayer);
         const RenderEngine::LayerSplitFrame &split =
             previewSplit(m_activeStrokeLayer, renderSize);
         if (split.valid)

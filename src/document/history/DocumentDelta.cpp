@@ -142,10 +142,9 @@ bool mergeLayerWobble(
     {
         return false;
     }
-    const auto fold = []<typename T>(std::optional<DocumentDelta::ValueChange<T>>
-                                         &target,
-                          const std::optional<DocumentDelta::ValueChange<T>>
-                              &later)
+    const auto fold =
+        []<typename T>(std::optional<DocumentDelta::ValueChange<T>> &target,
+            const std::optional<DocumentDelta::ValueChange<T>> &later)
     {
         if (!later)
         {

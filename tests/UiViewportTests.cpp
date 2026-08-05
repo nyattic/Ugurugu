@@ -345,13 +345,16 @@ private slots:
         Stroke edit;
         edit.color = QColor(20, 90, 210);
         edit.width = 18.0;
-        edit.points = {{QPointF(60.0, 200.0), 1.0}, {QPointF(200.0, 60.0), 1.0}};
-        QCOMPARE(controller.addStroke(controller.document().activeLayerId, edit),
+        edit.points = {
+            {QPointF(60.0, 200.0), 1.0}, {QPointF(200.0, 60.0), 1.0}};
+        QCOMPARE(
+            controller.addStroke(controller.document().activeLayerId, edit),
             DocumentController::AddStrokeResult::Added);
         QVERIFY(!canvas.isAnimating());
 
         // Editing clears the cache; the warmup must refill it while paused so
-        // that resuming plays from cache instead of rendering on the GUI thread.
+        // that resuming plays from cache instead of rendering on the GUI
+        // thread.
         QTRY_COMPARE_WITH_TIMEOUT(
             CanvasWidgetTestAccess::cachedFrameCount(canvas),
             qsizetype{30},
@@ -359,7 +362,8 @@ private slots:
         QVERIFY(!CanvasWidgetTestAccess::frameCacheWarmupActive(canvas));
 
         canvas.setAnimating(true);
-        QCOMPARE(CanvasWidgetTestAccess::cachedFrameCount(canvas), qsizetype{30});
+        QCOMPARE(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas), qsizetype{30});
         for (int frame = 0; frame < 30; ++frame)
         {
             QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(canvas, frame));
