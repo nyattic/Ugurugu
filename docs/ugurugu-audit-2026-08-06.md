@@ -216,11 +216,33 @@ Configure 때 Vulkan headers 미탐지와 Qt GuiPrivate 버전 결합 경고가 
 
 ### 호스팅 macOS sanitizer 후속 검증
 
-감사 커밋 `3a100f02fc43656de9b44c19e4aaf6722c89a6b1`의 첫 GitHub Actions 실행에서 macOS 15.7.7/AppleClang 17의 `ugurugu_ui_viewport_tests`가 4K frame-cache warmup 테스트를 마친 직후 SIGTRAP으로 종료됐다. 출력은 제품 코드의 ASan/UBSan 진단이 아니라 compiler-rt의 [`UnsetAlternateSignalStack()`](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_posix_libcdep.cpp)이 worker pthread 종료 중 `sigaltstack(SS_DISABLE, ...)` 실패를 내부 `CHECK`로 처리한 것이었다. 테스트 본문의 마지막 진단 로그까지 도달했고, 이전 커밋의 같은 경로는 동일 runner 계열에서 통과했으며, macOS 26.6/AppleClang 21에서는 해당 suite를 20회, 문제 테스트를 30회 반복해 모두 통과했다.
+감사 커밋 `3a100f02fc43656de9b44c19e4aaf6722c89a6b1`의 첫 GitHub Actions 실행(run 31079257565)에서 macOS 15.7.7/AppleClang 17의 `ugurugu_ui_viewport_tests`가 4K frame-cache warmup 구간에서 SIGTRAP으로 종료됐다. 출력은 제품 코드의 ASan/UBSan 진단이 아니라 compiler-rt `sanitizer_posix_libcdep.cpp:209`의 `UnsetAlternateSignalStack()`이 `sigaltstack()` 실패를 내부 `CHECK`로 처리한 것이었고, stack trace는 비어 있었다.
 
-[`QThreadPool` 소멸자](https://doc.qt.io/qt-6/qthreadpool.html#dtor.QThreadPool)는 이미 모든 runnable 완료와 worker 종료를 기다리므로 제품 코드에 중복 `waitForDone()`을 추가하지 않았다. 대신 macOS ASan+UBSan test preset에 compiler-rt의 공식 [`use_sigaltstack=0`](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_flags.inc)을 지정해 결함이 난 Apple sanitizer runtime의 대체 signal-stack 설치·해제 경로만 피했다. 주소·수명·UB 계측과 `halt_on_error=1`은 그대로 유지된다. 다만 실제 stack exhaustion 때 sanitizer signal handler가 별도 stack을 쓰지 못하므로 stack-overflow 보고의 신뢰성은 낮아질 수 있다.
+이를 Apple sanitizer runtime의 alternate signal stack 해제 결함으로 보고 macOS ASan+UBSan test preset에 [`use_sigaltstack=0`](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_flags.inc)을 지정했다(커밋 `34550aa`). **이 우회책은 실패했다.** 다음 실행(run 31080460711)에서 같은 suite가 이번엔 `asan_poisoning.cpp:40`의 `PoisonShadow()` `CHECK`로 SIGABRT 종료했다. 두 지점 모두 `sigaltstack()`으로 현재 alternate stack 상태를 읽는 경로라, 우회책은 실패를 제거한 게 아니라 이동시킨 것에 가깝다. 해당 preset 설정은 되돌렸고, 이로써 stack-overflow 보고 능력도 복구된다.
 
-후속 변경 뒤 macOS 26.6/AppleClang 21에서 Debug 13/13(18.60초), Release 13/13(40.57초), `use_sigaltstack=0`을 적용한 ASan+UBSan 13/13(46.38초)이 모두 통과했다. CMake preset parsing과 `git diff --check`도 통과했다. macOS 15 호스팅 runner에서의 우회책 검증은 이 후속 변경이 원격 CI에서 실행될 때까지 남아 있다.
+두 번째 실행은 stack trace가 온전해 실제 트리거를 특정할 수 있었다.
+
+```
+#3  __asan::PoisonShadow
+#4  __asan::PlatformUnpoisonStacks
+#5  __asan_handle_no_return
+#6  longjmp
+#7~#12 (QtGui 내부 static 함수)
+#13 QRasterPaintEngine::fill
+#14 QPaintEngineEx::stroke
+#16 ugurugu::StrokeRenderer::(anonymous namespace)::drawPath   StrokeRenderer.cpp:102
+#25 ugurugu::RenderEngine::renderScaled                        RenderEngine.cpp:60
+#26 ugurugu::CanvasWidget::renderNextFrameCacheWarmup          CanvasWidgetPreview.cpp:966
+#37 asan_thread_start
+```
+
+`QRasterPaintEngine::fill` 아래에서 `longjmp`을 쓰는 Qt 코드는 FreeType 파생 anti-aliasing 래스터라이저(`qgrayraster.c`)뿐이다. 이 래스터라이저는 cell buffer가 넘치면 `longjmp`으로 빠져나와 pool을 키우고 재시도한다. 즉 경로가 충분히 크거나 복잡하면 발생하는 Qt의 정상 동작이며, 문제는 그 `longjmp`을 가로챈 ASan이 Darwin에서 스택 unpoison에 실패한다는 데 있다. 제품 코드의 메모리 오류가 아니다.
+
+ASan job은 `3a100f0` 직전 세 번의 실행(31058550123, 31070218057, 31071613484)에서 같은 macOS 15 runner로 모두 통과했다. runner는 그대로였고 바뀐 것은 이 커밋의 렌더 부하다. `previewRenderSize()`가 메모리 예산 기반 스케일 탐색(`PreviewRenderPolicy::renderSize(const Document &, qreal, int)`)으로 교체됐고, `primitiveBounds()`의 square tip `lineReach`가 `width * 0.5 + 3.0`에서 `width * 2.1 + 3.0`으로 늘었다. 둘 다 래스터라이저가 처리할 면적과 복잡도를 키우므로, 이 커밋이 Qt가 cell pool 오버플로로 `longjmp`을 시작하는 지점을 넘겼다고 보는 것이 자연스럽다.
+
+따라서 대응은 sanitizer 기능을 끄는 대신 결함이 있는 runtime을 쓰지 않는 쪽으로 바꿨다. ASan+UBSan job만 `macos-26`으로 올렸고(다른 job은 `macos-15` 유지) preset의 `use_sigaltstack=0`은 제거했다. 릴리스·패키지 job은 SDK와 배포 타깃이 바뀌므로 건드리지 않았다.
+
+로컬 macOS 26.6/AppleClang 21에서는 해당 suite를 20회, 문제 테스트를 30회 반복해 모두 통과했고 Debug 13/13, Release 13/13, ASan+UBSan 13/13이 통과했다. 다만 hosted runner는 코어 수와 메모리가 로컬과 다르고 새 `renderSize()`는 메모리 예산에, warmup pool 크기는 `QThread::idealThreadCount()`에 의존하므로 렌더 크기와 동시성이 달라진다. **hosted macos-26에서의 검증은 아직 남아 있다.** 또한 CI가 초록으로 바뀌더라도 그것은 최신 sanitizer runtime이 이 `longjmp`을 견딘다는 뜻일 뿐, 4K warmup이 Qt 래스터 pool을 상시 넘기는 상태가 의도된 것인지는 별도로 확인이 필요하다.
 
 ## 직접 검토했으나 finding에서 제외한 항목
 

@@ -162,8 +162,13 @@ jobs:
             preset: windows-release
             qt-host: windows
             qt-arch: win64_msvc2022_64
+          # macOS 15 이미지의 AppleClang 17 ASan runtime은 Qt raster
+          # rasterizer가 cell pool 오버플로로 longjmp할 때
+          # __asan_handle_no_return의 stack unpoison 경로가 내부 CHECK로
+          # 죽는다. 다른 job과 달리 이 job만 최신 sanitizer runtime이
+          # 필요하다.
           - name: macOS ASan + UBSan
-            os: macos-15
+            os: macos-26
             preset: macos-sanitized
             qt-host: mac
             qt-arch: clang_64
