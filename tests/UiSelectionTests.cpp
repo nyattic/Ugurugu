@@ -2147,6 +2147,102 @@ private slots:
             DocumentSerializer::toJson(controller.document()), beforeTransform);
     }
 
+    void lassoModeChangeRestoresThePreviousSelection()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(80.0, 50.0), 1.0}};
+        document.layers.first().strokes = {stroke};
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        const QImage selectionBefore =
+            CanvasWidgetTestAccess::selectionMask(canvas);
+        QVERIFY(!selectionBefore.isNull());
+
+        const auto widgetPoint = [&canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(x, y))
+                .toPoint();
+        };
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(30.0, 30.0));
+        QTest::mouseMove(&canvas, widgetPoint(70.0, 30.0), 5);
+        QTest::mouseMove(&canvas, widgetPoint(70.0, 70.0), 5);
+        QVERIFY(CanvasWidgetTestAccess::areaSelectionActive(canvas));
+
+        canvas.setLassoMode(CanvasWidget::LassoMode::Paint);
+        QVERIFY(!CanvasWidgetTestAccess::areaSelectionActive(canvas));
+        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
+            selectionBefore);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(70.0, 70.0));
+        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
+            selectionBefore);
+    }
+
+    void resizeDuringActiveLassoKeepsTheRollbackSnapshot()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(80.0, 50.0), 1.0}};
+        document.layers.first().strokes = {stroke};
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+
+        const auto widgetPoint = [&canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(x, y))
+                .toPoint();
+        };
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(30.0, 30.0));
+        QTest::mouseMove(&canvas, widgetPoint(70.0, 30.0), 5);
+        QTest::mouseMove(&canvas, widgetPoint(70.0, 70.0), 5);
+        QVERIFY(CanvasWidgetTestAccess::areaSelectionActive(canvas));
+
+        const QSize resized(130, 100);
+        QVERIFY(controller.resizeCanvas(resized, QPoint(5, 0)));
+
+        // Escape rolls the live lasso back to the selection that existed
+        // before it started; that snapshot has to survive the resize the
+        // same way the live selection does.
+        canvas.handleEscape();
+        QVERIFY(!CanvasWidgetTestAccess::areaSelectionActive(canvas));
+        const QImage restored = CanvasWidgetTestAccess::selectionMask(canvas);
+        QVERIFY2(!restored.isNull(),
+            "the rollback snapshot was lost across the canvas resize");
+        QCOMPARE(restored.size(), resized);
+        QVERIFY(canvas.hasSelection());
+    }
+
     void unrelatedSelectionDoesNotInheritCopyMoveMode()
     {
         Document document = Document::createDefault(QSize(100, 100));

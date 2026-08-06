@@ -1131,7 +1131,13 @@ void CanvasWidget::setLassoMode(LassoMode mode)
     {
         return;
     }
-    cancelAreaSelection();
+    if (m_areaSelectionActive)
+    {
+        const SelectionState previousSelection =
+            m_hasSelectionBeforeArea ? m_selectionBeforeArea : SelectionState();
+        cancelAreaSelection();
+        restoreSelectionState(previousSelection);
+    }
     m_lassoMode = mode;
     emit lassoModeChanged(mode);
 }

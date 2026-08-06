@@ -1049,6 +1049,23 @@ void CanvasWidget::handleCanvasResized(const QSize &previousSize,
             rebuildSelectionOutline();
         }
     }
+    // The rollback snapshot a live lasso would restore has to follow the
+    // resize the same way the live selection does, or the restore's size
+    // guard discards it.
+    if (m_hasSelectionBeforeArea && !m_selectionBeforeArea.mask.isNull()
+        && m_selectionBeforeArea.mask.size() == previousSize)
+    {
+        const QImage transformedSnapshot =
+            transformedMask(m_selectionBeforeArea.mask, currentSize, transform);
+        if (transformedSnapshot.isNull() || !maskHasContent(transformedSnapshot))
+        {
+            m_selectionBeforeArea = {};
+        }
+        else
+        {
+            m_selectionBeforeArea.mask = transformedSnapshot;
+        }
+    }
     for (QPointF &point : m_areaSelectionPoints)
     {
         point = transform.map(point);
