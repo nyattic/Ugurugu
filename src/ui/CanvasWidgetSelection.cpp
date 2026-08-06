@@ -120,7 +120,7 @@ void CanvasWidget::beginAreaSelection(
     m_areaSelectionPoints.clear();
     m_areaSelectionPoints.append(m_areaSelectionAnchor);
     updateSelectionAnimation();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::continueAreaSelection(const QPointF &documentPosition)
@@ -138,7 +138,7 @@ void CanvasWidget::continueAreaSelection(const QPointF &documentPosition)
     {
         m_areaSelectionPoints.append(m_areaSelectionCurrent);
     }
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::finishAreaSelection()
@@ -169,7 +169,7 @@ void CanvasWidget::finishAreaSelection()
         else
         {
             updateSelectionAnimation();
-            update();
+            requestDisplayUpdate();
         }
         return;
     }
@@ -186,7 +186,7 @@ void CanvasWidget::finishAreaSelection()
     {
         commitFrozenFill(mask);
         updateSelectionAnimation();
-        update();
+        requestDisplayUpdate();
         return;
     }
     if (combine == SelectionCombine::Replace)
@@ -214,7 +214,7 @@ void CanvasWidget::cancelAreaSelection()
     m_selectionBeforeArea = {};
     m_hasSelectionBeforeArea = false;
     updateSelectionAnimation();
-    update();
+    requestDisplayUpdate();
 }
 
 bool CanvasWidget::canFinishAreaSelection() const
@@ -304,7 +304,7 @@ void CanvasWidget::restoreSelectionState(const SelectionState &state)
     rebuildSelectionOutline();
     updateSelectionAnimation();
     notifySelectionTransformAvailability();
-    update();
+    requestDisplayUpdate();
     evaluateSelectionVisibility();
 }
 
@@ -327,7 +327,7 @@ void CanvasWidget::evaluateSelectionVisibility()
         }
         notifySelectionTransformAvailability();
         emit interactionMessage(tr("No content in the selected area."));
-        update();
+        requestDisplayUpdate();
         return;
     }
 
@@ -380,7 +380,7 @@ void CanvasWidget::evaluateSelectionVisibility()
                     ? tr("No content in the selected area.")
                     : tr("Selected content. Use the action bar to transform "
                          "or remove it."));
-            update();
+            requestDisplayUpdate();
         });
     watcher->setFuture(QtConcurrent::run(
         [document, layerId, mask, frame]()
@@ -654,7 +654,7 @@ void CanvasWidget::beginSelectionMove(const QPointF &documentPosition)
     m_moveBaseTransform = m_selectionTransformSession.transform;
     m_moveStartedTransformSession = !alreadyActive;
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::continueSelectionMove(const QPointF &documentPosition)
@@ -687,7 +687,7 @@ void CanvasWidget::commitSelectionMove()
     m_moveBaseTransform = QTransform();
     updateSelectionActionBar();
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::cancelSelectionMove()
@@ -711,7 +711,7 @@ void CanvasWidget::cancelSelectionMove()
     }
     updateSelectionActionBar();
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 bool CanvasWidget::beginSelectionTransformSession()
@@ -746,7 +746,7 @@ bool CanvasWidget::beginSelectionTransformSession()
     m_selectionTransformSession = std::move(session);
     emit selectionTransformSessionChanged(true, false);
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
     return true;
 }
 
@@ -763,7 +763,7 @@ bool CanvasWidget::setPendingSelectionTransform(const QTransform &transform)
         samplingForSelectionTransform(transform);
     emit selectionTransformSessionChanged(true, !fuzzyIdentity(transform));
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
     return true;
 }
 
@@ -790,7 +790,7 @@ void CanvasWidget::resetSelectionTransformSession()
     m_moveStartedTransformSession = false;
     emit selectionTransformSessionChanged(false, false);
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::cancelSelectionTransformForBoundary(const QString &message)
@@ -860,7 +860,7 @@ void CanvasWidget::clearSelection()
     updateSelectionAnimation();
     notifySelectionTransformAvailability();
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::pruneSelection()
@@ -879,7 +879,7 @@ void CanvasWidget::pruneSelection()
 
     m_selectedStrokes.clear();
     notifySelectionTransformAvailability();
-    update();
+    requestDisplayUpdate();
     evaluateSelectionVisibility();
 }
 
@@ -918,7 +918,7 @@ void CanvasWidget::transformSelectionOverlay(const QUuid &layerId,
     }
     m_selectionMask = transformedSelection;
     rebuildSelectionOutline();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::handleStrokesDuplicated(const QUuid &layerId,
@@ -974,7 +974,7 @@ void CanvasWidget::handleStrokesDuplicated(const QUuid &layerId,
     m_selectionMask = transformedSelection;
     rebuildSelectionOutline();
     notifySelectionTransformAvailability();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::handleSelectionOverlayTransition(const QUuid &layerId,
@@ -1025,7 +1025,7 @@ void CanvasWidget::handleSelectionOverlayTransition(const QUuid &layerId,
     updateSelectionAnimation();
     notifySelectionTransformAvailability();
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::handleCanvasResized(const QSize &previousSize,

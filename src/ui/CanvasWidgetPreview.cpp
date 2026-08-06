@@ -297,6 +297,10 @@ QImage CanvasWidget::activeStrokePreview(
     m_activeStrokePreviewPatchBounds = patchBounds;
     m_activeStrokePreviewPatchBoundsValid =
         patchBoundsValid && m_activeStrokePreviewResolved;
+    if (m_activeStrokePreviewPatchBoundsValid)
+    {
+        m_displayedFrameDirtyAccum |= patchBounds;
+    }
     resolved = m_activeStrokePreviewResolved;
     updateFrameCacheBudget();
     return preview;
@@ -341,6 +345,144 @@ QImage CanvasWidget::interactionPreview(
         return {};
     }
     return RenderEngine::renderScaled(document, m_currentFrame, renderSize);
+}
+
+CanvasWidget::DisplayedFrame CanvasWidget::resolveDisplayedFrame()
+{
+    const Document document = displayDocument();
+    const QSize renderSize = previewRenderSize();
+    QImage displayedFrame;
+    bool activeStrokePreviewResolved = false;
+    if (m_drawing && !m_activeStroke.points.isEmpty())
+    {
+        displayedFrame = activeStrokePreview(
+            document, renderSize, activeStrokePreviewResolved);
+    }
+    else if (hasPendingSelectionTransform())
+    {
+        const auto useRegionalPreview =
+            [this, &displayedFrame](
+                const RenderEngine::PixelSelectionPreviewRegion &region,
+                const QImage &composed)
+        {
+            const QImage baseFrame = frameImage(m_currentFrame);
+            if (!region.valid || baseFrame.isNull()
+                || (!region.bounds.isEmpty() && composed.isNull()))
+            {
+                return false;
+            }
+            if (m_composedPreviewFrame.size() != baseFrame.size()
+                || m_composedPreviewBaseKey != baseFrame.cacheKey())
+            {
+                m_composedPreviewFrame = baseFrame.copy();
+                m_composedPreviewBaseKey = baseFrame.cacheKey();
+                m_composedSelectionPreviewRegion = {};
+            }
+            QPainter compositor(&m_composedPreviewFrame);
+            compositor.setCompositionMode(QPainter::CompositionMode_Source);
+            const QRect resetRegion =
+                m_composedSelectionPreviewRegion.united(region.bounds);
+            if (!resetRegion.isEmpty())
+            {
+                compositor.drawImage(
+                    resetRegion.topLeft(), baseFrame, resetRegion);
+            }
+            if (!region.bounds.isEmpty())
+            {
+                compositor.drawImage(region.bounds.topLeft(), composed);
+            }
+            compositor.end();
+            m_composedSelectionPreviewRegion = region.bounds;
+            m_displayedFrameDirtyAccum |= resetRegion;
+            displayedFrame = m_composedPreviewFrame;
+            return true;
+        };
+        const RenderEngine::LayerSplitFrame &split =
+            previewSplit(m_selectionTransformSession.layer, renderSize);
+        if (split.valid)
+        {
+            const RenderEngine::PixelSelectionPreviewRegion region =
+                RenderEngine::replayPixelSelectionOnLayerRegion(split.layerBase,
+                    m_selectionTransformSession.previewOperation);
+            const QImage composed =
+                region.bounds.isEmpty()
+                    ? QImage()
+                    : RenderEngine::composeLayerSplitRegion(
+                          split, region.image, region.bounds);
+            if (!useRegionalPreview(region, composed))
+            {
+                QImage layerImage = split.layerBase;
+                if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
+                        m_selectionTransformSession.previewOperation))
+                {
+                    displayedFrame =
+                        RenderEngine::composeLayerSplit(split, layerImage);
+                }
+            }
+        }
+        if (displayedFrame.isNull())
+        {
+            const RenderEngine::LayerRasterFrame &rasters =
+                previewLayerRasters(renderSize);
+            const auto cached = rasters.paintLayers.constFind(
+                m_selectionTransformSession.layer);
+            if (rasters.valid && cached != rasters.paintLayers.cend())
+            {
+                const RenderEngine::PixelSelectionPreviewRegion region =
+                    RenderEngine::replayPixelSelectionOnLayerRegion(
+                        cached.value(),
+                        m_selectionTransformSession.previewOperation);
+                const QImage composed =
+                    region.bounds.isEmpty()
+                        ? QImage()
+                        : RenderEngine::composeLayerRasterFrameRegion(document,
+                              rasters,
+                              m_selectionTransformSession.layer,
+                              region.image,
+                              region.bounds);
+                if (!useRegionalPreview(region, composed))
+                {
+                    QImage layerImage = cached.value();
+                    if (RenderEngine::replayPixelSelectionOnLayer(layerImage,
+                            m_selectionTransformSession.previewOperation))
+                    {
+                        displayedFrame =
+                            RenderEngine::composeLayerRasterFrame(document,
+                                rasters,
+                                m_selectionTransformSession.layer,
+                                layerImage);
+                    }
+                }
+            }
+        }
+    }
+    if (displayedFrame.isNull() && !activeStrokePreviewResolved
+        && ((m_drawing && !m_activeStroke.points.isEmpty())
+            || hasPendingSelectionTransform()))
+    {
+        displayedFrame = interactionPreview(document, renderSize);
+    }
+    if (displayedFrame.isNull())
+    {
+        displayedFrame = frameImage(m_currentFrame);
+    }
+
+    DisplayedFrame result;
+    result.image = displayedFrame;
+    const QRect fullBounds(QPoint(), displayedFrame.size());
+    if (displayedFrame.cacheKey() != m_displayedFrameKey
+        || displayedFrame.size() != m_displayedFrameSize)
+    {
+        result.dirtyBounds = fullBounds;
+    }
+    else
+    {
+        result.dirtyBounds = m_displayedFrameDirtyAccum.intersected(fullBounds);
+    }
+    m_displayedFrameKey = displayedFrame.cacheKey();
+    m_displayedFrameSize = displayedFrame.size();
+    m_displayedFrameDirtyAccum = {};
+    return result;
 }
 
 const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
@@ -565,7 +707,7 @@ bool CanvasWidget::tryRegionalStrokeInvalidation(
     updateFrameCacheBudget();
     updateTimerInterval();
     notifyZoomChanged();
-    update();
+    requestDisplayUpdate();
     scheduleFrameCacheWarmup();
     return true;
 }
@@ -596,7 +738,7 @@ void CanvasWidget::invalidateFrames()
     updateFrameCacheBudget();
     updateTimerInterval();
     notifyZoomChanged();
-    update();
+    requestDisplayUpdate();
     scheduleFrameCacheWarmup();
 }
 
@@ -709,7 +851,7 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         m_frameCacheWarmupRenderSize = {};
         m_frameCacheWarmupPatchBounds = {};
         m_frameCacheWarmupCursor = 0;
-        update();
+        requestDisplayUpdate();
         if (finishedRun)
         {
             // A patch run may leave whole frames still missing (or vice

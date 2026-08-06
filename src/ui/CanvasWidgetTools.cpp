@@ -95,7 +95,7 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     m_composedPreviewFrame = {};
     m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::continueStroke(
@@ -144,13 +144,13 @@ void CanvasWidget::continueStroke(
                 / static_cast<qreal>(renderSize.width()),
             m_activeStrokePreviewPatchBounds.height() * document.size.height()
                 / static_cast<qreal>(renderSize.height()));
-        update(documentTransform()
+        requestDisplayUpdate(documentTransform()
                 .mapRect(documentRect)
                 .toAlignedRect()
                 .adjusted(-2, -2, 2, 2));
         return;
     }
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
@@ -242,7 +242,7 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
         }
         updateFrameCacheBudget();
     }
-    update();
+    requestDisplayUpdate();
 }
 
 DocumentController::AddStrokeResult CanvasWidget::commitStroke(
@@ -307,7 +307,7 @@ void CanvasWidget::cancelStroke()
     m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
     m_strokeStabilizer.reset();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::beginPan(const QPointF &widgetPosition)
@@ -334,7 +334,7 @@ void CanvasWidget::continuePan(const QPointF &widgetPosition)
     }
     else
     {
-        update();
+        requestDisplayUpdate();
     }
 }
 
@@ -349,7 +349,7 @@ void CanvasWidget::endPan()
     const QRect pointerRect = pointerUpdateRect();
     if (!pointerRect.isEmpty())
     {
-        update(pointerRect);
+        requestDisplayUpdate(pointerRect);
     }
 }
 
@@ -375,7 +375,7 @@ void CanvasWidget::zoomToward(qreal targetZoom, const QPointF &widgetPosition)
     }
     m_zoomRenderTimer.start();
     notifyZoomChanged();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::beginZoomDrag(const QPointF &widgetPosition)
@@ -412,7 +412,7 @@ void CanvasWidget::continueZoomDrag(const QPointF &widgetPosition)
     }
     m_zoomRenderTimer.start();
     notifyZoomChanged();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::endZoomDrag()
@@ -427,9 +427,9 @@ void CanvasWidget::endZoomDrag()
     const QRect pointerRect = pointerUpdateRect();
     if (!pointerRect.isEmpty())
     {
-        update(pointerRect);
+        requestDisplayUpdate(pointerRect);
     }
-    update();
+    requestDisplayUpdate();
 }
 
 bool CanvasWidget::isColorPickableTool() const
@@ -444,7 +444,7 @@ void CanvasWidget::beginColorPick(const QPointF &widgetPosition)
     m_pickingColor = true;
     updateCursor();
     pickColorAt(widgetPosition);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::endColorPick()
@@ -458,7 +458,7 @@ void CanvasWidget::endColorPick()
     m_colorPickFrameIndex = -1;
     updateFrameCacheBudget();
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
@@ -515,7 +515,7 @@ void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
     dirtyRect = dirtyRect.united(pointerUpdateRect());
     if (!dirtyRect.isEmpty())
     {
-        update(dirtyRect);
+        requestDisplayUpdate(dirtyRect);
     }
 }
 

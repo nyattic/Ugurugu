@@ -15,6 +15,7 @@
 #include <QImage>
 #include <QPainterPath>
 #include <QPointer>
+#include <QRegion>
 #include <QSet>
 #include <QThreadPool>
 #include <QTimer>
@@ -220,10 +221,25 @@ private:
         QTransform transform;
     };
 
+    // The frame pixels the viewport should show right now, together with the
+    // texels that changed since the previous resolve. dirtyBounds is in output
+    // (render-size) pixels: the full image when the backing store was
+    // replaced, empty when nothing changed. Lets a texture-backed display
+    // upload only what moved.
+    struct DisplayedFrame
+    {
+        QImage image;
+        QRect dirtyBounds;
+    };
+
     QTransform documentTransform() const;
     qreal fitZoom() const;
     Document displayDocument() const;
     void applyWobbleAnimationSetting(Document &document) const;
+    DisplayedFrame resolveDisplayedFrame();
+    void paintOverlay(QPainter &painter, const QRegion &exposedRegion);
+    void requestDisplayUpdate();
+    void requestDisplayUpdate(const QRect &rect);
     QPointF mapToDocument(
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
@@ -411,6 +427,12 @@ private:
     QImage m_composedPreviewFrame;
     QRect m_composedSelectionPreviewRegion;
     qint64 m_composedPreviewBaseKey = 0;
+    // In-place edits to the displayed frame (stroke tail patches, selection
+    // preview regions) keep the QImage cacheKey stable, so they accumulate
+    // here until the next resolveDisplayedFrame call consumes them.
+    QRect m_displayedFrameDirtyAccum;
+    qint64 m_displayedFrameKey = 0;
+    QSize m_displayedFrameSize;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
     QTimer m_zoomRenderTimer;

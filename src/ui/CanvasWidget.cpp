@@ -150,7 +150,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
         [this]()
         {
             m_selectionDashOffset -= 1.0;
-            update();
+            requestDisplayUpdate();
         });
     m_zoomRenderTimer.setSingleShot(true);
     m_zoomRenderTimer.setInterval(zoomRenderDelayMilliseconds);
@@ -159,7 +159,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
         this,
         [this]()
         {
-            update();
+            requestDisplayUpdate();
         });
 
     // Warmup renders on a dedicated pool: sharing the global QtConcurrent
@@ -536,7 +536,7 @@ bool CanvasWidget::applySelectionTransform()
         m_selectionTransformSession = session;
         emit selectionTransformSessionChanged(true, true);
         updateSelectionActionBar();
-        update();
+        requestDisplayUpdate();
         emit interactionMessage(
             tr("The selection transform could not be applied."));
         return false;
@@ -743,6 +743,16 @@ void CanvasWidget::releaseTransientRenderCaches()
     invalidateFrames();
 }
 
+void CanvasWidget::requestDisplayUpdate()
+{
+    update();
+}
+
+void CanvasWidget::requestDisplayUpdate(const QRect &rect)
+{
+    update(rect);
+}
+
 void CanvasWidget::setTool(Tool tool)
 {
     if (m_tool == tool)
@@ -764,7 +774,7 @@ void CanvasWidget::setTool(Tool tool)
     m_tool = tool;
     emit toolChanged(tool);
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setSelectionMoveMode(bool enabled)
@@ -783,7 +793,7 @@ void CanvasWidget::setSelectionMoveMode(bool enabled)
     emit selectionMoveModeChanged(next);
     updateCursor();
     updateSelectionActionBar();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::handleEscape()
@@ -829,7 +839,7 @@ void CanvasWidget::setBrushColor(const QColor &color)
     }
     m_brushColor = color;
     emit brushColorChanged(color);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setBrushWidth(qreal width)
@@ -851,7 +861,7 @@ void CanvasWidget::setBrushWidth(qreal width)
         m_brushPresetWidths.insert(m_brushPresetId, normalized);
     }
     emit brushWidthChanged(normalized);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setBrushPresetWidth(const QString &presetId, qreal width)
@@ -891,7 +901,7 @@ void CanvasWidget::setEraserWidth(qreal width)
         m_eraserPresetWidths.insert(m_eraserPresetId, normalized);
     }
     emit eraserWidthChanged(normalized);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setEraserPresetWidth(const QString &presetId, qreal width)
@@ -972,7 +982,7 @@ void CanvasWidget::setBrushAntialiasing(bool antialiasing)
     }
     m_brushAntialiasing = antialiasing;
     emit brushAntialiasingChanged(antialiasing);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setWobbleAnimationEnabled(bool enabled)
@@ -1011,7 +1021,7 @@ void CanvasWidget::setBrushPreset(const QString &presetId)
     }
     emit brushPresetChanged(preset->id);
     emit brushStabilizationChanged(brushStabilization());
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setEraserPreset(const QString &presetId)
@@ -1036,7 +1046,7 @@ void CanvasWidget::setEraserPreset(const QString &presetId)
     }
     emit eraserPresetChanged(preset->id);
     emit eraserStabilizationChanged(eraserStabilization());
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setWandReference(WandReference reference)
@@ -1118,7 +1128,7 @@ void CanvasWidget::setSelectionShape(SelectionShape shape)
     }
     m_selectionShape = shape;
     emit selectionShapeChanged(shape);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setLassoMode(LassoMode mode)
@@ -1173,7 +1183,7 @@ void CanvasWidget::setAnimating(bool animating)
         scheduleFrameCacheWarmup();
     }
     emit animatingChanged(animating);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::toggleAnimating()
@@ -1194,7 +1204,7 @@ void CanvasWidget::setGroupSelectionActive(bool active)
     }
     m_groupSelectionActive = active;
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::fitToWindow()
@@ -1202,7 +1212,7 @@ void CanvasWidget::fitToWindow()
     m_zoom = fitZoom();
     m_pan = QPointF();
     notifyZoomChanged();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::resetZoom()
@@ -1239,7 +1249,7 @@ void CanvasWidget::setCanvasMirrored(bool mirrored)
     m_canvasMirrored = mirrored;
     updatePointerPosition(m_pointerWidgetPosition);
     emit canvasMirroredChanged(mirrored);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::toggleCanvasMirrored()
@@ -1259,7 +1269,7 @@ void CanvasWidget::setCurrentFrame(int frame)
     m_currentFrame = normalized;
     invalidateActiveStrokePreview();
     emit currentFrameChanged(normalized);
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::setPanModifierActive(bool active)
@@ -1270,7 +1280,7 @@ void CanvasWidget::setPanModifierActive(bool active)
     }
     m_spacePressed = active;
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 void CanvasWidget::cancelActiveInteraction()
@@ -1294,7 +1304,7 @@ void CanvasWidget::cancelActiveInteraction()
     m_tabletPointerEraser = false;
     setPanModifierActive(false);
     updateCursor();
-    update();
+    requestDisplayUpdate();
 }
 
 }
