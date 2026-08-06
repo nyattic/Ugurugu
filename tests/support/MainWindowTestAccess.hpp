@@ -67,6 +67,24 @@ public:
         window.m_recoveryWriter.setSuspendedForTesting(suspended);
     }
 
+    static bool autosavePending(const MainWindow &window)
+    {
+        return window.m_autosavePending;
+    }
+
+    static quint64 submittedRecoveryRevision(const MainWindow &window)
+    {
+        return window.m_submittedRecoveryRevision;
+    }
+
+    static void deliverAutosaveCompletion(MainWindow &window,
+        bool success,
+        quint64 revision,
+        const QString &error)
+    {
+        window.handleAutosaveWritten(success, revision, error);
+    }
+
     static bool loadDocument(MainWindow &window, Document document)
     {
         return window.m_controller.loadDocument(std::move(document));

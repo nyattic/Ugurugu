@@ -1331,7 +1331,12 @@ void MainWindow::handleAutosaveWritten(
     }
     m_recoveryRevision = std::max(m_recoveryRevision, revision);
     clearRecoveryMetadata();
-    if (m_autosaveEditGeneration == m_submittedEditGeneration)
+    // Only the completion of the most recent submission may release the
+    // pending state: an older write finishing after a newer submission does
+    // not cover it, and if that newer write then fails the state must still
+    // demand a retry.
+    if (revision == m_submittedRecoveryRevision
+        && m_autosaveEditGeneration == m_submittedEditGeneration)
     {
         m_autosavePending = false;
     }

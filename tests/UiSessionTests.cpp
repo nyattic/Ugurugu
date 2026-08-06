@@ -194,6 +194,48 @@ private slots:
         QVERIFY(snapshot->metadata->revision >= 2);
     }
 
+    void ignoresStaleAutosaveCompletionForNewerPendingWork()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
+
+        MainWindow window;
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        controller.addLayer();
+
+        MainWindowTestAccess::setAutosaveWriterSuspended(window, true);
+        MainWindowTestAccess::requestAutosave(window);
+        const quint64 firstRevision =
+            MainWindowTestAccess::submittedRecoveryRevision(window);
+
+        controller.addLayer();
+        MainWindowTestAccess::requestAutosave(window);
+        const quint64 secondRevision =
+            MainWindowTestAccess::submittedRecoveryRevision(window);
+        QVERIFY(secondRevision > firstRevision);
+        QVERIFY(MainWindowTestAccess::autosavePending(window));
+
+        // The first write completes only after the second submission, the way
+        // an in-flight write races a newer one. Its success must not release
+        // the pending state the second write still owes.
+        MainWindowTestAccess::deliverAutosaveCompletion(
+            window, true, firstRevision, {});
+        QVERIFY2(MainWindowTestAccess::autosavePending(window),
+            "a stale autosave completion released the newer pending state");
+
+        MainWindowTestAccess::deliverAutosaveCompletion(
+            window, true, secondRevision, {});
+        QVERIFY(!MainWindowTestAccess::autosavePending(window));
+
+        MainWindowTestAccess::setAutosaveWriterSuspended(window, false);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+    }
+
     void dropsQueuedAutosaveAfterDiscard()
     {
         EnvironmentVariableGuard environmentGuard(
