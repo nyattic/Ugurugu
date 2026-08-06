@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QPainter>
 #include <QPainterPath>
+#include <QtMath>
 
 #include <algorithm>
 #include <cmath>
@@ -185,6 +186,140 @@ QRect RenderEngine::strokePreviewBounds(
     return mapped.toAlignedRect()
         .adjusted(-1, -1, 1, 1)
         .intersected(QRect(QPoint(), outputSize));
+}
+
+RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
+    const Document &document,
+    const QUuid &layerId,
+    const QUuid &strokeId,
+    const QSize &outputSize,
+    const QRect &additionalNativeBounds)
+{
+    RegionalStrokeRefresh refresh;
+    if (document.size.isEmpty() || outputSize.isEmpty())
+    {
+        return refresh;
+    }
+    const QRect canvasBounds(QPoint(), document.size);
+    // Pixel-selection and reframe operations move pixels across the canvas,
+    // so a stroke outside the refreshed region could still change pixels
+    // inside it. Every other operation only writes where it paints, which is
+    // what makes dropping far-away strokes safe.
+    for (const Layer &layer : document.layers)
+    {
+        if (layer.initialCanvasSize.isValid()
+            && layer.initialCanvasSize != document.size)
+        {
+            return refresh;
+        }
+        for (const Stroke &stroke : layer.strokes)
+        {
+            if (stroke.pixelSelectionOp || stroke.reframeOp
+                || stroke.mode == StrokeMode::PixelSelection
+                || stroke.mode == StrokeMode::Reframe)
+            {
+                return refresh;
+            }
+        }
+    }
+
+    const Layer *targetLayer = document.layer(layerId);
+    if (!targetLayer || targetLayer->kind != LayerKind::Paint)
+    {
+        return refresh;
+    }
+    int strokeIndex = -1;
+    for (int index = 0; index < targetLayer->strokes.size(); ++index)
+    {
+        if (targetLayer->strokes[index].id == strokeId)
+        {
+            strokeIndex = index;
+            break;
+        }
+    }
+    if (strokeIndex < 0)
+    {
+        return refresh;
+    }
+    const Stroke &target = targetLayer->strokes[strokeIndex];
+    if (target.mode != StrokeMode::Paint && target.mode != StrokeMode::Erase)
+    {
+        return refresh;
+    }
+    const StrokeCoveragePlan targetPlan =
+        prepareStrokeCoverage(document, *targetLayer);
+    if (!targetPlan.valid)
+    {
+        return refresh;
+    }
+    QRect nativeBounds = conservativeStrokeCoverageBounds(
+        document, *targetLayer, strokeIndex, targetPlan);
+    if (nativeBounds.isEmpty())
+    {
+        return refresh;
+    }
+    if (!additionalNativeBounds.isEmpty())
+    {
+        nativeBounds = nativeBounds.united(
+            additionalNativeBounds.intersected(canvasBounds));
+    }
+
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / document.size.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / document.size.height();
+    // Kept strokes must cover the native sampling footprint of every output
+    // pixel inside outputBounds, including the resampler's neighborhood on
+    // the native-exact fallback path.
+    const int marginX =
+        qCeil(2.0 / std::min<qreal>(1.0, horizontalScale)) + 4;
+    const int marginY = qCeil(2.0 / std::min<qreal>(1.0, verticalScale)) + 4;
+    const QRect filterBounds =
+        nativeBounds.adjusted(-marginX, -marginY, marginX, marginY)
+            .intersected(canvasBounds);
+
+    refresh.filteredDocument = document;
+    for (int layerIndex = 0; layerIndex < document.layers.size(); ++layerIndex)
+    {
+        const Layer &layer = document.layers[layerIndex];
+        if (layer.kind != LayerKind::Paint || layer.strokes.isEmpty())
+        {
+            continue;
+        }
+        const StrokeCoveragePlan plan = prepareStrokeCoverage(document, layer);
+        if (!plan.valid
+            || plan.primitiveBounds.size() != layer.strokes.size())
+        {
+            // Keeping every stroke of a layer the plan cannot describe is
+            // always correct, only slower.
+            continue;
+        }
+        QVector<Stroke> kept;
+        kept.reserve(layer.strokes.size());
+        for (int index = 0; index < layer.strokes.size(); ++index)
+        {
+            const Stroke &stroke = layer.strokes[index];
+            const bool droppable = stroke.mode == StrokeMode::Paint
+                                   || stroke.mode == StrokeMode::Erase
+                                   || stroke.mode == StrokeMode::Fill;
+            if (!droppable || plan.primitiveBounds[index].intersects(filterBounds))
+            {
+                kept.append(stroke);
+            }
+        }
+        refresh.filteredDocument.layers[layerIndex].strokes = std::move(kept);
+    }
+
+    const QRectF mappedRefresh(nativeBounds.x() * horizontalScale,
+        nativeBounds.y() * verticalScale,
+        nativeBounds.width() * horizontalScale,
+        nativeBounds.height() * verticalScale);
+    refresh.nativeBounds = nativeBounds;
+    refresh.outputBounds = mappedRefresh.toAlignedRect()
+                               .adjusted(-1, -1, 1, 1)
+                               .intersected(QRect(QPoint(), outputSize));
+    refresh.valid = !refresh.outputBounds.isEmpty();
+    return refresh;
 }
 
 QImage RenderEngine::renderStrokeCoverage(const Document &document,

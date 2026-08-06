@@ -157,6 +157,136 @@ private slots:
             staticPreview);
     }
 
+    void patchesRegionalStrokeRefreshExactly()
+    {
+        Document document = Document::createDefault(QSize(128, 96));
+        document.animationFrames = 6;
+        document.wobbleAmount = 4.0;
+        Layer &base = document.layers.first();
+        base.initialCanvasSize = document.size;
+        base.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(200, 60, 40),
+            7.0,
+            11,
+            {QPointF(10.0, 10.0), QPointF(30.0, 20.0), QPointF(20.0, 40.0)}));
+        base.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(30, 80, 200),
+            9.0,
+            12,
+            {QPointF(100.0, 70.0), QPointF(118.0, 88.0)}));
+        base.strokes.append(makeStroke(StrokeMode::Erase,
+            Qt::black,
+            12.0,
+            13,
+            {QPointF(105.0, 75.0), QPointF(115.0, 85.0)}));
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.opacity = 0.8;
+        top.blendMode = LayerBlendMode::Multiply;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(20, 160, 90),
+            6.0,
+            14,
+            {QPointF(60.0, 10.0), QPointF(80.0, 30.0)}));
+        document.layers.append(top);
+
+        const QSize previewSize(64, 48);
+        QVector<QImage> framesBefore;
+        for (int frame = 0; frame < document.animationFrames; ++frame)
+        {
+            framesBefore.append(
+                RenderEngine::renderScaled(document, frame, previewSize));
+            QVERIFY(!framesBefore.last().isNull());
+        }
+
+        Stroke added = makeStroke(StrokeMode::Paint,
+            QColor(240, 200, 40),
+            5.0,
+            15,
+            {QPointF(14.0, 14.0), QPointF(26.0, 30.0)});
+        const QUuid addedId = added.id;
+        const QUuid layerId = document.layers.first().id;
+        document.layers.first().strokes.append(added);
+
+        const RenderEngine::RegionalStrokeRefresh refresh =
+            RenderEngine::prepareRegionalStrokeRefresh(
+                document, layerId, addedId, previewSize);
+        QVERIFY(refresh.valid);
+        QVERIFY(!refresh.outputBounds.isEmpty());
+        QVERIFY(!refresh.nativeBounds.isEmpty());
+
+        int filteredStrokes = 0;
+        int fullStrokes = 0;
+        for (const Layer &layer : refresh.filteredDocument.layers)
+        {
+            filteredStrokes += layer.strokes.size();
+        }
+        for (const Layer &layer : document.layers)
+        {
+            fullStrokes += layer.strokes.size();
+        }
+        QVERIFY(filteredStrokes < fullStrokes);
+
+        for (int frame = 0; frame < document.animationFrames; ++frame)
+        {
+            const QImage expected =
+                RenderEngine::renderScaled(document, frame, previewSize);
+            const QImage regional = RenderEngine::renderScaled(
+                refresh.filteredDocument, frame, previewSize);
+            QVERIFY(!expected.isNull());
+            QVERIFY(!regional.isNull());
+            QImage patched = framesBefore[frame];
+            QPainter painter(&patched);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(
+                refresh.outputBounds.topLeft(), regional, refresh.outputBounds);
+            painter.end();
+            QCOMPARE(patched, expected);
+        }
+    }
+
+    void refusesRegionalStrokeRefreshWhenPixelsCanMove()
+    {
+        Document document = Document::createDefault(QSize(128, 96));
+        document.animationFrames = 4;
+        Layer &layer = document.layers.first();
+        layer.initialCanvasSize = document.size;
+        layer.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(210, 40, 70),
+            8.0,
+            21,
+            {QPointF(20.0, 20.0), QPointF(40.0, 32.0)}));
+
+        Stroke added = makeStroke(StrokeMode::Paint,
+            QColor(240, 200, 40),
+            5.0,
+            22,
+            {QPointF(90.0, 70.0), QPointF(110.0, 82.0)});
+        const QUuid addedId = added.id;
+        layer.strokes.append(added);
+
+        QVERIFY(RenderEngine::prepareRegionalStrokeRefresh(
+            document, layer.id, addedId, QSize(64, 48))
+                .valid);
+
+        const QImage selection =
+            rectangularMask(document.size, QRect(8, 8, 32, 32));
+        QTransform shift;
+        shift.translate(64.0, 32.0);
+        const std::optional<PixelSelectionOp> selectionOperation =
+            makePixelSelectionOp(selection, shift, true, true);
+        QVERIFY(selectionOperation.has_value());
+        Stroke operation;
+        operation.mode = StrokeMode::PixelSelection;
+        operation.pixelSelectionOp = *selectionOperation;
+        layer.strokes.insert(0, operation);
+
+        QVERIFY(!RenderEngine::prepareRegionalStrokeRefresh(
+            document, layer.id, addedId, QSize(64, 48))
+                 .valid);
+    }
+
     void replaysIntegralNearestSelectionAtDisplayScale()
     {
         Document document = Document::createDefault(QSize(128, 96));

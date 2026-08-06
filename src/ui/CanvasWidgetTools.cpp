@@ -118,6 +118,38 @@ void CanvasWidget::continueStroke(
     }
     m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
     invalidateActiveStrokePreview();
+    // Resolving the preview here instead of in paintEvent costs nothing extra
+    // (paintEvent reuses the resolved image) and yields the exact changed
+    // region, so the repaint can stay confined to the stroke tail instead of
+    // re-blitting the whole viewport per pointer event.
+    const QSize renderSize = previewRenderSize();
+    bool previewResolved = false;
+    if (!renderSize.isEmpty())
+    {
+        activeStrokePreview(displayDocument(), renderSize, previewResolved);
+    }
+    if (previewResolved && m_activeStrokePreviewPatchBoundsValid)
+    {
+        if (m_activeStrokePreviewPatchBounds.isEmpty())
+        {
+            return;
+        }
+        const Document &document = m_controller->document();
+        const QRectF documentRect(
+            m_activeStrokePreviewPatchBounds.x() * document.size.width()
+                / static_cast<qreal>(renderSize.width()),
+            m_activeStrokePreviewPatchBounds.y() * document.size.height()
+                / static_cast<qreal>(renderSize.height()),
+            m_activeStrokePreviewPatchBounds.width() * document.size.width()
+                / static_cast<qreal>(renderSize.width()),
+            m_activeStrokePreviewPatchBounds.height() * document.size.height()
+                / static_cast<qreal>(renderSize.height()));
+        update(documentTransform()
+                .mapRect(documentRect)
+                .toAlignedRect()
+                .adjusted(-2, -2, 2, 2));
+        return;
+    }
     update();
 }
 
@@ -193,6 +225,10 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
             PreviewRenderPolicy::cacheCostKiB(promotedFrame.sizeInBytes());
         m_frameCache.insert(
             promotedFrameIndex, new QImage(promotedFrame), cost);
+        // The promotion is a fresh composite of the committed document, so a
+        // regional invalidation that just marked the frame stale is satisfied.
+        m_frameCacheStaleFrames.remove(promotedFrameIndex);
+        clearCompletedFrameCacheRefresh();
         if (promotedSplit.valid)
         {
             m_previewSplit = std::move(promotedSplit);
@@ -215,8 +251,10 @@ DocumentController::AddStrokeResult CanvasWidget::commitStroke(
     const bool recordsColor =
         stroke.mode == StrokeMode::Paint || stroke.mode == StrokeMode::Fill;
     const QColor usedColor = stroke.color;
+    m_pendingStrokeRefreshHint = {true, layerId, stroke.id};
     const DocumentController::AddStrokeResult result =
         m_controller->addStroke(layerId, std::move(stroke));
+    m_pendingStrokeRefreshHint = {};
     switch (result)
     {
     case DocumentController::AddStrokeResult::Added:

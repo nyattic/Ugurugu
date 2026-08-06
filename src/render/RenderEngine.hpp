@@ -114,6 +114,24 @@ public:
         bool valid = false;
     };
 
+    // Everything a caller needs to refresh already rendered frames after one
+    // primitive stroke was appended, without re-rendering the whole canvas.
+    // filteredDocument drops every primitive stroke that cannot touch
+    // outputBounds, so rendering it and copying outputBounds over a frame
+    // rendered before the stroke existed reproduces the full document's frame
+    // exactly. Valid only while no operation in the document moves pixels
+    // across the canvas; pixel-selection and reframe operations refuse the
+    // plan outright.
+    struct RegionalStrokeRefresh
+    {
+        // Union of every pixel the stroke can touch on any frame, in native
+        // document coordinates respectively mapped to output coordinates.
+        QRect nativeBounds;
+        QRect outputBounds;
+        Document filteredDocument;
+        bool valid = false;
+    };
+
     static QImage render(const Document &document, int frameIndex);
     static QImage renderScaled(const Document &document,
         int frameIndex,
@@ -165,6 +183,14 @@ public:
     static QRect strokePreviewBounds(const Document &document,
         const Stroke &stroke,
         const QSize &outputSize);
+    // additionalNativeBounds widens the refreshed region, for callers whose
+    // cached frames are already missing an earlier stroke's pixels there.
+    static RegionalStrokeRefresh prepareRegionalStrokeRefresh(
+        const Document &document,
+        const QUuid &layerId,
+        const QUuid &strokeId,
+        const QSize &outputSize,
+        const QRect &additionalNativeBounds = QRect());
     static QImage renderStrokeCoverage(const Document &document,
         const Layer &layer,
         int strokeIndex,

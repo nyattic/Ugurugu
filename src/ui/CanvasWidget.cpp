@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace ugurugu
 {
@@ -70,7 +71,13 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
             cancelSelectionTransformForBoundary(
                 tr("The pending selection transform was canceled because "
                    "the document changed."));
-            invalidateFrames();
+            const PendingStrokeRefreshHint hint =
+                std::exchange(m_pendingStrokeRefreshHint, {});
+            if (!hint.armed
+                || !tryRegionalStrokeInvalidation(hint.layerId, hint.strokeId))
+            {
+                invalidateFrames();
+            }
             pruneSelection();
         });
     connect(m_controller,

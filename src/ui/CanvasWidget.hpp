@@ -193,6 +193,17 @@ private:
         QImage mask;
     };
 
+    // Armed by commitStroke around DocumentController::addStroke so the
+    // documentChanged handler can tell a plain stroke append apart from every
+    // other document change and refresh cached frames regionally instead of
+    // discarding them.
+    struct PendingStrokeRefreshHint
+    {
+        bool armed = false;
+        QUuid layerId;
+        QUuid strokeId;
+    };
+
     struct FloatingTransformSession
     {
         bool active = false;
@@ -215,6 +226,10 @@ private:
     PreviewSurfaceUsage previewSurfaceUsage() const;
     void updateFrameCacheBudget();
     QImage frameImage(int frame);
+    void resetFrameCacheStorage();
+    bool tryRegionalStrokeInvalidation(
+        const QUuid &layerId, const QUuid &strokeId);
+    void clearCompletedFrameCacheRefresh();
     QImage activeStrokePreview(
         const Document &document, const QSize &renderSize, bool &resolved);
     void invalidateActiveStrokePreview();
@@ -350,10 +365,21 @@ private:
     bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
+    // Frames still cached but rendered before the strokes covered by the
+    // pending regional refresh; they display stale pixels only inside
+    // m_frameCacheRefreshOutputBounds and must be patched before use.
+    QSet<int> m_frameCacheStaleFrames;
+    QRect m_frameCacheRefreshNativeBounds;
+    QRect m_frameCacheRefreshOutputBounds;
+    std::shared_ptr<const Document> m_frameCacheRefreshDocument;
+    PendingStrokeRefreshHint m_pendingStrokeRefreshHint;
     std::shared_ptr<const Document> m_frameCacheWarmupDocument;
     std::shared_ptr<std::atomic_bool> m_frameCacheWarmupCancellation;
     QVector<int> m_frameCacheWarmupFrames;
     QSize m_frameCacheWarmupRenderSize;
+    // Non-empty while the warmup run patches stale frames regionally instead
+    // of rendering whole frames.
+    QRect m_frameCacheWarmupPatchBounds;
     qsizetype m_frameCacheWarmupCursor = 0;
     quint64 m_frameCacheWarmupGeneration = 0;
     bool m_frameCacheWarmupActive = false;
@@ -370,6 +396,12 @@ private:
     QSize m_activeStrokePreviewRenderSize;
     int m_activeStrokePreviewFrame = -1;
     bool m_activeStrokePreviewResolved = false;
+    // Union of the preview pixels that changed in the last resolve, in output
+    // coordinates. Only meaningful while the valid flag is set; an empty rect
+    // then means nothing changed. Lets continueStroke repaint just the stroke
+    // tail instead of the whole widget.
+    QRect m_activeStrokePreviewPatchBounds;
+    bool m_activeStrokePreviewPatchBoundsValid = false;
     IncrementalStrokeRenderer m_incrementalStrokeRenderer;
     QImage m_composedPreviewFrame;
     QRect m_composedSelectionPreviewRegion;

@@ -79,15 +79,42 @@ QImage CanvasWidget::frameImage(int frame)
     const QSize renderSize = previewRenderSize();
     if (renderSize != m_cachedRenderSize)
     {
-        m_frameCache.clear();
+        resetFrameCacheStorage();
         m_cachedRenderSize = renderSize;
     }
-    if (QImage *cached = m_frameCache.object(frame))
+    const bool stale = m_frameCacheStaleFrames.contains(frame);
+    if (!stale)
     {
-        return *cached;
+        if (QImage *cached = m_frameCache.object(frame))
+        {
+            return *cached;
+        }
     }
     QImage image;
-    if (m_previewSplit.valid && m_previewSplitFrame == frame
+    if (stale && m_frameCacheRefreshDocument
+        && !m_frameCacheRefreshOutputBounds.isEmpty())
+    {
+        // A stale frame only misrenders inside the pending refresh bounds, so
+        // rendering the filtered document and patching that region is exact
+        // and far cheaper than a full render.
+        if (QImage *base = m_frameCache.object(frame);
+            base && base->size() == renderSize)
+        {
+            const QImage regional = RenderEngine::renderScaled(
+                *m_frameCacheRefreshDocument, frame, renderSize);
+            if (regional.size() == base->size())
+            {
+                image = base->copy();
+                QPainter painter(&image);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                painter.drawImage(m_frameCacheRefreshOutputBounds.topLeft(),
+                    regional,
+                    m_frameCacheRefreshOutputBounds);
+                painter.end();
+            }
+        }
+    }
+    if (image.isNull() && m_previewSplit.valid && m_previewSplitFrame == frame
         && m_previewSplit.below.size() == renderSize)
     {
         image = RenderEngine::composeLayerSplit(
@@ -111,6 +138,8 @@ QImage CanvasWidget::frameImage(int frame)
     }
     const int cost = PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
     m_frameCache.insert(frame, new QImage(image), cost);
+    m_frameCacheStaleFrames.remove(frame);
+    clearCompletedFrameCacheRefresh();
     return image;
 }
 
@@ -126,6 +155,8 @@ QImage CanvasWidget::activeStrokePreview(
     }
 
     QImage preview;
+    QRect patchBounds;
+    bool patchBoundsValid = false;
     if (const Layer *strokeLayer = document.layer(m_activeStrokeLayer))
     {
         // The live stroke has to wobble the way its own layer does, not the
@@ -145,15 +176,18 @@ QImage CanvasWidget::activeStrokePreview(
             const QImage baseFrame = frameImage(m_currentFrame);
             if (update.valid && !baseFrame.isNull())
             {
+                bool rebuiltComposedBase = false;
                 if (m_composedPreviewFrame.size() != baseFrame.size()
                     || m_composedPreviewBaseKey != baseFrame.cacheKey())
                 {
                     m_composedPreviewFrame = baseFrame.copy();
                     m_composedPreviewBaseKey = baseFrame.cacheKey();
+                    rebuiltComposedBase = true;
                 }
                 QPainter painter(&m_composedPreviewFrame);
                 painter.setCompositionMode(QPainter::CompositionMode_Source);
                 bool composedAllPatches = true;
+                QRect composedBounds;
                 for (const IncrementalStrokeRenderer::Patch &patch :
                     update.patches)
                 {
@@ -166,11 +200,16 @@ QImage CanvasWidget::activeStrokePreview(
                         break;
                     }
                     painter.drawImage(patch.bounds.topLeft(), composed);
+                    composedBounds = composedBounds.united(patch.bounds);
                 }
                 painter.end();
                 if (composedAllPatches)
                 {
                     preview = m_composedPreviewFrame;
+                    patchBounds = rebuiltComposedBase
+                                      ? QRect(QPoint(), renderSize)
+                                      : composedBounds;
+                    patchBoundsValid = true;
                 }
                 else
                 {
@@ -196,16 +235,19 @@ QImage CanvasWidget::activeStrokePreview(
                 const QImage baseFrame = frameImage(m_currentFrame);
                 if (update.valid && !baseFrame.isNull())
                 {
+                    bool rebuiltComposedBase = false;
                     if (m_composedPreviewFrame.size() != baseFrame.size()
                         || m_composedPreviewBaseKey != baseFrame.cacheKey())
                     {
                         m_composedPreviewFrame = baseFrame.copy();
                         m_composedPreviewBaseKey = baseFrame.cacheKey();
+                        rebuiltComposedBase = true;
                     }
                     QPainter painter(&m_composedPreviewFrame);
                     painter.setCompositionMode(
                         QPainter::CompositionMode_Source);
                     bool composedAllPatches = true;
+                    QRect composedBounds;
                     for (const IncrementalStrokeRenderer::Patch &patch :
                         update.patches)
                     {
@@ -222,11 +264,16 @@ QImage CanvasWidget::activeStrokePreview(
                             break;
                         }
                         painter.drawImage(patch.bounds.topLeft(), composed);
+                        composedBounds = composedBounds.united(patch.bounds);
                     }
                     painter.end();
                     if (composedAllPatches)
                     {
                         preview = m_composedPreviewFrame;
+                        patchBounds = rebuiltComposedBase
+                                          ? QRect(QPoint(), renderSize)
+                                          : composedBounds;
+                        patchBoundsValid = true;
                     }
                     else
                     {
@@ -240,11 +287,16 @@ QImage CanvasWidget::activeStrokePreview(
     if (preview.isNull())
     {
         preview = interactionPreview(document, renderSize);
+        patchBounds = {};
+        patchBoundsValid = false;
     }
     m_activeStrokePreview = preview;
     m_activeStrokePreviewRenderSize = renderSize;
     m_activeStrokePreviewFrame = m_currentFrame;
     m_activeStrokePreviewResolved = !preview.isNull();
+    m_activeStrokePreviewPatchBounds = patchBounds;
+    m_activeStrokePreviewPatchBoundsValid =
+        patchBoundsValid && m_activeStrokePreviewResolved;
     resolved = m_activeStrokePreviewResolved;
     updateFrameCacheBudget();
     return preview;
@@ -256,6 +308,8 @@ void CanvasWidget::invalidateActiveStrokePreview()
     m_activeStrokePreviewRenderSize = {};
     m_activeStrokePreviewFrame = -1;
     m_activeStrokePreviewResolved = false;
+    m_activeStrokePreviewPatchBounds = {};
+    m_activeStrokePreviewPatchBoundsValid = false;
 }
 
 QImage CanvasWidget::interactionPreview(
@@ -312,7 +366,7 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
     if (m_previewLayerRasterFrame != m_currentFrame
         || m_previewLayerRasters.outputSize != renderSize)
     {
-        m_frameCache.clear();
+        resetFrameCacheStorage();
         m_previewLayerRasters = {};
         const qint64 budgetBytes =
             static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB()) * 1024;
@@ -431,10 +485,95 @@ void CanvasWidget::updateFrameCacheBudget()
         previewSurfaceUsage().pinnedBytes(), frameBytes));
 }
 
+void CanvasWidget::resetFrameCacheStorage()
+{
+    m_frameCache.clear();
+    m_frameCacheStaleFrames.clear();
+    m_frameCacheRefreshNativeBounds = {};
+    m_frameCacheRefreshOutputBounds = {};
+    m_frameCacheRefreshDocument.reset();
+}
+
+void CanvasWidget::clearCompletedFrameCacheRefresh()
+{
+    if (!m_frameCacheStaleFrames.isEmpty())
+    {
+        return;
+    }
+    m_frameCacheRefreshNativeBounds = {};
+    m_frameCacheRefreshOutputBounds = {};
+    m_frameCacheRefreshDocument.reset();
+}
+
+bool CanvasWidget::tryRegionalStrokeInvalidation(
+    const QUuid &layerId, const QUuid &strokeId)
+{
+    const QSize renderSize = previewRenderSize();
+    if (renderSize.isEmpty() || renderSize != m_cachedRenderSize
+        || m_frameCache.isEmpty())
+    {
+        return false;
+    }
+    // Frames still waiting on an earlier refresh are missing those pixels
+    // too, so the new refresh has to cover the union of both regions.
+    if (!m_frameCacheStaleFrames.isEmpty()
+        && m_frameCacheRefreshNativeBounds.isEmpty())
+    {
+        return false;
+    }
+    RenderEngine::RegionalStrokeRefresh refresh =
+        RenderEngine::prepareRegionalStrokeRefresh(displayDocument(),
+            layerId,
+            strokeId,
+            renderSize,
+            m_frameCacheStaleFrames.isEmpty()
+                ? QRect()
+                : m_frameCacheRefreshNativeBounds);
+    if (!refresh.valid)
+    {
+        return false;
+    }
+
+    // Mirrors invalidateFrames() except that the frame cache itself survives
+    // as the base the regional patches draw over.
+    cancelFrameCacheWarmup();
+    m_colorPickFrame = {};
+    m_colorPickFrameIndex = -1;
+    m_previewSplit = {};
+    m_previewSplitLayer = QUuid();
+    m_previewSplitFrame = -1;
+    m_previewLayerRasters = {};
+    m_previewLayerRasterFrame = -1;
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
+    invalidateActiveStrokePreview();
+    m_incrementalStrokeRenderer.clear();
+    m_editableStrokeIds.clear();
+    m_editableStrokeMaskKey = 0;
+    m_editableStrokeLayer = QUuid();
+    m_editableStrokeFrame = -1;
+
+    m_frameCacheRefreshNativeBounds = refresh.nativeBounds;
+    m_frameCacheRefreshOutputBounds = refresh.outputBounds;
+    m_frameCacheRefreshDocument =
+        std::make_shared<const Document>(std::move(refresh.filteredDocument));
+    const QList<int> cachedFrames = m_frameCache.keys();
+    m_frameCacheStaleFrames =
+        QSet<int>(cachedFrames.cbegin(), cachedFrames.cend());
+
+    updateFrameCacheBudget();
+    updateTimerInterval();
+    notifyZoomChanged();
+    update();
+    scheduleFrameCacheWarmup();
+    return true;
+}
+
 void CanvasWidget::invalidateFrames()
 {
     cancelFrameCacheWarmup();
-    m_frameCache.clear();
+    resetFrameCacheStorage();
     m_cachedRenderSize = {};
     m_colorPickFrame = {};
     m_colorPickFrameIndex = -1;
@@ -473,6 +612,7 @@ void CanvasWidget::cancelFrameCacheWarmup()
     m_frameCacheWarmupDocument.reset();
     m_frameCacheWarmupFrames.clear();
     m_frameCacheWarmupRenderSize = {};
+    m_frameCacheWarmupPatchBounds = {};
     m_frameCacheWarmupCursor = 0;
 }
 
@@ -503,11 +643,12 @@ void CanvasWidget::scheduleFrameCacheWarmup()
             }
             if (m_cachedRenderSize != renderSize)
             {
-                m_frameCache.clear();
+                resetFrameCacheStorage();
                 m_cachedRenderSize = renderSize;
             }
 
             QVector<int> missingFrames;
+            QVector<int> staleFrames;
             missingFrames.reserve(frameCount);
             for (int offset = 0; offset < frameCount; ++offset)
             {
@@ -516,17 +657,31 @@ void CanvasWidget::scheduleFrameCacheWarmup()
                 {
                     missingFrames.append(frame);
                 }
+                else if (m_frameCacheStaleFrames.contains(frame))
+                {
+                    staleFrames.append(frame);
+                }
             }
-            if (missingFrames.isEmpty())
+            // Stale frames patch far faster than missing frames render, so
+            // they refresh first; the finish path reschedules for whatever
+            // remains.
+            const bool patchMode = !staleFrames.isEmpty()
+                                   && m_frameCacheRefreshDocument
+                                   && !m_frameCacheRefreshOutputBounds.isEmpty();
+            if (!patchMode && missingFrames.isEmpty())
             {
                 return;
             }
 
             m_frameCacheWarmupDocument =
-                std::make_shared<const Document>(displayDocument());
+                patchMode ? m_frameCacheRefreshDocument
+                          : std::make_shared<const Document>(displayDocument());
             m_frameCacheWarmupCancellation =
                 std::make_shared<std::atomic_bool>(false);
-            m_frameCacheWarmupFrames = std::move(missingFrames);
+            m_frameCacheWarmupFrames =
+                patchMode ? std::move(staleFrames) : std::move(missingFrames);
+            m_frameCacheWarmupPatchBounds =
+                patchMode ? m_frameCacheRefreshOutputBounds : QRect();
             m_frameCacheWarmupRenderSize = renderSize;
             m_frameCacheWarmupCursor = 0;
             m_frameCacheWarmupActive = true;
@@ -546,13 +701,22 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         {
             return;
         }
+        const bool finishedRun = m_frameCacheWarmupActive;
         m_frameCacheWarmupActive = false;
         m_frameCacheWarmupCancellation.reset();
         m_frameCacheWarmupDocument.reset();
         m_frameCacheWarmupFrames.clear();
         m_frameCacheWarmupRenderSize = {};
+        m_frameCacheWarmupPatchBounds = {};
         m_frameCacheWarmupCursor = 0;
         update();
+        if (finishedRun)
+        {
+            // A patch run may leave whole frames still missing (or vice
+            // versa); a fresh schedule picks up whatever remains and returns
+            // without work otherwise.
+            scheduleFrameCacheWarmup();
+        }
         return;
     }
 
@@ -568,6 +732,7 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         const int frame = m_frameCacheWarmupFrames[m_frameCacheWarmupCursor];
         ++m_frameCacheWarmupCursor;
         const QSize renderSize = m_frameCacheWarmupRenderSize;
+        const QRect patchBounds = m_frameCacheWarmupPatchBounds;
         const std::shared_ptr<const Document> document =
             m_frameCacheWarmupDocument;
         const std::shared_ptr<std::atomic_bool> cancellation =
@@ -577,7 +742,8 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         connect(watcher,
             &QFutureWatcher<QImage>::finished,
             this,
-            [this, watcher, generation, frame, renderSize, cancellation]()
+            [this, watcher, generation, frame, renderSize, patchBounds,
+                cancellation]()
             {
                 const QImage image = watcher->result();
                 watcher->deleteLater();
@@ -597,13 +763,42 @@ void CanvasWidget::renderNextFrameCacheWarmup()
                         0, this, &CanvasWidget::renderNextFrameCacheWarmup);
                     return;
                 }
-                if (!image.isNull())
+                if (!patchBounds.isEmpty())
+                {
+                    QImage *base = m_frameCache.object(frame);
+                    if (!image.isNull() && base && base->size() == image.size()
+                        && m_frameCacheStaleFrames.contains(frame))
+                    {
+                        QImage patched = base->copy();
+                        QPainter painter(&patched);
+                        painter.setCompositionMode(
+                            QPainter::CompositionMode_Source);
+                        painter.drawImage(
+                            patchBounds.topLeft(), image, patchBounds);
+                        painter.end();
+                        const int cost = PreviewRenderPolicy::cacheCostKiB(
+                            patched.sizeInBytes());
+                        m_frameCache.insert(frame, new QImage(patched), cost);
+                        m_frameCacheStaleFrames.remove(frame);
+                    }
+                    else
+                    {
+                        // Without an intact base the patch cannot apply; drop
+                        // the frame so the follow-up schedule renders it in
+                        // full.
+                        m_frameCacheStaleFrames.remove(frame);
+                        m_frameCache.remove(frame);
+                    }
+                    clearCompletedFrameCacheRefresh();
+                }
+                else if (!image.isNull())
                 {
                     m_cachedRenderSize = renderSize;
                     updateFrameCacheBudget();
                     const int cost =
                         PreviewRenderPolicy::cacheCostKiB(image.sizeInBytes());
                     m_frameCache.insert(frame, new QImage(image), cost);
+                    m_frameCacheStaleFrames.remove(frame);
                 }
                 QTimer::singleShot(
                     0, this, &CanvasWidget::renderNextFrameCacheWarmup);
@@ -651,7 +846,9 @@ void CanvasWidget::advanceFrame()
     {
         const int frameCount =
             std::max(1, m_controller->document().animationFrames);
-        if (!m_frameCache.object((m_currentFrame + 1) % frameCount))
+        const int nextFrame = (m_currentFrame + 1) % frameCount;
+        if (!m_frameCache.object(nextFrame)
+            || m_frameCacheStaleFrames.contains(nextFrame))
         {
             return;
         }
