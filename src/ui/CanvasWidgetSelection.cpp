@@ -308,9 +308,47 @@ void CanvasWidget::restoreSelectionState(const SelectionState &state)
     evaluateSelectionVisibility();
 }
 
+void CanvasWidget::cancelSelectionVisibilityEvaluation()
+{
+    if (m_selectionVisibilityCancellation)
+    {
+        m_selectionVisibilityCancellation->store(
+            true, std::memory_order_relaxed);
+        m_selectionVisibilityCancellation.reset();
+    }
+    ++m_selectionVisibilityGeneration;
+}
+
+void CanvasWidget::applySelectionVisibility(bool hasVisiblePixels)
+{
+    QSet<QUuid> selected;
+    const Layer *layer = m_controller->document().layer(m_selectionLayer);
+    if (hasVisiblePixels && layer)
+    {
+        for (const Stroke &stroke : layer->strokes)
+        {
+            selected.insert(stroke.id);
+        }
+    }
+    m_selectedStrokes = std::move(selected);
+    notifySelectionTransformAvailability();
+    const bool armedForThisSelection =
+        std::exchange(m_armSelectionMoveMode, false)
+        && m_armSelectionMoveLayer == m_selectionLayer
+        && m_armSelectionMoveMaskKey == m_selectionMask.cacheKey();
+    if (armedForThisSelection && !m_selectedStrokes.isEmpty())
+    {
+        setSelectionMoveMode(true);
+    }
+    emit interactionMessage(m_selectedStrokes.isEmpty()
+            ? tr("No content in the selected area.")
+            : tr("Selected content. Use the action bar to transform or remove "
+                 "it."));
+    requestDisplayUpdate();
+}
+
 void CanvasWidget::evaluateSelectionVisibility()
 {
-    const quint64 generation = ++m_selectionVisibilityGeneration;
     const Document document = m_controller->document();
     const QUuid layerId = m_selectionLayer;
     const QImage mask = m_selectionMask;
@@ -319,6 +357,7 @@ void CanvasWidget::evaluateSelectionVisibility()
     const Layer *layer = document.layer(layerId);
     if (!layer || !layer->visible || layer->opacity <= 0.0 || mask.isNull())
     {
+        cancelSelectionVisibilityEvaluation();
         m_armSelectionMoveMode = false;
         m_selectedStrokes.clear();
         if (layer && !mask.isNull())
@@ -331,6 +370,21 @@ void CanvasWidget::evaluateSelectionVisibility()
         return;
     }
 
+    // Restoring a selection the document has not changed under - escaping a
+    // lasso, undoing back onto it - asks a question the controller already
+    // answered. Rendering it again would cost the whole animation.
+    const std::optional<bool> cached =
+        m_controller->cachedSelectionVisibility(layerId, mask);
+    cancelSelectionVisibilityEvaluation();
+    if (cached)
+    {
+        applySelectionVisibility(*cached);
+        return;
+    }
+
+    const quint64 generation = m_selectionVisibilityGeneration;
+    const auto cancellation = std::make_shared<std::atomic_bool>(false);
+    m_selectionVisibilityCancellation = cancellation;
     // QObject parenting retains the watcher until its finished callback queues
     // deleteLater(); the analyzer does not model either Qt ownership mechanism.
     // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
@@ -342,53 +396,35 @@ void CanvasWidget::evaluateSelectionVisibility()
         {
             const SelectionVisibility::Result result = watcher->result();
             watcher->deleteLater();
-            if (generation != m_selectionVisibilityGeneration
-                || layerId != m_selectionLayer
-                || maskKey != m_selectionMask.cacheKey())
+            if (generation != m_selectionVisibilityGeneration)
             {
                 return;
             }
-
-            QSet<QUuid> selected;
-            const Layer *currentLayer =
-                m_controller->document().layer(m_selectionLayer);
-            if (result.renderSucceeded && result.hasVisiblePixels
-                && currentLayer)
+            m_selectionVisibilityCancellation.reset();
+            if (layerId != m_selectionLayer
+                || maskKey != m_selectionMask.cacheKey())
             {
-                for (const Stroke &stroke : currentLayer->strokes)
-                {
-                    selected.insert(stroke.id);
-                }
+                return;
             }
             if (result.renderSucceeded)
             {
                 m_controller->cacheSelectionVisibility(
                     m_selectionLayer, m_selectionMask, result.hasVisiblePixels);
             }
-            m_selectedStrokes = std::move(selected);
-            notifySelectionTransformAvailability();
-            const bool armedForThisSelection =
-                std::exchange(m_armSelectionMoveMode, false)
-                && m_armSelectionMoveLayer == m_selectionLayer
-                && m_armSelectionMoveMaskKey == m_selectionMask.cacheKey();
-            if (armedForThisSelection && !m_selectedStrokes.isEmpty())
-            {
-                setSelectionMoveMode(true);
-            }
-            emit interactionMessage(
-                m_selectedStrokes.isEmpty()
-                    ? tr("No content in the selected area.")
-                    : tr("Selected content. Use the action bar to transform "
-                         "or remove it."));
-            requestDisplayUpdate();
+            applySelectionVisibility(
+                result.renderSucceeded && result.hasVisiblePixels);
         });
     watcher->setFuture(QtConcurrent::run(
-        [document, layerId, mask, frame]()
+        [document, layerId, mask, frame, cancellation]()
         {
             const Layer *snapshotLayer = document.layer(layerId);
-            return snapshotLayer ? SelectionVisibility::evaluate(
-                                       document, *snapshotLayer, mask, frame)
-                                 : SelectionVisibility::Result();
+            return snapshotLayer
+                       ? SelectionVisibility::evaluate(document,
+                             *snapshotLayer,
+                             mask,
+                             frame,
+                             cancellation.get())
+                       : SelectionVisibility::Result();
         }));
 }
 // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
@@ -839,7 +875,7 @@ QPointF CanvasWidget::safeSelectionDeltaForBounds(
 
 void CanvasWidget::clearSelection()
 {
-    ++m_selectionVisibilityGeneration;
+    cancelSelectionVisibilityEvaluation();
     m_armSelectionMoveMode = false;
     m_armSelectionMoveLayer = QUuid();
     m_armSelectionMoveMaskKey = 0;

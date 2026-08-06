@@ -314,6 +314,8 @@ private:
     SelectionState currentSelectionState() const;
     void restoreSelectionState(const SelectionState &state);
     void evaluateSelectionVisibility();
+    void cancelSelectionVisibilityEvaluation();
+    void applySelectionVisibility(bool hasVisiblePixels);
     void pushSelectionChange(const SelectionState &previousSelection,
         const SelectionState &nextSelection,
         const QString &text);
@@ -481,6 +483,11 @@ private:
     bool m_hasSelectionBeforeArea = false;
     QSet<QUuid> m_selectedStrokes;
     quint64 m_selectionVisibilityGeneration = 0;
+    // An evaluation renders the selected layer across the whole animation, so
+    // one that has been superseded stops rather than holding a pool thread
+    // against its own replacement. The flag outlives the widget through the
+    // running task's copy of the pointer.
+    std::shared_ptr<std::atomic_bool> m_selectionVisibilityCancellation;
     QUuid m_selectionLayer;
     QImage m_selectionMask;
     mutable QVector<QUuid> m_editableStrokeIds;

@@ -421,12 +421,10 @@ bool DocumentController::selectionHasVisibleLayerPixels(
     {
         return false;
     }
-    const qint64 maskKey = selectionMask.cacheKey();
-    if (m_selectionVisibilityCacheValid
-        && m_selectionVisibilityLayerId == layerId
-        && m_selectionVisibilityMaskKey == maskKey)
+    if (const std::optional<bool> cached =
+            cachedSelectionVisibility(layerId, selectionMask))
     {
-        return m_selectionVisibilityCacheResult;
+        return *cached;
     }
 
     const SelectionVisibility::Result visibility =
@@ -434,9 +432,21 @@ bool DocumentController::selectionHasVisibleLayerPixels(
             current, *layer, selectionMask, preferredFrame);
     m_selectionVisibilityCacheValid = visibility.renderSucceeded;
     m_selectionVisibilityLayerId = layerId;
-    m_selectionVisibilityMaskKey = maskKey;
+    m_selectionVisibilityMaskKey = selectionMask.cacheKey();
     m_selectionVisibilityCacheResult = visibility.hasVisiblePixels;
     return visibility.hasVisiblePixels;
+}
+
+std::optional<bool> DocumentController::cachedSelectionVisibility(
+    const QUuid &layerId, const QImage &selectionMask) const
+{
+    if (!m_selectionVisibilityCacheValid || selectionMask.isNull()
+        || m_selectionVisibilityLayerId != layerId
+        || m_selectionVisibilityMaskKey != selectionMask.cacheKey())
+    {
+        return std::nullopt;
+    }
+    return m_selectionVisibilityCacheResult;
 }
 
 void DocumentController::cacheSelectionVisibility(

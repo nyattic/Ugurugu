@@ -9,6 +9,7 @@
 #include <QTransform>
 
 #include <memory>
+#include <optional>
 
 namespace ugurugu
 {
@@ -152,6 +153,10 @@ public:
     bool selectionHasVisibleLayerPixels(const QUuid &layerId,
         const QImage &selectionMask,
         int preferredFrame = 0) const;
+    // The answer already known for this exact selection, or nothing when it
+    // has to be evaluated. Every document state installation drops it.
+    std::optional<bool> cachedSelectionVisibility(
+        const QUuid &layerId, const QImage &selectionMask) const;
     void cacheSelectionVisibility(
         const QUuid &layerId, const QImage &selectionMask, bool visible);
     void pushSelectionStateCommand(const QString &text,

@@ -6,7 +6,9 @@
 #include <QMessageBox>
 #include <QMimeData>
 
+#include <atomic>
 #include <cmath>
+#include <memory>
 #include <numbers>
 
 namespace ugurugu
@@ -2872,6 +2874,108 @@ private slots:
         QVERIFY(canvas.hasSelection());
         QTRY_VERIFY(eventLoopAdvanced);
         QTRY_VERIFY_WITH_TIMEOUT(canvas.hasTransformableSelection(), 5000);
+    }
+
+    void restoredSelectionReusesTheCachedVisibility()
+    {
+        Document document = Document::createDefault(QSize(128, 128));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {
+            {QPointF(30.0, 64.0), 1.0}, {QPointF(98.0, 64.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setSelectionShape(CanvasWidget::SelectionShape::Rectangle);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+
+        // Starting a lasso drops the selection and Escape puts the very same
+        // mask back on an unchanged document. That answer is already cached, so
+        // it has to apply straight away instead of behind another render.
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            center - QPoint(40, 40));
+        QTest::mouseMove(&canvas, center, 1);
+        QVERIFY(!canvas.hasSelection());
+        canvas.handleEscape();
+        QVERIFY(canvas.hasSelection());
+        QVERIFY2(canvas.hasTransformableSelection(),
+            "the restored selection waited on a redundant evaluation");
+    }
+
+    void documentChangeCancelsTheSupersededVisibilityEvaluation()
+    {
+        // Wobble over every frame makes one evaluation an animation-long
+        // render, so a superseded run left going competes with its own
+        // replacement for the pool.
+        Document document = Document::createDefault(QSize(256, 256));
+        document.background = Qt::transparent;
+        document.animationFrames = 60;
+        document.wobbleAmount = 4.0;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {
+            {QPointF(60.0, 128.0), 1.0}, {QPointF(196.0, 128.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.selectAll();
+        const std::shared_ptr<const std::atomic_bool> superseded =
+            CanvasWidgetTestAccess::selectionVisibilityCancellation(canvas);
+        QVERIFY(superseded);
+        QVERIFY(!superseded->load(std::memory_order_relaxed));
+
+        Stroke added;
+        added.width = 8.0;
+        added.points = {{QPointF(60.0, 40.0), 1.0}, {QPointF(196.0, 40.0), 1.0}};
+        QCOMPARE(
+            controller.addStroke(controller.document().activeLayerId, added),
+            DocumentController::AddStrokeResult::Added);
+
+        QVERIFY2(superseded->load(std::memory_order_relaxed),
+            "the superseded evaluation kept rendering on the pool");
+        const std::shared_ptr<const std::atomic_bool> replacement =
+            CanvasWidgetTestAccess::selectionVisibilityCancellation(canvas);
+        QVERIFY(replacement);
+        QVERIFY(replacement != superseded);
+        QVERIFY(!replacement->load(std::memory_order_relaxed));
+    }
+
+    void selectionVisibilityStopsWhenCancelled()
+    {
+        Document document = Document::createDefault(QSize(64, 64));
+        document.background = Qt::transparent;
+        document.animationFrames = 60;
+        document.wobbleAmount = 1.0;
+        Stroke stroke;
+        stroke.points = {
+            {QPointF(24.0, 32.0), 1.0}, {QPointF(40.0, 32.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        QImage mask(document.size, QImage::Format_Grayscale8);
+        mask.fill(0);
+        mask.scanLine(0)[0] = 255;
+
+        std::atomic_bool cancelled{true};
+        const SelectionVisibility::Result result = SelectionVisibility::evaluate(
+            document, document.layers.first(), mask, 0, &cancelled);
+        QCOMPARE(result.renderedFrames, 0);
+        QVERIFY2(!result.renderSucceeded,
+            "a cancelled evaluation reported an answer it never finished");
     }
 
     void packedSelectionSnapshotRoundTripsWithin4kUndoBudget()

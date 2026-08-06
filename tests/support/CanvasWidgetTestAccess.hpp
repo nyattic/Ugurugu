@@ -4,6 +4,9 @@
 
 #include <QSize>
 
+#include <atomic>
+#include <memory>
+
 namespace ugurugu
 {
 
@@ -64,6 +67,12 @@ public:
     static QImage selectionMask(const CanvasWidget &canvas)
     {
         return canvas.m_selectionMask;
+    }
+
+    static std::shared_ptr<const std::atomic_bool>
+    selectionVisibilityCancellation(const CanvasWidget &canvas)
+    {
+        return canvas.m_selectionVisibilityCancellation;
     }
 
     static bool drawing(const CanvasWidget &canvas)

@@ -182,6 +182,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
 CanvasWidget::~CanvasWidget()
 {
     cancelFrameCacheWarmup();
+    cancelSelectionVisibilityEvaluation();
 }
 
 CanvasWidget::Tool CanvasWidget::tool() const

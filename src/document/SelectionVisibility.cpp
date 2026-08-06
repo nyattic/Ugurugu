@@ -175,7 +175,8 @@ SelectionVisibility::Result SelectionVisibility::evaluate(
     const Document &document,
     const Layer &layer,
     const QImage &selectionMask,
-    int preferredFrame)
+    int preferredFrame,
+    const std::atomic_bool *cancelled)
 {
     Result result;
     if (!document.size.isValid() || selectionMask.isNull()
@@ -205,6 +206,10 @@ SelectionVisibility::Result SelectionVisibility::evaluate(
         });
     for (int offset = 0; offset < framesToInspect; ++offset)
     {
+        if (cancelled && cancelled->load(std::memory_order_relaxed))
+        {
+            return result;
+        }
         const int frame = (normalizedPreferred + offset) % frameCount;
         const QSize renderSize = regional ? bounds.size() : document.size;
         QImage layerImage(renderSize, QImage::Format_ARGB32_Premultiplied);

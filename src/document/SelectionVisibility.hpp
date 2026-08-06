@@ -2,6 +2,8 @@
 
 #include "document/Document.hpp"
 
+#include <atomic>
+
 namespace ugurugu
 {
 
@@ -28,10 +30,15 @@ public:
         quint64 maximumExplicitImageBytes = 0;
     };
 
+    // An animated layer is inspected frame by frame over the whole animation,
+    // so callers that can be superseded pass a cancellation flag, which must
+    // outlive the call. It is read before each frame; a cancelled run returns
+    // with renderSucceeded false so no caller caches an unfinished answer.
     static Result evaluate(const Document &document,
         const Layer &layer,
         const QImage &selectionMask,
-        int preferredFrame = 0);
+        int preferredFrame = 0,
+        const std::atomic_bool *cancelled = nullptr);
     static QVector<QUuid> editableStrokeIds(const Document &document,
         const Layer &layer,
         const QImage &selectionMask,
