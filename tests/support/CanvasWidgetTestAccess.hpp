@@ -15,6 +15,17 @@ public:
         return canvas.previewRenderSize();
     }
 
+    static CanvasWidget::DisplayedFrame resolveDisplayedFrame(
+        CanvasWidget &canvas)
+    {
+        return canvas.resolveDisplayedFrame();
+    }
+
+    static bool usingGpuDisplay(const CanvasWidget &canvas)
+    {
+        return canvas.usingGpuDisplay();
+    }
+
     static QSize cachedRenderSize(const CanvasWidget &canvas)
     {
         return canvas.m_cachedRenderSize;

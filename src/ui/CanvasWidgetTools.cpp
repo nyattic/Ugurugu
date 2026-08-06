@@ -326,7 +326,9 @@ void CanvasWidget::continuePan(const QPointF &widgetPosition)
     const QPoint pixelDelta(qRound(delta.x()), qRound(delta.y()));
     const bool integralDelta = qFuzzyIsNull(delta.x() - pixelDelta.x())
                                && qFuzzyIsNull(delta.y() - pixelDelta.y());
-    if (integralDelta && !pixelDelta.isNull()
+    // scroll() shifts the software backing store, which the GPU display does
+    // not paint into; there the pan is a transform change on the next draw.
+    if (!usingGpuDisplay() && integralDelta && !pixelDelta.isNull()
         && std::abs(pixelDelta.x()) < width()
         && std::abs(pixelDelta.y()) < height())
     {

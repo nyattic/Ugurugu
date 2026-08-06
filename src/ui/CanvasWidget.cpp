@@ -9,9 +9,13 @@
 #include "io/SelectionClipboardCodec.hpp"
 #include "render/PreviewRenderPolicy.hpp"
 #include "render/RenderEngine.hpp"
+#include "ui/CanvasFrameView.hpp"
+#include "ui/CanvasOverlayView.hpp"
 #include "ui/CanvasViewport.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/Theme.hpp"
+
+#include <spdlog/spdlog.h>
 
 #include <QClipboard>
 #include <QEnterEvent>
@@ -172,6 +176,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     updateTimerInterval();
     m_animationTimer.start();
     scheduleFrameCacheWarmup();
+    initializeDisplayViews();
 }
 
 CanvasWidget::~CanvasWidget()
@@ -745,12 +750,97 @@ void CanvasWidget::releaseTransientRenderCaches()
 
 void CanvasWidget::requestDisplayUpdate()
 {
+    if (usingGpuDisplay())
+    {
+        m_frameView->update();
+        m_overlayView->update();
+        return;
+    }
     update();
 }
 
 void CanvasWidget::requestDisplayUpdate(const QRect &rect)
 {
+    if (usingGpuDisplay())
+    {
+        m_frameView->update();
+        m_overlayView->update(rect);
+        return;
+    }
     update(rect);
+}
+
+bool CanvasWidget::usingGpuDisplay() const
+{
+    return m_frameView != nullptr;
+}
+
+void CanvasWidget::initializeDisplayViews()
+{
+    const QByteArray mode = qgetenv("UGURUGU_CANVAS_DISPLAY");
+    if (mode == "software")
+    {
+        spdlog::info("Canvas display: software (forced by environment)");
+        return;
+    }
+    // Headless platforms have no window-integrated RHI, so QRhiWidget cannot
+    // composite there; the QPainter path in paintEvent covers them.
+    const QString platform = QGuiApplication::platformName();
+    if (mode != "gpu"
+        && (platform == QStringLiteral("offscreen")
+            || platform == QStringLiteral("minimal")))
+    {
+        return;
+    }
+    m_frameView = new CanvasFrameView(this);
+    m_overlayView = new CanvasOverlayView(this);
+    connect(
+        m_frameView,
+        &QRhiWidget::renderFailed,
+        this,
+        [this]()
+        {
+            discardDisplayViews();
+        },
+        Qt::QueuedConnection);
+    syncDisplayViewGeometry();
+    m_frameView->show();
+    m_overlayView->show();
+}
+
+void CanvasWidget::discardDisplayViews()
+{
+    if (!m_frameView && !m_overlayView)
+    {
+        return;
+    }
+    spdlog::warn("Canvas display: GPU initialization failed, "
+                 "falling back to software rendering");
+    if (m_frameView)
+    {
+        m_frameView->hide();
+        m_frameView->deleteLater();
+        m_frameView = nullptr;
+    }
+    if (m_overlayView)
+    {
+        m_overlayView->hide();
+        m_overlayView->deleteLater();
+        m_overlayView = nullptr;
+    }
+    update();
+}
+
+void CanvasWidget::syncDisplayViewGeometry()
+{
+    if (m_frameView)
+    {
+        m_frameView->setGeometry(rect());
+    }
+    if (m_overlayView)
+    {
+        m_overlayView->setGeometry(rect());
+    }
 }
 
 void CanvasWidget::setTool(Tool tool)

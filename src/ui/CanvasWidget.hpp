@@ -33,6 +33,8 @@ namespace ugurugu
 
 class SelectionActionBar;
 class CanvasWidgetTestAccess;
+class CanvasFrameView;
+class CanvasOverlayView;
 
 class CanvasWidget final : public QWidget
 {
@@ -190,6 +192,8 @@ protected:
 
 private:
     friend class CanvasWidgetTestAccess;
+    friend class CanvasFrameView;
+    friend class CanvasOverlayView;
 
     struct SelectionState
     {
@@ -240,6 +244,10 @@ private:
     void paintOverlay(QPainter &painter, const QRegion &exposedRegion);
     void requestDisplayUpdate();
     void requestDisplayUpdate(const QRect &rect);
+    bool usingGpuDisplay() const;
+    void initializeDisplayViews();
+    void discardDisplayViews();
+    void syncDisplayViewGeometry();
     QPointF mapToDocument(
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;
@@ -427,11 +435,15 @@ private:
     QImage m_composedPreviewFrame;
     QRect m_composedSelectionPreviewRegion;
     qint64 m_composedPreviewBaseKey = 0;
-    // In-place edits to the displayed frame (stroke tail patches, selection
-    // preview regions) keep the QImage cacheKey stable, so they accumulate
-    // here until the next resolveDisplayedFrame call consumes them.
+    // Regional edits to the displayed frame (stroke tail patches, selection
+    // preview regions) accumulate here until resolveDisplayedFrame consumes
+    // them. Painting bumps a QImage's cacheKey even in place, so each edit
+    // also records the post-edit key; a resolved image carrying that key
+    // changed only inside the accumulated bounds, while any other new key
+    // means the frame was replaced wholesale.
     QRect m_displayedFrameDirtyAccum;
     qint64 m_displayedFrameKey = 0;
+    qint64 m_displayedFramePatchedKey = 0;
     QSize m_displayedFrameSize;
     QTimer m_animationTimer;
     QTimer m_selectionAnimationTimer;
@@ -484,6 +496,8 @@ private:
     FloatingTransformSession m_selectionTransformSession;
     QPointer<SelectionActionBar> m_selectionActionBar;
     bool m_selectionMoveMode = false;
+    CanvasFrameView *m_frameView = nullptr;
+    CanvasOverlayView *m_overlayView = nullptr;
 };
 
 }

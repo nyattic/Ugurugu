@@ -15,13 +15,6 @@ namespace ugurugu
 namespace canvas_detail
 {
 
-namespace
-{
-
-constexpr int checkerSize = 12;
-
-}
-
 const QBrush &checkerBrush()
 {
     static const QBrush brush = []()

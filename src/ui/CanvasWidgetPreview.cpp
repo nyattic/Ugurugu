@@ -300,6 +300,7 @@ QImage CanvasWidget::activeStrokePreview(
     if (m_activeStrokePreviewPatchBoundsValid)
     {
         m_displayedFrameDirtyAccum |= patchBounds;
+        m_displayedFramePatchedKey = preview.cacheKey();
     }
     resolved = m_activeStrokePreviewResolved;
     updateFrameCacheBudget();
@@ -394,6 +395,7 @@ CanvasWidget::DisplayedFrame CanvasWidget::resolveDisplayedFrame()
             compositor.end();
             m_composedSelectionPreviewRegion = region.bounds;
             m_displayedFrameDirtyAccum |= resetRegion;
+            m_displayedFramePatchedKey = m_composedPreviewFrame.cacheKey();
             displayedFrame = m_composedPreviewFrame;
             return true;
         };
@@ -470,16 +472,18 @@ CanvasWidget::DisplayedFrame CanvasWidget::resolveDisplayedFrame()
     DisplayedFrame result;
     result.image = displayedFrame;
     const QRect fullBounds(QPoint(), displayedFrame.size());
-    if (displayedFrame.cacheKey() != m_displayedFrameKey
-        || displayedFrame.size() != m_displayedFrameSize)
-    {
-        result.dirtyBounds = fullBounds;
-    }
-    else
+    const qint64 key = displayedFrame.cacheKey();
+    if (displayedFrame.size() == m_displayedFrameSize
+        && (key == m_displayedFrameKey || key == m_displayedFramePatchedKey))
     {
         result.dirtyBounds = m_displayedFrameDirtyAccum.intersected(fullBounds);
     }
-    m_displayedFrameKey = displayedFrame.cacheKey();
+    else
+    {
+        result.dirtyBounds = fullBounds;
+    }
+    m_displayedFrameKey = key;
+    m_displayedFramePatchedKey = 0;
     m_displayedFrameSize = displayedFrame.size();
     m_displayedFrameDirtyAccum = {};
     return result;

@@ -129,6 +129,10 @@ set(UGURUGU_UI_SOURCES
     src/ui/BrushSizeRow.hpp
     src/ui/BucketPopoverPanel.cpp
     src/ui/BucketPopoverPanel.hpp
+    src/ui/CanvasFrameView.cpp
+    src/ui/CanvasFrameView.hpp
+    src/ui/CanvasOverlayView.cpp
+    src/ui/CanvasOverlayView.hpp
     src/ui/CanvasSizeDialog.cpp
     src/ui/CanvasSizeDialog.hpp
     src/ui/CanvasTypes.hpp

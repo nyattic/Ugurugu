@@ -32,6 +32,17 @@ target_link_libraries(
     ugurugu_core
     Qt6::Concurrent
     Qt6::Widgets
+    PRIVATE
+    # The QRhi headers behind CanvasFrameView are semi-public: stable C++ API,
+    # but installed with the private headers.
+    Qt6::GuiPrivate
+)
+qt_add_shaders(ugurugu_ui "ugurugu_canvas_shaders"
+    PREFIX "/shaders"
+    BASE "resources/shaders"
+    FILES
+    resources/shaders/canvas_frame.vert
+    resources/shaders/canvas_frame.frag
 )
 
 if(APPLE)

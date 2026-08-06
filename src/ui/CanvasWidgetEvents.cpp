@@ -75,6 +75,12 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
 {
     QPainter painter(this);
     painter.fillRect(rect(), Theme::canvasBackground());
+    if (usingGpuDisplay())
+    {
+        // The frame and overlay views cover the whole widget; the fill above
+        // only keeps the opaque-paint-event contract for exposed edges.
+        return;
+    }
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
@@ -187,6 +193,7 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
 void CanvasWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    syncDisplayViewGeometry();
     invalidateActiveStrokePreview();
     notifyZoomChanged();
     updateSelectionActionBar();

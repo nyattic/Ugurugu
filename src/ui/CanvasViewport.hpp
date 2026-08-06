@@ -19,6 +19,7 @@ namespace canvas_detail
 // translation units. Everything here is free of widget state so it can be
 // reasoned about — and changed — without touching interaction code.
 
+constexpr int checkerSize = 12;
 constexpr qreal canvasMargin = 32.0;
 constexpr qreal minimumZoom = 0.01;
 constexpr qreal maximumZoom = 16.0;

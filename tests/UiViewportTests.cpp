@@ -671,6 +671,11 @@ private slots:
         canvas.setZoomPercent(100);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        if (CanvasWidgetTestAccess::usingGpuDisplay(canvas))
+        {
+            QSKIP("Exposed-strip scrolling is a software-backing-store "
+                  "optimization; the GPU display pans with a transform.");
+        }
         QTRY_VERIFY(!CanvasWidgetTestAccess::zoomRenderPending(canvas));
 
         PaintRegionTracker tracker;
@@ -688,6 +693,77 @@ private slots:
         QTest::mouseRelease(
             &canvas, Qt::MiddleButton, Qt::NoModifier, center + QPoint(12, 7));
         canvas.removeEventFilter(&tracker);
+    }
+
+    void fallsBackToSoftwareDisplayOnHeadlessPlatforms()
+    {
+        const QString platform = QGuiApplication::platformName();
+        if (platform != QStringLiteral("offscreen")
+            && platform != QStringLiteral("minimal"))
+        {
+            QSKIP("Only headless platforms must reject the GPU display.");
+        }
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(64, 64)));
+        CanvasWidget canvas(&controller);
+        QVERIFY(!CanvasWidgetTestAccess::usingGpuDisplay(canvas));
+    }
+
+    void reportsRegionalDirtyBoundsForTheDisplayedFrame()
+    {
+        // Large enough that the preview render spans several 256-pixel
+        // incremental-renderer tiles; a short stroke then dirties a proper
+        // subset of the frame instead of the single tile covering it all.
+        Document document = Document::createDefault(QSize(1024, 1024));
+        document.animationFrames = 3;
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 800);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        if (CanvasWidgetTestAccess::usingGpuDisplay(canvas))
+        {
+            QSKIP("The GPU display consumes dirty bounds on its own "
+                  "schedule; this test drives the software resolve.");
+        }
+        canvas.fitToWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
+
+        canvas.repaint();
+        const auto steady = CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!steady.image.isNull());
+        QVERIFY(steady.dirtyBounds.isEmpty());
+
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(20, 0));
+        QTest::mouseMove(&canvas, center - QPoint(10, 0));
+        const auto firstStrokeResolve =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!firstStrokeResolve.image.isNull());
+
+        QTest::mouseMove(&canvas, center + QPoint(5, 3));
+        const auto tail = CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!tail.image.isNull());
+        QVERIFY(!tail.dirtyBounds.isEmpty());
+        QVERIFY(tail.dirtyBounds != tail.image.rect());
+        QVERIFY(tail.image.rect().contains(tail.dirtyBounds));
+
+        const auto settled = CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(settled.dirtyBounds.isEmpty());
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(5, 3));
+        QApplication::processEvents();
+
+        canvas.repaint();
+        canvas.setCurrentFrame(1);
+        const auto nextFrame =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!nextFrame.image.isNull());
+        QCOMPARE(nextFrame.dirtyBounds, nextFrame.image.rect());
     }
 
     void zoomsWithPanModifierCtrlDrag()
