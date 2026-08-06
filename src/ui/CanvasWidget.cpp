@@ -1268,6 +1268,12 @@ void CanvasWidget::setAnimating(bool animating)
     else
     {
         m_animationTimer.stop();
+        if (hasSelection())
+        {
+            // Playback left the selection's per-frame editability unresolved;
+            // the frame it stopped on is the one the user acts on.
+            notifySelectionTransformAvailability();
+        }
     }
     if (!previewSizeChanged)
     {
@@ -1360,6 +1366,14 @@ void CanvasWidget::setCurrentFrame(int frame)
     m_currentFrame = normalized;
     invalidateActiveStrokePreview();
     emit currentFrameChanged(normalized);
+    // Which strokes a selection can edit is resolved against the displayed
+    // frame, so scrubbing changes the answer. Playback is excluded: it would
+    // repeat that per-frame search on every tick, and setAnimating settles the
+    // state once the animation stops.
+    if (!m_animating && hasSelection())
+    {
+        notifySelectionTransformAvailability();
+    }
     requestDisplayUpdate();
 }
 

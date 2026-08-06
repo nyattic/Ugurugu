@@ -2978,6 +2978,71 @@ private slots:
             "a cancelled evaluation reported an answer it never finished");
     }
 
+    void scrubbingFramesRefreshesStrokePropertyActions()
+    {
+        // Wobble carries the stroke in and out of a tight selection, so which
+        // strokes it can edit is a property of the displayed frame.
+        Document document = Document::createDefault(QSize(128, 128));
+        document.background = Qt::transparent;
+        document.animationFrames = 8;
+        document.wobbleAmount = 12.0;
+        Stroke stroke;
+        stroke.width = 4.0;
+        stroke.points = {
+            {QPointF(60.0, 64.0), 1.0}, {QPointF(68.0, 64.0), 1.0}};
+        document.layers.first().strokes.append(stroke);
+
+        QImage mask(document.size, QImage::Format_Grayscale8);
+        mask.fill(0);
+        for (int y = 62; y <= 66; ++y)
+        {
+            std::fill(mask.scanLine(y) + 58, mask.scanLine(y) + 71, 255);
+        }
+        const auto editableAt = [&document, &mask](int frame)
+        {
+            return !SelectionVisibility::editableStrokeIds(
+                document, document.layers.first(), mask, frame)
+                        .isEmpty();
+        };
+        QVERIFY(!editableAt(0));
+        QVERIFY(editableAt(1));
+        QVERIFY(!editableAt(2));
+
+        MainWindow window;
+        window.resize(800, 600);
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *editStrokeProperties = window.findChild<QAction *>(
+            QStringLiteral("editStrokePropertiesAction"));
+        QVERIFY(canvas);
+        QVERIFY(editStrokeProperties);
+        canvas->setAnimating(false);
+        controller.pushSelectionStateCommand(QStringLiteral("Select"),
+            {},
+            {},
+            controller.document().activeLayerId,
+            mask);
+        QTRY_VERIFY(canvas->hasTransformableSelection());
+        QVERIFY(!editStrokeProperties->isEnabled());
+
+        canvas->setCurrentFrame(1);
+        QVERIFY2(editStrokeProperties->isEnabled(),
+            "scrubbing onto an editable frame left the action disabled");
+        canvas->setCurrentFrame(2);
+        QVERIFY2(!editStrokeProperties->isEnabled(),
+            "scrubbing off an editable frame left the action enabled");
+
+        // Playback skips the per-frame search; stopping it settles the state
+        // on the frame that stays on screen.
+        canvas->setAnimating(true);
+        canvas->setCurrentFrame(1);
+        canvas->setAnimating(false);
+        QVERIFY2(editStrokeProperties->isEnabled(),
+            "stopping playback left the action stale");
+    }
+
     void packedSelectionSnapshotRoundTripsWithin4kUndoBudget()
     {
         constexpr int edge = 4096;
