@@ -214,6 +214,14 @@
 
 Configure 때 Vulkan headers 미탐지와 Qt GuiPrivate 버전 결합 경고가 출력됐지만 둘 다 이 저장소의 현재 macOS 구성에서 비치명적이며 빌드·테스트 실패는 아니었다.
 
+### 호스팅 macOS sanitizer 후속 검증
+
+감사 커밋 `3a100f02fc43656de9b44c19e4aaf6722c89a6b1`의 첫 GitHub Actions 실행에서 macOS 15.7.7/AppleClang 17의 `ugurugu_ui_viewport_tests`가 4K frame-cache warmup 테스트를 마친 직후 SIGTRAP으로 종료됐다. 출력은 제품 코드의 ASan/UBSan 진단이 아니라 compiler-rt의 [`UnsetAlternateSignalStack()`](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_posix_libcdep.cpp)이 worker pthread 종료 중 `sigaltstack(SS_DISABLE, ...)` 실패를 내부 `CHECK`로 처리한 것이었다. 테스트 본문의 마지막 진단 로그까지 도달했고, 이전 커밋의 같은 경로는 동일 runner 계열에서 통과했으며, macOS 26.6/AppleClang 21에서는 해당 suite를 20회, 문제 테스트를 30회 반복해 모두 통과했다.
+
+[`QThreadPool` 소멸자](https://doc.qt.io/qt-6/qthreadpool.html#dtor.QThreadPool)는 이미 모든 runnable 완료와 worker 종료를 기다리므로 제품 코드에 중복 `waitForDone()`을 추가하지 않았다. 대신 macOS ASan+UBSan test preset에 compiler-rt의 공식 [`use_sigaltstack=0`](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/sanitizer_common/sanitizer_flags.inc)을 지정해 결함이 난 Apple sanitizer runtime의 대체 signal-stack 설치·해제 경로만 피했다. 주소·수명·UB 계측과 `halt_on_error=1`은 그대로 유지된다. 다만 실제 stack exhaustion 때 sanitizer signal handler가 별도 stack을 쓰지 못하므로 stack-overflow 보고의 신뢰성은 낮아질 수 있다.
+
+후속 변경 뒤 macOS 26.6/AppleClang 21에서 Debug 13/13(18.60초), Release 13/13(40.57초), `use_sigaltstack=0`을 적용한 ASan+UBSan 13/13(46.38초)이 모두 통과했다. CMake preset parsing과 `git diff --check`도 통과했다. macOS 15 호스팅 runner에서의 우회책 검증은 이 후속 변경이 원격 CI에서 실행될 때까지 남아 있다.
+
 ## 직접 검토했으나 finding에서 제외한 항목
 
 - NativeExact 축소가 layer별 scale 때문에 합성 순서를 바꾼다는 후보: opacity/blend/clip/group 조합과 16→5 nearest 축소 probe에서 full native 합성 후 축소와 pixel 차이가 0이었다. 확인된 결함이 아니므로 제외했다.

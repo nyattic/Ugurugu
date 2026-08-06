@@ -188,7 +188,7 @@
       "name": "macos-sanitized",
       "configurePreset": "macos-sanitized",
       "environment": {
-        "ASAN_OPTIONS": "halt_on_error=1",
+        "ASAN_OPTIONS": "halt_on_error=1:use_sigaltstack=0",
         "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
       },
       "output": {
