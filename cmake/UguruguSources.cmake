@@ -1,6 +1,8 @@
 set(UGURUGU_CORE_SOURCES
     src/app/ApplicationInstanceLock.cpp
     src/app/ApplicationInstanceLock.hpp
+    src/app/BackgroundWork.cpp
+    src/app/BackgroundWork.hpp
     src/app/Logging.cpp
     src/app/Logging.hpp
     src/app/MemoryBudget.cpp

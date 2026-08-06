@@ -5,10 +5,13 @@
 
 #include <QFutureWatcher>
 #include <QImageReader>
+#include <QSemaphore>
 #include <QTabBar>
+#include <QThreadPool>
 #include <QToolBar>
 #include <QtConcurrentRun>
 
+#include <atomic>
 #include <new>
 
 namespace ugurugu
@@ -1199,6 +1202,27 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
         QVERIFY2(watchedFutureResult(watcher).isNull(),
             "a pool exception escaped into the completion handler");
+    }
+
+    void joinsDetachedBackgroundWorkBeforeShutdown()
+    {
+        // Layer thumbnails and selection visibility run detached on the global
+        // pool and outlive the widgets that started them. The caches they read
+        // through are function-local statics, so anything still running when
+        // those are destroyed reads freed memory.
+        QSemaphore started;
+        std::atomic_bool finished{false};
+        QThreadPool::globalInstance()->start(
+            [&started, &finished]()
+            {
+                started.release();
+                QThread::msleep(50);
+                finished.store(true, std::memory_order_relaxed);
+            });
+        started.acquire();
+        joinDetachedBackgroundWork();
+        QVERIFY2(finished.load(std::memory_order_relaxed),
+            "shutdown returned with pool work still running");
     }
 
     void editsStrokePropertyDialogValues()

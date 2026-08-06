@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/BackgroundWork.hpp"
 #include "app/RecoveryStore.hpp"
 #include "app/RecoveryWriter.hpp"
 #include "app/WatchedFutureResult.hpp"

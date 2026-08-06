@@ -1,4 +1,5 @@
 #include "app/ApplicationInstanceLock.hpp"
+#include "app/BackgroundWork.hpp"
 #include "app/Logging.hpp"
 #include "app/UpdateController.hpp"
 #include "ui/FileOpenEventRouter.hpp"
@@ -285,6 +286,7 @@ int runApplication(int argc, char *argv[])
             QObject::tr("The application encountered an unexpected error."));
     }
 
+    ugurugu::joinDetachedBackgroundWork();
     ugurugu::Logging::shutdown();
     return result;
 }
