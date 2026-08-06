@@ -137,9 +137,9 @@ void RecoveryWriter::processPending()
         }
         catch (const std::exception &exception)
         {
-            error = QStringLiteral(
-                "The recovery snapshot failed unexpectedly: %1")
-                        .arg(QString::fromUtf8(exception.what()));
+            error =
+                QStringLiteral("The recovery snapshot failed unexpectedly: %1")
+                    .arg(QString::fromUtf8(exception.what()));
         }
         catch (...)
         {
@@ -158,8 +158,8 @@ bool RecoveryWriter::performWrite(const PendingWrite &request, QString *error)
     bool raiseTestingFailure = false;
     {
         QMutexLocker locker(&m_mutex);
-        raiseTestingFailure = std::exchange(m_throwFromNextWriteForTesting,
-            false);
+        raiseTestingFailure =
+            std::exchange(m_throwFromNextWriteForTesting, false);
     }
     if (raiseTestingFailure)
     {

@@ -755,7 +755,8 @@ private slots:
             !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
 
         canvas.repaint();
-        const auto steady = CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        const auto steady =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
         QVERIFY(!steady.image.isNull());
         QVERIFY(steady.dirtyBounds.isEmpty());
 
@@ -774,7 +775,8 @@ private slots:
         QVERIFY(tail.dirtyBounds != tail.image.rect());
         QVERIFY(tail.image.rect().contains(tail.dirtyBounds));
 
-        const auto settled = CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        const auto settled =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
         QVERIFY(settled.dirtyBounds.isEmpty());
         QTest::mouseRelease(
             &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(5, 3));

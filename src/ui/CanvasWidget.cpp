@@ -15,8 +15,6 @@
 #include "ui/SelectionActionBar.hpp"
 #include "ui/Theme.hpp"
 
-#include <spdlog/spdlog.h>
-
 #include <QClipboard>
 #include <QEnterEvent>
 #include <QFutureWatcher>
@@ -35,6 +33,8 @@
 #include <QThread>
 #include <QWheelEvent>
 #include <QtConcurrentRun>
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>

@@ -271,8 +271,7 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
     // Kept strokes must cover the native sampling footprint of every output
     // pixel inside outputBounds, including the resampler's neighborhood on
     // the native-exact fallback path.
-    const int marginX =
-        qCeil(2.0 / std::min<qreal>(1.0, horizontalScale)) + 4;
+    const int marginX = qCeil(2.0 / std::min<qreal>(1.0, horizontalScale)) + 4;
     const int marginY = qCeil(2.0 / std::min<qreal>(1.0, verticalScale)) + 4;
     const QRect filterBounds =
         nativeBounds.adjusted(-marginX, -marginY, marginX, marginY)
@@ -287,8 +286,7 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
             continue;
         }
         const StrokeCoveragePlan plan = prepareStrokeCoverage(document, layer);
-        if (!plan.valid
-            || plan.primitiveBounds.size() != layer.strokes.size())
+        if (!plan.valid || plan.primitiveBounds.size() != layer.strokes.size())
         {
             // Keeping every stroke of a layer the plan cannot describe is
             // always correct, only slower.
@@ -302,7 +300,8 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
             const bool droppable = stroke.mode == StrokeMode::Paint
                                    || stroke.mode == StrokeMode::Erase
                                    || stroke.mode == StrokeMode::Fill;
-            if (!droppable || plan.primitiveBounds[index].intersects(filterBounds))
+            if (!droppable
+                || plan.primitiveBounds[index].intersects(filterBounds))
             {
                 kept.append(stroke);
             }

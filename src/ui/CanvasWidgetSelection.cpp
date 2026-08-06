@@ -341,7 +341,8 @@ void CanvasWidget::applySelectionVisibility(bool hasVisiblePixels)
     {
         setSelectionMoveMode(true);
     }
-    emit interactionMessage(m_selectedStrokes.isEmpty()
+    emit interactionMessage(
+        m_selectedStrokes.isEmpty()
             ? tr("No content in the selected area.")
             : tr("Selected content. Use the action bar to transform or remove "
                  "it."));
@@ -420,13 +421,12 @@ void CanvasWidget::evaluateSelectionVisibility()
         [document, layerId, mask, frame, cancellation]()
         {
             const Layer *snapshotLayer = document.layer(layerId);
-            return snapshotLayer
-                       ? SelectionVisibility::evaluate(document,
-                             *snapshotLayer,
-                             mask,
-                             frame,
-                             cancellation.get())
-                       : SelectionVisibility::Result();
+            return snapshotLayer ? SelectionVisibility::evaluate(document,
+                                       *snapshotLayer,
+                                       mask,
+                                       frame,
+                                       cancellation.get())
+                                 : SelectionVisibility::Result();
         }));
 }
 // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
@@ -1095,7 +1095,8 @@ void CanvasWidget::handleCanvasResized(const QSize &previousSize,
     {
         const QImage transformedSnapshot =
             transformedMask(m_selectionBeforeArea.mask, currentSize, transform);
-        if (transformedSnapshot.isNull() || !maskHasContent(transformedSnapshot))
+        if (transformedSnapshot.isNull()
+            || !maskHasContent(transformedSnapshot))
         {
             m_selectionBeforeArea = {};
         }

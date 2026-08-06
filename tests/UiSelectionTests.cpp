@@ -2188,12 +2188,12 @@ private slots:
 
         canvas.setLassoMode(CanvasWidget::LassoMode::Paint);
         QVERIFY(!CanvasWidgetTestAccess::areaSelectionActive(canvas));
-        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
-            selectionBefore);
+        QCOMPARE(
+            CanvasWidgetTestAccess::selectionMask(canvas), selectionBefore);
         QTest::mouseRelease(
             &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(70.0, 70.0));
-        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
-            selectionBefore);
+        QCOMPARE(
+            CanvasWidgetTestAccess::selectionMask(canvas), selectionBefore);
     }
 
     void resizeDuringActiveLassoKeepsTheRollbackSnapshot()
@@ -2901,10 +2901,8 @@ private slots:
         // mask back on an unchanged document. That answer is already cached, so
         // it has to apply straight away instead of behind another render.
         const QPoint center = canvas.rect().center();
-        QTest::mousePress(&canvas,
-            Qt::LeftButton,
-            Qt::NoModifier,
-            center - QPoint(40, 40));
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(40, 40));
         QTest::mouseMove(&canvas, center, 1);
         QVERIFY(!canvas.hasSelection());
         canvas.handleEscape();
@@ -2941,7 +2939,8 @@ private slots:
 
         Stroke added;
         added.width = 8.0;
-        added.points = {{QPointF(60.0, 40.0), 1.0}, {QPointF(196.0, 40.0), 1.0}};
+        added.points = {
+            {QPointF(60.0, 40.0), 1.0}, {QPointF(196.0, 40.0), 1.0}};
         QCOMPARE(
             controller.addStroke(controller.document().activeLayerId, added),
             DocumentController::AddStrokeResult::Added);
@@ -2971,8 +2970,9 @@ private slots:
         mask.scanLine(0)[0] = 255;
 
         std::atomic_bool cancelled{true};
-        const SelectionVisibility::Result result = SelectionVisibility::evaluate(
-            document, document.layers.first(), mask, 0, &cancelled);
+        const SelectionVisibility::Result result =
+            SelectionVisibility::evaluate(
+                document, document.layers.first(), mask, 0, &cancelled);
         QCOMPARE(result.renderedFrames, 0);
         QVERIFY2(!result.renderSucceeded,
             "a cancelled evaluation reported an answer it never finished");

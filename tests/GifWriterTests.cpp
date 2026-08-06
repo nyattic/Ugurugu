@@ -3,9 +3,9 @@
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
 #include "io/RenderExportPolicy.hpp"
-#include "ui/GifExportDialog.hpp"
 #include "render/LayerCompositionPlan.hpp"
 #include "render/RenderEngine.hpp"
+#include "ui/GifExportDialog.hpp"
 
 #include <QFile>
 #include <QFileInfo>
@@ -150,9 +150,8 @@ private slots:
         const QSize chosen = dialog.currentResult().outputSize;
         QVERIFY(chosen.isValid());
         QVERIFY2(AnimationExportPolicy::fitsMemoryBudget(deep, chosen),
-            qPrintable(
-                QStringLiteral("the dialog preselected %1x%2, which the "
-                               "document-aware budget rejects")
+            qPrintable(QStringLiteral("the dialog preselected %1x%2, which the "
+                                      "document-aware budget rejects")
                     .arg(chosen.width())
                     .arg(chosen.height())));
     }

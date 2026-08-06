@@ -48,8 +48,7 @@ bool AnimationExportPolicy::fitsMemoryBudget(const Document &document)
 bool AnimationExportPolicy::fitsMemoryBudget(
     const Document &document, const QSize &frameSize)
 {
-    return RenderExportPolicy::animatedGifFitsMemoryBudget(
-        document, frameSize);
+    return RenderExportPolicy::animatedGifFitsMemoryBudget(document, frameSize);
 }
 
 }

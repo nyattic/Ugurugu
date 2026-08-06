@@ -11,8 +11,7 @@ namespace ugurugu
 // could report it, and terminate the process. The tasks read this way all
 // signal failure through their result already - a null image, an evaluation
 // that did not succeed - so a thrown one reports the same default.
-template <typename T>
-T watchedFutureResult(QFutureWatcher<T> &watcher)
+template <typename T> T watchedFutureResult(QFutureWatcher<T> &watcher)
 {
     try
     {

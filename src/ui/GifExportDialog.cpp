@@ -117,8 +117,7 @@ QSize GifExportDialog::sizeForCurrentScale() const
 void GifExportDialog::updatePresentation()
 {
     const QSize size = sizeForCurrentScale();
-    const bool fits =
-        AnimationExportPolicy::fitsMemoryBudget(m_document, size);
+    const bool fits = AnimationExportPolicy::fitsMemoryBudget(m_document, size);
     const long double bytes =
         AnimationExportPolicy::estimatedWorkingBytes(m_document, size);
     const double mebibytes = static_cast<double>(bytes / (1024.0L * 1024.0L));

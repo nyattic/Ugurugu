@@ -284,7 +284,7 @@ private slots:
 
         QVERIFY(!RenderEngine::prepareRegionalStrokeRefresh(
             document, layer.id, addedId, QSize(64, 48))
-                 .valid);
+                .valid);
     }
 
     void replaysIntegralNearestSelectionAtDisplayScale()

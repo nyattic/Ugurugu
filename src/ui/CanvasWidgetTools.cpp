@@ -135,9 +135,9 @@ void CanvasWidget::continueStroke(
             return;
         }
         const Document &document = m_controller->document();
-        const QRectF documentRect(
-            m_activeStrokePreviewPatchBounds.x() * document.size.width()
-                / static_cast<qreal>(renderSize.width()),
+        const QRectF documentRect(m_activeStrokePreviewPatchBounds.x()
+                                      * document.size.width()
+                                      / static_cast<qreal>(renderSize.width()),
             m_activeStrokePreviewPatchBounds.y() * document.size.height()
                 / static_cast<qreal>(renderSize.height()),
             m_activeStrokePreviewPatchBounds.width() * document.size.width()
@@ -474,10 +474,9 @@ void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
     }
     if (m_colorPickFrame.isNull() || m_colorPickFrameIndex != m_currentFrame)
     {
-        Document document =
-            hasPendingSelectionTransform()
-                ? displayDocumentWithPendingSelectionTransform()
-                : displayDocument();
+        Document document = hasPendingSelectionTransform()
+                                ? displayDocumentWithPendingSelectionTransform()
+                                : displayDocument();
         m_colorPickFrame = {};
         m_colorPickFrame = RenderEngine::render(document, m_currentFrame);
         m_colorPickFrameIndex = m_currentFrame;

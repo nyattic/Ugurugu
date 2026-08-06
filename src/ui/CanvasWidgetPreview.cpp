@@ -821,9 +821,9 @@ void CanvasWidget::scheduleFrameCacheWarmup()
             // Stale frames patch far faster than missing frames render, so
             // they refresh first; the finish path reschedules for whatever
             // remains.
-            const bool patchMode = !staleFrames.isEmpty()
-                                   && m_frameCacheRefreshDocument
-                                   && !m_frameCacheRefreshOutputBounds.isEmpty();
+            const bool patchMode =
+                !staleFrames.isEmpty() && m_frameCacheRefreshDocument
+                && !m_frameCacheRefreshOutputBounds.isEmpty();
             if (!patchMode && missingFrames.isEmpty())
             {
                 return;
@@ -882,7 +882,7 @@ void CanvasWidget::renderNextFrameCacheWarmup()
     // finished frames while later ones are still rendering.
     while (m_frameCacheWarmupWorkersRunning
                < m_frameCacheWarmupPool.maxThreadCount()
-        && m_frameCacheWarmupCursor < m_frameCacheWarmupFrames.size())
+           && m_frameCacheWarmupCursor < m_frameCacheWarmupFrames.size())
     {
         const quint64 generation = m_frameCacheWarmupGeneration;
         const int frame = m_frameCacheWarmupFrames[m_frameCacheWarmupCursor];
@@ -898,7 +898,12 @@ void CanvasWidget::renderNextFrameCacheWarmup()
         connect(watcher,
             &QFutureWatcher<QImage>::finished,
             this,
-            [this, watcher, generation, frame, renderSize, patchBounds,
+            [this,
+                watcher,
+                generation,
+                frame,
+                renderSize,
+                patchBounds,
                 cancellation]()
             {
                 const QImage image = watchedFutureResult(*watcher);

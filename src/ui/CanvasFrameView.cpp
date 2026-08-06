@@ -91,9 +91,8 @@ void CanvasFrameView::initialize(QRhiCommandBuffer *cb)
         return;
     }
 
-    m_vertexBuffer.reset(m_rhi->newBuffer(QRhiBuffer::Dynamic,
-        QRhiBuffer::VertexBuffer,
-        4 * 4 * sizeof(float)));
+    m_vertexBuffer.reset(m_rhi->newBuffer(
+        QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 4 * 4 * sizeof(float)));
     m_vertexBuffer->create();
     m_uniformBuffer.reset(m_rhi->newBuffer(
         QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(FrameUniforms)));
@@ -155,7 +154,8 @@ void CanvasFrameView::render(QRhiCommandBuffer *cb)
         return;
     }
 
-    const CanvasWidget::DisplayedFrame frame = m_canvas->resolveDisplayedFrame();
+    const CanvasWidget::DisplayedFrame frame =
+        m_canvas->resolveDisplayedFrame();
     QRhiResourceUpdateBatch *batch = m_rhi->nextResourceUpdateBatch();
 
     bool frameValid = false;
@@ -165,11 +165,11 @@ void CanvasFrameView::render(QRhiCommandBuffer *cb)
         if (source.format() != QImage::Format_ARGB32_Premultiplied
             && source.format() != QImage::Format_RGB32)
         {
-            source = source.convertToFormat(
-                QImage::Format_ARGB32_Premultiplied);
+            source =
+                source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
         }
-        const bool recreate = !m_frameTexture
-                              || m_frameTexture->pixelSize() != source.size();
+        const bool recreate =
+            !m_frameTexture || m_frameTexture->pixelSize() != source.size();
         if (recreate)
         {
             m_frameTexture.reset(
@@ -211,13 +211,25 @@ void CanvasFrameView::render(QRhiCommandBuffer *cb)
     const QPointF topRight = transform.map(QPointF(documentSize.width(), 0.0));
     const QPointF bottomLeft =
         transform.map(QPointF(0.0, documentSize.height()));
-    const QPointF bottomRight = transform.map(
-        QPointF(documentSize.width(), documentSize.height()));
+    const QPointF bottomRight =
+        transform.map(QPointF(documentSize.width(), documentSize.height()));
     const float vertices[16] = {
-        float(topLeft.x()), float(topLeft.y()), 0.0f, 0.0f,
-        float(topRight.x()), float(topRight.y()), 1.0f, 0.0f,
-        float(bottomLeft.x()), float(bottomLeft.y()), 0.0f, 1.0f,
-        float(bottomRight.x()), float(bottomRight.y()), 1.0f, 1.0f,
+        float(topLeft.x()),
+        float(topLeft.y()),
+        0.0f,
+        0.0f,
+        float(topRight.x()),
+        float(topRight.y()),
+        1.0f,
+        0.0f,
+        float(bottomLeft.x()),
+        float(bottomLeft.y()),
+        0.0f,
+        1.0f,
+        float(bottomRight.x()),
+        float(bottomRight.y()),
+        1.0f,
+        1.0f,
     };
     batch->updateDynamicBuffer(
         m_vertexBuffer.get(), 0, sizeof(vertices), vertices);
@@ -235,12 +247,11 @@ void CanvasFrameView::render(QRhiCommandBuffer *cb)
     batch->updateDynamicBuffer(
         m_uniformBuffer.get(), 0, sizeof(uniforms), &uniforms);
 
-    cb->beginPass(
-        renderTarget(), Theme::canvasBackground(), {1.0f, 0}, batch);
+    cb->beginPass(renderTarget(), Theme::canvasBackground(), {1.0f, 0}, batch);
     cb->setGraphicsPipeline(m_pipeline.get());
     const QSize outputSize = renderTarget()->pixelSize();
-    cb->setViewport(
-        QRhiViewport(0, 0, float(outputSize.width()), float(outputSize.height())));
+    cb->setViewport(QRhiViewport(
+        0, 0, float(outputSize.width()), float(outputSize.height())));
     // Passed explicitly: recreating the frame texture replaces the bindings
     // object, while the pipeline still holds the one it was created with.
     cb->setShaderResources(m_bindings.get());

@@ -3,9 +3,8 @@
 #include <QImage>
 #include <QRhiWidget>
 
-#include <rhi/qrhi.h>
-
 #include <memory>
+#include <rhi/qrhi.h>
 
 namespace ugurugu
 {
