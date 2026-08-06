@@ -53,6 +53,9 @@ ExportWorker::ExportWorker(QObject *parent)
 
 ExportWorker::~ExportWorker()
 {
+    // Waits without a deadline on purpose. Cancellation is polled between
+    // frames, so an export in progress stops within one frame, and giving up
+    // on it would leave the encoder writing into a file this object owns.
     cancel();
     waitForIdle();
     m_thread.quit();

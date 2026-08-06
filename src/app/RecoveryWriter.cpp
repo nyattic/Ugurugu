@@ -23,6 +23,10 @@ RecoveryWriter::RecoveryWriter(QObject *parent)
 
 RecoveryWriter::~RecoveryWriter()
 {
+    // Flushes rather than drops, and waits without a deadline: a pending
+    // snapshot is the newest state the user has, and this is the last chance
+    // to get it to disk. One write is a serialize and a save, so the wait is
+    // bounded by that.
     {
         QMutexLocker locker(&m_mutex);
         m_suspended = false;

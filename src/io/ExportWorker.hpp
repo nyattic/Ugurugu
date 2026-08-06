@@ -86,6 +86,10 @@ private:
     void raiseRequestedTestingFailure();
 
     QThread m_thread;
+    // Lives on m_thread but is destroyed here, on the owning thread. The
+    // destructor quits and joins that thread first, and the context owns no
+    // timers, no children and no queued events by then, so nothing on the
+    // worker side is left to touch it.
     QObject m_workerContext;
     mutable QMutex m_mutex;
     QWaitCondition m_idleCondition;

@@ -121,6 +121,12 @@ private:
         const QString &filePath, const QString &extension) const;
     QString saveDialogStartPath(const QString &extension) const;
 
+    // Outlives every other member but not the child widgets: Qt deletes those
+    // in ~QObject, after all members are gone, and each of them holds the
+    // controller by raw pointer. Teardown is safe only because no event loop
+    // runs through it - nothing between ~MainWindow and ~QObject may deliver a
+    // timer, a paint or a queued completion, since the widgets those reach
+    // still dereference the controller.
     DocumentController m_controller;
     CanvasWidget *m_canvas = nullptr;
     TimelineBar *m_timeline = nullptr;
