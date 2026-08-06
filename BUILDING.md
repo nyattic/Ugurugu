@@ -4,9 +4,10 @@
 
 - CMake 3.31 or later, and 4.2 or later on Windows for the
   Visual Studio 18 2026 generator
-- Qt 6.10 or later; releases are built against Qt 6.11.1
+- Qt 6.10 or later, including the Qt Shader Tools module; releases are
+  built against Qt 6.11.1
 - An internet connection while configuring so CMake can fetch the
-  pinned spdlog, Sparkle, or Velopack dependencies
+  pinned spdlog, libwebp, Sparkle, or Velopack dependencies
 
 ## macOS
 
@@ -27,13 +28,16 @@ open out/install/macos-release/Ugurugu.app
 
 The supported deployment target is macOS 14 or later. Use the official
 Qt 6.11.1 binaries when creating a distributable build; Homebrew Qt may
-have a newer deployment target.
+have a newer deployment target. Homebrew Qt ships Qt Shader Tools; the
+Qt online installer lists it under Additional Libraries and does not
+select it by default.
 
 ## Windows
 
 Install Visual Studio 2026 with the Desktop development with C++
 workload and its C++ Clang tools for Windows component, plus
-Qt 6.11.1 for MSVC 2022 x64.
+Qt 6.11.1 for MSVC 2022 x64 with the Qt Shader Tools additional
+library.
 
 The Windows presets use the Visual Studio 18 2026 generator with the
 ClangCL toolset, so the build uses clang-cl against the MSVC ABI. The
