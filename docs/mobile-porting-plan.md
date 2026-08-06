@@ -1,6 +1,7 @@
 # Ugurugu 모바일 이식 개발 계획
 
-> - 조사 기준: 저장소 커밋 `dbd497c7003579b6b5d3253d448f3fd1785dff30` (`Prepare the 2.2.1 release`)
+> - 아키텍처·코드 조사 기준: 저장소 커밋 `dbd497c7003579b6b5d3253d448f3fd1785dff30` (`Prepare the 2.2.1 release`)
+> - 라이선스·기여자 권리 보충 기준: 저장소 커밋 `09c75821a437f9c75fcb2e7420d18d5093ba9eda` (`Remove outdated audit report for 2026-08-06`)
 > - 공식 문서 확인일: 2026-08-06 (KST)
 > - 대상: iPhone, iPad, Android 스마트폰, Android 태블릿
 > - 조사 방식: 소스·빌드·테스트·패키징 설정의 정적 감사와 공식 문서 검토. 요청에 따라 빌드, 리팩터링, 설정 변경, PoC 및 기기 측정은 수행하지 않았다.
@@ -9,14 +10,15 @@
 
 모바일 이식은 가능하다. 다만 현재 Qt Widgets 데스크톱 UI를 축소해 올리는 포팅은 제품 수준의 해법이 아니다. 가장 현실적인 방향은 **Qt for iOS/Android 위에서 기존 Qt/C++ 코어를 유지하고, iOS·Android가 함께 쓰는 새 Qt Quick/QML 모바일 UI를 만들며, 파일·수명주기·고충실도 펜 입력만 얇은 Objective-C++/UIKit 및 Kotlin/Java 어댑터로 연결하는 것**이다. 즉 구현 방향 1을 기반으로 하되, 구현 방향 5에서는 **데스크톱 Widgets UI와 모바일 QML UI를 분리**한다.
 
-첫 MVP는 **iPad**가 적합하다. 현재 제품의 큰 캔버스·패널·타임라인 작업 흐름과 화면 크기가 가장 잘 맞고, Apple Pencil/Metal 및 비교적 제한된 기기 조합으로 핵심 가설을 먼저 검증할 수 있다. 다만 같은 시기에 Android 태블릿에서 S Pen, Vulkan/OpenGL ES, 메모리, SAF만 검증하는 작은 병행 스파이크를 반드시 수행해야 한다.
+예산 0원의 학생 프로젝트라는 제약에서는 **Android 태블릿을 첫 MVP 플랫폼으로 추천한다**. Qt Community Edition과 GPL-3.0-or-later 소스 공개를 유지한다. 첫 검증은 최대 20대의 닫힌 Limited Distribution alpha로 하고, 그다음 developer-signed APK와 대응 source를 public release page에 무료 공개할 수 있다. 다만 20대 밖의 사용자는 Android Developer Verification 확대에 따라 advanced flow 또는 ADB를 거칠 수 있다. 저마찰 광범위 Full Distribution은 일회성 US$25이므로 “직접 APK는 영구적으로 무제한·무마찰 무료”라고 가정하지 않는다. iPad는 Apple Pencil·Metal·UIKit 입력을 검증하는 본인 기기용 기술 PoC로 병행하되, 타인에게 제공하는 TestFlight와 App Store 출시는 배포 권리가 서면으로 확정될 때까지 보류한다.
 
-가장 먼저 통과해야 할 P0 게이트는 기술이 아니라 배포 권리다. Ugurugu는 GPLv3이고(`README.md:201-207`), 현재 Qt 고지는 교체 가능한 동적 링크 배포를 전제로 한다(`THIRD_PARTY_NOTICES.md:7-18`). iOS 정적 링크와 App Store 약관을 포함해 **앱 저작권 보유 현황·재라이선스 가능성·Qt LGPL 준수 또는 Qt 상용 라이선스**를 전문 법률 검토로 확정해야 한다. Qt 공식 FAQ상 Community/open-source Qt로 시작한 프로젝트의 상용 전환은 Qt Company의 사전 서면 동의가 필요하므로 Qt Sales 승인도 같은 gate에 포함한다. Qt 상용 라이선스만으로 Ugurugu 자체 GPLv3 문제가 자동 해결되는 것은 아니다. 이 문서는 법률 자문이 아니다.
+가장 먼저 통과해야 할 P0 게이트는 기술이 아니라 배포 권리다. Ugurugu는 GPL-3.0-or-later이고(`README.md@09c7582:196-210`), 현재 Qt 고지는 교체 가능한 동적 링크 배포를 전제로 한다(`THIRD_PARTY_NOTICES.md@09c7582:12-23`). 앱 가격이 무료여도 GPL/LGPL 의무는 줄지 않는다. 공개 release에는 학습용으로 제한된 Qt Educational License 바이너리를 사용하지 않고 **Qt Community Edition**만 사용한다. Android 공개판은 complete corresponding source, 정확한 build·재서명·설치 방법, Qt 소스 제공 방법과 license notice를 함께 준비한다. iOS 정적 링크와 App Store 조건은 **앱 저작권 보유 현황·재라이선스 가능성·Qt LGPL 준수 또는 별도 서면 허가**를 전문 법률 검토로 확정해야 한다. Qt 공식 FAQ상 Community/open-source Qt로 시작한 프로젝트의 상용 전환은 Qt Company의 사전 서면 동의가 필요하다. Qt 상용 라이선스만으로 Ugurugu 자체 GPL 문제가 자동 해결되는 것도 아니다. 이 문서는 법률 자문이 아니다.
 
-작업 규모의 기준 추정치는 모바일 경험이 있는 C++/Qt 엔지니어 2명, 플랫폼 엔지니어 1명, 파트타임 디자인·QA를 가정할 때 다음과 같다.
+작업 규모의 기준 추정치는 모바일 경험이 있는 C++/Qt 엔지니어 2명, 플랫폼 엔지니어 1명, 파트타임 디자인·QA를 가정할 때 다음과 같다. 예산 0원의 1인 학생 개발에서는 같은 인월이 순차 작업으로 바뀌므로 아래 달력 기간을 그대로 적용하지 말고 Android 태블릿만 먼저 닫아야 한다.
 
-- iPad 기능 MVP: 약 **10~16 인월**, 병렬화 시 **4~6개월**
+- Android 태블릿 배포 MVP: 약 **10~16 인월**, 기준 팀 병렬화 시 **4~6개월**
 - 네 가지 폼팩터의 스토어 출시 품질: 약 **21~33 인월**, **9~13개월**
+- 1인 파트타임 개발: 전체 네 폼팩터는 다년 프로젝트가 되므로 Android 태블릿 → Android 스마트폰 → iPad/iPhone 순으로 출시 범위를 나눈다.
 - 전제: 계정·클라우드 동기화·협업 기능·완전한 GPU 브러시 엔진은 범위 밖이며, 라이선스 협상 기간은 제외한다.
 - 신뢰도: 중간 이하. 특히 직렬화 피크 메모리, 실제 펜 이벤트 품질, Android GPU 드라이버 편차는 PoC 전에는 ±30% 이상의 일정 변동을 만들 수 있다.
 
@@ -26,6 +28,7 @@
 - 재사용률은 물리 LOC가 아니라 **의미 있는 기존 구현이 큰 재작성 없이 제품 코드로 남는 비율**의 계획 추정치다.
 - 성능·앱 크기·시작 시간은 정적 분석만으로 숫자를 확정하지 않는다. 표의 평가는 상대 비교이며, 실제 수치는 1단계 release/thinned 빌드에서 측정한다.
 - Apple Developer Program 가입 비용과 가입 절차는 제외한다. 인증서, 프로파일, App ID, 서명, TestFlight, App Store Connect 및 심사는 포함한다.
+- 이 product tree의 Android와 iOS PoC·release는 모두 Qt Community Edition으로 통일한다. Qt Educational License는 별도의 학습 sandbox에서만 사용하고 Ugurugu source·build·artifact와 섞지 않는다.
 - 현재 공식 지원선은 Qt 6.11 문서 기준 Android 9/API 28~Android 16/API 36, iOS 17 이상이다. 스토어 제출 시점에는 다시 확인해야 한다.
 
 ## 1. 현재 코드베이스의 모바일 이식 준비 상태
@@ -292,7 +295,7 @@ Apple Pencil에는 뒤집어 쓰는 물리 eraser tip이 없다. eraser는 화�
 
 | 방향 | 렌더링 성능 | 메모리 | 앱 크기 | 시작 시간 | 플랫폼 기능 연동 | 스토어 배포 적합성 |
 |---|---|---|---|---|---|---|
-| **1 / 5B** | CPU renderer의 결과 일관성·tile 이점을 유지한다. Qt/native event 전달과 texture upload를 최적화해야 한다. | 기존 full-frame/DOM 정책 때문에 **중~고위험**이나 한 코어에서 해결 가능 | Qt runtime·plugins로 **중~대** | native보다 대체로 느린 **중간**; QML/plugin 수에 좌우 | 표준 기능은 Qt, 고충실도 입력·문서는 얇은 native bridge로 **중간** | 기술적으로 양호. Apple·Play 서명 가능하나 **GPL/Qt 라이선스 P0** |
+| **1 / 5B** | CPU renderer의 결과 일관성·tile 이점을 유지한다. Qt/native event 전달과 texture upload를 최적화해야 한다. | 기존 full-frame/DOM 정책 때문에 **중~고위험**이나 한 코어에서 해결 가능 | Qt runtime·plugins로 **중~대** | native보다 대체로 느린 **중간**; QML/plugin 수에 좌우 | 표준 기능은 Qt, 고충실도 입력·문서는 얇은 native bridge로 **중간** | Android의 GPL 소스·직접 APK/F-Droid 배포와 잘 맞는다. iOS 공개 배포는 별도 **GPL/Qt 라이선스 P0**다. |
 | 2 | 플랫폼별 최적 surface를 쓸 잠재력은 가장 높지만 동일 stroke 결과 구현 비용이 크다. | native 정책에 최적화 가능하나 bridge copy와 이중 cache 위험 | Qt Core/Gui를 유지하면 **중간**, de-Qt 재작성까지 해야 **소~중** 가능 | Qt runtime을 유지하면 **중간**, de-Qt일 때만 native 수준의 **빠름** 기대 | SwiftUI/Compose만으로 부족한 canvas는 UIKit/View bridge가 필요하나 전체적으로 **좋음** | 기술적으로 자연스럽지만 일정·동작 불일치 위험이 큼 |
 | 3 | 공유 CPU renderer로 품질은 일정하나 SwiftUI/UIKit·Compose/View texture surface 경계가 복잡하다. | cross-language image copy를 없애야 하며 **중간** | C++ engine 포함 **중간** | **빠름~중간** | native chrome은 좋고 C++ surface는 별도 작업이므로 **중~상** | 양호. 두 플랫폼별 archive와 native bridge QA 부담 |
 | 4 | 일반 UI는 충분하나 저지연 drawing surface는 custom engine/native texture가 필요하다. | Flutter/RN runtime + C++/Qt 또는 이중 engine으로 **고위험** | **중~대** | **중간~느림** | plugin이 없는 stylus·SAF·document workflow는 native code 필요 | 제출 가능하나 SDK privacy manifest/policy와 plugin 공급망 부담 |
@@ -329,7 +332,8 @@ Qt Widgets UI                               Qt Quick/QML adaptive UI
 
 기술 스택은 다음처럼 고정한다.
 
-- 공통: C++23, Qt 6.11.x의 Core/Gui/Concurrent, 기존 spdlog/libwebp, CMake. Qt patch 버전을 모든 개발·CI·배포 환경에서 정확히 pin한다.
+- 공통: C++23, **Qt Community Edition** 6.11.x의 Core/Gui/Concurrent, 기존 spdlog/libwebp, CMake. 공개 build에는 GPL/LGPL로 제공되는 module만 사용하고 Qt patch 버전과 대응 source를 모든 개발·CI·배포 환경에서 정확히 pin한다.
+- Android 공개판은 이미 GPL-3.0-or-later인 Ugurugu와 맞춰, 사용 Qt module이 제공하는 **GPLv3 option을 기본 선택**으로 license manifest에 기록한다. LGPL option을 선택해야 하는 component가 있으면 source·relink·install 의무를 별도 항목으로 검증한다.
 - 모바일 UI: Qt Quick/QML와 Qt Quick Controls. `PointerHandler`/`PinchHandler`, QML `SafeArea`, keyboard focus/shortcut을 사용하되 gesture ownership은 공통 C++ policy로 둔다.
 - canvas 표시 1차 후보: `QQuickRhiItem`과 QRhi. 기존 QImage BGRA texture·dirty upload·quad transform을 옮긴다. `QQuickRhiItem`은 software scene graph가 없고 render thread가 분리될 수 있으므로 `synchronize()` 경계와 immutable frame handoff를 지킨다. offscreen surface 비용이 기준을 넘으면 방향 3의 native surface 또는 더 직접적인 scene graph 경로를 재평가한다.
 - iOS/iPadOS: Metal backend, Qt iOS Xcode generator, Objective-C++ `.mm` + UIKit adapter. `UIDocumentPickerViewController`/`UIDocument` 또는 coordinated URL I/O, `UIActivityViewController`, UIScene/lifecycle, Pencil API를 연결한다. Swift/SwiftUI는 baseline 의존성에서 제외한다.
@@ -365,7 +369,8 @@ Metal/Vulkan/OpenGL ES는 같은 QRhi presenter contract 아래 둔다. iOS는 M
 - `QTabletEvent`와 public/native injection 경로로 mandatory Pencil/MotionEvent sample·cancel을 보존할 수 있고 private Qt platform plugin fork가 필요 없으면 방향 1/5B를 유지한다.
 - UIKit event를 Qt Quick window에 안정적으로 연결하려면 지속적인 private QPA patch가 필요하거나, Android 두 대표 GPU family에서 QQuickRhiItem이 합의한 frame/latency 기준을 bounded optimization 후에도 넘으면 **방향 3(native UIKit/Objective-C++ 및 Android View UI + shared C++ document/renderer)**으로 전환한다.
 - 플랫폼별 팀을 장기 유지할 예산이 없으면 방향 3 전환은 기능 범위 축소와 함께 승인한다. SwiftUI/Compose 두 벌을 추가하는 방향 2로 자동 확대하지 않는다.
-- Qt/GPL 배포 경로가 해결되지 않으면 UI framework만 바꾸지 말고 Qt type을 포함한 core 재작성 비용을 다시 산정한다. 이는 별도 go/no-go다.
+- Ugurugu product tree에는 Qt Educational License나 commercial evaluation artifact를 사용하지 않고 local PoC까지 Community Edition으로 통일한다. Android는 module별 license audit와 source-package rehearsal로 진행하고, iOS 외부 배포는 Qt Company의 서면 답변과 독립적인 법률 검토가 승인할 때만 연다.
+- iOS의 Qt/GPL 배포 경로가 해결되지 않으면 UI framework만 바꾸지 말고 Qt type을 포함한 core를 표준 C++·허용적 라이선스 library로 다시 만드는 비용을 산정한다. UIKit/Objective-C++로 shell만 바꾸고 `QImage`·`QPainter`를 남기는 것은 해결책이 아니다.
 
 ## 6. iOS·Android 공통 코드와 플랫폼별 코드의 경계
 
@@ -445,11 +450,12 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 | 저장·수명주기 | Files/iCloud provider와 UIScene가 복잡하지만 경계가 비교적 일관됨 | SAF provider 편차, activity/process death, low-RAM이 더 가혹함 |
 | 기존 환경 | macOS Qt/Xcode 경험과 Apple 계정을 활용 가능 | Android toolchain·Gradle·Play 운영을 새로 구축해야 함 |
 | 위험 발견 | core canvas UX를 빠르게 증명하기 좋음 | 최악의 fragmentation·memory 문제를 일찍 발견하기 좋음 |
-| 배포 게이트 | GPL/App Store 약관 검토가 특히 중요 | GPL 배포·Play 약관도 검토해야 하나 App Store와 조건이 다름 |
+| 예산 0원 공개 | App Store/TestFlight의 GPL·Qt 정적 링크 경로를 먼저 서면 승인받아야 함 | 최대 20대는 닫힌 무료 Limited alpha. public APK는 무료지만 20대 밖 설치에 advanced flow/ADB 마찰이 생길 수 있고, 저마찰 Full Distribution은 US$25 |
+| 배포 게이트 | GPL/App Store 조건 검토가 특히 중요 | GPL/LGPL 준수 package와 재빌드·재설치 가능성을 준비해야 하나 공개 경로를 직접 통제할 수 있음 |
 
-**iPad를 첫 MVP로 추천한다.** 제품 형태, Apple Pencil, Metal, 제한된 matrix와 보유한 Apple 배포 기반이 핵심 편집 loop를 가장 빠르게 검증한다. 다만 iPad만 완성한 뒤 Android를 시작하지 않는다. 1단계부터 S Pen 1대, 일반 USI/AES stylus 1대, 저사양 Android tablet 1대를 쓰는 **Android shadow spike**로 input trace, QRhi Vulkan/GLES, 4K memory, SAF를 병행한다. 이 spike가 common interface의 공동 승인자다.
+제품·기술 조건만 보면 iPad가 더 빠른 첫 canvas 검증 대상이다. 그러나 **학생·예산 0원·무료 공개라는 실제 제약을 포함하면 Android 태블릿을 첫 MVP 플랫폼으로 추천한다.** S Pen 1대, 일반 USI/AES stylus 1대, 저사양 Android tablet 1대를 소유하거나 학교·지인에게 빌릴 수 있어야 한다. 이를 primary matrix로 삼아 input trace, QRhi Vulkan/GLES, 4K memory와 SAF를 닫고 최대 20대의 닫힌 무료 alpha를 먼저 검증한다. 이후 APK와 같은 revision의 전체 소스·빌드 방법·license notice를 public release page에 올리되 20대 밖 설치의 advanced-flow 마찰을 고지한다. F-Droid는 즉시 배포를 보장하는 우회 채널이 아니라 별도 inclusion·source-build 심사를 통과해야 하는 후속 후보다.
 
-법률 검토가 TestFlight/App Store 외부 배포를 허용하지 않는 결론이면, iPad는 내부 기술 target으로만 두고 **Android 태블릿을 첫 배포 MVP로 전환**한다. 이 조건부 전환을 1단계 종료 전에 결정해야 한다.
+iPad는 포기하지 않는다. 보유 계정으로 본인 등록 기기에 개발 서명한 **local shadow PoC**를 유지해 Apple Pencil, Metal, UIKit/Objective-C++ adapter와 `.ugu` 호환성을 검증한다. 다만 타인에게 제공하는 TestFlight와 App Store build는 Qt/GPL 배포 경로가 서면 승인되기 전까지 milestone 완료 조건에 포함하지 않는다.
 
 ## 8. 최소 기능 모바일 버전의 범위
 
@@ -463,9 +469,9 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 - PNG/JPEG 이미지 가져오기, 현재 frame PNG/JPEG 내보내기
 - memory-bounded animated GIF 한 가지와 시스템 share; animated WebP와 고급 export option은 후속
 - per-document autosave/recovery, foreground/background·회전·window resize 복구
-- iPad keyboard/mouse shortcut과 기본 접근성 label/focus/font scaling
-- iOS Files/iCloud Drive document picker와 share sheet
-- Android 검증판의 SAF open/create, Sharesheet, S Pen drawing
+- Android tablet keyboard/mouse shortcut과 기본 접근성 label/focus/font scaling
+- Android SAF open/create, Sharesheet, S Pen·일반 stylus drawing
+- iPad local PoC의 Apple Pencil·Metal·UIKit 입력과 동일 `.ugu` 열기. Files/iCloud Drive와 share sheet는 iOS 공개 경로 승인 뒤 release 범위로 승격
 - 오류가 있는 파일, read-only/provider 권한 만료, 저장 공간 부족에 대한 데이터 보존형 오류 처리
 
 ### 8.2 MVP에서 연기할 범위
@@ -477,8 +483,9 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 - 실시간 cloud sync, 공동 편집, version browser와 provider 간 conflict merge
 - 완전한 GPU brush/compositor 재작성, 무제한 canvas, 여러 문서를 동시에 full-resolution으로 유지
 - phone 전용 UI와 foldable dual-pane polish는 tablet vertical slice 뒤에 진행
+- 외부 TestFlight와 App Store 출시는 Qt/GPL 배포 경로가 서면 승인될 때까지 연기
 
-“태블릿용 MVP” 단계에서는 sandbox sample과 internal repository로 이 편집 loop를 먼저 세운다. 외부 tester에게 배포 가능한 MVP의 완료는 이후 “파일 시스템 및 공유 기능”, 성능, 플랫폼 QA를 통과한 시점이다. 이 구분은 SAF/iCloud 작업 때문에 canvas 검증이 지연되는 것을 막으면서도 저장 없는 데모를 출시 버전으로 오인하지 않게 한다.
+“태블릿용 MVP” 단계에서는 Android sandbox와 internal APK로 이 편집 loop를 먼저 세운다. 외부 tester에게 배포 가능한 MVP의 완료는 이후 SAF·공유, 성능, 플랫폼 QA와 GPL/LGPL release package를 통과한 시점이다. iPad local PoC는 같은 core의 회귀 검증 대상이지 Android MVP의 blocker가 아니다.
 
 ## 9. 단계별 개발 로드맵
 
@@ -486,32 +493,32 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 
 | 단계 | 주요 작업 | 산출물 | 규모 | 선행 관계 |
 |---|---|---|---:|---|
-| **사전 기술 검증** | GPL/Qt 배포 경로 결정, Qt 6.11/Xcode 26/Android API 36 toolchain, QQuickRhiItem Metal·Vulkan·GLES, Qt-vs-native stylus trace, 4K serialize/export peak, thinned app size·cold start, iOS signed device build·Android signed AAB skeleton | go/no-go 기록, event capability matrix, 성능·메모리 baseline, 확정 지원 OS/ABI/backend | 1.5~2.5 | 없음; P0 |
+| **사전 기술 검증** | Qt Community Android release와 GPL/LGPL source·rebuild package 결정, Educational/commercial artifact 부재 확인, 실제 Android tablet 3종과 Pencil iPad 접근 확보, Qt 6.11/Xcode 26/Android API 36 toolchain, QQuickRhiItem Metal·Vulkan·GLES, Qt-vs-native stylus trace, 4K serialize/export peak, thinned app size·cold start, iOS local signed device build·Android signed APK skeleton | Android 20-device 무료 alpha go/no-go, 광범위 배포 비용/advanced-flow 기록, iOS 공개 보류/승인 기록, event capability matrix, 성능·메모리 baseline, 확정 지원 OS/ABI/backend | 1.5~2.5 | 없음; P0 |
 | **공통 코어 분리** | macOS `APPLE` 분기 해체, core/session/UI 경계, path-free stream/document handle, platform service interface, mobile memory/scheduler policy, core-only mobile build·CI | iOS/Android에서 빌드·테스트되는 UI 비의존 core와 adapter contract | 2~3.5 | 배포·Qt 선택 승인 |
 | **렌더링 및 입력 이식** | QQuickRhiItem presenter, immutable frame handoff, dirty upload, `PointerSample`, UIKit/MotionEvent batch adapter, gesture state machine, cancel/prediction, rotation transform | 실제 iPad/Android tablet에서 draw·pan·zoom·rotate하는 canvas vertical slice | 3.5~5 | core façade |
-| **태블릿용 MVP** | adaptive QML tablet shell, brush/color/layer/timeline, undo/redo/playback, sandbox recovery, iPad keyboard/mouse/accessibility; Android shadow build 유지 | iPad internal editing MVP와 동일 core의 Android tablet smoke build | 3~4.5 | 렌더·입력 |
+| **태블릿용 MVP** | adaptive QML tablet shell, brush/color/layer/timeline, undo/redo/playback, sandbox recovery, Android keyboard/mouse/accessibility; iPad local shadow build 유지 | Android tablet internal editing MVP와 동일 core의 iPad local smoke build | 3~4.5 | 렌더·입력 |
 | **스마트폰 UI 적용** | compact navigation, sheets, portrait/landscape, one-hand tool layout, resize state retention, phone keyboard/mouse 기본 | iPhone·Android phone 기능 parity UI | 1.5~2.5 | shared view model·tablet flow |
-| **파일 시스템 및 공유 기능** | QIODevice/stream serializer, coordinated commit, iCloud/Files, SAF URI/grants, incoming open, image import, bounded export, share, per-document recovery | provider round-trip과 OS share가 되는 beta 기능 집합 | 2~3 | document handle/core codec |
+| **파일 시스템 및 공유 기능** | QIODevice/stream serializer, SAF URI/grants 우선, incoming open, image import, bounded export, share, per-document recovery; iOS 승인 뒤 coordinated commit·iCloud/Files 추가 | Android provider round-trip과 OS share가 되는 beta, 조건부 iOS local 검증 | 2~3 | document handle/core codec |
 | **성능 최적화** | streaming JSON/export, tile/cache budget, mobile RAM tier, reservation/cancel, worker·thermal policy, texture size/failure, backend fallback, package/QML startup trimming | 합의한 frame/input/start/RSS 기준을 충족한 release build | 2~4 | end-to-end 기능 |
 | **플랫폼별 품질 검증** | Pencil/S Pen/general stylus, low-RAM/GPU, rotation/multi-window/fold, keyboard/mouse, accessibility/localization, offline/provider failure, soak/process death, upgrade/file compatibility | 지원 matrix 결과, P0/P1 결함 0, release candidate | 3~5 | 기능·성능 안정화 |
-| **스토어 배포 준비** | 식별자·entitlement·서명, privacy manifest/Data Safety, assets/metadata, TestFlight/Play tracks, native symbols, reviewer 자료, staged rollout·rollback runbook | 심사 승인 및 단계적 production release | 1.5~2.5 | QA RC; 일부 계정 작업은 조기 병행 |
+| **스토어 배포 준비** | Android signing, source tag, license/source/rebuild bundle, F-Droid metadata 또는 직접 APK, 선택적 Play track·Data Safety·native symbols; iOS 승인 시에만 App ID·profile·TestFlight·App Store 절차 수행 | Android 공개 release와 재현 가능한 source package, 조건부 Apple 심사 | 1.5~2.5 | QA RC; 일부 계정 작업은 조기 병행 |
 | **합계** |  | 네 폼팩터 출시 품질 | **20~32.5 인월**, 계획상 **21~33 인월** |  |
 
-권장 staffing은 Qt/C++·render 2명, iOS/Android native bridge 1명, QML/product UI 1명을 핵심 기간에 두고 디자인·QA를 파트타임이 아니라 MVP 후반부터 고정 배정하는 것이다. 3명의 엔지니어만 투입하면 역할을 겸하며 약 9~13개월, 4명은 일부 병렬화로 7~10개월을 목표로 할 수 있다. 이는 채용·심사·법률 지연을 제외한 범위이며 사전 검증 뒤 다시 산정한다.
+기준 staffing은 Qt/C++·render 2명, iOS/Android native bridge 1명, QML/product UI 1명을 가정한다. 예산 0원의 1인 학생 개발에서는 이 구성을 흉내 내려 하지 않고 Android 태블릿의 한 vertical slice를 순차적으로 완성한다. phone UI와 iOS 공개판을 동시에 진행하지 않으며 디자인·실기기 QA는 학교 lab, 오픈소스 기여자와 공개 beta의 도움을 받더라도 최종 release 책임은 개발자가 유지한다. 기준 팀 3명은 약 9~13개월, 4명은 7~10개월이며 1인 파트타임의 전체 범위는 다년 일정으로 본다.
 
 ## 10. 단계별 완료 조건과 검증 방법
 
 | 단계 | 완료 조건 | 검증 방법 |
 |---|---|---|
-| 사전 기술 검증 | 법률 검토가 선택한 배포·Qt 라이선스 경로를 서면 승인한다. mandatory stylus field·cancel·prediction의 Qt/native 차이가 기록되고 adapter 범위가 결정된다. iOS device와 Android 3개 tier에서 renderer·4K memory·size/start baseline이 있다. | license/기여자 audit, signed internal artifact, Pencil/S Pen/일반 pen event trace diff, Metal/Vulkan/GLES pixel golden, Instruments·Android profiler와 RSS/thermal log |
+| 사전 기술 검증 | Qt Community만으로 만든 Android artifact의 GPL/LGPL source·build·재서명·설치 경로가 문서화되고 Educational/commercial artifact가 섞이지 않는다. 무료 Limited Distribution 장치 한도와 광범위 배포 비용·advanced flow가 결정 기록에 포함된다. iOS 공개 상태는 “서면 승인” 또는 “보류”다. 필요한 실제 tablet 접근과 입력 adapter·4K baseline이 확보된다. | module/dependency/license/기여자 self-audit, clean Linux Android signed APK source rebuild, iPad local signed artifact, Pencil/S Pen/일반 pen trace diff, Metal/Vulkan/GLES golden, profiler·RSS/thermal log |
 | 공통 코어 분리 | core target이 Widgets/AppKit/Sparkle/Win API 없이 iOS arm64+simulator와 Android arm64-v8a+x86_64에서 빌드된다. path 없이 memory/device stream round-trip이 된다. | 모든 기존 core test, schema 1~13 fixture, malformed corpus, host/mobile CI, forbidden dependency scan |
 | 렌더링 및 입력 이식 | pressure/eraser/tilt/azimuth가 capability에 맞게 전달된다. predicted stroke는 실제 sample로 교체되고 cancel 뒤 ghost/undo 항목이 남지 않는다. 두 손가락 transform과 pen이 충돌하지 않는다. | recorded input replay, 10분 고속 stroke에서 sample/order 손실 검사, hand/palm protocol, transform property test, screenshot/pixel diff, render-thread sanitizer/soak |
-| 태블릿용 MVP | iPad에서 create→draw→layer/frame edit→undo/redo→playback→background kill→recover vertical slice가 가능하다. 모든 필수 기능을 Pencil 없이 touch/mouse로도 수행한다. Android shadow build가 같은 `.ugu`를 연다. | iPhone touch fallback, base iPad의 1세대/USB-C Pencil, hover 가능한 iPad Pro의 2세대/Pro Pencil capability matrix, Stage Manager/split view, keyboard/mouse, VoiceOver smoke, Android tablet cross-open 및 30분 editing session |
+| 태블릿용 MVP | Android tablet에서 create→draw→layer/frame edit→undo/redo→playback→background kill→recover vertical slice가 가능하다. 모든 필수 기능을 stylus 없이 touch/mouse로도 수행한다. iPad local shadow build가 같은 `.ugu`를 연다. | S Pen·일반 stylus·low-RAM tablet, keyboard/mouse, TalkBack, multi-window와 30분 editing session; iPad Pencil capability·Stage Manager·VoiceOver local smoke 및 cross-open |
 | 스마트폰 UI 적용 | compact portrait/landscape에서 가려진 필수 command나 겹친 safe-area control이 없고, 회전·resize 뒤 document/tool/viewport state가 보존된다. | iPhone/Android small·large phone screenshot matrix, font scale, notch/cutout, one-hand usability, rotation loop, keyboard appearance test |
-| 파일 시스템 및 공유 | local/iCloud/third-party provider와 SAF provider에서 open/edit/save-as/reopen이 byte·pixel 의미를 보존한다. stale/revoked/read-only/offline/저장 공간 부족이 원본을 손상하지 않는다. | provider별 fault-injection table, security scope/grant 재실행, process kill during commit, conflict/copy test, exported PNG/JPEG/GIF decode·share round-trip |
+| 파일 시스템 및 공유 | Android local/SAF provider에서 open/edit/save-as/reopen이 byte·pixel 의미를 보존한다. stale/revoked/read-only/offline/저장 공간 부족이 원본을 손상하지 않는다. iOS 승인이 있으면 Files/iCloud를 같은 contract로 추가한다. | SAF provider별 fault injection, persisted grant 재실행, commit 중 process kill, conflict/copy test, PNG/JPEG/GIF decode·share round-trip; 조건부 security-scope test |
 | 성능 최적화 | 합의한 reference devices에서 frame/input/start/memory 기준을 충족하고 low-RAM 장치에서 OOM·OS kill 없이 degrade한다. | release build cold/warm benchmark, 1/4/60 frame 4K corpus, 30분 thermal soak, memory warning/trim injection, GPU loss/resize, AAB/IPA size report |
-| 플랫폼별 품질 검증 | 지원 OS·폼팩터·입력 matrix에서 P0/P1 결함 0, 저장 손실 0이며 beta crash가 목표 이하다. upgrade와 desktop↔mobile file compatibility가 통과한다. | device farm + 실제 stylus lab, fuzz/regression/golden, background/process-death loop, accessibility/localization, TestFlight/closed-track telemetry |
-| 스토어 배포 준비 | 양 store의 식별자·서명·privacy·metadata·rating·review access가 완료되고 production과 동일한 build가 beta·심사에서 검증된다. archive/symbol/rollback가 재현 가능하다. | clean CI archive, signature/entitlement inspection, upload validation, dSYM/native symbol crash symbolication, reviewer checklist, staged rollout dry run |
+| 플랫폼별 품질 검증 | Android 지원 OS·폼팩터·입력 matrix에서 P0/P1 결함 0, 저장 손실 0이며 beta crash가 목표 이하다. upgrade와 desktop↔mobile file compatibility가 통과한다. iPad는 local regression matrix를 유지한다. | device farm + 실제 stylus lab, fuzz/regression/golden, background/process-death loop, accessibility/localization, 직접 APK/F-Droid/closed-track telemetry와 iPad local soak |
+| 스토어 배포 준비 | Android 서명·privacy·metadata와 GPL/LGPL 대응 source가 production artifact와 일치하며 직접 APK/F-Droid 또는 선택한 Play channel에서 검증된다. Apple은 배포 승인 뒤에만 동일 수준의 TestFlight/App Store gate를 적용한다. | clean CI APK/AAB와 source rebuild, signature/license inspection, native symbolication, F-Droid recipe 또는 Play upload validation; 조건부 Xcode archive·dSYM·review checklist |
 
 사전 검증에서 수치 baseline을 얻은 뒤 product/engineering이 최종 SLO를 승인한다. 시작점으로 사용할 **잠정 기준**은 다음과 같다.
 
@@ -527,7 +534,8 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 
 | 우선순위 | 위험 | 가능성 / 영향 | 조기 증거와 대응 |
 |---:|---|---|---|
-| P0 | Ugurugu GPLv3, Qt LGPL/상용 조건과 App Store/Play 배포 조건의 양립 불확실 | 높음 / 치명적 | 모든 기여·저작권·dependency·link 방식을 audit하고 전문 법률 의견으로 허용 경로를 고정한다. Qt 상용 라이선스는 Qt 조건만 다루며 앱 자체 GPL 문제를 자동 해결하지 않는다. 해결 전 외부 TestFlight/스토어 배포를 승인하지 않는다. |
+| P0 | Android release에 불완전한 GPL/LGPL source package나 Educational/commercial Qt artifact가 섞임 | 중간 / 치명적 | 전체 product CI는 Qt Community artifact만 허용한다. 사용 module별 license self-audit와 clean Linux source rebuild를 거쳐 20-device 제한 alpha와 public APK를 열고, F-Droid·Play·Full Distribution을 각각 별도 gate로 둔다. 앱이 무료라는 사실을 근거로 의무를 생략하지 않는다. |
+| P0 | Ugurugu GPL·Qt LGPL과 App Store 정적 링크·추가 조건의 양립이 확정되지 않음 | 높음 / 치명적 | Qt에 구체적인 서면 답변을 요청하고 무료 법률 clinic 또는 전문 자문으로 독립 검토한다. 승인 전에는 본인 기기 development build만 허용하고 외부 TestFlight/App Store를 차단한다. 상용 Qt도 앱 자체 GPL·기여자 권리를 자동 해결하지 않는다. |
 | P0 | Qt의 stylus event가 Pencil coalesced/predicted/estimated 또는 Android palm-cancel/history를 손실할 수 있음 | 높음 / 높음 | Qt와 UIKit/MotionEvent raw trace를 동일 stroke에서 비교한다. 빠진 필드만 native batch adapter로 보완하고 trace fixture로 회귀시킨다. |
 | P0 | 4K QImage, full JSON DOM, frame cache, all-frame export가 합쳐져 OOM/process kill | 높음 / 치명적 | peak allocation ledger를 먼저 만들고 stream serialization/export, tile/cache eviction, reservation, worker 제한을 구현한다. 저사양 실제 기기에서 1/4/60 frame corpus를 측정한다. |
 | P0 | 현재 CMake의 `APPLE == macOS` 가정과 Sparkle/AppKit가 iOS configure를 막음 | 확실 / 높음 | `IOS`, `MACOS`, `ANDROID` target을 분리하고 app/update/package를 core에서 떼는 설계안을 2단계 exit criterion으로 둔다. |
@@ -541,20 +549,40 @@ controls는 플랫폼의 최소 touch target과 Dynamic Type/font scale을 지�
 | P2 | Qt runtime/QML/plugin으로 download size와 cold start가 native보다 커짐 | 높음 / 중간 | release thinned IPA/split APK 기준으로 plugin/import/asset 기여도를 측정하고 사용하지 않는 Qt module, QML import, ABI를 제외한다. 기능을 줄여 수치를 숨기지 않는다. |
 | P2 | Apple/Google SDK·정책 기한이 개발 중 변경 | 높음 / 높음 | 분기별 및 RC 직전 공식 정책 audit, Xcode/SDK/Qt upgrade rehearsal, store preflight owner를 release checklist에 둔다. |
 
-라이선스 gate의 산출물은 “Qt를 산다” 같은 단일 문장이 아니라 다음 후보 중 하나를 특정한 승인서여야 한다.
+라이선스 gate의 산출물은 “앱이 무료다” 또는 “Qt를 산다” 같은 단일 문장이 아니라 배포 채널별 승인서여야 한다.
 
-- 앱 저작권을 모두 통제할 수 있으면 Ugurugu에 store 배포와 서명 조건을 허용하는 별도/이중 라이선스를 적용하고, Qt는 상용 mobile 라이선스·정적 배포 조건을 계약으로 확정한다.
-- 외부 기여가 있으면 각 기여자의 재라이선스 동의 또는 해당 코드를 교체할 계획이 있어야 한다.
-- GPLv3/Qt LGPL로 계속 배포하려면 source·relink/install 정보, store 추가 조건, 서명·업데이트 제한까지 포함한 변호사 승인 준수안을 만든다.
-- Community/open-source Qt로 시작한 뒤 상용으로 전환하는 경우 Qt 공식 FAQ가 요구하는 **Qt Company의 사전 서면 동의**를 Qt Sales에서 받고, 계약 가능성·팀 전원 seat·적용 시점을 함께 확인한다. 동의 전에는 상용 전환을 일정의 확정 가정으로 두지 않는다.
+- **비용 0원의 기본 경로:** Ugurugu product의 local·CI·공개 build를 모두 Qt Community Edition으로 통일한다. Android APK와 함께 Ugurugu·사용한 Qt의 complete corresponding source, 정확한 build/re-sign/install 절차, license text와 notice를 제공한다. 최대 20대의 닫힌 Limited Distribution alpha를 먼저 검증하고, public release page의 APK에는 그 밖의 사용자가 advanced flow/ADB를 거칠 수 있음을 알린다. F-Droid는 inclusion 후보이며 저마찰 광범위 Full Distribution에는 2026년 정책상 일회성 US$25가 필요하다.
+- **Educational License 경계:** Qt Educational License는 별도의 학습 sandbox에만 쓴다. Ugurugu의 local PoC에도 사용하지 않아 같은 product에서 Community와 commercial 계열 artifact가 섞일 위험을 없앤다. 무료 앱인지 여부로 이 제한이 바뀐다고 가정하지 않는다.
+- **나중에 유료화할 경우:** GPL은 판매 자체를 금지하지 않으므로 전체 source와 사용자 권리를 계속 제공한다면 Qt Community/GPL 경로를 유지할 수 있다. 가격을 받는 순간 자동으로 상용 Qt가 필요한 것은 아니지만, source 비공개·재배포 제한·유료 proprietary 전환을 원하면 그 시점 전에 별도 license·기여자 권리 gate를 다시 연다.
+- **iOS 공개 경로:** source·relink/install 정보, App Store의 추가 조건과 code signing을 포함한 준수안을 독립적으로 검토하고 Qt Company에 프로젝트 조건을 적은 서면 답변을 요청한다. 승인 전에는 본인 등록 기기의 development build만 만든다.
+- 앱 저작권을 모두 통제할 수 있으면 Ugurugu에 store 조건을 허용하는 별도/이중 라이선스를 검토할 수 있지만 이는 Qt의 권리를 바꾸지 않는다. `README.md@09c7582:196-202`가 앱 아이콘의 저작권자를 `seuppi`로 명시하고 `CONTRIBUTING.md@09c7582:8-21`은 기여자의 저작권을 양도받지 않으므로, 아이콘의 별도 허락 또는 교체와 모든 외부 기여의 동의·교체가 필요하다. 향후 기여를 받기 전에 GPL-only를 유지할지 별도 contributor agreement를 도입할지 결정하며, Git author 목록만으로 권리 소유를 확정하지 않는다.
+- iOS에서 Qt를 제거하는 경로를 택하면 표준 C++ document/render core + UIKit/Objective-C++ + Metal의 재작성 규모를 별도 산정한다. UIKit shell만 바꾸고 Qt Core/Gui/QImage/QPainter를 남기는 것은 de-Qt가 아니다.
+- Community/open-source Qt로 시작한 뒤 상용으로 전환하는 경우 Qt 공식 FAQ가 요구하는 **Qt Company의 사전 서면 동의**를 받고 계약 가능성·적용 시점을 확인한다. 예산에 없는 상용 전환을 일정의 확정 가정으로 두지 않는다.
 
-가장 비싼 실패는 “iPad UI를 완성한 뒤 라이선스, Android OOM 또는 raw Pencil 입력 누락을 발견하는 것”이다. 따라서 세 위험은 UI feature 개발 전에 같은 사전 검증 단계에서 닫는다.
+가장 비싼 실패는 “iPad UI를 완성한 뒤 공개할 수 없거나, Android OOM 또는 raw stylus 입력 누락을 발견하는 것”이다. 따라서 Android 무비용 release package, 양쪽 입력, 메모리를 UI feature 개발 전에 같은 사전 검증 단계에서 닫는다.
 
 ## 12. TestFlight, App Store, Google Play 배포 준비
 
+예산 0원의 출시 단계는 **Android 20-device 닫힌 alpha → public developer-signed APK와 advanced-flow 고지 → F-Droid inclusion 후보 → 필요할 때 US$25 Full Distribution 또는 Google Play → 배포 권리 승인 뒤 TestFlight/App Store**다. 이는 한 계정의 자동 승격 순서가 아니라 별도 배포 gate다. 무료 공개는 GPL/LGPL 의무를 면제하지 않는다. release binary마다 같은 revision의 source와 build 자료를 함께 보존한다.
+
+### 12.0 무비용 Android alpha와 설치 계보
+
+1. **최초 alpha artifact**
+   - release page에 developer-signed universal 또는 arm64 APK, 같은 tag의 source archive, build·install 안내, APK SHA-256과 signing certificate SHA-256 fingerprint를 함께 올린다. AAB는 사용자가 직접 설치하는 artifact가 아니라 Play용이므로 초기 직접 배포에는 APK를 사용한다.
+   - 최초 production signing key를 source 밖에 암호화해 두 곳 이상 백업한다. key를 잃거나 채널마다 다른 key를 쓰면 기존 설치 위에 update할 수 없다.
+   - Android Developer Console의 무료 Limited Distribution은 사용자가 명시적으로 승인한 최대 20대까지다. 확인일의 공식 문서는 2026년 8월 출시 예정이며 early access가 닫혀 있다고 표시하므로 milestone 시작 때 실제 이용 가능 여부를 다시 확인한다. 2026-09-30부터 일부 지역·참여 store에서 인증이 시작되고 2027년 이후 global rollout이 예정되어 있어, 직접 APK가 무제한 무료 공개를 영구 보장하지 않는다. 등록하지 않은 app은 사용자가 advanced flow 또는 ADB를 거쳐야 할 수 있다.
+2. **F-Droid 후보**
+   - public source repository, 자유 software dependency만 사용하는 clean Linux CLI build, version tag와 `fdroiddata` recipe가 inclusion review를 통과해야 한다. F-Droid는 upload 즉시 배포되는 저장소가 아니다.
+   - 기본 F-Droid 서명 build는 upstream 직접 APK와 signing key가 달라 서로 update할 수 없다. 한 설치 계보를 유지하려면 upstream-signed reproducible build가 F-Droid에서 검증되는 방식을 목표로 하거나, 서로 다른 package/channel을 감수한다.
+   - F-Droid도 Android Developer Verification을 자동 우회한다고 가정하지 않는다. 출시 지역·기기에서 F-Droid의 참여 상태와 unregistered-app advanced flow를 RC 때 다시 확인한다.
+3. **향후 Full Distribution·Play 전환**
+   - 20대를 넘는 저마찰 일반 공개에는 현재 Android Developer Console Full Distribution의 일회성 US$25 또는 Google Play 계정이 필요하다. 비용 0원을 유지하면 설치자가 advanced flow/ADB를 거치는 마찰을 감수한다.
+   - Android Developer Console의 Limited와 Full plan은 계정 생성 뒤 바꿀 수 없다. Full로 옮길 때는 새 account를 만들고 package name을 transfer해야 하므로 signing key/update 계보와 별개로 account migration을 계획한다.
+   - 직접 APK와 Play build의 update 계보를 유지하려면 처음부터 같은 application ID와 app signing key를 사용한다. Play App Signing 도입 시 여러 store에 쓰던 기존 app signing key를 제공하는 경로를 선택하고 upload key는 별도로 운용한다.
+
 ### 12.1 Apple: 인증서, 서명과 App Store Connect
 
-Apple Developer Program 계정 가입 비용과 가입 절차는 범위에서 제외한다. 보유 계정 안에서 다음을 수행한다.
+Apple Developer Program 계정 가입 비용과 가입 절차는 범위에서 제외한다. 아래는 iOS 공개 배포 권리가 서면 승인된 뒤 수행할 조건부 절차다. 그전에는 보유 계정으로 본인 등록 기기에 development signing한 local PoC만 만들고, 타인 대상 TestFlight와 App Store upload는 하지 않는다.
 
 1. **식별자와 capability**
    - 고유 bundle ID를 정하고 explicit App ID를 등록한다. App Store Connect app record의 bundle ID와 정확히 일치시킨다.
@@ -583,34 +611,43 @@ Apple Developer Program 계정 가입 비용과 가입 절차는 범위에서 �
    - reviewer가 Pencil 없이도 모든 필수 기능을 쓸 수 있게 하고, sample `.ugu`, import/export 절차, iCloud 사용 이유, 비명백한 gesture와 test instructions를 review note에 적는다.
    - crash/placeholder/깨진 link가 없는 production-signed build를 제출하고 rejection owner와 응답 SLA를 정한다. 승인 후 phased release, crash·save-failure guardrail과 rollback/새 build 절차를 사용한다.
 
-### 12.2 Android: Play Console, AAB와 서명
+### 12.2 Android: 무비용 공개, Play Console, AAB와 서명
 
-Google Play Console 계정 보유 여부는 현재 정보에 없다. 없다면 엔지니어링 외 선행조건으로 1회 등록비(공식 안내상 US$25), 개인/조직 선택과 신원 검증을 계획한다. 2023-11-13 이후 생성된 **개인 계정**에는 production access 전에 최소 12명이 14일 연속 참여하는 closed test 요건이 적용될 수 있으므로 조직 계정 전체에 일반화하지 말고 실제 계정 상태를 확인한다.
+첫 20-device 닫힌 alpha에는 Google Play가 필요 없지만 Android Developer Console의 Limited Distribution 등록과 device authorization을 준비한다. public APK를 무료로 제공할 수는 있어도 그 밖의 설치자에게 advanced flow/ADB 마찰이 생길 수 있다. 저마찰 광범위 공개에는 Full Distribution 또는 Play의 일회성 US$25를 예산에 넣는다. F-Droid inclusion도 비용은 없지만 별도 심사·build와 Android 인증 정책의 영향을 받는다.
 
-1. **application ID와 빌드 규격**
-   - 변경하기 어려운 package/application ID를 확정하고 2026-09-30 package 등록·developer identity 상태를 Play Console에서 확인한다. 기존 Play 앱은 대부분 자동 등록되지만 확인은 필요하다.
+Google Play Console 계정 보유 여부는 현재 정보에 없다. 나중에 Play가 필요해질 때 개인/조직 선택과 신원 검증을 계획한다. 2023-11-13 이후 생성된 **개인 계정**에는 production access 전에 최소 12명이 14일 연속 참여하는 closed test 요건이 적용될 수 있으므로 조직 계정 전체에 일반화하지 말고 실제 계정 상태를 확인한다.
+
+1. **오픈소스 release package**
+   - APK/AAB와 정확히 같은 Git tag의 Ugurugu complete corresponding source, submodule/dependency lock, CMake·Gradle·NDK·Qt version과 build command를 제공한다.
+   - 사용한 Qt library의 complete corresponding source와 modification, 또는 수령 방법을 유효한 방식으로 제공하고 GPL/LGPL 전문과 prominent notice를 앱과 download page에 포함한다.
+   - Qt module별 선택 license를 manifest에 기록한다. Ugurugu와 결합하는 Qt module은 GPLv3 option을 기본으로 하고, LGPL로 배포하는 component가 있으면 교체·relink·실행 절차를 별도로 시험한다.
+   - 사용자가 source를 수정해 build·서명·설치하고 Qt library를 교체할 수 있는 절차를 실제 clean environment에서 검증한다. 단순 repository URL이나 “동적 링크했다”는 설명만으로 준수가 끝난다고 간주하지 않는다.
+   - Qt Educational/commercial binary, proprietary Qt module, 재배포 불가능한 SDK나 asset가 release dependency graph에 섞이면 CI가 실패하게 한다.
+2. **application ID와 빌드 규격**
+   - 변경하기 어려운 package/application ID를 확정하고 2026-09-30 package 등록·developer identity 상태를 Android Developer Console 또는 Play Console에서 확인한다. 기존 Play 앱은 대부분 자동 등록되지만 확인은 필요하다.
    - 출시 계획은 `targetSdk 36`, Qt 6.11 지원 하한인 `minSdk 28`을 초기값으로 한다. 2026-08-31부터 신규 앱·업데이트에 API 36 target 요구가 적용되므로 RC에서 정책을 다시 확인한다.
    - Play용은 AAB로 만들고 최소 `arm64-v8a`를 포함한다. emulator/QA용 `x86_64`를 분리하거나 AAB에 함께 넣되 실제 download size를 확인한다. 모든 native `.so`가 64-bit와 16KB page size를 지원하는지 검사한다. Qt 6.10+ 지원만 믿지 말고 bundled libwebp/spdlog와 자체 binary까지 AAB Analyzer·16KB 환경에서 검증한다.
    - 사용자에게 보이는 `versionName`과 별도로 Play에 올리는 모든 artifact의 `versionCode`를 단조 증가시키고 CI가 중복·감소를 거부한다.
-2. **서명**
-   - source 밖에서 생성·백업한 upload key로 AAB를 서명하고 Play App Signing에 가입해 Google이 배포 APK의 app signing key를 보호하게 한다.
+3. **서명**
+   - 최초 직접 APK에 사용한 app signing key를 source 밖에서 생성·백업한다. 나중에 Play App Signing을 도입하면 여러 store의 update 계보를 유지할 수 있도록 기존 app signing key 제공 방식을 선택하고, 별도 upload key로 AAB를 업로드한다.
    - upload key와 app signing key의 역할, rotation/recovery 담당자를 문서화하고 debug/staging key로 production package를 만들지 못하게 CI에서 검사한다.
-3. **manifest와 파일 접근**
+4. **manifest와 파일 접근**
    - intent filter에 `.ugu` MIME/extension과 incoming open/share를 선언하고 content URI만 사용한다. broad storage permission 대신 SAF/Photo Picker/app-specific storage를 사용한다.
    - recovery와 private metadata는 `filesDir`, 재생성 가능한 preview/cache는 `cacheDir`에 둔다. 사용자가 보존할 최종 문서는 uninstall 시 제거되는 app-specific storage가 아니라 SAF를 통해 선택한 provider에 저장한다.
    - edge-to-edge/window inset, configuration change, foreground service를 쓰지 않는 background save, network·notification permission 부재를 manifest와 Data Safety에 맞춘다.
-4. **Play Console 정책 정보**
+5. **Play Console 정책 정보**
    - store listing, phone/tablet screenshot, feature graphic, category, support 연락처, privacy policy를 준비한다.
    - “수집 없음”인 경우에도 출시 track에는 Data Safety form과 privacy policy가 필요하다. third-party SDK의 data behavior까지 포함한다. IARC content rating, target audience/content, ads 여부, app access, 민감 permission declaration을 완료한다.
    - 2026 developer verification/package registration과 release 시점의 policy status를 다시 확인한다.
-5. **테스트와 출시**
+6. **테스트와 출시**
    - internal test(최대 100명) → closed test → 필요 시 open test 순서로 승격하고 Play pre-launch report와 실제 S Pen/low-RAM/foldable lab 결과를 함께 본다.
    - release AAB에 `FULL` 또는 적절한 native debug symbols를 포함하거나 별도 업로드해 C++/Qt crash를 symbolicate하고 version별 symbols를 보존한다.
    - staged rollout을 작은 비율에서 시작하고 crash/ANR, OOM/LMK, save/export failure, backend fallback 비율을 guardrail로 둔다. 문제가 생기면 rollout을 중지하고 새 signed version으로 복구한다.
 
-### 12.3 두 스토어 공통 release gate
+### 12.3 Android와 조건부 Apple 공통 release gate
 
 - 동일 source revision, dependency lock, compiler/SDK/Qt patch와 signing identity로 build가 재현된다.
+- binary 수령자가 같은 version의 Ugurugu·Qt 대응 source, license text, build·relink·재서명·설치 정보에 접근할 수 있고 clean rebuild가 검증된다.
 - 개인정보 전송이 없는 경우에도 검증 로그·crash telemetry의 데이터 흐름, retention, opt-out을 privacy 문서와 일치시킨다.
 - 제출 binary의 SBOM/third-party notice, GPL/Qt 결론, libwebp/spdlog license와 vulnerability audit가 승인돼 있다.
 - clean install, upgrade, rollback 불가 상황, offline first launch, corrupted document, storage full, process kill을 production-signed artifact로 검증한다.
@@ -622,12 +659,12 @@ Google Play Console 계정 보유 여부는 현재 정보에 없다. 없다면 �
 
 | 순위 | 작업 | 이유 |
 |---:|---|---|
-| **P0-1** | GPLv3·Qt·스토어 배포 권리 결정 | 실패하면 외부 배포 자체가 불가능하므로 feature 개발보다 먼저 닫아야 한다. |
-| **P0-2** | iPad+Android stylus raw event와 QRhi backend PoC | architecture의 native adapter 범위와 QML canvas 가능성을 결정한다. |
+| **P0-1** | Qt Community Android 무비용 배포 package와 iOS 보류/승인 결정 | Educational License 오용을 막고 실제 공개 가능한 첫 target을 feature 개발 전에 고정한다. |
+| **P0-2** | Android tablet primary + iPad local stylus/QRhi PoC | architecture의 native adapter 범위와 QML canvas 가능성을 결정한다. |
 | **P0-3** | 4K serialize/render/export peak memory 및 lifecycle kill PoC | 가장 큰 기술 일정 변동 요인이며 코어 API를 바꿀 수 있다. |
 | **P1-1** | path-free document/session façade와 mobile build graph | 파일 provider, autosave, UI를 독립시키는 모든 후속 작업의 경계다. |
 | **P1-2** | shared QML tablet UI와 input arbitration | 제품 가치가 있는 첫 vertical slice다. |
-| **P1-3** | iCloud/SAF, journal recovery와 bounded export | 저장·복구 없는 drawing demo를 배포 가능한 앱으로 만든다. |
+| **P1-3** | SAF, journal recovery와 bounded export; 조건부 iCloud | 저장·복구 없는 drawing demo를 Android 공개 가능한 앱으로 만든다. |
 | **P1-4** | low-RAM/backend/device matrix와 성능 budget | Android 출시 가능 범위와 지원 기기를 확정한다. |
 | **P2-1** | compact phone topology와 foldable polish | core/view model이 안정된 뒤 적용하면 중복을 줄일 수 있다. |
 | **P2-2** | Pencil squeeze, S Pen Air Actions, advanced export/UI parity | 핵심 workflow와 데이터 안전성보다 후순위다. |
@@ -637,7 +674,7 @@ Google Play Console 계정 보유 여부는 현재 정보에 없다. 없다면 �
 
 | workstream | 주 소유 | 규모 | 주 산출물 |
 |---|---|---:|---|
-| 법률·release architecture | tech lead + 법률/PM | 0.5~1.0 인월 + 외부 대기 | 배포 권리·Qt edition/link 방식·store 책임 승인 |
+| 라이선스·release architecture | 개발자 + 필요 시 법률 자문 | 0.5~1.0 인월 + 외부 대기 | Community Android 준수안, 기여자 권리 audit, iOS 서면 결정 |
 | CMake/core/session/CI | senior Qt/C++ | 3~5 인월 | mobile core targets, service boundary, deterministic CI |
 | renderer·memory·scheduler | graphics C++ | 4~6 인월 | QQuickRhiItem, Metal/Vulkan/GLES, bounded 4K pipeline |
 | input·gesture | C++ + iOS/Android | 3~4.5 인월 | Pencil/S Pen batch adapter와 arbitration |
@@ -645,13 +682,13 @@ Google Play Console 계정 보유 여부는 현재 정보에 없다. 없다면 �
 | storage·lifecycle·share | platform + C++ | 3~4.5 인월 | iCloud/Files, SAF, journal recovery, import/export/share |
 | QA·performance·stores | QA + platform/release | 4~6 인월 | device matrix, telemetry, beta, store approval |
 
-workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하지 않는다. 일정은 사전 검증 뒤 ±30% 범위로 재산정하고, iPad MVP는 renderer/input/UI 인력을 겹쳐 **10~16 인월**, 네 폼팩터 출시는 **21~33 인월**을 기준선으로 둔다.
+workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하지 않는다. 일정은 사전 검증 뒤 ±30% 범위로 재산정하고, Android 태블릿 배포 MVP는 **10~16 인월**, 네 폼팩터 출시는 **21~33 인월**을 기준선으로 둔다. 1인 0.5 FTE의 학생 개발이면 Android tablet MVP만 약 **20~32개월**에 해당하며 학업·기기 확보·외부 심사 대기는 별도다. 인월을 병렬화할 수 없으므로 phone과 iOS를 후속 release로 분리한다.
 
 ## 부록 A. 조사 근거
 
 ### A.1 저장소 근거 색인
 
-아래는 주요 판단의 대표 근거다. 본문의 더 구체적인 판단에는 해당 위치를 함께 표시했다.
+아래는 주요 판단의 대표 근거다. 별도 표시가 없는 architecture·code 위치는 `dbd497c` 기준이고, license·기여자 권리 위치는 `09c7582` 기준이다. 본문의 더 구체적인 판단에는 해당 위치를 함께 표시했다.
 
 | 판단 | 저장소 위치 |
 |---|---|
@@ -662,7 +699,7 @@ workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하�
 | 문서·history·limit | `src/document/Document.hpp:164-250`, `src/document/DocumentLimits.hpp:8-50`, `src/document/history/LogicalHistoryCommand.hpp:15-26`, `src/document/history/DocumentDelta.hpp:16-129` |
 | serializer·export | `src/io/serializer/SerializerSchema.hpp:16-25`, `src/io/DocumentSerializer.cpp:562-648`, `701-724`, `src/io/ExportWorker.cpp:246-372` |
 | memory·thread·recovery | `src/app/MemoryBudget.hpp:8-31`, `src/app/MemoryBudget.cpp:27-68`, `src/app/RecoveryWriter.cpp:24-63`, `178-238`, `src/app/RecoveryStore.cpp:186-196`, `src/io/ExportWorker.cpp:46-62`, `src/ui/LayerDock.cpp:1002-1009`, `src/ui/CanvasWidgetSelection.cpp:393-430`, `src/app/BackgroundWork.cpp:8-11` |
-| license | `README.md:201-207`, `THIRD_PARTY_NOTICES.md:7-18` |
+| license·기여자 권리 (`09c7582`) | `README.md:196-222`, `CONTRIBUTING.md:3-21`, `THIRD_PARTY_NOTICES.md:9-23` |
 
 ### A.2 Qt 공식 문서
 
@@ -684,6 +721,8 @@ workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하�
 - QRhi item, thread·DPR·호환성 제한: [QQuickRhiItem](https://doc.qt.io/qt-6/qquickrhiitem.html)
 - Metal/Vulkan/OpenGL ES backend: [Graphics in Qt](https://doc.qt.io/qt-6/topics-graphics.html), [QQuickWindow graphics API](https://doc.qt.io/qt-6/qquickwindow.html)
 - LGPL 의무와 app store/static linking 주의: [Qt Open Source Licensing Obligations](https://www.qt.io/development/open-source-lgpl-obligations)
+- Community Edition의 GPL/LGPL 선택: [Qt Open Source Development](https://www.qt.io/development/download-open-source), [Qt Licensing](https://www.qt.io/development/qt-framework/qt-licensing)
+- 학습용 범위와 public product build 분리: [Qt Educational License](https://www.qt.io/development/qt-educational-license), [Qt Educational License Terms](https://www.qt.io/terms-conditions/edu-2023-11)
 - Qt 상용 라이선스 범위: [Qt Commercial Licensing FAQ](https://www.qt.io/faq/qt-commercial-licensing)
 
 ### A.3 Apple 공식 문서
@@ -741,7 +780,8 @@ workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하�
 - JNI 경계 최소화: [JNI Tips](https://developer.android.com/ndk/guides/jni-tips)
 - 16KB page size 의무: [Support 16KB Page Sizes](https://developer.android.com/guide/practices/page-sizes)
 - target API 36 일정: [Target API Level Requirements](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en-GB)
-- 2026 developer verification/package 등록: [Android Developer Verification](https://developer.android.com/developer-verification), [Register Package Names](https://support.google.com/googleplay/android-developer/answer/16984799?hl=en)
+- 2026 developer verification, 20-device 무료 Limited Distribution과 full account: [Android Developer Verification](https://developer.android.com/developer-verification), [Limited Distribution](https://developer.android.com/developer-verification/guides/limited-distribution), [Android Developer Console Account](https://support.google.com/android-developer-console/answer/16604405?hl=en), [Choose a Distribution](https://support.google.com/android-developer-console/answer/16640817?hl=en), [Register Package Names](https://support.google.com/googleplay/android-developer/answer/16984799?hl=en)
+- 직접 APK publish와 signing key: [Prepare and Roll Out a Release](https://developer.android.com/studio/publish/), [Sign Your App](https://developer.android.com/studio/publish/app-signing)
 - Play 계정 등록·신원 확인: [Get Started with Play Console](https://support.google.com/googleplay/android-developer/answer/6112435?hl=en)
 - 신규 개인 계정 테스트 조건: [App Testing Requirements for New Personal Developer Accounts](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en-EN)
 - AAB 의무: [Use Android App Bundles](https://support.google.com/googleplay/android-developer/answer/9844679?hl=en)
@@ -754,6 +794,7 @@ workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하�
 - content rating: [IARC Content Rating](https://support.google.com/googleplay/android-developer/answer/9898843?hl=en)
 - pre-launch report: [Use Pre-Launch Reports](https://support.google.com/googleplay/android-developer/answer/9842757?hl=en)
 - C/C++ symbol upload: [Include Native Debug Symbols](https://developer.android.com/build/include-native-symbols), [Deobfuscate or Symbolicate Crash Stack Traces](https://support.google.com/googleplay/android-developer/answer/9848633?hl=en)
+- F-Droid source-build 공개 후보: [Inclusion Policy](https://f-droid.org/en/docs/Inclusion_Policy/), [Submitting to F-Droid](https://f-droid.org/en/docs/Submitting_to_F-Droid_Quick_Start_Guide/), [Reproducible Builds](https://f-droid.org/en/docs/Reproducible_Builds/)
 
 ### A.5 대안 프레임워크와 언어 경계의 공식 문서
 
@@ -763,10 +804,17 @@ workstream 합은 경계 작업이 겹치므로 단계 합과 단순히 더하�
 - Flutter engine·Dart/FFI/platform channel: [Flutter Architectural Overview](https://docs.flutter.dev/resources/architectural-overview), [Measuring App Size](https://docs.flutter.dev/perf/app-size)
 - React Native JSI/Fabric와 native module: [React Native New Architecture](https://reactnative.dev/architecture/landing-page), [Native Platform](https://reactnative.dev/docs/native-platform)
 
+### A.6 GPL과 배포 판단 자료
+
+모두 **2026-08-06**에 확인했다. FSF의 App Store 사례는 2010년 당시 조건에 대한 역사적 분석이며 2026년 Apple 약관의 법률 결론으로 직접 사용하지 않고, 독립 검토가 필요한 위험의 근거로만 사용했다.
+
+- GPL은 가격이 아니라 사용자 자유와 배포 조건에 관한 license라는 설명: [GNU GPLv3](https://www.gnu.org/licenses/gpl.en.html), [GNU License FAQ](https://www.gnu.org/licenses/gpl-faq.en.html)
+- App Store 추가 조건과 GPL 충돌의 역사적 사례: [FSF: More about the App Store GPL Enforcement](https://www.fsf.org/blogs/licensing/more-about-the-app-store-gpl-enforcement)
+
 ## 최종 요약
 
 - **모바일 이식 가능 여부:** 가능하다. 문서·history·CPU renderer·codec은 강한 기반이지만 현재 Widgets UI, direct-path I/O, desktop memory/lifecycle 정책과 build graph는 모바일 출시 준비가 되어 있지 않다.
-- **가장 추천하는 아키텍처와 기술 스택:** Qt 6.11.x/C++23 공통 코어 + iOS·Android 공용 Qt Quick/QML 모바일 UI + QQuickRhiItem/QRhi 1차 표시 후보(Metal, Vulkan·OpenGL ES launch-time fallback)다. UIKit/Objective-C++과 Kotlin/Java/JNI는 Qt가 충분히 노출하지 않는 고충실도 입력·문서·공유·수명주기만 담당하는 얇은 adapter로 쓴다. Swift/SwiftUI 전면 UI는 권고하지 않는다.
-- **첫 번째 목표 플랫폼:** iPad와 Apple Pencil이다. 동시에 작은 Android tablet shadow spike를 수행하며, GPL/App Store 배포가 법적으로 막히면 첫 배포 MVP는 Android tablet으로 전환한다.
-- **예상되는 가장 큰 장애물:** GPLv3·Qt·스토어 배포 조건, 4K/animation의 peak memory, Pencil/S Pen의 raw input·palm/cancel 품질, 현재 Widgets/session/path 결합이다.
-- **가장 먼저 해야 할 작업:** 코드를 옮기기 전에 저작권·라이선스 배포 경로를 확정하고, 같은 사전 검증에서 iPad/Android 실제 기기로 stylus event, QQuickRhiItem backend, 4K serialize/render/export memory를 수치화해 architecture go/no-go를 내린다.
+- **가장 추천하는 아키텍처와 기술 스택:** Qt Community Edition 6.11.x/C++23 공통 코어 + iOS·Android 공용 Qt Quick/QML 모바일 UI + QQuickRhiItem/QRhi 1차 표시 후보(Metal, Vulkan·OpenGL ES launch-time fallback)다. UIKit/Objective-C++과 Kotlin/Java/JNI는 Qt가 충분히 노출하지 않는 고충실도 입력·문서·공유·수명주기만 담당하는 얇은 adapter로 쓴다. Ugurugu product tree에는 Qt Educational License를 사용하지 않는다.
+- **첫 번째 목표 플랫폼:** 첫 MVP 플랫폼은 Android 태블릿이다. 서비스가 열리면 최대 20-device 닫힌 Limited Distribution alpha로 검증하고, public APK에는 advanced-flow/ADB 설치 마찰을 고지하며 F-Droid를 후속 후보로 둔다. 저마찰 광범위 공개는 US$25 별도 gate다. iPad와 Apple Pencil은 Community Qt로 만든 본인 기기 local shadow PoC이며 외부 TestFlight/App Store는 권리 승인 전까지 보류한다.
+- **예상되는 가장 큰 장애물:** GPL/Qt/App Store 배포 조건과 기여자 권리, Android의 20-device 무료 한도·광범위 배포 비용/설치 마찰, 실제 stylus 기기 확보, 4K/animation peak memory, Pencil/S Pen raw input·palm/cancel 품질과 Widgets/session/path 결합이다.
+- **가장 먼저 해야 할 작업:** Qt Community module·기여자 권리를 audit하고, 장기 application ID/signing key를 정해 clean Linux에서 Android APK와 대응 source package를 재빌드한다. 동시에 S Pen·일반 stylus·저사양 Android tablet과 iPad/Pencil 접근을 확보해 입력, QQuickRhiItem backend와 4K memory를 측정하고 Qt에 iOS 공개 조건을 서면 문의한다.
