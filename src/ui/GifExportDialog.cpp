@@ -42,6 +42,7 @@ QSize scaledSize(const QSize &size, int percentage)
 GifExportDialog::GifExportDialog(
     const Document &document, const QString &windowTitle, QWidget *parent)
     : QDialog(parent)
+    , m_document(document)
     , m_documentSize(document.size)
     , m_frameCount(document.animationFrames)
     , m_documentHasTransparency(documentHasTransparentBackground(document))
@@ -98,7 +99,7 @@ GifExportDialog::GifExportDialog(
     {
         const QSize size =
             scaledSize(m_documentSize, m_scaleBox->itemData(index).toInt());
-        if (AnimationExportPolicy::fitsMemoryBudget(size, m_frameCount))
+        if (AnimationExportPolicy::fitsMemoryBudget(m_document, size))
         {
             selected = index;
             break;
@@ -117,9 +118,9 @@ void GifExportDialog::updatePresentation()
 {
     const QSize size = sizeForCurrentScale();
     const bool fits =
-        AnimationExportPolicy::fitsMemoryBudget(size, m_frameCount);
+        AnimationExportPolicy::fitsMemoryBudget(m_document, size);
     const long double bytes =
-        AnimationExportPolicy::estimatedWorkingBytes(size, m_frameCount);
+        AnimationExportPolicy::estimatedWorkingBytes(m_document, size);
     const double mebibytes = static_cast<double>(bytes / (1024.0L * 1024.0L));
 
     if (fits)

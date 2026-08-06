@@ -40,6 +40,9 @@ private:
     void updatePresentation();
     QSize sizeForCurrentScale() const;
 
+    // Held whole rather than as size and frame count: the memory estimate
+    // depends on the layer hierarchy, and the copy shares the document data.
+    Document m_document;
     QSize m_documentSize;
     int m_frameCount = 1;
     bool m_documentHasTransparency = false;

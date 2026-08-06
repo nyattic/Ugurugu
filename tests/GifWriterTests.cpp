@@ -3,6 +3,7 @@
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
 #include "io/RenderExportPolicy.hpp"
+#include "ui/GifExportDialog.hpp"
 #include "render/LayerCompositionPlan.hpp"
 #include "render/RenderEngine.hpp"
 
@@ -110,6 +111,50 @@ private slots:
         QVERIFY(!RenderExportPolicy::staticImageFitsMemoryBudget(deep));
         QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(deep));
         QVERIFY(!AnimationExportPolicy::fitsMemoryBudget(deep));
+    }
+
+    void evaluatesScaledExportBudgetAgainstTheDocumentHierarchy()
+    {
+        constexpr long double mebibyte = 1024.0L * 1024.0L;
+        const Document deep = deepClippedExportDocument(QSize(4096, 4096));
+
+        // The size-only estimate accepts the native export that the
+        // document-aware one refuses; the export UI has to consult the
+        // latter.
+        QVERIFY(AnimationExportPolicy::fitsMemoryBudget(
+            deep.size, deep.animationFrames));
+        QVERIFY(!AnimationExportPolicy::fitsMemoryBudget(deep, deep.size));
+
+        const RenderExportMemoryEstimate native =
+            RenderExportPolicy::animatedGifAtSize(deep, deep.size);
+        QVERIFY(native.valid);
+        QCOMPARE(native.workingBytes,
+            RenderExportPolicy::animatedGif(deep).workingBytes);
+
+        // Half size composes the hierarchy on quarter-cost surfaces but still
+        // renders each layer natively before scaling it down.
+        const QSize half(2048, 2048);
+        const RenderExportMemoryEstimate scaled =
+            RenderExportPolicy::animatedGifAtSize(deep, half);
+        QVERIFY(scaled.valid);
+        QCOMPARE(scaled.workingBytes, 288.0L * mebibyte);
+        QVERIFY(AnimationExportPolicy::fitsMemoryBudget(deep, half));
+
+        QVERIFY(!RenderExportPolicy::animatedGifAtSize(deep, QSize()).valid);
+    }
+
+    void preselectsAnExportScaleTheDocumentBudgetAccepts()
+    {
+        const Document deep = deepClippedExportDocument(QSize(4096, 4096));
+        GifExportDialog dialog(deep, QStringLiteral("Export"));
+        const QSize chosen = dialog.currentResult().outputSize;
+        QVERIFY(chosen.isValid());
+        QVERIFY2(AnimationExportPolicy::fitsMemoryBudget(deep, chosen),
+            qPrintable(
+                QStringLiteral("the dialog preselected %1x%2, which the "
+                               "document-aware budget rejects")
+                    .arg(chosen.width())
+                    .arg(chosen.height())));
     }
 
     void rejectsOverflowingExportMemoryGeometry()

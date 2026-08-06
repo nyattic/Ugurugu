@@ -17,8 +17,12 @@ class RenderExportPolicy final
 public:
     static RenderExportMemoryEstimate staticImage(const Document &document);
     static RenderExportMemoryEstimate animatedGif(const Document &document);
+    static RenderExportMemoryEstimate animatedGifAtSize(
+        const Document &document, const QSize &outputSize);
     static bool staticImageFitsMemoryBudget(const Document &document);
     static bool animatedGifFitsMemoryBudget(const Document &document);
+    static bool animatedGifFitsMemoryBudget(
+        const Document &document, const QSize &outputSize);
 };
 
 }

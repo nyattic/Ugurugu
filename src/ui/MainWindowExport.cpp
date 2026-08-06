@@ -41,10 +41,9 @@ void MainWindow::exportAnimation(ExportWorker::Kind kind)
     }
     // The smallest offered scale is the only thing that can still be over
     // budget; anything above that is the user's choice inside the dialog.
-    if (!AnimationExportPolicy::fitsMemoryBudget(
+    if (!AnimationExportPolicy::fitsMemoryBudget(document,
             QSize(std::max(1, document.size.width() / 4),
-                std::max(1, document.size.height() / 4)),
-            document.animationFrames))
+                std::max(1, document.size.height() / 4))))
     {
         const long double mebibytes =
             AnimationExportPolicy::estimatedWorkingBytes(document)

@@ -33,9 +33,23 @@ bool AnimationExportPolicy::fitsMemoryBudget(
                   MemoryBudget::animationExportWorkingBytes);
 }
 
+long double AnimationExportPolicy::estimatedWorkingBytes(
+    const Document &document, const QSize &frameSize)
+{
+    return RenderExportPolicy::animatedGifAtSize(document, frameSize)
+        .workingBytes;
+}
+
 bool AnimationExportPolicy::fitsMemoryBudget(const Document &document)
 {
     return RenderExportPolicy::animatedGifFitsMemoryBudget(document);
+}
+
+bool AnimationExportPolicy::fitsMemoryBudget(
+    const Document &document, const QSize &frameSize)
+{
+    return RenderExportPolicy::animatedGifFitsMemoryBudget(
+        document, frameSize);
 }
 
 }
