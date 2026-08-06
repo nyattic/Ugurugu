@@ -3,9 +3,13 @@
 #include "ui/PaletteDockTitleBar.hpp"
 #include "ui/PopoverToolButton.hpp"
 
+#include <QFutureWatcher>
 #include <QImageReader>
 #include <QTabBar>
 #include <QToolBar>
+#include <QtConcurrentRun>
+
+#include <new>
 
 namespace ugurugu
 {
@@ -1153,6 +1157,48 @@ private slots:
         QVERIFY(!canceledResult.at(1).toBool());
         QVERIFY(canceledResult.at(2).toBool());
         QVERIFY(!QFileInfo::exists(gifPath));
+    }
+
+    void exportReportsFailureWhenTheWriteThrows()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const Document document = Document::createDefault(QSize(32, 24));
+
+        ExportWorker worker;
+        QSignalSpy finished(&worker, &ExportWorker::finished);
+        const QString path = directory.filePath(QStringLiteral("thrown.png"));
+        worker.throwFromNextExportForTesting();
+        QVERIFY(worker.startImage(document, 0, path, false));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(!finished.at(0).at(1).toBool(),
+            "a throwing export reported success");
+        QVERIFY(!finished.at(0).at(2).toBool());
+        QVERIFY(!finished.at(0).at(4).toString().isEmpty());
+        QVERIFY(!QFileInfo::exists(path));
+
+        // A worker left busy would hang the destructor's wait, so the next
+        // export has to be accepted and to run.
+        QVERIFY(worker.waitForIdle(5000));
+        QVERIFY(!worker.isBusy());
+        QVERIFY(worker.startImage(document, 0, path, false));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 10000);
+        QVERIFY2(finished.at(1).at(1).toBool(),
+            qPrintable(finished.at(1).at(4).toString()));
+    }
+
+    void watchedFutureResultTreatsAThrownTaskAsNoResult()
+    {
+        QFutureWatcher<QImage> watcher;
+        QSignalSpy finished(&watcher, &QFutureWatcher<QImage>::finished);
+        watcher.setFuture(QtConcurrent::run(
+            []() -> QImage
+            {
+                throw std::bad_alloc();
+            }));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(watchedFutureResult(watcher).isNull(),
+            "a pool exception escaped into the completion handler");
     }
 
     void editsStrokePropertyDialogValues()

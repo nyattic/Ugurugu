@@ -109,7 +109,20 @@ public:
             owner,
             [this, watcher, interactive]()
             {
-                const CheckResult result = watcher->result();
+                CheckResult result;
+                try
+                {
+                    result = watcher->result();
+                }
+                catch (const std::exception &error)
+                {
+                    result.error = QString::fromUtf8(error.what());
+                }
+                catch (...)
+                {
+                    result.error = UpdateController::tr(
+                        "The update check failed unexpectedly.");
+                }
                 watcher->deleteLater();
                 busy = false;
 

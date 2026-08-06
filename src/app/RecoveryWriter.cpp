@@ -7,6 +7,7 @@
 #include <QMutexLocker>
 #include <QSaveFile>
 
+#include <stdexcept>
 #include <utility>
 
 namespace ugurugu
@@ -86,6 +87,12 @@ void RecoveryWriter::setSuspendedForTesting(bool suspended)
     scheduleProcessing();
 }
 
+void RecoveryWriter::throwFromNextWriteForTesting()
+{
+    QMutexLocker locker(&m_mutex);
+    m_throwFromNextWriteForTesting = true;
+}
+
 void RecoveryWriter::scheduleProcessing()
 {
     QMetaObject::invokeMethod(
@@ -116,7 +123,25 @@ void RecoveryWriter::processPending()
         }
 
         QString error;
-        const bool success = performWrite(request, &error);
+        bool success = false;
+        // An exception leaving this handler would unwind through the worker's
+        // event loop and terminate the process with the busy flag still set,
+        // which would also hang the destructor's wait for the final flush.
+        try
+        {
+            success = performWrite(request, &error);
+        }
+        catch (const std::exception &exception)
+        {
+            error = QStringLiteral(
+                "The recovery snapshot failed unexpectedly: %1")
+                        .arg(QString::fromUtf8(exception.what()));
+        }
+        catch (...)
+        {
+            error =
+                QStringLiteral("The recovery snapshot failed unexpectedly.");
+        }
         if (success || !error.isEmpty())
         {
             emit writeFinished(success, request.metadata.revision, error);
@@ -126,6 +151,16 @@ void RecoveryWriter::processPending()
 
 bool RecoveryWriter::performWrite(const PendingWrite &request, QString *error)
 {
+    bool raiseTestingFailure = false;
+    {
+        QMutexLocker locker(&m_mutex);
+        raiseTestingFailure = std::exchange(m_throwFromNextWriteForTesting,
+            false);
+    }
+    if (raiseTestingFailure)
+    {
+        throw std::runtime_error("Injected recovery write failure.");
+    }
     if (!RecoveryStore::isValidMetadata(request.metadata))
     {
         *error = QStringLiteral("Recovery metadata is invalid.");

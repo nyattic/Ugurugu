@@ -50,6 +50,9 @@ public:
     void cancel();
     bool isBusy() const;
     bool waitForIdle(int timeoutMilliseconds = -1);
+    // Nothing in an export throws deliberately, so the only way to exercise
+    // the worker's exception boundary is to make the next write raise.
+    void throwFromNextExportForTesting();
 
 signals:
     void progress(Kind kind, int value, int maximum);
@@ -80,6 +83,7 @@ private:
         const QString &error);
     bool writeImage(const Request &request, QString *error);
     bool writeAnimation(const Request &request, QString *error);
+    void raiseRequestedTestingFailure();
 
     QThread m_thread;
     QObject m_workerContext;
@@ -88,6 +92,7 @@ private:
     std::optional<Request> m_request;
     bool m_busy = false;
     bool m_cancelRequested = false;
+    bool m_throwFromNextExportForTesting = false;
 };
 
 }

@@ -1,3 +1,4 @@
+#include "app/WatchedFutureResult.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
@@ -394,7 +395,8 @@ void CanvasWidget::evaluateSelectionVisibility()
         this,
         [this, watcher, generation, layerId, maskKey]()
         {
-            const SelectionVisibility::Result result = watcher->result();
+            const SelectionVisibility::Result result =
+                watchedFutureResult(*watcher);
             watcher->deleteLater();
             if (generation != m_selectionVisibilityGeneration)
             {

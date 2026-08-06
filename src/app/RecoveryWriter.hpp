@@ -36,6 +36,9 @@ public:
     bool runExclusiveFileOperation(const std::function<bool()> &operation);
     bool waitForIdle(int timeoutMilliseconds = -1);
     void setSuspendedForTesting(bool suspended);
+    // Nothing in a write throws deliberately, so the only way to exercise the
+    // worker's exception boundary is to make the next write raise.
+    void throwFromNextWriteForTesting();
 
 signals:
     void writeFinished(bool success, quint64 revision, const QString &error);
@@ -61,6 +64,7 @@ private:
     quint64 m_generation = 0;
     bool m_busy = false;
     bool m_suspended = false;
+    bool m_throwFromNextWriteForTesting = false;
 };
 
 }

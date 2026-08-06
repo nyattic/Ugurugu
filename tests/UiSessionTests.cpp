@@ -236,6 +236,40 @@ private slots:
         QVERIFY(MainWindowTestAccess::flushAutosave(window));
     }
 
+    void recoveryWriteReportsFailureWhenTheWriteThrows()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
+
+        RecoveryWriter writer;
+        QSignalSpy finished(&writer, &RecoveryWriter::writeFinished);
+        RecoveryStore::Metadata metadata;
+        metadata.sessionId = QUuid::createUuid();
+        metadata.revision = 7;
+        metadata.timestampUtc = QDateTime::currentDateTimeUtc();
+
+        writer.throwFromNextWriteForTesting();
+        writer.submitWrite(Document::createDefault(QSize(32, 32)), metadata);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY2(!finished.at(0).at(0).toBool(),
+            "a throwing recovery write reported success");
+        QCOMPARE(finished.at(0).at(1).toULongLong(), metadata.revision);
+        QVERIFY(!finished.at(0).at(2).toString().isEmpty());
+
+        // A worker left busy would hang the destructor's wait, and the pending
+        // snapshot would never be retried.
+        QVERIFY(writer.waitForIdle(5000));
+        metadata.revision = 8;
+        writer.submitWrite(Document::createDefault(QSize(32, 32)), metadata);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 10000);
+        QVERIFY2(finished.at(1).at(0).toBool(),
+            qPrintable(finished.at(1).at(2).toString()));
+    }
+
     void dropsQueuedAutosaveAfterDiscard()
     {
         EnvironmentVariableGuard environmentGuard(

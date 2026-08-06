@@ -12,6 +12,7 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <stdexcept>
 #include <utility>
 
 namespace ugurugu
@@ -105,6 +106,12 @@ void ExportWorker::cancel()
     m_cancelRequested = true;
 }
 
+void ExportWorker::throwFromNextExportForTesting()
+{
+    QMutexLocker locker(&m_mutex);
+    m_throwFromNextExportForTesting = true;
+}
+
 bool ExportWorker::isBusy() const
 {
     QMutexLocker locker(&m_mutex);
@@ -146,8 +153,26 @@ void ExportWorker::process()
     bool success = false;
     if (!canceled())
     {
-        success = request.kind == Kind::Image ? writeImage(request, &error)
-                                              : writeAnimation(request, &error);
+        // An exception leaving this handler would unwind through the worker's
+        // event loop and terminate the process with the busy flag still set,
+        // so the export it belongs to could never be reported or retried.
+        try
+        {
+            success = request.kind == Kind::Image
+                          ? writeImage(request, &error)
+                          : writeAnimation(request, &error);
+        }
+        catch (const std::exception &exception)
+        {
+            success = false;
+            error = tr("The export failed unexpectedly: %1")
+                        .arg(QString::fromUtf8(exception.what()));
+        }
+        catch (...)
+        {
+            success = false;
+            error = tr("The export failed unexpectedly.");
+        }
     }
     const bool wasCanceled = !success && canceled();
     complete(request, success, wasCanceled, error);
@@ -191,8 +216,22 @@ void ExportWorker::complete(const Request &request,
         Qt::QueuedConnection);
 }
 
+void ExportWorker::raiseRequestedTestingFailure()
+{
+    bool raise = false;
+    {
+        QMutexLocker locker(&m_mutex);
+        raise = std::exchange(m_throwFromNextExportForTesting, false);
+    }
+    if (raise)
+    {
+        throw std::runtime_error("Injected export failure.");
+    }
+}
+
 bool ExportWorker::writeImage(const Request &request, QString *error)
 {
+    raiseRequestedTestingFailure();
     QImage image = RenderEngine::render(request.document, request.frame);
     if (image.isNull())
     {
@@ -253,6 +292,7 @@ bool ExportWorker::writeImage(const Request &request, QString *error)
 
 bool ExportWorker::writeAnimation(const Request &request, QString *error)
 {
+    raiseRequestedTestingFailure();
     const QSize outputSize = request.animation.outputSize.isValid()
                                      && !request.animation.outputSize.isEmpty()
                                  ? request.animation.outputSize

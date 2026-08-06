@@ -13,6 +13,7 @@ set(UGURUGU_CORE_SOURCES
     src/app/ReleaseNotes.hpp
     src/app/UpdateCheckPolicy.cpp
     src/app/UpdateCheckPolicy.hpp
+    src/app/WatchedFutureResult.hpp
     src/brush/BrushPreset.cpp
     src/brush/BrushPreset.hpp
     src/brush/EraserPreset.cpp

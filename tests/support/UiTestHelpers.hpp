@@ -1,6 +1,8 @@
 #pragma once
 
 #include "app/RecoveryStore.hpp"
+#include "app/RecoveryWriter.hpp"
+#include "app/WatchedFutureResult.hpp"
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"

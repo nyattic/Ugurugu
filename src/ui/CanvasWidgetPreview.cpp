@@ -1,3 +1,4 @@
+#include "app/WatchedFutureResult.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/SelectionOperation.hpp"
 #include "render/PreviewRenderPolicy.hpp"
@@ -891,7 +892,7 @@ void CanvasWidget::renderNextFrameCacheWarmup()
             [this, watcher, generation, frame, renderSize, patchBounds,
                 cancellation]()
             {
-                const QImage image = watcher->result();
+                const QImage image = watchedFutureResult(*watcher);
                 watcher->deleteLater();
                 --m_frameCacheWarmupWorkersRunning;
                 if (generation != m_frameCacheWarmupGeneration

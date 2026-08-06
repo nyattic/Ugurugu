@@ -1,5 +1,6 @@
 #include "ui/LayerDock.hpp"
 
+#include "app/WatchedFutureResult.hpp"
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "document/LayerHierarchy.hpp"
@@ -969,7 +970,7 @@ void LayerDock::regenerateThumbnails()
         this,
         [this, watcher, nextId, revision]()
         {
-            const QImage image = watcher->result();
+            const QImage image = watchedFutureResult(*watcher);
             watcher->deleteLater();
             m_thumbnailRendering = false;
             if (m_controller && m_thumbnailRevisions.value(nextId) == revision
