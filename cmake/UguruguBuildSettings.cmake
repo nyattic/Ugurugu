@@ -10,6 +10,16 @@ option(
     "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
     OFF
 )
+# Off by default and deliberately not a CI gate: the prebuilt Qt is not
+# instrumented, so the synchronisation inside QMutex, QThreadPool and
+# QtConcurrent is invisible to ThreadSanitizer and every handoff across them is
+# reported as a race. Reports naming only Ugurugu frames on both sides are the
+# ones worth reading; anything whose two accesses meet inside Qt is not.
+option(
+    UGURUGU_ENABLE_THREAD_SANITIZER
+    "Enable ThreadSanitizer (reports false races against an uninstrumented Qt)"
+    OFF
+)
 option(
     UGURUGU_ENABLE_COVERAGE
     "Enable Clang source coverage instrumentation"
@@ -23,6 +33,23 @@ option(
 
 if(UGURUGU_ENABLE_SANITIZERS AND MSVC)
     message(FATAL_ERROR "UGURUGU_ENABLE_SANITIZERS requires Clang or GCC")
+endif()
+if(UGURUGU_ENABLE_THREAD_SANITIZER AND MSVC)
+    message(FATAL_ERROR "UGURUGU_ENABLE_THREAD_SANITIZER requires Clang or GCC")
+endif()
+# ThreadSanitizer maintains its own shadow memory and cannot share a process
+# with AddressSanitizer.
+if(UGURUGU_ENABLE_THREAD_SANITIZER AND UGURUGU_ENABLE_SANITIZERS)
+    message(
+        FATAL_ERROR
+        "ThreadSanitizer and AddressSanitizer cannot be enabled together"
+    )
+endif()
+if(UGURUGU_ENABLE_THREAD_SANITIZER AND UGURUGU_ENABLE_COVERAGE)
+    message(
+        FATAL_ERROR
+        "ThreadSanitizer and coverage cannot be enabled together"
+    )
 endif()
 if(UGURUGU_ENABLE_COVERAGE
     AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang"
@@ -78,6 +105,15 @@ function(ugurugu_target_defaults target)
                 -fsanitize=address,undefined
                 -fno-sanitize-recover=all
             )
+        endif()
+        if(UGURUGU_ENABLE_THREAD_SANITIZER)
+            target_compile_options(
+                ${target}
+                PRIVATE
+                -fsanitize=thread
+                -fno-omit-frame-pointer
+            )
+            target_link_options(${target} PRIVATE -fsanitize=thread)
         endif()
         if(UGURUGU_ENABLE_COVERAGE)
             target_compile_options(

@@ -58,6 +58,20 @@
       }
     },
     {
+      "name": "macos-thread-sanitized",
+      "inherits": "base",
+      "displayName": "macOS TSan",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "UGURUGU_ENABLE_THREAD_SANITIZER": "ON"
+      }
+    },
+    {
       "name": "macos-distribution",
       "inherits": "macos-release",
       "displayName": "macOS Distribution",
@@ -128,6 +142,10 @@
       "configurePreset": "macos-sanitized"
     },
     {
+      "name": "macos-thread-sanitized",
+      "configurePreset": "macos-thread-sanitized"
+    },
+    {
       "name": "macos-distribution",
       "configurePreset": "macos-distribution"
     },
@@ -172,6 +190,16 @@
       "environment": {
         "ASAN_OPTIONS": "halt_on_error=1",
         "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-thread-sanitized",
+      "configurePreset": "macos-thread-sanitized",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
       },
       "output": {
         "outputOnFailure": true
