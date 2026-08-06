@@ -1,3 +1,4 @@
+#include "render/LayerCompositionPlan.hpp"
 #include "support/RenderTestHelpers.hpp"
 #include "support/RenderTestSuites.hpp"
 
@@ -155,6 +156,112 @@ private slots:
         QVERIFY(retainedCost <= PreviewRenderPolicy::maximumCacheKiB());
         QCOMPARE(PreviewRenderPolicy::renderSize(documentSize, 16.0, 0),
             staticPreview);
+    }
+
+    void budgetsLargerReframeEpochsAtDisplayScale()
+    {
+        const auto makeDocument = [](int boundaryCount)
+        {
+            Document document = Document::createDefault(QSize(1024, 1024));
+            Layer &layer = document.layers.first();
+            layer.initialCanvasSize = QSize(4096, 4096);
+            layer.strokes.clear();
+            for (int index = 0; index < boundaryCount; ++index)
+            {
+                Stroke boundary;
+                boundary.mode = StrokeMode::CompositeBoundary;
+                layer.strokes.append(boundary);
+            }
+            Stroke reframe;
+            reframe.mode = StrokeMode::Reframe;
+            reframe.reframeOp = ReframeOp{ReframeMode::Image,
+                SamplingMode::Nearest,
+                QSize(4096, 4096),
+                document.size,
+                {}};
+            layer.strokes.append(reframe);
+            return document;
+        };
+
+        const Document replayProbe = makeDocument(3);
+        QVERIFY(!DocumentSerializer::toJson(replayProbe).isEmpty());
+        const QSize probeSize(128, 128);
+        RenderEngine::ScaledRenderStats stats;
+        const QImage preview = RenderEngine::renderScaled(replayProbe,
+            0,
+            probeSize,
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            &stats);
+        QVERIFY(!preview.isNull());
+        QVERIFY(stats.usedDisplayScaleReplay);
+        QCOMPARE(stats.largestIntermediateImageSize, QSize(512, 512));
+        const LayerCompositionMemoryEstimate outputHierarchy =
+            RenderEngine::estimateHierarchyMemory(replayProbe, probeSize);
+        QVERIFY(outputHierarchy.valid);
+        QVERIFY(
+            stats.maximumEstimatedWorkingSetBytes > outputHierarchy.peakBytes);
+
+        const Document budgetProbe = makeDocument(40);
+        QVERIFY(!DocumentSerializer::toJson(budgetProbe).isEmpty());
+        constexpr int retainedSurfaces = 7;
+        const LayerCompositionPlan plan =
+            LayerCompositionPlan::build(budgetProbe);
+        QVERIFY(plan.isValid());
+        const LayerCompositionMemoryEstimate nativeHierarchy =
+            plan.memoryEstimate(budgetProbe.size);
+        QVERIFY(nativeHierarchy.valid);
+        const QSize legacy = PreviewRenderPolicy::renderSize(budgetProbe.size,
+            16.0,
+            retainedSurfaces,
+            nativeHierarchy.peakSurfaceCount);
+        const QSize aware = PreviewRenderPolicy::renderSize(
+            budgetProbe, 16.0, retainedSurfaces);
+        QVERIFY(aware.isValid());
+        QVERIFY(aware.width() < legacy.width());
+
+        const auto estimatedBytes = [&](const QSize &outputSize)
+        {
+            const LayerCompositionMemoryEstimate hierarchy =
+                plan.memoryEstimate(outputSize);
+            const long double outputBytes =
+                static_cast<long double>(hierarchy.bytesPerSurface);
+            const long double paintBytes = static_cast<long double>(
+                plan.maximumPaintLayerBytesPerSurfaceAtSize(
+                    budgetProbe.size, outputSize));
+            return outputBytes
+                       * (retainedSurfaces + hierarchy.peakSurfaceCount - 1)
+                   + (paintBytes - outputBytes)
+                         * plan.peakPaintLayerSurfaceCount()
+                   + paintBytes
+                         * LayerCompositionPlan::
+                             paintOperationScratchSurfaceCount;
+        };
+        const long double budgetBytes =
+            static_cast<long double>(PreviewRenderPolicy::maximumCacheKiB())
+            * 1024.0L * 0.9L;
+        QVERIFY(estimatedBytes(legacy) > budgetBytes);
+        QVERIFY(estimatedBytes(aware) <= budgetBytes);
+
+        Document impossible = Document::createDefault(QSize(16, 16));
+        Layer &impossibleLayer = impossible.layers.first();
+        impossibleLayer.initialCanvasSize = QSize(4096, 4096);
+        impossibleLayer.strokes.clear();
+        for (int index = 0; index < 9000; ++index)
+        {
+            Stroke boundary;
+            boundary.mode = StrokeMode::CompositeBoundary;
+            impossibleLayer.strokes.append(boundary);
+        }
+        Stroke finalReframe;
+        finalReframe.mode = StrokeMode::Reframe;
+        finalReframe.reframeOp = ReframeOp{ReframeMode::Image,
+            SamplingMode::Nearest,
+            QSize(4096, 4096),
+            impossible.size,
+            {}};
+        impossibleLayer.strokes.append(finalReframe);
+        QVERIFY(!DocumentSerializer::toJson(impossible).isEmpty());
+        QVERIFY(PreviewRenderPolicy::renderSize(impossible, 16.0).isEmpty());
     }
 
     void patchesRegionalStrokeRefreshExactly()

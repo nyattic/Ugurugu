@@ -11,6 +11,7 @@
 
 #include <QPainter>
 #include <QRadialGradient>
+#include <QSet>
 #include <QtMath>
 
 #include <algorithm>
@@ -75,6 +76,48 @@ QImage scaledMask(
         cache.insert(key, scaled);
     }
     return scaled;
+}
+
+QImage scaledTransientMask(const QImage &mask, const QSize &outputSize)
+{
+    if (mask.isNull())
+    {
+        return {};
+    }
+    return mask.size() == outputSize
+               ? mask
+               : mask.scaled(
+                     outputSize, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+}
+
+void noteStrokeMaskBackings(LayerStrokeReplayStats *stats,
+    const QHash<qint64, QImage> &cachedMasks,
+    const QImage &firstTransient,
+    const QImage &secondTransient)
+{
+    if (!stats)
+    {
+        return;
+    }
+    QSet<qint64> backingKeys;
+    for (const QImage &mask : cachedMasks)
+    {
+        if (!mask.isNull())
+        {
+            backingKeys.insert(mask.cacheKey());
+        }
+    }
+    if (!firstTransient.isNull())
+    {
+        backingKeys.insert(firstTransient.cacheKey());
+    }
+    if (!secondTransient.isNull())
+    {
+        backingKeys.insert(secondTransient.cacheKey());
+    }
+    stats->peakStrokeMaskBackingCount =
+        std::max(stats->peakStrokeMaskBackingCount,
+            static_cast<int>(backingKeys.size()));
 }
 
 std::optional<QRect> scaledVisibilityClip(const Stroke &stroke,
@@ -183,7 +226,8 @@ void renderLayerStrokes(QImage &layerImage,
     qreal verticalScale,
     QHash<qint64, QPainterPath> &clipPaths,
     QHash<qint64, QImage> &scaledClipMasks,
-    const QPointF &logicalOrigin)
+    const QPointF &logicalOrigin,
+    LayerStrokeReplayStats *stats)
 {
     static_cast<void>(frameCount);
     const QSize outputSize = layerImage.size();
@@ -213,7 +257,11 @@ void renderLayerStrokes(QImage &layerImage,
             const QImage &coverage =
                 stroke.fillCoverage ? packedCoverage : stroke.fillMask;
             const QImage scaledCoverageMask =
-                scaledMask(coverage, outputSize, scaledClipMasks);
+                stroke.fillCoverage
+                    ? scaledTransientMask(coverage, outputSize)
+                    : scaledMask(coverage, outputSize, scaledClipMasks);
+            noteStrokeMaskBackings(
+                stats, scaledClipMasks, packedCoverage, scaledCoverageMask);
             if ((!stroke.fillMask.isNull() || stroke.fillCoverage)
                 && scaledCoverageMask.isNull())
             {

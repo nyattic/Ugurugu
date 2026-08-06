@@ -232,11 +232,13 @@ public:
     // leaves the document unchanged. When selectionMask is given the copy
     // is shifted by contentDelta on the new layer and the current selection
     // follows it there as part of the same undo entry; that form requires
-    // sourceCanvasSize to match the document size.
+    // sourceCanvasSize to match the document size. Referenced raster assets
+    // must already exist byte-for-byte or be supplied with the pasted layer.
     PasteLayerResult pasteLayer(Layer layer,
         const QSize &sourceCanvasSize,
         const QPointF &contentDelta = {},
-        const QImage &selectionMask = {});
+        const QImage &selectionMask = {},
+        const QMap<QString, RasterAsset> &rasterAssets = {});
     void removeLayer(const QUuid &id);
     void clearLayer(const QUuid &id);
     RenameLayerResult renameLayer(const QUuid &id, const QString &name);

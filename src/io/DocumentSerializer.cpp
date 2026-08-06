@@ -625,13 +625,27 @@ std::optional<Document> DocumentSerializer::load(
         setError(error, file.errorString());
         return std::nullopt;
     }
-    if (file.size() < 0 || file.size() > DocumentLimits::maximumProjectBytes)
+    return loadFromDevice(file, DocumentLimits::maximumProjectBytes, error);
+}
+
+std::optional<Document> DocumentSerializer::loadFromDevice(
+    QIODevice &device, qint64 maximumBytes, QString *error)
+{
+    if (maximumBytes < 0 || maximumBytes > DocumentLimits::maximumProjectBytes
+        || device.size() < 0 || device.size() > maximumBytes)
     {
         setError(
             error, DocumentSerializer::tr("The project file is too large."));
         return std::nullopt;
     }
-    return fromJson(file.readAll(), error);
+    const QByteArray data = device.read(maximumBytes + 1);
+    if (data.size() > maximumBytes || !device.atEnd())
+    {
+        setError(
+            error, DocumentSerializer::tr("The project file is too large."));
+        return std::nullopt;
+    }
+    return fromJson(data, error);
 }
 
 QByteArray DocumentSerializer::toJson(const Document &document)

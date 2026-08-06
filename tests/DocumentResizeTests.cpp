@@ -231,6 +231,80 @@ private slots:
         QCOMPARE(scaledLayer.strokes[2].reframeOp->mode, ReframeMode::Image);
     }
 
+    void imageResizePreservesInsertedImageLayersAndHistory()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 48));
+        QImage image(QSize(8, 6), QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+        image.setPixelColor(1, 1, QColor(230, 40, 20, 255));
+        image.setPixelColor(6, 4, QColor(20, 170, 80, 220));
+        QCOMPARE(controller.insertImage(image, QStringLiteral("image.png")),
+            DocumentController::InsertImageResult::Inserted);
+        const QUuid layerId = controller.document().activeLayerId;
+        const QString assetId = controller.document()
+                                    .layer(layerId)
+                                    ->strokes.first()
+                                    .imageOp->assetId;
+        const QImage before = RenderEngine::render(controller.document(), 0);
+
+        QVERIFY(controller.resizeImage(QSize(128, 96)));
+        const Layer *resized = controller.document().layer(layerId);
+        QVERIFY(resized);
+        QCOMPARE(resized->strokes.size(), 2);
+        QCOMPARE(resized->strokes.first().mode, StrokeMode::Image);
+        QCOMPARE(resized->strokes.last().mode, StrokeMode::Reframe);
+        QVERIFY(resized->strokes.last().reframeOp.has_value());
+        QCOMPARE(resized->strokes.last().reframeOp->mode, ReframeMode::Image);
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+        const QImage after = RenderEngine::render(controller.document(), 0);
+        QVERIFY(!after.isNull());
+
+        controller.undoStack()->undo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+        controller.undoStack()->redo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), after);
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+    }
+
+    void canvasResizePreservesInsertedImageLayersAndHistory()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(64, 48));
+        QImage image(QSize(8, 6), QImage::Format_RGBA8888);
+        image.fill(QColor(40, 100, 220, 255));
+        QCOMPARE(controller.insertImage(image, QStringLiteral("image.png")),
+            DocumentController::InsertImageResult::Inserted);
+        const QUuid layerId = controller.document().activeLayerId;
+        const QString assetId = controller.document()
+                                    .layer(layerId)
+                                    ->strokes.first()
+                                    .imageOp->assetId;
+        const QImage before = RenderEngine::render(controller.document(), 0);
+
+        QVERIFY(controller.resizeCanvas(QSize(80, 60), QPoint(7, 5)));
+        const Layer *resized = controller.document().layer(layerId);
+        QVERIFY(resized);
+        QCOMPARE(resized->strokes.size(), 2);
+        QCOMPARE(resized->strokes.first().mode, StrokeMode::Image);
+        QCOMPARE(resized->strokes.last().mode, StrokeMode::Reframe);
+        QVERIFY(resized->strokes.last().reframeOp.has_value());
+        QCOMPARE(resized->strokes.last().reframeOp->mode, ReframeMode::Canvas);
+        QCOMPARE(
+            resized->strokes.last().reframeOp->contentOffset, QPoint(7, 5));
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+        const QImage after = RenderEngine::render(controller.document(), 0);
+        QVERIFY(!after.isNull());
+
+        controller.undoStack()->undo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), before);
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+        controller.undoStack()->redo();
+        QCOMPARE(RenderEngine::render(controller.document(), 0), after);
+        QVERIFY(controller.document().rasterAssets.contains(assetId));
+    }
+
     void resizesCanvasWithoutLayers()
     {
         Document document = Document::createDefault(QSize(90, 70));

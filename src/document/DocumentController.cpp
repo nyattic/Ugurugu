@@ -92,7 +92,8 @@ bool layerCanProducePixels(const Layer &layer)
         [](const Stroke &stroke)
         {
             return stroke.mode == StrokeMode::Paint
-                   || stroke.mode == StrokeMode::Fill;
+                   || stroke.mode == StrokeMode::Fill
+                   || stroke.mode == StrokeMode::Image;
         });
 }
 

@@ -535,7 +535,6 @@ QSize CanvasWidget::previewRenderSize() const
         return m_cachedRenderSize;
     }
     const Document &document = m_controller->document();
-    const QSize documentSize = document.size;
     const qreal displayScale =
         std::abs(documentTransform().m11()) * devicePixelRatioF();
     // Sized for the whole frame cache whether or not playback is running, for
@@ -576,16 +575,8 @@ QSize CanvasWidget::previewRenderSize() const
             std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0))
             + 1;
     }
-    const LayerCompositionMemoryEstimate hierarchyMemory =
-        RenderEngine::estimateHierarchyMemory(document, documentSize);
-    if (!hierarchyMemory.valid)
-    {
-        return {};
-    }
-    return PreviewRenderPolicy::renderSize(documentSize,
-        displayScale,
-        retainedSurfaces,
-        hierarchyMemory.peakSurfaceCount);
+    return PreviewRenderPolicy::renderSize(
+        document, displayScale, retainedSurfaces);
 }
 
 PreviewSurfaceUsage CanvasWidget::previewSurfaceUsage() const

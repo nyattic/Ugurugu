@@ -543,7 +543,8 @@ bool DocumentController::mergeLayerDown(const QUuid &id)
 DocumentController::PasteLayerResult DocumentController::pasteLayer(Layer layer,
     const QSize &sourceCanvasSize,
     const QPointF &contentDelta,
-    const QImage &selectionMask)
+    const QImage &selectionMask,
+    const QMap<QString, RasterAsset> &rasterAssets)
 {
     const auto reject = [this](PasteLayerResult result)
     {
@@ -590,6 +591,40 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(Layer layer,
                > DocumentLimits::maximumTotalPoints - existingPointCount)
     {
         return reject(PasteLayerResult::RejectedPointLimit);
+    }
+    QMap<QString, RasterAsset> importedAssets;
+    serializer_detail::RasterAssetTable importedAssetTable;
+    for (const Stroke &stroke : std::as_const(layer.strokes))
+    {
+        if (!stroke.imageOp || importedAssets.contains(stroke.imageOp->assetId))
+        {
+            continue;
+        }
+        const QString &assetId = stroke.imageOp->assetId;
+        const auto provided = rasterAssets.constFind(assetId);
+        const auto existing = current.rasterAssets.constFind(assetId);
+        if (existing != current.rasterAssets.cend())
+        {
+            if (provided != rasterAssets.cend() && *provided != *existing)
+            {
+                return reject(PasteLayerResult::RejectedInvalidLayer);
+            }
+            importedAssets.insert(assetId, *existing);
+            continue;
+        }
+        if (provided == rasterAssets.cend() || provided.key() != provided->id)
+        {
+            return reject(PasteLayerResult::RejectedInvalidLayer);
+        }
+        const serializer_detail::RasterAssetRegistrationResult registration =
+            importedAssetTable.registerPayload(
+                provided->id, provided->size, provided->compressedRgba);
+        if (registration.status
+            != serializer_detail::RasterAssetRegistrationStatus::Registered)
+        {
+            return reject(PasteLayerResult::RejectedInvalidLayer);
+        }
+        importedAssets.insert(assetId, *provided);
     }
     QImage nextSelectionMask;
     if (shiftsContent)
@@ -653,6 +688,11 @@ DocumentController::PasteLayerResult DocumentController::pasteLayer(Layer layer,
     layer.parentGroupId = active ? active->parentGroupId : QUuid();
     const QUuid layerId = layer.id;
     Document candidate = current;
+    for (auto asset = importedAssets.cbegin(); asset != importedAssets.cend();
+        ++asset)
+    {
+        candidate.rasterAssets.insert(asset.key(), *asset);
+    }
     const int activeIndex = current.layerIndex(current.activeLayerId);
     if (activeIndex >= 0)
     {

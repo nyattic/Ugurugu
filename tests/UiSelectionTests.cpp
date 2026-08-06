@@ -2035,6 +2035,117 @@ private slots:
         QVERIFY(!canvas.hasSelection());
     }
 
+    void immediateUndoRedoRestoresTransformedSelectionMask()
+    {
+        Document document = Document::createDefault(QSize(120, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 12.0;
+        source.points = {
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(50.0, 50.0), 1.0}};
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(480, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentPoint)
+                .toPoint();
+        };
+        dragFreehandQuad(&canvas,
+            widgetPoint(QPointF(10.0, 35.0)),
+            widgetPoint(QPointF(60.0, 65.0)),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        const QImage originalSelection =
+            CanvasWidgetTestAccess::selectionMask(canvas);
+
+        QVERIFY(canvas.scaleSelection(1.4));
+        QVERIFY(canvas.rotateSelection(20.0));
+        QVERIFY(canvas.applySelectionTransform());
+        const QImage transformedSelection =
+            CanvasWidgetTestAccess::selectionMask(canvas);
+        QVERIFY(transformedSelection != originalSelection);
+
+        controller.undoStack()->undo();
+        QCOMPARE(
+            CanvasWidgetTestAccess::selectionMask(canvas), originalSelection);
+
+        controller.undoStack()->redo();
+        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
+            transformedSelection);
+    }
+
+    void undoAfterEmptyVisibilityResultRestoresTransformedSelectionMask()
+    {
+        Document document = Document::createDefault(QSize(120, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.width = 8.0;
+        source.points = {{QPointF(10.0, 50.0), 1.0}};
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(480, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+
+        const auto widgetPoint = [&canvas](const QPointF &documentPoint)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentPoint)
+                .toPoint();
+        };
+        dragFreehandQuad(&canvas,
+            widgetPoint(QPointF(0.0, 35.0)),
+            widgetPoint(QPointF(100.0, 65.0)),
+            Qt::NoModifier);
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        const QImage originalSelection =
+            CanvasWidgetTestAccess::selectionMask(canvas);
+
+        canvas.setSelectionMoveMode(true);
+        const QPoint start = widgetPoint(QPointF(50.0, 50.0));
+        const QPoint end = widgetPoint(QPointF(0.0, 50.0));
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&canvas, end, 5);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, end);
+        QVERIFY(canvas.hasPendingSelectionTransform());
+        QVERIFY(canvas.pendingSelectionTransform().dx() < -49.0);
+        QVERIFY(canvas.applySelectionTransform());
+        const QImage transformedSelection =
+            CanvasWidgetTestAccess::selectionMask(canvas);
+        QVERIFY(transformedSelection != originalSelection);
+        QTRY_VERIFY(!canvas.hasTransformableSelection());
+
+        controller.undoStack()->undo();
+        QCOMPARE(
+            CanvasWidgetTestAccess::selectionMask(canvas), originalSelection);
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+
+        controller.undoStack()->redo();
+        QCOMPARE(CanvasWidgetTestAccess::selectionMask(canvas),
+            transformedSelection);
+    }
+
     void clipsPartialFloatingTransformAndRetainsFailedSession()
     {
         Document document = Document::createDefault(QSize(100, 100));

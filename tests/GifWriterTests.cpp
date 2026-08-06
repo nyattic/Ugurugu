@@ -131,16 +131,88 @@ private slots:
         QCOMPARE(native.workingBytes,
             RenderExportPolicy::animatedGif(deep).workingBytes);
 
-        // Half size composes the hierarchy on quarter-cost surfaces but still
-        // renders each layer natively before scaling it down.
         const QSize half(2048, 2048);
         const RenderExportMemoryEstimate scaled =
             RenderExportPolicy::animatedGifAtSize(deep, half);
         QVERIFY(scaled.valid);
-        QCOMPARE(scaled.workingBytes, 288.0L * mebibyte);
+        QCOMPARE(scaled.workingBytes, 192.0L * mebibyte);
         QVERIFY(AnimationExportPolicy::fitsMemoryBudget(deep, half));
 
         QVERIFY(!RenderExportPolicy::animatedGifAtSize(deep, QSize()).valid);
+    }
+
+    void rejectsScaledExportWithNativeCompositeSectionsOverBudget()
+    {
+        constexpr long double mebibyte = 1024.0L * 1024.0L;
+        Document document = Document::createDefault(QSize(4096, 4096));
+        document.animationFrames = 8;
+        document.layers.first().strokes.clear();
+        for (int index = 0; index < 9; ++index)
+        {
+            Stroke boundary;
+            boundary.mode = StrokeMode::CompositeBoundary;
+            document.layers.first().strokes.append(boundary);
+        }
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+
+        const QSize outputSize(1024, 1024);
+        const RenderExportMemoryEstimate estimate =
+            RenderExportPolicy::animatedGifAtSize(document, outputSize);
+        QVERIFY(estimate.valid);
+        QCOMPARE(estimate.hierarchyTransientBytes, 40.0L * mebibyte);
+        QCOMPARE(estimate.workingBytes, 772.0L * mebibyte);
+        QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(
+            document, outputSize));
+    }
+
+    void accountsForLargerReframeEpochsAndSectionOverlap()
+    {
+        constexpr long double mebibyte = 1024.0L * 1024.0L;
+        Document document = Document::createDefault(QSize(1024, 1024));
+        document.animationFrames = 8;
+        Layer &layer = document.layers.first();
+        layer.initialCanvasSize = QSize(4096, 4096);
+        layer.strokes.clear();
+
+        Stroke firstBoundary;
+        firstBoundary.mode = StrokeMode::CompositeBoundary;
+        layer.strokes.append(firstBoundary);
+        const auto appendImageReframe =
+            [&](const QSize &source, const QSize &target)
+        {
+            Stroke reframe;
+            reframe.mode = StrokeMode::Reframe;
+            reframe.reframeOp = ReframeOp{
+                ReframeMode::Image, SamplingMode::Nearest, source, target, {}};
+            layer.strokes.append(reframe);
+        };
+        appendImageReframe(QSize(4096, 4096), QSize(2048, 2048));
+        appendImageReframe(QSize(2048, 2048), QSize(4096, 4096));
+        for (int index = 1; index < 9; ++index)
+        {
+            Stroke boundary;
+            boundary.mode = StrokeMode::CompositeBoundary;
+            layer.strokes.append(boundary);
+        }
+        appendImageReframe(QSize(4096, 4096), document.size);
+        QVERIFY(!DocumentSerializer::toJson(document).isEmpty());
+
+        const RenderExportMemoryEstimate staticEstimate =
+            RenderExportPolicy::staticImage(document);
+        const RenderExportMemoryEstimate nativeAnimation =
+            RenderExportPolicy::animatedGif(document);
+        const RenderExportMemoryEstimate scaledAnimation =
+            RenderExportPolicy::animatedGifAtSize(document, QSize(256, 256));
+        QVERIFY(staticEstimate.valid);
+        QVERIFY(nativeAnimation.valid);
+        QVERIFY(scaledAnimation.valid);
+        QCOMPARE(staticEstimate.workingBytes, 712.0L * mebibyte);
+        QCOMPARE(nativeAnimation.workingBytes, 736.0L * mebibyte);
+        QCOMPARE(scaledAnimation.workingBytes, 708.25L * mebibyte);
+        QVERIFY(!RenderExportPolicy::staticImageFitsMemoryBudget(document));
+        QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(document));
+        QVERIFY(!RenderExportPolicy::animatedGifFitsMemoryBudget(
+            document, QSize(256, 256)));
     }
 
     void preselectsAnExportScaleTheDocumentBudgetAccepts()

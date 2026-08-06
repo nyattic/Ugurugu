@@ -608,8 +608,11 @@ bool CanvasWidget::copySelection()
         return false;
     }
     const QPointF delta = clampedSelectionDelta(QPointF(12.0, 12.0));
-    if (m_controller->pasteLayer(
-            std::move(copy.layer), copy.canvasSize, delta, m_selectionMask)
+    if (m_controller->pasteLayer(std::move(copy.layer),
+            copy.canvasSize,
+            delta,
+            m_selectionMask,
+            copy.rasterAssets)
         != DocumentController::PasteLayerResult::Pasted)
     {
         emit interactionMessage(

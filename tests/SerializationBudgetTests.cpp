@@ -1,8 +1,29 @@
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
+#include <QBuffer>
+
 namespace ugurugu
 {
+
+class DocumentSerializerTestAccess final
+{
+public:
+    static std::optional<Document> load(
+        QIODevice &device, qint64 maximumBytes, QString *error = nullptr)
+    {
+        return DocumentSerializer::loadFromDevice(device, maximumBytes, error);
+    }
+};
+
+class StaleSizeBuffer final : public QBuffer
+{
+public:
+    qint64 size() const override
+    {
+        return 0;
+    }
+};
 
 class SerializationBudgetTests final : public QObject
 {
@@ -1061,6 +1082,28 @@ private slots:
             DocumentSerializer::load(path, &error);
         QVERIFY(!document.has_value());
         QVERIFY(!error.isEmpty());
+    }
+
+    void boundsTheReadWhenTheReportedFileSizeIsStale()
+    {
+        const QByteArray data =
+            DocumentSerializer::toJson(Document::createDefault(QSize(40, 30)));
+        QVERIFY(data.size() > 1);
+        StaleSizeBuffer device;
+        device.setData(data);
+        QVERIFY(device.open(QIODevice::ReadOnly));
+
+        QString error;
+        QVERIFY(!DocumentSerializerTestAccess::load(
+            device, data.size() - 1, &error));
+        QVERIFY(error.contains(QStringLiteral("too large")));
+
+        QVERIFY(device.seek(0));
+        error.clear();
+        const std::optional<Document> loaded =
+            DocumentSerializerTestAccess::load(device, data.size(), &error);
+        QVERIFY2(loaded.has_value(), qPrintable(error));
+        QCOMPARE(loaded->size, QSize(40, 30));
     }
 
     void rejectsExcessivePointCollection()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/MemoryBudget.hpp"
+#include "document/Document.hpp"
 
 #include <QSize>
 #include <QtTypes>
@@ -25,6 +26,9 @@ public:
         qreal physicalDisplayScale,
         int retainedSurfaceCount = 1,
         int hierarchyTransientSurfaceCount = 0);
+    static QSize renderSize(const Document &document,
+        qreal physicalDisplayScale,
+        int retainedSurfaceCount = 1);
     static int cacheCostKiB(qsizetype imageBytes);
     // Frame cache ceiling once the surfaces that cannot be dropped on demand
     // are accounted for. One frame always stays cacheable: an active stroke

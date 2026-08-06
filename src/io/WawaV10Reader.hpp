@@ -13,6 +13,8 @@
 namespace ugurugu
 {
 
+class WawaV10ReaderTestAccess;
+
 struct WawaStroke
 {
     QColor color;
@@ -79,6 +81,13 @@ class WawaV10Reader final
 public:
     static std::optional<WawaProject> read(
         const QByteArray &data, QString *error = nullptr);
+
+private:
+    static std::optional<WawaProject> read(const QByteArray &data,
+        quint64 maximumDecodedImageBytes,
+        QString *error);
+
+    friend class WawaV10ReaderTestAccess;
 };
 
 }

@@ -91,10 +91,11 @@ void appendFill(QByteArray &data,
     appendPoints(data, points);
 }
 
-QByteArray encodedLayerImage(const QSize &size)
+QByteArray encodedLayerImage(
+    const QSize &size, const QColor &color = QColor(12, 34, 56, 78))
 {
     QImage image(size, QImage::Format_RGBA8888);
-    image.fill(QColor(12, 34, 56, 78));
+    image.fill(color);
     QByteArray encoded;
     QBuffer buffer(&encoded);
     if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
@@ -104,7 +105,7 @@ QByteArray encodedLayerImage(const QSize &size)
     return encoded;
 }
 
-QByteArray representativeProject()
+QByteArray projectHeader(int layerCount)
 {
     QByteArray data;
     appendString(data, QStringLiteral("WAWA"));
@@ -131,7 +132,13 @@ QByteArray representativeProject()
     appendInt32(data, static_cast<qint32>(0x80445566U));
     appendByte(data, 0);
     appendByte(data, 1);
-    appendInt32(data, 1);
+    appendInt32(data, layerCount);
+    return data;
+}
+
+QByteArray representativeProject()
+{
+    QByteArray data = projectHeader(1);
     appendString(data, QStringLiteral("Ink"));
     appendByte(data, 1);
     const QByteArray image = encodedLayerImage(QSize(8, 6));
@@ -149,7 +156,35 @@ QByteArray representativeProject()
     return data;
 }
 
+QByteArray imageOnlyProject(const QVector<QByteArray> &images)
+{
+    QByteArray data = projectHeader(static_cast<int>(images.size()));
+    for (int index = 0; index < images.size(); ++index)
+    {
+        appendString(data, QStringLiteral("Layer %1").arg(index + 1));
+        appendByte(data, 1);
+        const QByteArray &image = images[index];
+        appendInt32(data, static_cast<qint32>(image.size()));
+        data.append(image);
+        appendInt32(data, 0);
+        appendInt32(data, 0);
+        appendInt32(data, 0);
+    }
+    return data;
 }
+
+}
+
+class WawaV10ReaderTestAccess final
+{
+public:
+    static std::optional<WawaProject> read(const QByteArray &data,
+        quint64 maximumDecodedImageBytes,
+        QString *error = nullptr)
+    {
+        return WawaV10Reader::read(data, maximumDecodedImageBytes, error);
+    }
+};
 
 class WawaV10ReaderTests final : public QObject
 {
@@ -216,6 +251,50 @@ private slots:
         QString error;
         QVERIFY(!WawaV10Reader::read(trailing, &error));
         QVERIFY(error.contains(QStringLiteral("trailing")));
+    }
+
+    void deduplicatesLayerImagesBeforeEnforcingTheDecodedBudget()
+    {
+        constexpr quint64 decodedLayerBytes = 8ULL * 6ULL * 4ULL;
+        const QByteArray first = encodedLayerImage(QSize(8, 6));
+        const QByteArray duplicateData = imageOnlyProject({first, first});
+        QString error;
+        const std::optional<WawaProject> duplicates =
+            WawaV10ReaderTestAccess::read(
+                duplicateData, decodedLayerBytes, &error);
+        QVERIFY2(duplicates.has_value(), qPrintable(error));
+        QCOMPARE(duplicates->layers.size(), 2);
+        QCOMPARE(duplicates->layers[0].baseImage.cacheKey(),
+            duplicates->layers[1].baseImage.cacheKey());
+
+        const QByteArray second =
+            encodedLayerImage(QSize(8, 6), QColor(90, 40, 210, 255));
+        const QByteArray distinctData = imageOnlyProject({first, second});
+        error.clear();
+        QVERIFY(!WawaV10ReaderTestAccess::read(
+            distinctData, decodedLayerBytes, &error));
+        QVERIFY(!error.isEmpty());
+
+        error.clear();
+        const std::optional<WawaProject> project =
+            WawaV10ReaderTestAccess::read(
+                distinctData, decodedLayerBytes * 2ULL, &error);
+        QVERIFY2(project.has_value(), qPrintable(error));
+        QCOMPARE(project->layers.size(), 2);
+
+        const QByteArray transparentFirst =
+            encodedLayerImage(QSize(8, 6), QColor(10, 20, 30, 0));
+        const QByteArray transparentSecond =
+            encodedLayerImage(QSize(8, 6), QColor(200, 100, 50, 0));
+        error.clear();
+        const std::optional<WawaProject> transparent =
+            WawaV10ReaderTestAccess::read(
+                imageOnlyProject({transparentFirst, transparentSecond}),
+                0,
+                &error);
+        QVERIFY2(transparent.has_value(), qPrintable(error));
+        QCOMPARE(transparent->layers[0].baseImage.cacheKey(),
+            transparent->layers[1].baseImage.cacheKey());
     }
 
     void importsNativeOperationsAsAnUnsavedWwpDocument()

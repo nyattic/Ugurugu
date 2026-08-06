@@ -1,3 +1,4 @@
+#include "io/serializer/RasterAssetTable.hpp"
 #include "support/RenderTestHelpers.hpp"
 #include "support/RenderTestSuites.hpp"
 
@@ -9,6 +10,66 @@ class StrokeCoverageTests final : public QObject
     Q_OBJECT
 
 private slots:
+    void detectsInsertedImagesAsStaticSelectionContent()
+    {
+        Document document = Document::createDefault(QSize(64, 48));
+        document.background = Qt::transparent;
+        document.animationFrames = 30;
+        document.wobbleAmount = 12.0;
+        QImage image(QSize(8, 6), QImage::Format_RGBA8888);
+        image.fill(QColor(40, 120, 220, 255));
+        const std::optional<RasterAsset> asset =
+            serializer_detail::rasterAssetFromImage(image);
+        QVERIFY(asset.has_value());
+        document.rasterAssets.insert(asset->id, *asset);
+        Stroke operation;
+        operation.mode = StrokeMode::Image;
+        operation.points.clear();
+        operation.imageOp = ImageOp{asset->id,
+            QTransform::fromTranslate(20.0, 15.0),
+            SamplingMode::Nearest};
+        document.layers.first().strokes = {operation};
+        const QImage selection =
+            rectangularMask(document.size, QRect(20, 15, 8, 6));
+
+        const SelectionVisibility::Result result =
+            SelectionVisibility::evaluate(
+                document, document.layers.first(), selection, 7);
+        QVERIFY(result.renderSucceeded);
+        QVERIFY(result.hasVisiblePixels);
+        QCOMPARE(result.renderedFrames, 1);
+    }
+
+    void detectsMergedLayersAsStaticSelectionContent()
+    {
+        Document document = Document::createDefault(QSize(64, 48));
+        document.background = Qt::transparent;
+        document.animationFrames = 30;
+        document.wobbleAmount = 12.0;
+        Stroke lower = makeStroke(StrokeMode::Paint,
+            QColor(220, 60, 40),
+            12.0,
+            1,
+            {QPointF(8.0, 16.0), QPointF(56.0, 16.0)});
+        Stroke boundary;
+        boundary.mode = StrokeMode::CompositeBoundary;
+        Stroke upper = makeStroke(StrokeMode::Paint,
+            QColor(40, 80, 220),
+            12.0,
+            2,
+            {QPointF(8.0, 32.0), QPointF(56.0, 32.0)});
+        document.layers.first().strokes = {lower, boundary, upper};
+        const QImage selection =
+            rectangularMask(document.size, QRect(QPoint(), document.size));
+
+        const SelectionVisibility::Result result =
+            SelectionVisibility::evaluate(
+                document, document.layers.first(), selection, 7);
+        QVERIFY(result.renderSucceeded);
+        QVERIFY(result.hasVisiblePixels);
+        QCOMPARE(result.renderedFrames, 1);
+    }
+
     void identifiesOnlyEditableStrokesIntersectingSelection()
     {
         Document document = Document::createDefault(QSize(96, 64));
@@ -262,6 +323,39 @@ private slots:
         fill.visibilityClip = QRect(11, 7, 28, 29);
         proceduralFill.layers.first().strokes = {fill};
         verify(proceduralFill, 0);
+    }
+
+    void matchesNonAntialiasedPackedFillCoverageExactly()
+    {
+        Document document = Document::createDefault(QSize(32, 32));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        QImage mask(document.size, QImage::Format_Grayscale8);
+        mask.fill(0);
+        mask.scanLine(10)[10] = 255;
+        const std::optional<PackedMaskRegion> packed = packBinaryMask(mask);
+        QVERIFY(packed.has_value());
+
+        Stroke fill;
+        fill.mode = StrokeMode::Fill;
+        fill.color = Qt::black;
+        fill.brush.antialiasing = false;
+        fill.points = {{QPointF(10.0, 10.0), 1.0}};
+        fill.fillCoverage = *packed;
+        document.layers.first().strokes = {fill};
+        const Layer &layer = document.layers.first();
+
+        const RenderEngine::StrokeCoveragePlan plan =
+            RenderEngine::prepareStrokeCoverage(document, layer);
+        QVERIFY(plan.valid);
+        const RenderEngine::StrokeCoverageRegion sparse =
+            RenderEngine::renderSparseStrokeCoverage(
+                document, layer, 0, 0, QRect(QPoint(), document.size), plan);
+        QVERIFY(sparse.valid);
+        const QImage expected =
+            RenderEngine::renderStrokeCoverage(document, layer, 0, 0);
+        QCOMPARE(expandedStrokeCoverage(sparse, document.size), expected);
+        QCOMPARE(qAlpha(expected.pixel(9, 10)), 0);
     }
 
     void resamplesImageRegionsDeterministicallyNearQtReference()

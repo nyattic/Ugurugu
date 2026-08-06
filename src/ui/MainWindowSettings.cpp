@@ -398,14 +398,22 @@ void MainWindow::importWwpPreset()
     QFile file(filePath);
     QString error;
     std::optional<WwpPreset> preset;
-    if (!file.open(QIODevice::ReadOnly)
+    if (!file.open(QIODevice::ReadOnly) || file.size() < 0
         || file.size() > WwpPresetCodec::maximumBytes)
     {
         error = tr("The preset could not be read or is too large.");
     }
     else
     {
-        preset = WwpPresetCodec::decode(file.readAll(), &error);
+        const QByteArray data = file.read(WwpPresetCodec::maximumBytes + 1);
+        if (data.size() > WwpPresetCodec::maximumBytes || !file.atEnd())
+        {
+            error = tr("The preset could not be read or is too large.");
+        }
+        else
+        {
+            preset = WwpPresetCodec::decode(data, &error);
+        }
     }
     if (!preset
         || !m_controller.applyMotionPreset(

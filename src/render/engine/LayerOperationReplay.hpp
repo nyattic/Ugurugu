@@ -29,6 +29,11 @@ QPainterPath maskPath(const QImage &mask);
 QImage scaledMask(
     const QImage &mask, const QSize &outputSize, QHash<qint64, QImage> &cache);
 
+struct LayerStrokeReplayStats final
+{
+    int peakStrokeMaskBackingCount = 0;
+};
+
 std::optional<QRect> scaledVisibilityClip(const Stroke &stroke,
     const QSize &outputSize,
     qreal horizontalScale,
@@ -51,7 +56,8 @@ void renderLayerStrokes(QImage &layerImage,
     qreal verticalScale,
     QHash<qint64, QPainterPath> &clipPaths,
     QHash<qint64, QImage> &scaledClipMasks,
-    const QPointF &logicalOrigin = {});
+    const QPointF &logicalOrigin = {},
+    LayerStrokeReplayStats *stats = nullptr);
 
 bool applyPixelSelectionOperation(
     QImage &layerImage, const PixelSelectionOp &operation);

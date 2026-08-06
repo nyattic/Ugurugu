@@ -9,8 +9,12 @@
 #include <memory>
 #include <optional>
 
+class QIODevice;
+
 namespace ugurugu
 {
+
+class DocumentSerializerTestAccess;
 
 class DocumentSerializer
 {
@@ -173,6 +177,12 @@ public:
         const QByteArray &data, QString *error = nullptr);
     static std::optional<Document> fromJson(
         const QByteArray &data, QJsonObject *root, QString *error);
+
+private:
+    static std::optional<Document> loadFromDevice(
+        QIODevice &device, qint64 maximumBytes, QString *error);
+
+    friend class DocumentSerializerTestAccess;
 };
 
 }

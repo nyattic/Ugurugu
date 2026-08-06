@@ -684,12 +684,16 @@ bool renderFillCoverage(CoverageFrame &frame,
             {
                 continue;
             }
+            const bool includeEdgeCoverage =
+                !stroke.fillCoverage || stroke.brush.antialiasing;
             const bool covered =
                 !fillLine || fillLine[x] >= 128
-                || (x > 0 && fillLine[x - 1] >= 128)
-                || (x < frame.canvasSize.width() - 1 && fillLine[x + 1] >= 128)
-                || (fillAbove && fillAbove[x] >= 128)
-                || (fillBelow && fillBelow[x] >= 128);
+                || (includeEdgeCoverage
+                    && ((x > 0 && fillLine[x - 1] >= 128)
+                        || (x < frame.canvasSize.width() - 1
+                            && fillLine[x + 1] >= 128)
+                        || (fillAbove && fillAbove[x] >= 128)
+                        || (fillBelow && fillBelow[x] >= 128)));
             if (covered)
             {
                 target[x - frame.bounds.left()] = fill;

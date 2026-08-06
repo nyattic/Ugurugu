@@ -1002,7 +1002,12 @@ QRectF primitiveBounds(
     {
         return {};
     }
-    const qreal lineReach = prepared.width * 0.5 + 3.0;
+    // QPen's default miter limit can extend square-tip joins to twice the pen
+    // width.
+    const qreal lineReach =
+        prepared.width
+            * (stroke.brush.tipShape == BrushTipShape::Square ? 2.1 : 0.5)
+        + 3.0;
     qreal reach = lineReach;
     if (stroke.brush.engine == BrushEngine::Spray)
     {

@@ -40,12 +40,19 @@ public:
     bool isValid() const;
     const QVector<Operation> &operations() const;
     int peakSurfaceCount() const;
+    int peakPaintLayerSurfaceCount() const;
+    quint64 maximumPaintLayerBytesPerSurface() const;
+    quint64 maximumPaintLayerBytesPerSurfaceAtSize(
+        const QSize &documentSize, const QSize &outputSize) const;
     LayerCompositionMemoryEstimate memoryEstimate(
         const QSize &surfaceSize) const;
 
 private:
     bool m_valid = false;
     int m_peakSurfaceCount = 0;
+    int m_peakPaintLayerSurfaceCount = 0;
+    quint64 m_maximumPaintLayerBytesPerSurface = 0;
+    QVector<QSize> m_paintLayerSurfaceSizes;
     QVector<Operation> m_operations;
 };
 

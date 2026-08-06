@@ -36,7 +36,8 @@ bool RenderEngine::renderStrokesOnLayer(QImage &layerImage,
         {
             return stroke.mode == StrokeMode::PixelSelection
                    || stroke.mode == StrokeMode::Reframe
-                   || stroke.mode == StrokeMode::CompositeBoundary;
+                   || stroke.mode == StrokeMode::CompositeBoundary
+                   || stroke.mode == StrokeMode::Image;
         });
     if (containsFramebufferOperations)
     {
@@ -125,7 +126,8 @@ bool RenderEngine::renderStrokesOnLayerRegion(QImage &layerImage,
                 return stroke.mode == StrokeMode::PixelSelection
                        || stroke.mode == StrokeMode::Reframe
                        || stroke.mode == StrokeMode::CompositeBoundary
-                       || stroke.mode == StrokeMode::Fill;
+                       || stroke.mode == StrokeMode::Fill
+                       || stroke.mode == StrokeMode::Image;
             }))
     {
         return false;

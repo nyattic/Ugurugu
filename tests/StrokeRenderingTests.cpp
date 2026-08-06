@@ -1,3 +1,4 @@
+#include "render/engine/LayerOperationReplay.hpp"
 #include "support/RenderTestHelpers.hpp"
 #include "support/RenderTestSuites.hpp"
 
@@ -243,6 +244,51 @@ private slots:
         const QImage rendered = RenderEngine::render(document, 0);
         QCOMPARE(rendered.pixelColor(3, 3), QColor(Qt::transparent));
         QCOMPARE(rendered.pixelColor(11, 11), fill.color);
+    }
+
+    void releasesTransientPackedFillMasksBetweenStrokes()
+    {
+        Document document = Document::createDefault(QSize(32, 32));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        QVector<Stroke> fills;
+        for (const QPoint &point : {QPoint(8, 8), QPoint(24, 24)})
+        {
+            QImage mask(document.size, QImage::Format_Grayscale8);
+            mask.fill(0);
+            mask.scanLine(point.y())[point.x()] = 255;
+            const std::optional<PackedMaskRegion> packed = packBinaryMask(mask);
+            QVERIFY(packed.has_value());
+            Stroke fill;
+            fill.mode = StrokeMode::Fill;
+            fill.color = Qt::black;
+            fill.brush.antialiasing = false;
+            fill.points = {{QPointF(point), 1.0}};
+            fill.fillCoverage = *packed;
+            fills.append(fill);
+        }
+
+        QImage layer(document.size, QImage::Format_ARGB32_Premultiplied);
+        layer.fill(Qt::transparent);
+        QHash<qint64, QPainterPath> clipPaths;
+        QHash<qint64, QImage> scaledMasks;
+        render_detail::LayerStrokeReplayStats stats;
+        render_detail::renderLayerStrokes(layer,
+            document,
+            fills,
+            0,
+            document.animationFrames,
+            1.0,
+            1.0,
+            clipPaths,
+            scaledMasks,
+            {},
+            &stats);
+
+        QCOMPARE(stats.peakStrokeMaskBackingCount, 1);
+        QVERIFY(scaledMasks.isEmpty());
+        QCOMPARE(qAlpha(layer.pixel(8, 8)), 255);
+        QCOMPARE(qAlpha(layer.pixel(24, 24)), 255);
     }
 
     void canvasCropPreservesDisconnectedFillPixels()

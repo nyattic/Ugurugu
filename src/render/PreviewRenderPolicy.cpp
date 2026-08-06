@@ -51,6 +51,81 @@ QSize PreviewRenderPolicy::renderSize(const QSize &documentSize,
         std::max(1, qCeil(documentSize.height() * scale)));
 }
 
+QSize PreviewRenderPolicy::renderSize(const Document &document,
+    qreal physicalDisplayScale,
+    int retainedSurfaceCount)
+{
+    if (document.size.isEmpty() || !std::isfinite(physicalDisplayScale)
+        || physicalDisplayScale <= 0.0)
+    {
+        return {};
+    }
+    const LayerCompositionPlan plan = LayerCompositionPlan::build(document);
+    if (!plan.isValid())
+    {
+        return {};
+    }
+
+    const qreal edgeScale = std::min(maximumPreviewEdge / document.size.width(),
+        maximumPreviewEdge / document.size.height());
+    const qreal minimumScale =
+        1.0 / std::max(document.size.width(), document.size.height());
+    qreal scale = std::clamp(
+        std::min(physicalDisplayScale, edgeScale), minimumScale, 1.0);
+    const long double budgetBytes =
+        static_cast<long double>(maximumCacheKiB()) * 1024.0L * 0.9L;
+    const qint64 retainedSurfaces =
+        static_cast<qint64>(std::max(1, retainedSurfaceCount));
+    const int paintSurfaces = plan.peakPaintLayerSurfaceCount();
+
+    for (;;)
+    {
+        const QSize outputSize(
+            std::max(1, qCeil(document.size.width() * scale)),
+            std::max(1, qCeil(document.size.height() * scale)));
+        const LayerCompositionMemoryEstimate hierarchy =
+            plan.memoryEstimate(outputSize);
+        if (!hierarchy.valid)
+        {
+            return {};
+        }
+        const long double outputSurfaceBytes =
+            static_cast<long double>(hierarchy.bytesPerSurface);
+        const long double paintSurfaceBytes = std::max(outputSurfaceBytes,
+            static_cast<long double>(
+                plan.maximumPaintLayerBytesPerSurfaceAtSize(
+                    document.size, outputSize)));
+        long double workingBytes =
+            outputSurfaceBytes
+            * static_cast<long double>(
+                retainedSurfaces + hierarchy.peakSurfaceCount - 1);
+        if (paintSurfaces > 0)
+        {
+            workingBytes +=
+                (paintSurfaceBytes - outputSurfaceBytes) * paintSurfaces
+                + paintSurfaceBytes
+                      * LayerCompositionPlan::paintOperationScratchSurfaceCount;
+        }
+        else
+        {
+            workingBytes +=
+                outputSurfaceBytes
+                * LayerCompositionPlan::paintOperationScratchSurfaceCount;
+        }
+        if (workingBytes <= budgetBytes)
+        {
+            return outputSize;
+        }
+        if (scale <= minimumScale)
+        {
+            return {};
+        }
+        const qreal reduction =
+            static_cast<qreal>(std::sqrt(budgetBytes / workingBytes));
+        scale = std::max(minimumScale, scale * reduction * 0.995);
+    }
+}
+
 int PreviewRenderPolicy::frameCacheCostKiB(
     qint64 pinnedBytes, qint64 singleFrameBytes)
 {

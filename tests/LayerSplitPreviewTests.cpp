@@ -348,6 +348,47 @@ private slots:
         }
     }
 
+    void includesSquareLineCapsAndJoinsInIncrementalTileBounds()
+    {
+        Document document = Document::createDefault(QSize(512, 512));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        QImage base(document.size, QImage::Format_ARGB32_Premultiplied);
+        base.fill(Qt::transparent);
+
+        const auto verify = [&](qreal width, const QVector<QPointF> &points)
+        {
+            Stroke stroke;
+            stroke.color = Qt::black;
+            stroke.width = width;
+            stroke.brush.tipShape = BrushTipShape::Square;
+            stroke.brush.sizeDynamics = 0.0;
+            stroke.brush.antialiasing = false;
+            for (const QPointF &point : points)
+            {
+                stroke.points.append({point, 1.0});
+            }
+
+            IncrementalStrokeRenderer renderer;
+            const IncrementalStrokeRenderer::Update update =
+                renderer.update(base, document, stroke, 0, document.size);
+            QVERIFY(update.valid);
+            QImage actual = base;
+            QVERIFY(renderer.applyTo(actual));
+            QImage expected = base;
+            QVERIFY(RenderEngine::renderStrokesOnLayer(
+                expected, document, {stroke}, 0, document.size));
+            QCOMPARE(actual, expected);
+        };
+
+        verify(200.0, {QPointF(100.0, 100.0), QPointF(140.0, 140.0)});
+        verify(80.0,
+            {QPointF(190.0, 150.0),
+                QPointF(250.0, 250.0),
+                QPointF(190.0, 252.0),
+                QPointF(250.0, 360.0)});
+    }
+
     void checkpointsLocalizedHundredPixelDabEraserReplay()
     {
         const QSize canvasSize(4096, 4096);

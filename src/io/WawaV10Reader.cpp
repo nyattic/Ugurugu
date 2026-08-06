@@ -4,6 +4,7 @@
 #include "io/serializer/RasterAssetTable.hpp"
 
 #include <QBuffer>
+#include <QHash>
 #include <QImageReader>
 #include <QStringDecoder>
 #include <QtEndian>
@@ -160,7 +161,26 @@ bool validPoint(const QPointF &point)
                   <= DocumentLimits::maximumStoredCoordinateMagnitude;
 }
 
-std::optional<QImage> readLayerImage(BinaryCursor &cursor, const QSize &size)
+bool hasVisiblePixels(const QImage &image)
+{
+    for (int y = 0; y < image.height(); ++y)
+    {
+        for (int x = 0; x < image.width(); ++x)
+        {
+            if (qAlpha(image.pixel(x, y)) != 0)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::optional<QImage> readLayerImage(BinaryCursor &cursor,
+    const QSize &size,
+    quint64 &remainingDecodedImageBytes,
+    QHash<QString, QImage> &decodedImages,
+    QImage &transparentImage)
 {
     const std::optional<qint32> encodedLength = cursor.readInt32();
     if (!encodedLength || *encodedLength <= 0
@@ -183,8 +203,11 @@ std::optional<QImage> readLayerImage(BinaryCursor &cursor, const QSize &size)
     }
     QImageReader reader(&buffer);
     reader.setDecideFormatFromContent(true);
+    const QSize decodedSize = reader.size();
+    const std::optional<quint64> decodedBytes =
+        serializer_detail::rasterDecodedByteCount(decodedSize);
     if (reader.format().toLower() != QByteArrayLiteral("png")
-        || reader.size() != size)
+        || decodedSize != size || !decodedBytes)
     {
         return std::nullopt;
     }
@@ -193,8 +216,37 @@ std::optional<QImage> readLayerImage(BinaryCursor &cursor, const QSize &size)
     {
         return std::nullopt;
     }
-    const QImage canonical = serializer_detail::canonicalRasterImage(decoded);
-    return canonical.isNull() ? std::nullopt : std::optional<QImage>(canonical);
+    QImage canonical = serializer_detail::canonicalRasterImage(decoded);
+    if (canonical.isNull())
+    {
+        return std::nullopt;
+    }
+    if (!hasVisiblePixels(canonical))
+    {
+        if (transparentImage.isNull())
+        {
+            canonical.fill(Qt::transparent);
+            transparentImage = canonical;
+        }
+        return transparentImage;
+    }
+    const QString contentId = serializer_detail::rasterContentId(canonical);
+    if (contentId.isEmpty())
+    {
+        return std::nullopt;
+    }
+    const auto existing = decodedImages.constFind(contentId);
+    if (existing != decodedImages.cend())
+    {
+        return *existing;
+    }
+    if (*decodedBytes > remainingDecodedImageBytes)
+    {
+        return std::nullopt;
+    }
+    remainingDecodedImageBytes -= *decodedBytes;
+    decodedImages.insert(contentId, canonical);
+    return canonical;
 }
 
 std::optional<QVector<QPointF>> readPoints(
@@ -313,6 +365,12 @@ std::optional<QVector<WawaFill>> readFills(BinaryCursor &cursor,
 std::optional<WawaProject> WawaV10Reader::read(
     const QByteArray &data, QString *error)
 {
+    return read(data, DocumentLimits::maximumDistinctRasterDecodedBytes, error);
+}
+
+std::optional<WawaProject> WawaV10Reader::read(
+    const QByteArray &data, quint64 maximumDecodedImageBytes, QString *error)
+{
     if (data.size() > DocumentLimits::maximumProjectBytes)
     {
         setError(error, QStringLiteral("The .wawa project is too large."));
@@ -405,14 +463,21 @@ std::optional<WawaProject> WawaV10Reader::read(
 
     qsizetype remainingStrokes = DocumentLimits::maximumTotalStrokes;
     qsizetype remainingPoints = DocumentLimits::maximumTotalPoints;
+    quint64 remainingDecodedImageBytes = std::min(maximumDecodedImageBytes,
+        DocumentLimits::maximumDistinctRasterDecodedBytes);
+    QHash<QString, QImage> decodedImages;
+    QImage transparentImage;
     project.layers.reserve(*layerCount);
     for (int index = 0; index < *layerCount; ++index)
     {
         const std::optional<QString> name =
             cursor.readString(maximumEncodedLayerNameBytes);
         const std::optional<bool> visible = cursor.readBoolean();
-        std::optional<QImage> image =
-            readLayerImage(cursor, project.canvasSize);
+        std::optional<QImage> image = readLayerImage(cursor,
+            project.canvasSize,
+            remainingDecodedImageBytes,
+            decodedImages,
+            transparentImage);
         std::optional<QVector<WawaStroke>> paint =
             readStrokes(cursor, remainingStrokes, remainingPoints);
         std::optional<QVector<WawaStroke>> erasers =

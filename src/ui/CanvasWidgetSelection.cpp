@@ -1037,18 +1037,6 @@ void CanvasWidget::handleSelectionOverlayTransition(const QUuid &layerId,
         return;
     }
 
-    const QSet<QUuid> from(fromStrokeIds.cbegin(), fromStrokeIds.cend());
-    const bool affectsSelection = std::any_of(m_selectedStrokes.cbegin(),
-        m_selectedStrokes.cend(),
-        [&from](const QUuid &id)
-        {
-            return from.contains(id);
-        });
-    if (!affectsSelection)
-    {
-        return;
-    }
-
     for (const QUuid &strokeId : fromStrokeIds)
     {
         m_selectedStrokes.remove(strokeId);

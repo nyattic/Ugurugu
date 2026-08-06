@@ -47,8 +47,10 @@ bool layerVariesByFrame(const Document &document, const Layer &layer)
         layer.strokes.cend(),
         [wobbleAmount](const Stroke &stroke)
         {
-            if (stroke.mode == StrokeMode::Fill || stroke.pixelSelectionOp
-                || stroke.reframeOp)
+            if (stroke.mode == StrokeMode::Fill
+                || stroke.mode == StrokeMode::Image
+                || stroke.mode == StrokeMode::CompositeBoundary
+                || stroke.pixelSelectionOp || stroke.reframeOp)
             {
                 return false;
             }
@@ -201,8 +203,10 @@ SelectionVisibility::Result SelectionVisibility::evaluate(
         layer.strokes.cend(),
         [](const Stroke &stroke)
         {
-            return stroke.mode == StrokeMode::Fill || stroke.pixelSelectionOp
-                   || stroke.reframeOp;
+            return stroke.mode == StrokeMode::Fill
+                   || stroke.mode == StrokeMode::Image
+                   || stroke.mode == StrokeMode::CompositeBoundary
+                   || stroke.pixelSelectionOp || stroke.reframeOp;
         });
     for (int offset = 0; offset < framesToInspect; ++offset)
     {

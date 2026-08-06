@@ -33,12 +33,14 @@ public:
         // copy into the current document without a clipboard round trip.
         Layer layer;
         QSize canvasSize;
+        QMap<QString, RasterAsset> rasterAssets;
     };
 
     struct Pasted
     {
         QSize canvasSize;
         Layer layer;
+        QMap<QString, RasterAsset> rasterAssets;
     };
 
     static QString mimeType();

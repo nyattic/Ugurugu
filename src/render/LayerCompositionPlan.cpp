@@ -1,8 +1,10 @@
 #include "render/LayerCompositionPlan.hpp"
 
+#include "document/DocumentOperations.hpp"
 #include "document/LayerHierarchy.hpp"
 
 #include <QHash>
+#include <QtMath>
 
 #include <algorithm>
 #include <limits>
@@ -25,7 +27,15 @@ struct SurfaceEstimateFrame final
     bool hasClippingBase = false;
 };
 
-int estimatedPeakSurfaceCount(const Document &document,
+struct SurfaceEstimateResult final
+{
+    int peakSurfaceCount = 0;
+    int peakPaintLayerSurfaceCount = 0;
+    quint64 maximumPaintLayerBytesPerSurface = 0;
+    QVector<QSize> paintLayerSurfaceSizes;
+};
+
+SurfaceEstimateResult estimatedSurfaceCounts(const Document &document,
     const QVector<LayerCompositionPlan::Operation> &ops)
 {
     QVector<SurfaceEstimateFrame> frames;
@@ -33,6 +43,9 @@ int estimatedPeakSurfaceCount(const Document &document,
     int residentSurfaces = 1;
     int freeSurfaces = 0;
     int peakSurfaces = residentSurfaces;
+    int peakPaintLayerSurfaces = 0;
+    quint64 maximumPaintLayerBytesPerSurface = 0;
+    QVector<QSize> paintLayerSurfaceSizes;
 
     const auto notePeak = [&]()
     {
@@ -149,6 +162,35 @@ int estimatedPeakSurfaceCount(const Document &document,
                 ++boundaries;
             }
         }
+        if (!layer.strokes.isEmpty())
+        {
+            peakPaintLayerSurfaces =
+                std::max(peakPaintLayerSurfaces, std::max(1, boundaries));
+            const auto noteSurfaceSize = [&](const QSize &size)
+            {
+                if (size.isEmpty())
+                {
+                    return;
+                }
+                const quint64 bytes = static_cast<quint64>(size.width())
+                                      * static_cast<quint64>(size.height())
+                                      * sizeof(quint32);
+                maximumPaintLayerBytesPerSurface =
+                    std::max(maximumPaintLayerBytesPerSurface, bytes);
+                paintLayerSurfaceSizes.append(size);
+            };
+            noteSurfaceSize(layer.initialCanvasSize.isValid()
+                                ? layer.initialCanvasSize
+                                : DocumentOperations::initialCanvasSize(
+                                      layer.strokes, document.size));
+            for (const Stroke &stroke : layer.strokes)
+            {
+                if (stroke.reframeOp)
+                {
+                    noteSurfaceSize(stroke.reframeOp->targetSize);
+                }
+            }
+        }
         if (boundaries > 1)
         {
             residentSurfaces += boundaries - 1;
@@ -168,13 +210,16 @@ int estimatedPeakSurfaceCount(const Document &document,
 
     if (frames.size() != 1)
     {
-        return 0;
+        return {};
     }
     if (frames.last().hasClippingBase)
     {
         recycleSurface();
     }
-    return peakSurfaces;
+    return {peakSurfaces,
+        peakPaintLayerSurfaces,
+        maximumPaintLayerBytesPerSurface,
+        paintLayerSurfaceSizes};
 }
 
 }
@@ -263,8 +308,14 @@ LayerCompositionPlan LayerCompositionPlan::build(const Document &document)
         plan.m_operations.clear();
         return plan;
     }
-    plan.m_peakSurfaceCount =
-        estimatedPeakSurfaceCount(document, plan.m_operations);
+    const SurfaceEstimateResult surfaceEstimate =
+        estimatedSurfaceCounts(document, plan.m_operations);
+    plan.m_peakSurfaceCount = surfaceEstimate.peakSurfaceCount;
+    plan.m_peakPaintLayerSurfaceCount =
+        surfaceEstimate.peakPaintLayerSurfaceCount;
+    plan.m_maximumPaintLayerBytesPerSurface =
+        surfaceEstimate.maximumPaintLayerBytesPerSurface;
+    plan.m_paintLayerSurfaceSizes = surfaceEstimate.paintLayerSurfaceSizes;
     plan.m_valid = plan.m_peakSurfaceCount > 0;
     return plan;
 }
@@ -283,6 +334,44 @@ LayerCompositionPlan::operations() const
 int LayerCompositionPlan::peakSurfaceCount() const
 {
     return m_valid ? m_peakSurfaceCount : 0;
+}
+
+int LayerCompositionPlan::peakPaintLayerSurfaceCount() const
+{
+    return m_valid ? m_peakPaintLayerSurfaceCount : 0;
+}
+
+quint64 LayerCompositionPlan::maximumPaintLayerBytesPerSurface() const
+{
+    return m_valid ? m_maximumPaintLayerBytesPerSurface : 0;
+}
+
+quint64 LayerCompositionPlan::maximumPaintLayerBytesPerSurfaceAtSize(
+    const QSize &documentSize, const QSize &outputSize) const
+{
+    if (!m_valid || documentSize.isEmpty() || outputSize.isEmpty())
+    {
+        return 0;
+    }
+    if (outputSize.width() > documentSize.width()
+        || outputSize.height() > documentSize.height())
+    {
+        return 0;
+    }
+    const qreal horizontalScale =
+        static_cast<qreal>(outputSize.width()) / documentSize.width();
+    const qreal verticalScale =
+        static_cast<qreal>(outputSize.height()) / documentSize.height();
+    quint64 maximumBytes = 0;
+    for (const QSize &nativeSize : m_paintLayerSurfaceSizes)
+    {
+        const quint64 width = static_cast<quint64>(
+            std::max(1, qRound(nativeSize.width() * horizontalScale)));
+        const quint64 height = static_cast<quint64>(
+            std::max(1, qRound(nativeSize.height() * verticalScale)));
+        maximumBytes = std::max(maximumBytes, width * height * sizeof(quint32));
+    }
+    return maximumBytes;
 }
 
 LayerCompositionMemoryEstimate LayerCompositionPlan::memoryEstimate(

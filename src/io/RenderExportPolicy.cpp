@@ -24,20 +24,30 @@ RenderExportMemoryEstimate RenderExportPolicy::staticImage(
     const Document &document)
 {
     RenderExportMemoryEstimate estimate;
+    const LayerCompositionPlan plan = LayerCompositionPlan::build(document);
     const LayerCompositionMemoryEstimate hierarchy =
-        LayerCompositionPlan::build(document).memoryEstimate(document.size);
+        plan.memoryEstimate(document.size);
     if (!hierarchy.valid)
     {
         return estimate;
     }
+    const long double frameBytes =
+        static_cast<long double>(hierarchy.bytesPerSurface);
+    const int nativePaintSurfaces = plan.peakPaintLayerSurfaceCount();
+    const long double maximumPaintSurfaceBytes = std::max(frameBytes,
+        static_cast<long double>(plan.maximumPaintLayerBytesPerSurface()));
     estimate.valid = true;
     estimate.hierarchyTransientBytes =
         static_cast<long double>(hierarchy.peakBytes);
     estimate.workingBytes =
-        estimate.hierarchyTransientBytes
-        + static_cast<long double>(hierarchy.bytesPerSurface)
-              * static_cast<long double>(
-                  LayerCompositionPlan::paintOperationScratchSurfaceCount + 1);
+        estimate.hierarchyTransientBytes + frameBytes
+        + maximumPaintSurfaceBytes
+              * LayerCompositionPlan::paintOperationScratchSurfaceCount;
+    if (nativePaintSurfaces > 0)
+    {
+        estimate.workingBytes +=
+            (maximumPaintSurfaceBytes - frameBytes) * nativePaintSurfaces;
+    }
     return estimate;
 }
 
@@ -67,27 +77,34 @@ RenderExportMemoryEstimate RenderExportPolicy::animatedGifAtSize(
     const long double frameCount =
         static_cast<long double>(document.animationFrames);
     const long double encoderBytes = frameBytes * frameCount * 3.0L;
+    const int nativePaintSurfaces = plan.peakPaintLayerSurfaceCount();
+    const long double maximumPaintSurfaceBytes = std::max(frameBytes,
+        static_cast<long double>(plan.maximumPaintLayerBytesPerSurface()));
     estimate.hierarchyTransientBytes =
         static_cast<long double>(hierarchy.peakBytes);
     long double renderBytes =
-        estimate.hierarchyTransientBytes
-        + frameBytes
-              * (frameCount - 1.0L
-                  + static_cast<long double>(
-                      LayerCompositionPlan::paintOperationScratchSurfaceCount));
+        estimate.hierarchyTransientBytes + frameBytes * (frameCount - 1.0L);
     if (outputSize != document.size)
     {
-        // renderAtSize composes every paint layer at its native size before
-        // scaling it down, so one native-size surface peaks alongside the
-        // scaled hierarchy.
-        const LayerCompositionMemoryEstimate nativeHierarchy =
-            plan.memoryEstimate(document.size);
-        if (!nativeHierarchy.valid)
+        if (nativePaintSurfaces > 0)
         {
-            return estimate;
+            renderBytes +=
+                maximumPaintSurfaceBytes
+                * static_cast<long double>(
+                    nativePaintSurfaces
+                    + LayerCompositionPlan::paintOperationScratchSurfaceCount);
         }
+    }
+    else
+    {
         renderBytes +=
-            static_cast<long double>(nativeHierarchy.bytesPerSurface);
+            maximumPaintSurfaceBytes
+            * LayerCompositionPlan::paintOperationScratchSurfaceCount;
+        if (nativePaintSurfaces > 0)
+        {
+            renderBytes +=
+                (maximumPaintSurfaceBytes - frameBytes) * nativePaintSurfaces;
+        }
     }
     estimate.valid = true;
     estimate.workingBytes = std::max(encoderBytes, renderBytes);

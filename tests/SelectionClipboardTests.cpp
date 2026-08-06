@@ -1,4 +1,5 @@
 #include "io/SelectionClipboardCodec.hpp"
+#include "io/serializer/RasterAssetTable.hpp"
 #include "support/DocumentTestHelpers.hpp"
 #include "support/DocumentTestSuites.hpp"
 
@@ -100,6 +101,144 @@ private slots:
         QVERIFY(pasted.has_value());
         QCOMPARE(pasted->layer.strokes.size(),
             document.layers.first().strokes.size());
+    }
+
+    void copiedRasterUsesTheSourceMotionSettings()
+    {
+        Document document = clipboardSourceDocument();
+        document.background = Qt::transparent;
+        document.wobbleAmount = 6.0;
+        document.motion.style = MotionStyle::Smooth;
+        document.motion.poseCount = 5;
+        document.motion.detail = 18;
+        document.motion.linked = 0.25;
+        document.motion.randomness = 0.7;
+        const int frame = 7;
+        const QImage mask = rectangularSelectionMask(
+            document.size, QRect(QPoint(), document.size));
+
+        Document defaultMotion = document;
+        defaultMotion.motion = MotionSettings{};
+        const QImage sourceFrame = RenderEngine::render(document, frame);
+        QVERIFY(sourceFrame != RenderEngine::render(defaultMotion, frame));
+        const QImage expected =
+            sourceFrame.convertToFormat(QImage::Format_ARGB32);
+
+        QString error;
+        const std::optional<SelectionClipboardCodec::Copy> copy =
+            SelectionClipboardCodec::makeCopy(
+                document, document.layers.first().id, mask, frame, &error);
+        QVERIFY2(copy.has_value(), qPrintable(error));
+        QCOMPARE(copy->raster, expected);
+
+        const std::optional<Document> payload =
+            DocumentSerializer::fromJson(copy->payload, &error);
+        QVERIFY2(payload.has_value(), qPrintable(error));
+        QCOMPARE(payload->motion, document.motion);
+        QCOMPARE(RenderEngine::render(*payload, frame)
+                     .convertToFormat(QImage::Format_ARGB32),
+            expected);
+    }
+
+    void imageAssetsSurviveCrossDocumentPasteAndHistory()
+    {
+        Document source = Document::createDefault(QSize(64, 64));
+        QImage image(QSize(18, 12), QImage::Format_RGBA8888);
+        image.fill(QColor(210, 40, 80, 190));
+        QPainter painter(&image);
+        painter.fillRect(QRect(3, 2, 8, 7), QColor(20, 180, 90, 255));
+        painter.end();
+        const std::optional<RasterAsset> asset =
+            serializer_detail::rasterAssetFromImage(image);
+        QVERIFY(asset.has_value());
+        source.rasterAssets.insert(asset->id, *asset);
+        Stroke imageStroke;
+        imageStroke.mode = StrokeMode::Image;
+        imageStroke.points.clear();
+        imageStroke.imageOp = ImageOp{asset->id,
+            QTransform::fromTranslate(9.0, 11.0),
+            SamplingMode::Nearest};
+        source.layers.first().strokes = {imageStroke};
+
+        QImage unusedImage(QSize(4, 4), QImage::Format_RGBA8888);
+        unusedImage.fill(Qt::blue);
+        const std::optional<RasterAsset> unused =
+            serializer_detail::rasterAssetFromImage(unusedImage);
+        QVERIFY(unused.has_value());
+        source.rasterAssets.insert(unused->id, *unused);
+
+        QString error;
+        const std::optional<SelectionClipboardCodec::Copy> copy =
+            SelectionClipboardCodec::makeCopy(source,
+                source.layers.first().id,
+                rectangularSelectionMask(
+                    source.size, QRect(QPoint(), source.size)),
+                0,
+                &error);
+        QVERIFY2(copy.has_value(), qPrintable(error));
+        QCOMPARE(copy->rasterAssets.size(), 1);
+        QCOMPARE(copy->rasterAssets.value(asset->id), *asset);
+
+        const std::optional<SelectionClipboardCodec::Pasted> pasted =
+            SelectionClipboardCodec::decode(copy->payload, &error);
+        QVERIFY2(pasted.has_value(), qPrintable(error));
+        QCOMPARE(pasted->rasterAssets, copy->rasterAssets);
+
+        DocumentController directController;
+        QVERIFY(directController.loadDocument(
+            Document::createDefault(source.size)));
+        QCOMPARE(directController.pasteLayer(
+                     copy->layer, copy->canvasSize, {}, {}, copy->rasterAssets),
+            DocumentController::PasteLayerResult::Pasted);
+        QCOMPARE(
+            directController.document().rasterAssets.value(asset->id), *asset);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(Document::createDefault(source.size)));
+        const QByteArray before =
+            DocumentSerializer::toJson(controller.document());
+        QCOMPARE(controller.pasteLayer(pasted->layer,
+                     pasted->canvasSize,
+                     {},
+                     {},
+                     pasted->rasterAssets),
+            DocumentController::PasteLayerResult::Pasted);
+        QCOMPARE(controller.document().rasterAssets.size(), 1);
+        QCOMPARE(controller.document().rasterAssets.value(asset->id), *asset);
+
+        controller.undoStack()->undo();
+        QCOMPARE(DocumentSerializer::toJson(controller.document()), before);
+        QVERIFY(controller.document().rasterAssets.isEmpty());
+        controller.undoStack()->redo();
+        QCOMPARE(controller.document().rasterAssets.size(), 1);
+        QCOMPARE(controller.document().rasterAssets.value(asset->id), *asset);
+
+        QCOMPARE(controller.pasteLayer(pasted->layer,
+                     pasted->canvasSize,
+                     {},
+                     {},
+                     pasted->rasterAssets),
+            DocumentController::PasteLayerResult::Pasted);
+        QCOMPARE(controller.document().rasterAssets.size(), 1);
+
+        QImage conflictingImage(QSize(18, 12), QImage::Format_RGBA8888);
+        conflictingImage.fill(Qt::yellow);
+        std::optional<RasterAsset> conflicting =
+            serializer_detail::rasterAssetFromImage(conflictingImage);
+        QVERIFY(conflicting.has_value());
+        conflicting->id = asset->id;
+        const QMap<QString, RasterAsset> conflictingAssets{
+            {asset->id, *conflicting}};
+        const QByteArray beforeConflict =
+            DocumentSerializer::toJson(controller.document());
+        const int historyCount = controller.undoStack()->count();
+        QCOMPARE(
+            controller.pasteLayer(
+                pasted->layer, pasted->canvasSize, {}, {}, conflictingAssets),
+            DocumentController::PasteLayerResult::RejectedInvalidLayer);
+        QCOMPARE(
+            DocumentSerializer::toJson(controller.document()), beforeConflict);
+        QCOMPARE(controller.undoStack()->count(), historyCount);
     }
 
     void emptySelectionMaskIsRejected()

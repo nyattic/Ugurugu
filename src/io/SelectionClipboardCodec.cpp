@@ -7,6 +7,8 @@
 
 #include <QMimeData>
 
+#include <utility>
+
 namespace ugurugu
 {
 
@@ -85,6 +87,23 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     copy.visible = true;
     copy.reference = false;
 
+    QMap<QString, RasterAsset> rasterAssets;
+    for (const Stroke &stroke : std::as_const(copy.strokes))
+    {
+        if (!stroke.imageOp)
+        {
+            continue;
+        }
+        const auto asset =
+            document.rasterAssets.constFind(stroke.imageOp->assetId);
+        if (asset == document.rasterAssets.cend())
+        {
+            setCodecError(error, tr("The selected layer cannot be copied."));
+            return std::nullopt;
+        }
+        rasterAssets.insert(asset.key(), *asset);
+    }
+
     // Clipping to the selection is expressed as one appended erase operation
     // over the inverted mask instead of per-stroke clip masks. That stays
     // correct when the layer already carries ordered framebuffer operations,
@@ -115,6 +134,8 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     payloadDocument.animationFrames = document.animationFrames;
     payloadDocument.framesPerSecond = document.framesPerSecond;
     payloadDocument.wobbleAmount = document.wobbleAmount;
+    payloadDocument.motion = document.motion;
+    payloadDocument.rasterAssets = rasterAssets;
     payloadDocument.activeLayerId = copy.id;
     payloadDocument.layers = {copy};
 
@@ -137,6 +158,7 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
                         .convertToFormat(QImage::Format_ARGB32);
     result.layer = std::move(copy);
     result.canvasSize = document.size;
+    result.rasterAssets = std::move(rasterAssets);
     return result;
 }
 
@@ -158,6 +180,21 @@ std::optional<SelectionClipboardCodec::Pasted> SelectionClipboardCodec::decode(
     Pasted result;
     result.canvasSize = document->size;
     result.layer = document->layers.first();
+    for (const Stroke &stroke : std::as_const(result.layer.strokes))
+    {
+        if (!stroke.imageOp)
+        {
+            continue;
+        }
+        const auto asset =
+            document->rasterAssets.constFind(stroke.imageOp->assetId);
+        if (asset == document->rasterAssets.cend())
+        {
+            setCodecError(error, tr("The clipboard content is not supported."));
+            return std::nullopt;
+        }
+        result.rasterAssets.insert(asset.key(), *asset);
+    }
     return result;
 }
 

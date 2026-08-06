@@ -1,9 +1,12 @@
+#include "document/DocumentLimits.hpp"
 #include "render/BrokenLineModel.hpp"
+#include "render/DeterministicNoise.hpp"
 #include "support/RenderTestSuites.hpp"
 
 #include <QtTest>
 
 #include <algorithm>
+#include <limits>
 
 namespace ugurugu
 {
@@ -71,6 +74,47 @@ private slots:
         const QVector<quint8> segments{0, 1, 1, 0, 1, 0};
         const QVector<BrokenLineModel::VisibleRun> expected{{1, 3}, {4, 5}};
         QCOMPARE(BrokenLineModel::visibleRuns(segments), expected);
+    }
+
+    void handlesValidatedArcLengthsBeyondIntRange()
+    {
+        QVector<StrokePoint> points;
+        points.reserve(50000);
+        for (int index = 0; index < 50000; ++index)
+        {
+            const qreal coordinate =
+                index % 2 == 0
+                    ? -DocumentLimits::maximumStoredCoordinateMagnitude
+                    : DocumentLimits::maximumStoredCoordinateMagnitude;
+            points.append({QPointF(coordinate, coordinate), 1.0});
+        }
+
+        const QVector<quint8> segments =
+            BrokenLineModel::visibleSegments(points, 7, 0, 0.45, 2.0);
+        QCOMPARE(segments.size(), points.size() - 1);
+        QCOMPARE(BrokenLineModel::visibleSegments(points, 7, 0, 0.45, 2.0),
+            segments);
+        const auto tail = segments.sliced(48000);
+        QVERIFY(std::any_of(tail.cbegin(),
+            tail.cend(),
+            [](quint8 value)
+            {
+                return value == 0;
+            }));
+        QVERIFY(std::any_of(tail.cbegin(),
+            tail.cend(),
+            [](quint8 value)
+            {
+                return value != 0;
+            }));
+
+        const qreal coordinate =
+            static_cast<qreal>(std::numeric_limits<int>::max()) + 1.5;
+        const qreal first =
+            DeterministicNoise::smoothValue(7, 0, coordinate, 0x1234ULL);
+        QVERIFY(std::isfinite(first));
+        QCOMPARE(DeterministicNoise::smoothValue(7, 0, coordinate, 0x1234ULL),
+            first);
     }
 
     void rejectsInvalidSettings()

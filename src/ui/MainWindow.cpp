@@ -301,16 +301,24 @@ std::optional<Document> MainWindow::readProject(const QString &filePath)
         == 0)
     {
         QFile file(filePath);
-        if (!file.open(QIODevice::ReadOnly)
+        if (!file.open(QIODevice::ReadOnly) || file.size() < 0
             || file.size() > DocumentLimits::maximumProjectBytes)
         {
             error = tr("The .wawa project could not be read or is too large.");
         }
         else
         {
-            const std::optional<WawaImportResult> imported =
-                WawaV10Importer::import(file.readAll(), &error);
-            if (imported)
+            const QByteArray data =
+                file.read(DocumentLimits::maximumProjectBytes + 1);
+            if (data.size() > DocumentLimits::maximumProjectBytes
+                || !file.atEnd())
+            {
+                error =
+                    tr("The .wawa project could not be read or is too large.");
+            }
+            else if (const std::optional<WawaImportResult> imported =
+                         WawaV10Importer::import(data, &error);
+                imported)
             {
                 m_pendingWawaImportSummary = imported->summary;
                 const QFileInfo source(filePath);
@@ -1137,7 +1145,8 @@ void MainWindow::pasteFromClipboard()
                        : error);
         return;
     }
-    switch (m_controller.pasteLayer(pasted->layer, pasted->canvasSize))
+    switch (m_controller.pasteLayer(
+        pasted->layer, pasted->canvasSize, {}, {}, pasted->rasterAssets))
     {
     case DocumentController::PasteLayerResult::Pasted:
         showNotice(tr("Pasted as a new layer."));

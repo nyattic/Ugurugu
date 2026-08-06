@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace ugurugu::BrokenLineModel
 {
@@ -46,11 +47,27 @@ QVector<quint8> visibleSegments(const QVector<StrokePoint> &points,
             points[index + 1].position - points[index].position;
         const qreal segmentLength = std::hypot(delta.x(), delta.y());
         const qreal midpoint = arcLength + segmentLength * 0.5;
-        const int cell = static_cast<int>(std::floor(midpoint / breakRange));
+        const qreal cellCoordinate = std::floor(midpoint / breakRange);
+        const long double extendedCell =
+            static_cast<long double>(cellCoordinate);
+        if (!std::isfinite(segmentLength) || !std::isfinite(midpoint)
+            || !std::isfinite(cellCoordinate)
+            || extendedCell < static_cast<long double>(
+                   std::numeric_limits<qint64>::min())
+            || extendedCell >= static_cast<long double>(
+                   std::numeric_limits<qint64>::max()))
+        {
+            return {};
+        }
+        const qint64 cell = static_cast<qint64>(cellCoordinate);
         result[index] = static_cast<quint8>(
             DeterministicNoise::unitValue(seed, pose, cell, visibilityChannel)
             >= breakAmount);
         arcLength += segmentLength;
+        if (!std::isfinite(arcLength))
+        {
+            return {};
+        }
     }
     return result;
 }
