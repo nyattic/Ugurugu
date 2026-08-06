@@ -82,10 +82,14 @@ public:
     bool hasSelectionTransformSession() const;
     bool hasPendingSelectionTransform() const;
     QTransform pendingSelectionTransform() const;
-    // Persistence/export snapshot equal to the on-screen preview. Appends
-    // the pending PixelSelectionOp to a document copy without touching the
-    // live document or history; intended for export/autosave, not painting.
+    // Persistence snapshot: appends the pending PixelSelectionOp to a
+    // document copy without touching the live document or history, keeping
+    // the true wobble values autosave must record.
     Document documentWithPendingSelectionTransform() const;
+    // Display variant of the pending-transform snapshot: additionally applies
+    // the wobble-disabled normalization the on-screen preview uses, layer
+    // overrides included. What the eyedropper and still-image export sample.
+    Document displayDocumentWithPendingSelectionTransform() const;
     bool scaleSelection(qreal factor);
     bool rotateSelection(qreal degrees);
     bool flipSelectionHorizontally();
@@ -219,6 +223,7 @@ private:
     QTransform documentTransform() const;
     qreal fitZoom() const;
     Document displayDocument() const;
+    void applyWobbleAnimationSetting(Document &document) const;
     QPointF mapToDocument(
         const QPointF &widgetPosition, bool *inside = nullptr) const;
     QPointF clampedDocumentPosition(const QPointF &position) const;

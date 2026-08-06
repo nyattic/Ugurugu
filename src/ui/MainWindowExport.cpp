@@ -98,11 +98,8 @@ void MainWindow::exportImage()
         return;
     }
     const int frame = m_canvas->currentFrame();
-    Document exportDocument = m_canvas->documentWithPendingSelectionTransform();
-    if (!m_canvas->isWobbleAnimationEnabled())
-    {
-        exportDocument.wobbleAmount = 0.0;
-    }
+    const Document exportDocument =
+        m_canvas->displayDocumentWithPendingSelectionTransform();
     const RenderExportMemoryEstimate memoryEstimate =
         RenderExportPolicy::staticImage(exportDocument);
     if (!RenderExportPolicy::staticImageFitsMemoryBudget(exportDocument))

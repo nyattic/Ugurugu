@@ -270,17 +270,30 @@ bool CanvasWidget::isWobbleAnimationEnabled() const
 Document CanvasWidget::displayDocument() const
 {
     Document document = m_controller->document();
-    if (!m_wobbleAnimationEnabled)
+    applyWobbleAnimationSetting(document);
+    return document;
+}
+
+void CanvasWidget::applyWobbleAnimationSetting(Document &document) const
+{
+    if (m_wobbleAnimationEnabled)
     {
-        document.wobbleAmount = 0.0;
-        for (Layer &layer : document.layers)
+        return;
+    }
+    document.wobbleAmount = 0.0;
+    for (Layer &layer : document.layers)
+    {
+        if (layer.wobbleAmount)
         {
-            if (layer.wobbleAmount)
-            {
-                layer.wobbleAmount = 0.0;
-            }
+            layer.wobbleAmount = 0.0;
         }
     }
+}
+
+Document CanvasWidget::displayDocumentWithPendingSelectionTransform() const
+{
+    Document document = documentWithPendingSelectionTransform();
+    applyWobbleAnimationSetting(document);
     return document;
 }
 

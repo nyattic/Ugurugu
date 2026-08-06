@@ -472,13 +472,10 @@ void CanvasWidget::pickColorAt(const QPointF &widgetPosition)
     }
     if (m_colorPickFrame.isNull() || m_colorPickFrameIndex != m_currentFrame)
     {
-        Document document = hasPendingSelectionTransform()
-                                ? documentWithPendingSelectionTransform()
-                                : displayDocument();
-        if (!m_wobbleAnimationEnabled)
-        {
-            document.wobbleAmount = 0.0;
-        }
+        Document document =
+            hasPendingSelectionTransform()
+                ? displayDocumentWithPendingSelectionTransform()
+                : displayDocument();
         m_colorPickFrame = {};
         m_colorPickFrame = RenderEngine::render(document, m_currentFrame);
         m_colorPickFrameIndex = m_currentFrame;

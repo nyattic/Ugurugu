@@ -81,6 +81,42 @@ private slots:
         QCOMPARE(effectiveWobbleAmount(display, *displayLayer), 0.0);
     }
 
+    void disablesLayerWobbleInPendingTransformSnapshots()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(96, 96)));
+        const QUuid layerId = controller.document().activeLayerId;
+        Stroke stroke;
+        stroke.width = 10.0;
+        stroke.points = {
+            {QPointF(20.0, 48.0), 1.0}, {QPointF(76.0, 48.0), 1.0}};
+        QCOMPARE(controller.addStroke(layerId, stroke),
+            DocumentController::AddStrokeResult::Added);
+        MotionSettings motion = controller.document().motion;
+        controller.setLayerWobbleOverride(layerId, 5.0, motion);
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(300, 300);
+        canvas.setAnimating(false);
+        canvas.setWobbleAnimationEnabled(false);
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QVERIFY(canvas.scaleSelection(1.5));
+        QVERIFY(canvas.hasPendingSelectionTransform());
+
+        // The eyedropper and the still-image export sample this snapshot; it
+        // has to match the wobble-disabled view, layer overrides included,
+        // while still carrying the pending selection transform.
+        const Document snapshot =
+            canvas.displayDocumentWithPendingSelectionTransform();
+        const Layer *layer = snapshot.layer(layerId);
+        QVERIFY(layer);
+        QCOMPARE(snapshot.wobbleAmount, 0.0);
+        QCOMPARE(effectiveWobbleAmount(snapshot, *layer), 0.0);
+        QVERIFY(!layer->strokes.isEmpty());
+        QCOMPARE(layer->strokes.last().mode, StrokeMode::PixelSelection);
+    }
+
     void keepsAnimatingWhileThePenIsDownWhenEnabled()
     {
         DocumentController controller;
