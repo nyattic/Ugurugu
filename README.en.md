@@ -44,6 +44,20 @@ app is checked by Apple before release.
 The other files on the release page are used by automatic updates. For a
 normal installation, you only need the installer in the table above.
 
+## System requirements
+
+| | Minimum | Recommended |
+| --- | --- | --- |
+| Operating system | Windows 10 64-bit / macOS 14 (Apple Silicon) | Windows 11 / latest macOS |
+| Memory | 8GB | 16GB or more |
+| Graphics | No specific requirement | A GPU with Direct3D 11 (Windows) or Metal (macOS) support |
+| Input device | Mouse | A pen tablet with pressure support (Wacom and others) |
+
+Canvas display, zooming, panning and playback are GPU accelerated, and
+the app automatically switches to software rendering when graphics
+acceleration is unavailable. When working on large canvases (up to
+4096×4096) with several layers, more memory keeps the preview smooth.
+
 ## Get started
 
 1. Open the app and create a canvas, or open an existing drawing.
