@@ -367,8 +367,11 @@ void CanvasWidget::evaluateSelectionVisibility()
             }
             m_selectedStrokes = std::move(selected);
             notifySelectionTransformAvailability();
-            if (std::exchange(m_armSelectionMoveMode, false)
-                && !m_selectedStrokes.isEmpty())
+            const bool armedForThisSelection =
+                std::exchange(m_armSelectionMoveMode, false)
+                && m_armSelectionMoveLayer == m_selectionLayer
+                && m_armSelectionMoveMaskKey == m_selectionMask.cacheKey();
+            if (armedForThisSelection && !m_selectedStrokes.isEmpty())
             {
                 setSelectionMoveMode(true);
             }
@@ -837,6 +840,9 @@ QPointF CanvasWidget::safeSelectionDeltaForBounds(
 void CanvasWidget::clearSelection()
 {
     ++m_selectionVisibilityGeneration;
+    m_armSelectionMoveMode = false;
+    m_armSelectionMoveLayer = QUuid();
+    m_armSelectionMoveMaskKey = 0;
     setSelectionMoveMode(false);
     resetSelectionTransformSession();
     if (m_selectedStrokes.isEmpty() && m_selectionMask.isNull()

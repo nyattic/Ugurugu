@@ -611,6 +611,8 @@ bool CanvasWidget::copySelection()
         return false;
     }
     m_armSelectionMoveMode = true;
+    m_armSelectionMoveLayer = m_selectionLayer;
+    m_armSelectionMoveMaskKey = m_selectionMask.cacheKey();
     emit interactionMessage(
         tr("Copied to a new layer. Drag inside the selection to move it."));
     return true;

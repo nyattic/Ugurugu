@@ -2147,6 +2147,37 @@ private slots:
             DocumentSerializer::toJson(controller.document()), beforeTransform);
     }
 
+    void unrelatedSelectionDoesNotInheritCopyMoveMode()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.wobbleAmount = 0.0;
+        Stroke stroke;
+        stroke.width = 12.0;
+        stroke.points = {
+            {QPointF(20.0, 50.0), 1.0}, {QPointF(80.0, 50.0), 1.0}};
+        document.layers.first().strokes = {stroke};
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QVERIFY(canvas.copySelection());
+
+        // Deselect before the pasted selection's visibility evaluation can
+        // deliver, then make an unrelated selection. Its completion must not
+        // consume the copy's move-mode arm.
+        canvas.deselectSelection();
+        QVERIFY(!canvas.selectionMoveMode());
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QCoreApplication::processEvents();
+        QVERIFY2(!canvas.selectionMoveMode(),
+            "an unrelated selection inherited the copy's move-mode arm");
+    }
+
     void requiresExplicitSelectionMoveMode()
     {
         DocumentController controller;

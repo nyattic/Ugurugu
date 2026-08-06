@@ -437,7 +437,11 @@ private:
     bool m_areaSelectionActive = false;
     // Move mode requires the async visibility evaluation to confirm content,
     // so copySelection arms it here and the evaluation result applies it.
+    // The arm is scoped to the selection it was created for; a completion for
+    // any other selection retires it instead of consuming it.
     bool m_armSelectionMoveMode = false;
+    QUuid m_armSelectionMoveLayer;
+    qint64 m_armSelectionMoveMaskKey = 0;
     SelectionCombine m_areaSelectionCombine = SelectionCombine::Replace;
     SelectionState m_selectionBeforeArea;
     bool m_hasSelectionBeforeArea = false;
