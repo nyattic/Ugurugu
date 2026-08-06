@@ -11,18 +11,21 @@
 namespace ugurugu
 {
 
-QSize LayerThumbnailRenderer::renderSize(const QSize &documentSize)
+QSize LayerThumbnailRenderer::renderSize(
+    const QSize &documentSize, qreal devicePixelRatio)
 {
-    if (!documentSize.isValid())
+    if (!documentSize.isValid() || devicePixelRatio <= 0.0)
     {
         return {};
     }
-    const QSize scaled = documentSize.scaled(targetSize, Qt::KeepAspectRatio);
+    const QSize deviceTarget(qRound(targetSize.width() * devicePixelRatio),
+        qRound(targetSize.height() * devicePixelRatio));
+    const QSize scaled = documentSize.scaled(deviceTarget, Qt::KeepAspectRatio);
     return QSize(std::max(1, scaled.width()), std::max(1, scaled.height()));
 }
 
 QImage LayerThumbnailRenderer::renderImage(
-    const Document &document, const Layer &layer)
+    const Document &document, const Layer &layer, qreal devicePixelRatio)
 {
     const LayerHierarchyAnalysis hierarchy = analyzeLayerHierarchy(document);
     if (!hierarchy.isValid())
@@ -46,20 +49,8 @@ QImage LayerThumbnailRenderer::renderImage(
         root->clipToLayerBelow = false;
     }
 
-    return RenderEngine::renderScaled(single, 0, renderSize(single.size));
-}
-
-QPixmap LayerThumbnailRenderer::render(
-    const Document &document, const Layer &layer)
-{
-    const QImage image = renderImage(document, layer);
-    if (image.isNull())
-    {
-        return {};
-    }
-    QPixmap pixmap = QPixmap::fromImage(image);
-    pixmap.setDevicePixelRatio(2.0);
-    return pixmap;
+    return RenderEngine::renderScaled(
+        single, 0, renderSize(single.size, devicePixelRatio));
 }
 
 }

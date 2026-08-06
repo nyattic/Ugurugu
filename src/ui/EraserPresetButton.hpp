@@ -20,6 +20,7 @@ public:
 
     QString presetId() const;
     QSize sizeHint() const override;
+    bool event(QEvent *event) override;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

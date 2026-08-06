@@ -5,10 +5,12 @@
 
 #include "ui/Theme.hpp"
 
+#include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
 #include <QSizePolicy>
 
+#include <algorithm>
 #include <utility>
 
 namespace ugurugu
@@ -18,7 +20,46 @@ namespace
 {
 
 constexpr int cardWidth = 264;
-constexpr int cardHeight = 62;
+constexpr int cardPadding = 11;
+constexpr int previewSize = 40;
+constexpr int previewColumn = 66;
+constexpr int titleGap = 1;
+// The two text bands were laid out by hand against the default font. Keeping
+// them as floors reproduces that layout exactly and lets a larger system font
+// push them open instead of clipping.
+constexpr int titleBandFloor = 19;
+constexpr int descriptionBandFloor = 18;
+
+int titleBandHeight(const QFont &font)
+{
+    return std::max(titleBandFloor, QFontMetrics(font).height());
+}
+
+int descriptionBandHeight(const QFont &font)
+{
+    return std::max(descriptionBandFloor, QFontMetrics(font).height());
+}
+
+QFont titleFont(const QFont &base)
+{
+    QFont font = Theme::scaledFont(base, Theme::TextRole::Title);
+    font.setWeight(QFont::DemiBold);
+    return font;
+}
+
+QFont descriptionFont(const QFont &base)
+{
+    return Theme::scaledFont(base, Theme::TextRole::Caption);
+}
+
+// The card is as tall as the preview until the system font grows past it, so
+// the default layout is unchanged and larger text still gets its two lines.
+int cardHeight(const QFont &base)
+{
+    const int textHeight = titleBandHeight(titleFont(base)) + titleGap
+                           + descriptionBandHeight(descriptionFont(base));
+    return 2 * cardPadding + std::max(previewSize, textHeight);
+}
 
 }
 
@@ -39,7 +80,7 @@ PopoverOptionButton::PopoverOptionButton(
 
 QSize PopoverOptionButton::sizeHint() const
 {
-    return QSize(cardWidth, cardHeight);
+    return QSize(cardWidth, cardHeight(font()));
 }
 
 void PopoverOptionButton::paintEvent(QPaintEvent *event)
@@ -63,26 +104,31 @@ void PopoverOptionButton::paintEvent(QPaintEvent *event)
                                              : QPen(Theme::border(), 1.0));
     painter.drawPath(card);
 
-    paintPreview(painter, QRectF(12.0, 11.0, 42.0, 40.0));
+    paintPreview(painter, QRectF(12.0, cardPadding, 42.0, previewSize));
 
-    QFont titleFont = font();
-    titleFont.setPixelSize(12);
-    titleFont.setWeight(QFont::DemiBold);
-    painter.setFont(titleFont);
+    const QFont title = titleFont(font());
+    const QFont description = descriptionFont(font());
+    const int titleHeight = titleBandHeight(title);
+    const int descriptionHeight = descriptionBandHeight(description);
+    const qreal textWidth = width() - previewColumn - 12.0;
+    const qreal textTop = cardPadding;
+
+    painter.setFont(title);
     painter.setPen(Theme::textPrimary());
-    painter.drawText(QRectF(66.0, 11.0, width() - 78.0, 19.0),
+    painter.drawText(QRectF(previewColumn, textTop, textWidth, titleHeight),
         Qt::AlignLeft | Qt::AlignVCenter,
         painter.fontMetrics().elidedText(
-            m_title, Qt::ElideRight, width() - 78));
+            m_title, Qt::ElideRight, qRound(textWidth)));
 
-    QFont descriptionFont = font();
-    descriptionFont.setPixelSize(10);
-    painter.setFont(descriptionFont);
+    painter.setFont(description);
     painter.setPen(Theme::textMuted());
-    painter.drawText(QRectF(66.0, 31.0, width() - 78.0, 18.0),
+    painter.drawText(QRectF(previewColumn,
+                         textTop + titleHeight + titleGap,
+                         textWidth,
+                         descriptionHeight),
         Qt::AlignLeft | Qt::AlignVCenter,
         painter.fontMetrics().elidedText(
-            m_description, Qt::ElideRight, width() - 78));
+            m_description, Qt::ElideRight, qRound(textWidth)));
 }
 
 }

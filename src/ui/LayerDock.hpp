@@ -36,6 +36,9 @@ public:
 signals:
     void groupSelectionChanged(bool groupSelected);
 
+protected:
+    bool event(QEvent *event) override;
+
 private:
     void buildContent();
     void connectControls();

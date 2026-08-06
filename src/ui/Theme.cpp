@@ -6,11 +6,15 @@
 #include <QApplication>
 #include <QFont>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QPalette>
+#include <QScreen>
 #include <QSettings>
 #include <QStringList>
 #include <QStyleFactory>
 #include <QWidget>
+
+#include <algorithm>
 
 namespace ugurugu
 {
@@ -19,6 +23,35 @@ namespace
 {
 
 constexpr auto accentColorKey = "appearance/accentColor";
+
+// Hangul and kana lose the strokes that separate them below this size, and
+// the bundled font covers both scripts, so no text step goes under it however
+// small the system font is.
+constexpr qreal minimumTextPixels = 11.0;
+
+qreal textRoleRatio(Theme::TextRole role)
+{
+    switch (role)
+    {
+    case Theme::TextRole::Title:
+        return 1.0;
+    case Theme::TextRole::Label:
+        return 0.92;
+    case Theme::TextRole::Caption:
+        return 0.85;
+    }
+    return 1.0;
+}
+
+// Point sizes only become pixels through the logical resolution, which Qt
+// reports as 96 on Windows and 72 on macOS. Reading it keeps one written
+// minimum from meaning two different sizes on the two platforms.
+qreal pointsPerDeviceIndependentPixel()
+{
+    const QScreen *screen = QGuiApplication::primaryScreen();
+    const qreal dotsPerInch = screen ? screen->logicalDotsPerInch() : 96.0;
+    return dotsPerInch > 0.0 ? 72.0 / dotsPerInch : 0.75;
+}
 
 QColor &activeAccent()
 {
@@ -113,6 +146,37 @@ QColor Theme::defaultAccent()
     return QColor(0xFF, 0xC9, 0x4A);
 }
 
+QFont Theme::scaledFont(const QFont &base, TextRole role)
+{
+    const qreal ratio = textRoleRatio(role);
+    QFont derived = base;
+    if (base.pixelSize() > 0)
+    {
+        derived.setPixelSize(
+            qRound(std::max(minimumTextPixels, base.pixelSize() * ratio)));
+        return derived;
+    }
+    const qreal minimumPoints =
+        minimumTextPixels * pointsPerDeviceIndependentPixel();
+    derived.setPointSizeF(std::max(minimumPoints, base.pointSizeF() * ratio));
+    return derived;
+}
+
+int Theme::fontPixelSize(TextRole role)
+{
+    const QFont derived = scaledFont(QApplication::font(), role);
+    if (derived.pixelSize() > 0)
+    {
+        return derived.pixelSize();
+    }
+    return qRound(derived.pointSizeF() / pointsPerDeviceIndependentPixel());
+}
+
+int Theme::minimumTextPixelSize()
+{
+    return qRound(minimumTextPixels);
+}
+
 void Theme::apply(QApplication &application)
 {
     activeAccent() = storedAccent();
@@ -182,7 +246,7 @@ QToolBar QLabel {
 }
 QLabel[fieldLabel="true"] {
     color: %MUTED%;
-    font-size: 10px;
+    font-size: %CAPTIONSIZE%;
     font-weight: 600;
     letter-spacing: 1px;
 }
@@ -218,7 +282,7 @@ QToolButton[categoryTab="true"] {
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 3px 9px;
-    font-size: 11px;
+    font-size: %LABELSIZE%;
     font-weight: 600;
 }
 QToolButton[categoryTab="true"]:hover {
@@ -367,7 +431,7 @@ QWidget#TimelineBar QLabel {
 QLabel#LayerDockTitle {
     background: %CHROME%;
     color: %MUTED%;
-    font-size: 10px;
+    font-size: %CAPTIONSIZE%;
     font-weight: 600;
     letter-spacing: 1px;
     padding: 9px 12px;
@@ -377,7 +441,13 @@ QWidget#LayerDockBody {
 }
 )");
 
+    // Resolved after the application font is in place, because the text steps
+    // are read back off it.
     QString resolved = sheet;
+    resolved.replace(QStringLiteral("%LABELSIZE%"),
+        QStringLiteral("%1px").arg(fontPixelSize(TextRole::Label)));
+    resolved.replace(QStringLiteral("%CAPTIONSIZE%"),
+        QStringLiteral("%1px").arg(fontPixelSize(TextRole::Caption)));
     resolved.replace(QStringLiteral("%CHROME%"), chromeBackground().name());
     resolved.replace(QStringLiteral("%STATUS%"), statusBackground().name());
     resolved.replace(QStringLiteral("%BASE%"), canvasBackground().name());

@@ -24,6 +24,7 @@ public:
     QString presetId() const;
     void setPreviewFrame(int frame);
     QSize sizeHint() const override;
+    bool event(QEvent *event) override;
 
 protected:
     void paintEvent(QPaintEvent *event) override;

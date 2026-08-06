@@ -1877,165 +1877,165 @@
 <context>
     <name>ugurugu::LayerDock</name>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="114"/>
-        <location filename="../src/ui/LayerDock.cpp" line="145"/>
+        <location filename="../src/ui/LayerDock.cpp" line="115"/>
+        <location filename="../src/ui/LayerDock.cpp" line="146"/>
         <source>Layers</source>
         <translation>레이어</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="158"/>
+        <location filename="../src/ui/LayerDock.cpp" line="159"/>
         <source>Add layer</source>
         <translation>레이어 추가</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="172"/>
+        <location filename="../src/ui/LayerDock.cpp" line="173"/>
         <source>Duplicate layer</source>
         <translation>레이어 복제</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="178"/>
-        <location filename="../src/ui/LayerDock.cpp" line="808"/>
+        <location filename="../src/ui/LayerDock.cpp" line="179"/>
+        <location filename="../src/ui/LayerDock.cpp" line="809"/>
         <source>Merge with layer below</source>
         <translation>아래 레이어와 병합</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="184"/>
+        <location filename="../src/ui/LayerDock.cpp" line="185"/>
         <source>Delete layer</source>
         <translation>레이어 삭제</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="190"/>
+        <location filename="../src/ui/LayerDock.cpp" line="191"/>
         <source>Move layer up</source>
         <translation>레이어 위로 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="196"/>
+        <location filename="../src/ui/LayerDock.cpp" line="197"/>
         <source>Move layer down</source>
         <translation>레이어 아래로 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="248"/>
+        <location filename="../src/ui/LayerDock.cpp" line="249"/>
         <source>OPACITY</source>
         <translation>불투명도</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="814"/>
+        <location filename="../src/ui/LayerDock.cpp" line="815"/>
         <source>Select a paint layer to merge</source>
         <translation>병합할 페인트 레이어를 선택하세요</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="817"/>
+        <location filename="../src/ui/LayerDock.cpp" line="818"/>
         <source>No paint layer is directly below</source>
         <translation>바로 아래에 페인트 레이어가 없습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="820"/>
+        <location filename="../src/ui/LayerDock.cpp" line="821"/>
         <source>Both layers must use matching safe properties</source>
         <translation>두 레이어가 동일한 안전 속성을 사용해야 합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="824"/>
+        <location filename="../src/ui/LayerDock.cpp" line="825"/>
         <source>This layer resizes the canvas or erased merged artwork, so merging would change the picture</source>
         <translation>이 레이어는 캔버스 크기를 바꾸거나 합쳐진 그림을 지운 적이 있어 병합하면 그림이 달라집니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="828"/>
+        <location filename="../src/ui/LayerDock.cpp" line="829"/>
         <source>The layers use incompatible canvas histories</source>
         <translation>레이어의 캔버스 기록이 서로 호환되지 않습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="831"/>
+        <location filename="../src/ui/LayerDock.cpp" line="832"/>
         <source>The merged layer would exceed the stroke limit</source>
         <translation>병합한 레이어가 선 개수 한도를 초과합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="1204"/>
+        <location filename="../src/ui/LayerDock.cpp" line="1221"/>
         <source>Move layer</source>
         <translation>레이어 이동</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="206"/>
+        <location filename="../src/ui/LayerDock.cpp" line="207"/>
         <source>BLEND MODE</source>
         <translation>합성 모드</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="210"/>
+        <location filename="../src/ui/LayerDock.cpp" line="211"/>
         <source>Layer blend mode</source>
         <translation>레이어 합성 모드</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="85"/>
+        <location filename="../src/ui/LayerDock.cpp" line="86"/>
         <source>Normal</source>
         <translation>일반</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="77"/>
+        <location filename="../src/ui/LayerDock.cpp" line="78"/>
         <source>Multiply</source>
         <translation>곱하기</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="79"/>
+        <location filename="../src/ui/LayerDock.cpp" line="80"/>
         <source>Screen</source>
         <translation>스크린</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="81"/>
+        <location filename="../src/ui/LayerDock.cpp" line="82"/>
         <source>Overlay</source>
         <translation>오버레이</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="500"/>
-        <location filename="../src/ui/LayerDock.cpp" line="899"/>
+        <location filename="../src/ui/LayerDock.cpp" line="501"/>
+        <location filename="../src/ui/LayerDock.cpp" line="900"/>
         <source>%1%</source>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="164"/>
+        <location filename="../src/ui/LayerDock.cpp" line="165"/>
         <source>Add group containing the selected layer</source>
         <translation>선택한 레이어를 포함하는 그룹 추가</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="222"/>
+        <location filename="../src/ui/LayerDock.cpp" line="223"/>
         <source>GROUP</source>
         <translation>그룹</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="226"/>
+        <location filename="../src/ui/LayerDock.cpp" line="227"/>
         <source>Parent layer group</source>
         <translation>상위 레이어 그룹</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="231"/>
+        <location filename="../src/ui/LayerDock.cpp" line="232"/>
         <source>Clip to layer below</source>
         <translation>아래 레이어에 클리핑</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="237"/>
+        <location filename="../src/ui/LayerDock.cpp" line="238"/>
         <source>Reference layer</source>
         <translation>참조 레이어</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="240"/>
+        <location filename="../src/ui/LayerDock.cpp" line="241"/>
         <source>Use this layer when a selection tool references marked layers</source>
         <translation>표시한 레이어를 참조하는 선택 도구에서 이 레이어 사용</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="234"/>
+        <location filename="../src/ui/LayerDock.cpp" line="235"/>
         <source>Limit this layer to the opacity of the base layer below it</source>
         <translation>이 레이어를 아래 기준 레이어의 불투명 영역 안에 표시합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="849"/>
+        <location filename="../src/ui/LayerDock.cpp" line="850"/>
         <source>No group</source>
         <translation>그룹 없음</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="694"/>
+        <location filename="../src/ui/LayerDock.cpp" line="695"/>
         <source>Layer is visible</source>
         <translation>레이어가 표시되어 있습니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayerDock.cpp" line="694"/>
+        <location filename="../src/ui/LayerDock.cpp" line="695"/>
         <source>Layer is hidden</source>
         <translation>레이어가 숨겨져 있습니다</translation>
     </message>

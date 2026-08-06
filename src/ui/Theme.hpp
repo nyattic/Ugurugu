@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFont>
 
 class QApplication;
 
@@ -12,6 +13,17 @@ namespace ugurugu
 
 struct Theme final
 {
+    // Steps below the system interface font. Every smaller label in the app
+    // names one of these instead of a pixel count, because a pixel count
+    // ignores the Windows text size and macOS display settings that the
+    // system font already carries.
+    enum class TextRole
+    {
+        Title,
+        Label,
+        Caption,
+    };
+
     static QColor chromeBackground();
     static QColor statusBackground();
     static QColor canvasBackground();
@@ -27,6 +39,10 @@ struct Theme final
     static QColor accentPressed();
     static QColor accentText();
     static QColor defaultAccent();
+
+    static QFont scaledFont(const QFont &base, TextRole role);
+    static int fontPixelSize(TextRole role);
+    static int minimumTextPixelSize();
 
     static void apply(QApplication &application);
     static void setAccent(QApplication &application, const QColor &color);

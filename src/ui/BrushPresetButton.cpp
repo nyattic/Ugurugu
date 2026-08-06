@@ -7,6 +7,8 @@
 #include "render/RenderEngine.hpp"
 #include "ui/Theme.hpp"
 
+#include <QEvent>
+#include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -21,18 +23,39 @@ namespace
 {
 
 constexpr int cardWidth = 132;
-constexpr int cardHeight = 64;
 constexpr int previewWidth = 116;
 constexpr int previewHeight = 36;
-constexpr qreal previewScale = 2.0;
+constexpr int previewTop = 5;
+constexpr int previewGap = 3;
+constexpr int nameBandFloor = 16;
+constexpr int cardBottomPadding = 4;
 constexpr qreal previewWobbleAmount = 2.2;
 
-Stroke previewStroke(const BrushPreset &preset)
+QFont nameFont(const QFont &base)
+{
+    return Theme::scaledFont(base, Theme::TextRole::Label);
+}
+
+int nameBandHeight(const QFont &base)
+{
+    return std::max(nameBandFloor, QFontMetrics(nameFont(base)).height());
+}
+
+int cardHeight(const QFont &base)
+{
+    return previewTop + previewHeight + previewGap + nameBandHeight(base)
+           + cardBottomPadding;
+}
+
+// The preview is rendered straight into the pixels the screen has, so the
+// stroke geometry is built at that same scale rather than at a fixed factor
+// that only lines up on a doubled display.
+Stroke previewStroke(const BrushPreset &preset, qreal scale)
 {
     Stroke stroke;
     stroke.seed = qHash(preset.id);
     stroke.color = Theme::textPrimary();
-    stroke.width = std::min(preset.defaultSize, 16.0) * previewScale;
+    stroke.width = std::min(preset.defaultSize, 16.0) * scale;
     stroke.brush = preset.settings;
 
     constexpr int sampleCount = 26;
@@ -41,10 +64,9 @@ Stroke previewStroke(const BrushPreset &preset)
     {
         const qreal t = static_cast<qreal>(index) / (sampleCount - 1);
         StrokePoint point;
-        point.position = QPointF(
-            (10.0 + t * (previewWidth - 20.0)) * previewScale,
+        point.position = QPointF((10.0 + t * (previewWidth - 20.0)) * scale,
             (previewHeight * 0.5 - std::sin(t * std::numbers::pi * 1.5) * 5.0)
-                * previewScale);
+                * scale);
         point.pressure = 0.2 + 0.8 * std::sin(t * std::numbers::pi);
         stroke.points.append(point);
     }
@@ -84,7 +106,20 @@ void BrushPresetButton::setPreviewFrame(int frame)
 
 QSize BrushPresetButton::sizeHint() const
 {
-    return QSize(cardWidth, cardHeight);
+    return QSize(cardWidth, cardHeight(font()));
+}
+
+bool BrushPresetButton::event(QEvent *event)
+{
+    // Cached previews hold pixels for one screen scale. Moving the window to a
+    // display with another one has to throw them away, or the cards keep
+    // showing a resampled copy of the old rendering.
+    if (event->type() == QEvent::DevicePixelRatioChange)
+    {
+        m_frames.fill(QImage());
+        update();
+    }
+    return QAbstractButton::event(event);
 }
 
 void BrushPresetButton::paintEvent(QPaintEvent *event)
@@ -107,18 +142,20 @@ void BrushPresetButton::paintEvent(QPaintEvent *event)
         isChecked() ? QPen(Theme::accent(), 1.5) : QPen(Theme::border(), 1.0));
     painter.drawPath(card);
 
-    painter.drawImage(
-        QPointF((width() - previewWidth) * 0.5, 5.0), frameImage(m_frame));
+    painter.drawImage(QPointF((width() - previewWidth) * 0.5, previewTop),
+        frameImage(m_frame));
 
-    QFont nameFont = font();
-    nameFont.setPixelSize(11);
-    painter.setFont(nameFont);
+    const int nameHeight = nameBandHeight(font());
+    painter.setFont(nameFont(font()));
     painter.setPen(isChecked() ? Theme::textPrimary() : Theme::textMuted());
     const QString name = painter.fontMetrics().elidedText(
         BrushPresetCatalog::displayName(*m_preset),
         Qt::ElideRight,
         width() - 12);
-    painter.drawText(QRectF(6.0, height() - 20.0, width() - 12.0, 16.0),
+    painter.drawText(QRectF(6.0,
+                         height() - cardBottomPadding - nameHeight,
+                         width() - 12.0,
+                         nameHeight),
         Qt::AlignHCenter | Qt::AlignVCenter,
         name);
 }
@@ -131,19 +168,20 @@ const QImage &BrushPresetButton::frameImage(int frame)
         return cached;
     }
 
+    const qreal scale = devicePixelRatioF();
     Document document;
-    document.size = QSize(qRound(previewWidth * previewScale),
-        qRound(previewHeight * previewScale));
+    document.size =
+        QSize(qRound(previewWidth * scale), qRound(previewHeight * scale));
     document.background = QColor(0, 0, 0, 0);
     document.animationFrames = previewFrameCount;
     document.wobbleAmount = previewWobbleAmount;
 
     Layer layer;
-    layer.strokes.append(previewStroke(*m_preset));
+    layer.strokes.append(previewStroke(*m_preset, scale));
     document.layers.append(layer);
 
     cached = RenderEngine::render(document, frame);
-    cached.setDevicePixelRatio(previewScale);
+    cached.setDevicePixelRatio(scale);
     return cached;
 }
 

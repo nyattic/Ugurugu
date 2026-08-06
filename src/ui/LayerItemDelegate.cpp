@@ -8,13 +8,17 @@
 #include "ui/Icons.hpp"
 #include "ui/Theme.hpp"
 
+#include <QFontMetrics>
 #include <QLineEdit>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QWidget>
 
 #include <algorithm>
+#include <map>
+#include <tuple>
 
 namespace ugurugu
 {
@@ -22,43 +26,55 @@ namespace ugurugu
 namespace
 {
 
-constexpr int rowHeight = 56;
+constexpr int rowHeightFloor = 56;
 constexpr int rowPadding = 8;
 constexpr int accentBarWidth = 3;
 constexpr int thumbnailWidth = 48;
 constexpr int thumbnailHeight = 32;
 constexpr int eyeSize = 20;
 constexpr int wobbleSize = 18;
-constexpr int metaHeight = 15;
-constexpr int metaFontPixelSize = 10;
+constexpr int metaHeightFloor = 15;
 constexpr int depthIndent = 14;
 
-const QPixmap &eyeOpenPixmap()
+QFont metaFont(const QFont &base)
 {
-    static const QPixmap pixmap = Icons::pixmap(
-        IconGlyph::EyeOpen, eyeSize, Theme::textMuted(), 0.0, 2.0);
-    return pixmap;
+    return Theme::scaledFont(base, Theme::TextRole::Caption);
 }
 
-const QPixmap &eyeClosedPixmap()
+int metaHeight(const QFont &base)
 {
-    static const QPixmap pixmap = Icons::pixmap(
-        IconGlyph::EyeClosed, eyeSize, Theme::textDisabled(), 0.0, 2.0);
-    return pixmap;
+    return std::max(metaHeightFloor, QFontMetrics(metaFont(base)).height());
 }
 
-const QPixmap &wobbleOnPixmap()
+int rowHeight(const QFont &base)
 {
-    static const QPixmap pixmap =
-        Icons::pixmap(IconGlyph::Wobble, wobbleSize, Theme::accent(), 0.0, 2.0);
-    return pixmap;
+    return std::max(rowHeightFloor,
+        2 * rowPadding + metaHeight(base) + QFontMetrics(base).height());
 }
 
-const QPixmap &wobbleOffPixmap()
+// One entry per screen scale rather than a single doubled rendering, so a
+// display that is not exactly 2x draws the icon at its own pixels instead of
+// resampling one built for another screen. Keying on the colour also retires
+// the entries a change of accent colour has made stale.
+const QPixmap &glyphPixmap(
+    IconGlyph glyph, int size, const QColor &color, qreal ratio)
 {
-    static const QPixmap pixmap = Icons::pixmap(
-        IconGlyph::Wobble, wobbleSize, Theme::textDisabled(), 0.0, 2.0);
-    return pixmap;
+    using Key = std::tuple<int, int, QRgb, int>;
+    static std::map<Key, QPixmap> cache;
+    const Key key{
+        static_cast<int>(glyph), size, color.rgba(), qRound(ratio * 1000.0)};
+    const auto entry = cache.find(key);
+    if (entry != cache.end())
+    {
+        return entry->second;
+    }
+    return cache.emplace(key, Icons::pixmap(glyph, size, color, 0.0, ratio))
+        .first->second;
+}
+
+qreal ratioFor(const QStyleOptionViewItem &option)
+{
+    return option.widget ? option.widget->devicePixelRatioF() : 1.0;
 }
 
 }
@@ -103,17 +119,19 @@ QRect LayerItemDelegate::textColumnRect(const QRect &rowRect, int depth) const
         rowRect.height() - 8);
 }
 
-QRect LayerItemDelegate::metaRect(const QRect &rowRect, int depth) const
+QRect LayerItemDelegate::metaRect(
+    const QRect &rowRect, int depth, const QFont &font) const
 {
     QRect column = textColumnRect(rowRect, depth);
-    column.setHeight(metaHeight);
+    column.setHeight(metaHeight(font));
     return column;
 }
 
-QRect LayerItemDelegate::nameRect(const QRect &rowRect, int depth) const
+QRect LayerItemDelegate::nameRect(
+    const QRect &rowRect, int depth, const QFont &font) const
 {
     QRect column = textColumnRect(rowRect, depth);
-    column.setTop(column.top() + metaHeight);
+    column.setTop(column.top() + metaHeight(font));
     return column;
 }
 
@@ -175,26 +193,25 @@ void LayerItemDelegate::paint(QPainter *painter,
         index.data(LayerItemRoles::BlendModeName).toString();
     if (!blendModeName.isEmpty())
     {
-        QFont metaFont = option.font;
-        metaFont.setPixelSize(metaFontPixelSize);
+        const QFont meta = metaFont(option.font);
         painter->save();
-        painter->setFont(metaFont);
+        painter->setFont(meta);
         painter->setPen(Theme::textMuted());
-        const QRect meta = metaRect(option.rect, depth);
+        const QRect metaBand = metaRect(option.rect, depth, option.font);
         const QString metaText =
             QStringLiteral("%1 %  %2")
                 .arg(index.data(LayerItemRoles::OpacityPercent).toInt())
                 .arg(blendModeName);
-        painter->drawText(meta,
+        painter->drawText(metaBand,
             Qt::AlignLeft | Qt::AlignVCenter,
-            QFontMetrics(metaFont).elidedText(
-                metaText, Qt::ElideRight, meta.width()));
+            QFontMetrics(meta).elidedText(
+                metaText, Qt::ElideRight, metaBand.width()));
         painter->restore();
     }
 
     painter->setPen(visible ? Theme::textPrimary() : Theme::textMuted());
     const QString name = index.data(Qt::DisplayRole).toString();
-    QRect textRect = nameRect(option.rect, depth);
+    QRect textRect = nameRect(option.rect, depth, option.font);
     if (group || clipped || reference)
     {
         QStringList badges;
@@ -225,14 +242,21 @@ void LayerItemDelegate::paint(QPainter *painter,
         option.fontMetrics.elidedText(name, Qt::ElideRight, textRect.width()));
 
     painter->setOpacity(1.0);
+    const qreal ratio = ratioFor(option);
     if (index.data(LayerItemRoles::WobbleToggleable).toBool())
     {
         const bool stopped = index.data(LayerItemRoles::WobbleStopped).toBool();
         painter->drawPixmap(wobbleRect(option.rect),
-            stopped ? wobbleOffPixmap() : wobbleOnPixmap());
+            glyphPixmap(IconGlyph::Wobble,
+                wobbleSize,
+                stopped ? Theme::textDisabled() : Theme::accent(),
+                ratio));
     }
-    const QPixmap &eye = visible ? eyeOpenPixmap() : eyeClosedPixmap();
-    painter->drawPixmap(eyeRect(option.rect), eye);
+    painter->drawPixmap(eyeRect(option.rect),
+        glyphPixmap(visible ? IconGlyph::EyeOpen : IconGlyph::EyeClosed,
+            eyeSize,
+            visible ? Theme::textMuted() : Theme::textDisabled(),
+            ratio));
 
     painter->restore();
 }
@@ -241,7 +265,7 @@ QSize LayerItemDelegate::sizeHint(
     const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     Q_UNUSED(index);
-    return QSize(option.rect.width(), rowHeight);
+    return QSize(option.rect.width(), rowHeight(option.font));
 }
 
 bool LayerItemDelegate::editorEvent(QEvent *event,
@@ -297,7 +321,7 @@ void LayerItemDelegate::updateEditorGeometry(QWidget *editor,
 {
     Q_UNUSED(index);
     const int depth = index.data(LayerItemRoles::Depth).toInt();
-    QRect rect = nameRect(option.rect, depth);
+    QRect rect = nameRect(option.rect, depth, option.font);
     rect.adjust(-4, 6, 4, -6);
     editor->setGeometry(rect);
 }

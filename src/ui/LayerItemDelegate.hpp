@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QFont>
 #include <QStyledItemDelegate>
 
 namespace ugurugu
@@ -56,8 +57,8 @@ private:
     QRect eyeRect(const QRect &rowRect) const;
     QRect wobbleRect(const QRect &rowRect) const;
     QRect textColumnRect(const QRect &rowRect, int depth) const;
-    QRect metaRect(const QRect &rowRect, int depth) const;
-    QRect nameRect(const QRect &rowRect, int depth) const;
+    QRect metaRect(const QRect &rowRect, int depth, const QFont &font) const;
+    QRect nameRect(const QRect &rowRect, int depth, const QFont &font) const;
 };
 
 }

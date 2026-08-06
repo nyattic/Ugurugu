@@ -8,7 +8,9 @@
 
 #include <QFutureWatcher>
 #include <QImageReader>
+#include <QScopeGuard>
 #include <QSemaphore>
+#include <QStyleOptionViewItem>
 #include <QTabBar>
 #include <QThreadPool>
 #include <QToolBar>
@@ -1478,6 +1480,97 @@ private slots:
         Theme::setAccent(*qApp, Theme::defaultAccent());
     }
 
+    // Small labels used to be pinned to pixel counts, which ignored the
+    // Windows text size and macOS display settings the system font carries.
+    // They now hang off that font, and these are the properties that keep
+    // them readable while they do.
+    void derivesSmallTextFromTheSystemFont()
+    {
+        const QFont original = QApplication::font();
+        auto restore = qScopeGuard(
+            [&original]()
+            {
+                QApplication::setFont(original);
+            });
+
+        QFont base = original;
+        base.setPointSizeF(9.0);
+        const qreal title =
+            Theme::scaledFont(base, Theme::TextRole::Title).pointSizeF();
+        const qreal label =
+            Theme::scaledFont(base, Theme::TextRole::Label).pointSizeF();
+        const qreal caption =
+            Theme::scaledFont(base, Theme::TextRole::Caption).pointSizeF();
+        QVERIFY(title >= label);
+        QVERIFY(label >= caption);
+        QCOMPARE(title, base.pointSizeF());
+
+        // Weight and family have to survive the step, or the bundled font
+        // stops being the one that draws these labels.
+        QFont styled = base;
+        styled.setFamilies({QStringLiteral("Courier New")});
+        styled.setWeight(QFont::DemiBold);
+        const QFont stepped =
+            Theme::scaledFont(styled, Theme::TextRole::Caption);
+        QCOMPARE(stepped.families(), styled.families());
+        QCOMPARE(stepped.weight(), QFont::DemiBold);
+
+        QApplication::setFont(base);
+        const int captionAtDefault =
+            Theme::fontPixelSize(Theme::TextRole::Caption);
+        QVERIFY(captionAtDefault >= Theme::minimumTextPixelSize());
+
+        // A system font the user has enlarged has to carry the small steps up
+        // with it. That is the whole point of deriving them.
+        QFont enlarged = base;
+        enlarged.setPointSizeF(base.pointSizeF() * 2.0);
+        QApplication::setFont(enlarged);
+        QVERIFY(
+            Theme::fontPixelSize(Theme::TextRole::Caption) > captionAtDefault);
+
+        // A very small one must not drag them under the size at which Hangul
+        // and kana lose the strokes that tell them apart.
+        QFont tiny = base;
+        tiny.setPointSizeF(4.0);
+        QApplication::setFont(tiny);
+        QCOMPARE(Theme::fontPixelSize(Theme::TextRole::Caption),
+            Theme::minimumTextPixelSize());
+        QCOMPARE(Theme::fontPixelSize(Theme::TextRole::Label),
+            Theme::minimumTextPixelSize());
+    }
+
+    // Cards and rows used to reserve a fixed number of pixels for text that
+    // was itself fixed. Now that the text follows the system font, the space
+    // it is given has to follow it too.
+    void growsTextLayoutsWithTheSystemFont()
+    {
+        BrushPresetButton brush(BrushPresetCatalog::defaultPreset());
+        EraserPresetButton eraser(EraserPresetCatalog::defaultPreset());
+        LayerItemDelegate delegate;
+        QStyleOptionViewItem option;
+        option.rect = QRect(0, 0, 200, 56);
+
+        QFont small = brush.font();
+        small.setPointSizeF(4.0);
+        brush.setFont(small);
+        eraser.setFont(small);
+        option.font = small;
+        // Floors hold these at the sizes they were drawn against, so a small
+        // system font can never squeeze the layout below what it used to be.
+        QVERIFY(brush.sizeHint().height() >= 64);
+        QVERIFY(eraser.sizeHint().height() >= 64);
+        QVERIFY(delegate.sizeHint(option, QModelIndex()).height() >= 56);
+
+        QFont large = brush.font();
+        large.setPointSizeF(28.0);
+        brush.setFont(large);
+        eraser.setFont(large);
+        option.font = large;
+        QVERIFY(brush.sizeHint().height() > 64);
+        QVERIFY(eraser.sizeHint().height() > 64);
+        QVERIFY(delegate.sizeHint(option, QModelIndex()).height() > 56);
+    }
+
     // The About dialog is where the program states its copyright, the license
     // it is offered under and the absence of a warranty, so each of those has
     // to survive edits to the notice.
@@ -1652,10 +1745,21 @@ private slots:
 
     void unlocksImageSizeDialogForExtremeAspectRatios()
     {
+        QCOMPARE(LayerThumbnailRenderer::renderSize(QSize(1, 4096), 2.0),
+            QSize(1, 64));
+        QCOMPARE(LayerThumbnailRenderer::renderSize(QSize(4096, 1), 2.0),
+            QSize(96, 1));
+        // A thumbnail is rendered for the pixels the screen actually has, so
+        // a fractional scale asks for a fractional multiple of the band and
+        // an extreme aspect ratio still keeps its one pixel side.
+        QCOMPARE(LayerThumbnailRenderer::renderSize(QSize(1, 4096), 1.5),
+            QSize(1, 48));
+        QCOMPARE(LayerThumbnailRenderer::renderSize(QSize(4096, 1), 1.5),
+            QSize(72, 1));
+        QCOMPARE(LayerThumbnailRenderer::renderSize(QSize(400, 400), 1.0),
+            QSize(32, 32));
         QCOMPARE(
-            LayerThumbnailRenderer::renderSize(QSize(1, 4096)), QSize(1, 64));
-        QCOMPARE(
-            LayerThumbnailRenderer::renderSize(QSize(4096, 1)), QSize(96, 1));
+            LayerThumbnailRenderer::renderSize(QSize(400, 400), 0.0), QSize());
         QCOMPARE(PreviewRenderPolicy::renderSize(QSize(4096, 4096), 16.0),
             QSize(4096, 4096));
 

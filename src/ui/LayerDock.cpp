@@ -18,6 +18,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QEvent>
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
@@ -963,6 +964,9 @@ void LayerDock::regenerateThumbnails()
     }
     const quint64 revision = m_thumbnailRevisions.value(nextId);
     const Document snapshot = document;
+    // Read on this thread: the worker has no widget to ask, and the answer has
+    // to be the one the finished pixmap is tagged with.
+    const qreal ratio = devicePixelRatioF();
     m_thumbnailRendering = true;
     // QObject parenting retains the watcher until its finished callback queues
     // deleteLater(); the analyzer does not model either Qt ownership mechanism.
@@ -971,7 +975,7 @@ void LayerDock::regenerateThumbnails()
     connect(watcher,
         &QFutureWatcher<QImage>::finished,
         this,
-        [this, watcher, nextId, revision]()
+        [this, watcher, nextId, revision, ratio]()
         {
             const QImage image = watchedFutureResult(*watcher);
             watcher->deleteLater();
@@ -980,7 +984,7 @@ void LayerDock::regenerateThumbnails()
                 && m_controller->document().layer(nextId) && !image.isNull())
             {
                 QPixmap pixmap = QPixmap::fromImage(image);
-                pixmap.setDevicePixelRatio(2.0);
+                pixmap.setDevicePixelRatio(ratio);
                 m_thumbnails.insert(nextId, std::move(pixmap));
                 QScopedValueRollback syncing(m_syncing, true);
                 QSignalBlocker blocker(m_layerList);
@@ -1003,15 +1007,28 @@ void LayerDock::regenerateThumbnails()
             }
         });
     watcher->setFuture(QtConcurrent::run(
-        [snapshot, nextId]()
+        [snapshot, nextId, ratio]()
         {
             const Layer *snapshotLayer = snapshot.layer(nextId);
             return snapshotLayer ? LayerThumbnailRenderer::renderImage(
-                                       snapshot, *snapshotLayer)
+                                       snapshot, *snapshotLayer, ratio)
                                  : QImage();
         }));
 }
 // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
+
+bool LayerDock::event(QEvent *event)
+{
+    // Thumbnails already on screen hold pixels for the scale of the display
+    // they were rendered for. Following the window to another one means
+    // rendering them again rather than letting Qt resample the old ones.
+    if (event->type() == QEvent::DevicePixelRatioChange)
+    {
+        m_thumbnails.clear();
+        scheduleAllThumbnails();
+    }
+    return QDockWidget::event(event);
+}
 
 void LayerDock::scheduleAllThumbnails()
 {
