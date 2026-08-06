@@ -62,6 +62,13 @@ public:
         window.writeAutosave();
     }
 
+    // Unlike requestAutosave, leaves the pending state to whatever the
+    // document signals armed, so a test can cover that wiring.
+    static void writeAutosave(MainWindow &window)
+    {
+        window.writeAutosave();
+    }
+
     static void setAutosaveWriterSuspended(MainWindow &window, bool suspended)
     {
         window.m_recoveryWriter.setSuspendedForTesting(suspended);

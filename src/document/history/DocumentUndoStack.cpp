@@ -260,26 +260,31 @@ void DocumentUndoStack::notifyHistoryState()
     {
         return;
     }
-    const bool undoAvailable = canUndo();
-    const bool redoAvailable = canRedo();
-    const QString nextUndoText = undoText();
-    const QString nextRedoText = redoText();
-    if (m_impl->notifiedCanUndo != undoAvailable)
+    // A slot may move history again from inside any of these signals, which
+    // runs this notification to completion before the outer one resumes. Each
+    // value is therefore read immediately before it is published: a snapshot
+    // taken up front would resume as the newest state and publish - and record
+    // as published - the state history has already left.
+    if (const bool undoAvailable = canUndo();
+        m_impl->notifiedCanUndo != undoAvailable)
     {
         m_impl->notifiedCanUndo = undoAvailable;
         emit canUndoChanged(undoAvailable);
     }
-    if (m_impl->notifiedCanRedo != redoAvailable)
+    if (const bool redoAvailable = canRedo();
+        m_impl->notifiedCanRedo != redoAvailable)
     {
         m_impl->notifiedCanRedo = redoAvailable;
         emit canRedoChanged(redoAvailable);
     }
-    if (m_impl->notifiedUndoText != nextUndoText)
+    if (const QString nextUndoText = undoText();
+        m_impl->notifiedUndoText != nextUndoText)
     {
         m_impl->notifiedUndoText = nextUndoText;
         emit undoTextChanged(nextUndoText);
     }
-    if (m_impl->notifiedRedoText != nextRedoText)
+    if (const QString nextRedoText = redoText();
+        m_impl->notifiedRedoText != nextRedoText)
     {
         m_impl->notifiedRedoText = nextRedoText;
         emit redoTextChanged(nextRedoText);

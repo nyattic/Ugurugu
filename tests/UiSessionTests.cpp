@@ -236,6 +236,45 @@ private slots:
         QVERIFY(MainWindowTestAccess::flushAutosave(window));
     }
 
+    void documentEditsArmTheAutosaveThroughTheDocumentSignal()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString recoveryPath =
+            directory.filePath(QStringLiteral("recovery.ugu"));
+        qputenv("UGURUGU_RECOVERY_PATH", recoveryPath.toUtf8());
+
+        MainWindow window;
+        DocumentController &controller =
+            MainWindowTestAccess::controller(window);
+        // An unmodified document has nothing to autosave, so the pending state
+        // is settled from a first edit rather than from a fresh window.
+        controller.addLayer();
+        MainWindowTestAccess::requestAutosave(window);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+        QVERIFY(!MainWindowTestAccess::autosavePending(window));
+
+        // The arming itself is the contract under test, so nothing here may
+        // set the pending state on the window's behalf.
+        controller.addLayer();
+        QVERIFY2(MainWindowTestAccess::autosavePending(window),
+            "an edit did not arm the autosave through documentChanged");
+
+        const int layerCount =
+            static_cast<int>(controller.document().layers.size());
+        MainWindowTestAccess::writeAutosave(window);
+        QVERIFY(MainWindowTestAccess::flushAutosave(window));
+        QVERIFY(!MainWindowTestAccess::autosavePending(window));
+        QString error;
+        const std::optional<RecoveryStore::Snapshot> snapshot =
+            RecoveryStore::load(&error);
+        QVERIFY2(snapshot.has_value(), qPrintable(error));
+        QCOMPARE(
+            static_cast<int>(snapshot->document.layers.size()), layerCount);
+    }
+
     void recoveryWriteReportsFailureWhenTheWriteThrows()
     {
         EnvironmentVariableGuard environmentGuard(

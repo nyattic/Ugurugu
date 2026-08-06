@@ -91,6 +91,61 @@ private slots:
         QVERIFY(documentChangedAfterEffect);
     }
 
+    void reentrantHistoryMovementPublishesTheStateItLandedOn()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(64, 64)));
+        const QUuid layerId = controller.document().activeLayerId;
+        for (int index = 0; index < 2; ++index)
+        {
+            Stroke stroke;
+            stroke.width = 4.0;
+            stroke.points = {{QPointF(8.0 + index, 8.0), 1.0},
+                {QPointF(40.0 + index, 40.0), 1.0}};
+            QCOMPARE(controller.addStroke(layerId, std::move(stroke)),
+                DocumentController::AddStrokeResult::Added);
+        }
+        DocumentUndoStack *stack = controller.undoStack();
+        QCOMPARE(stack->count(), 2);
+
+        // Moving history again from inside a history signal is what a shortcut
+        // held down through a slot does; every payload published afterwards
+        // has to describe where history actually ended up.
+        QString lastUndoText;
+        QString lastRedoText;
+        bool reentered = false;
+        connect(stack,
+            &DocumentUndoStack::undoTextChanged,
+            stack,
+            [&lastUndoText](const QString &text)
+            {
+                lastUndoText = text;
+            });
+        connect(stack,
+            &DocumentUndoStack::redoTextChanged,
+            stack,
+            [&lastRedoText](const QString &text)
+            {
+                lastRedoText = text;
+            });
+        connect(stack,
+            &DocumentUndoStack::canRedoChanged,
+            stack,
+            [stack, &reentered](bool)
+            {
+                if (!std::exchange(reentered, true))
+                {
+                    stack->undo();
+                }
+            });
+
+        stack->undo();
+        QVERIFY(reentered);
+        QCOMPARE(stack->index(), 0);
+        QCOMPARE(lastUndoText, stack->undoText());
+        QCOMPARE(lastRedoText, stack->redoText());
+    }
+
     void undoesAndRedoesTransparentBackground()
     {
         DocumentController controller;
