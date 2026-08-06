@@ -98,7 +98,7 @@ void MainWindow::exportImage()
         return;
     }
     const int frame = m_canvas->currentFrame();
-    const Document exportDocument =
+    Document exportDocument =
         m_canvas->displayDocumentWithPendingSelectionTransform();
     const RenderExportMemoryEstimate memoryEstimate =
         RenderExportPolicy::staticImage(exportDocument);

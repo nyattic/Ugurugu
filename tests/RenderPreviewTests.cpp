@@ -216,8 +216,8 @@ private slots:
         QVERIFY(!refresh.outputBounds.isEmpty());
         QVERIFY(!refresh.nativeBounds.isEmpty());
 
-        int filteredStrokes = 0;
-        int fullStrokes = 0;
+        qsizetype filteredStrokes = 0;
+        qsizetype fullStrokes = 0;
         for (const Layer &layer : refresh.filteredDocument.layers)
         {
             filteredStrokes += layer.strokes.size();

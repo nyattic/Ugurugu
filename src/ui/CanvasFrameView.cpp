@@ -92,7 +92,7 @@ void CanvasFrameView::initialize(QRhiCommandBuffer *cb)
     }
 
     m_vertexBuffer.reset(m_rhi->newBuffer(
-        QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 4 * 4 * sizeof(float)));
+        QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, sizeof(float) * 4 * 4));
     m_vertexBuffer->create();
     m_uniformBuffer.reset(m_rhi->newBuffer(
         QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(FrameUniforms)));
