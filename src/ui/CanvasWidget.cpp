@@ -87,7 +87,16 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     connect(m_controller,
         &DocumentController::documentReplaced,
         this,
-        &CanvasWidget::clearSelection);
+        [this]()
+        {
+            // A stroke or lasso that survives the replacement would commit
+            // into the newly loaded document; the layer UUIDs even match when
+            // the same file is reopened. Cancel first: the cancellation may
+            // restore the pre-lasso selection captured from the outgoing
+            // document, and the clear removes that too.
+            cancelActiveInteraction();
+            clearSelection();
+        });
     connect(m_controller,
         &DocumentController::selectionHistoryStateRequested,
         this,

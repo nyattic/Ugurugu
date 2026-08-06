@@ -1020,6 +1020,87 @@ private slots:
         QVERIFY(!history->canRedo());
     }
 
+    void documentReplacementDuringActiveStrokeCancelsStroke()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(200, 200)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        // Same layer UUID as the live document, the way reopening the same
+        // file does; a stroke surviving the boundary would commit cleanly.
+        const Document snapshot = controller.document();
+
+        const auto activeLayerStrokeCount = [&controller]() -> qsizetype
+        {
+            const Document &document = controller.document();
+            const Layer *layer = document.layer(document.activeLayerId);
+            return layer ? layer->strokes.size() : -1;
+        };
+        const auto widgetPoint = [&canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(x, y))
+                .toPoint();
+        };
+
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(40.0, 60.0));
+        QTest::mouseMove(&canvas, widgetPoint(160.0, 60.0), 5);
+        QVERIFY(CanvasWidgetTestAccess::drawing(canvas));
+
+        QVERIFY(controller.loadDocument(snapshot));
+        QVERIFY(!CanvasWidgetTestAccess::drawing(canvas));
+
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(160.0, 60.0));
+        QVERIFY2(activeLayerStrokeCount() == qsizetype(0),
+            qPrintable(QStringLiteral(
+                "release committed the stroke into the replaced document: "
+                "strokes=%1, canUndo=%2")
+                    .arg(activeLayerStrokeCount())
+                    .arg(controller.undoStack()->canUndo())));
+        QVERIFY(!controller.undoStack()->canUndo());
+    }
+
+    void documentReplacementDuringActiveLassoCancelsLasso()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(200, 200)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        const Document snapshot = controller.document();
+        const auto widgetPoint = [&canvas](qreal x, qreal y)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(x, y))
+                .toPoint();
+        };
+
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(40.0, 40.0));
+        QTest::mouseMove(&canvas, widgetPoint(160.0, 40.0), 5);
+        QTest::mouseMove(&canvas, widgetPoint(160.0, 160.0), 5);
+        QVERIFY(CanvasWidgetTestAccess::areaSelectionActive(canvas));
+
+        QVERIFY(controller.loadDocument(snapshot));
+        QVERIFY(!CanvasWidgetTestAccess::areaSelectionActive(canvas));
+
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(160.0, 160.0));
+        QVERIFY(!canvas.hasSelection());
+    }
+
     void deactivationRestoresLassoAndCancelsSelectionMove()
     {
         Document document = Document::createDefault(QSize(100, 100));
