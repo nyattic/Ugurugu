@@ -112,6 +112,7 @@ jobs:
           host: mac
           target: desktop
           arch: clang_64
+          modules: qtshadertools
           cache: true
 
       - name: Install LLVM 22
@@ -185,6 +186,7 @@ jobs:
           host: '${{ matrix.qt-host }}'
           target: desktop
           arch: '${{ matrix.qt-arch }}'
+          modules: qtshadertools
           cache: true
 
       - name: Configure
@@ -266,6 +268,7 @@ jobs:
           host: '${{ matrix.qt-host }}'
           target: desktop
           arch: '${{ matrix.qt-arch }}'
+          modules: qtshadertools
           cache: true
 
       - name: Configure
