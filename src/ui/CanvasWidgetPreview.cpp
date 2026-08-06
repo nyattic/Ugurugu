@@ -739,7 +739,16 @@ void CanvasWidget::invalidateFrames()
     m_editableStrokeLayer = QUuid();
     m_editableStrokeFrame = -1;
     const int frames = std::max(1, m_controller->document().animationFrames);
-    m_currentFrame %= frames;
+    if (const int normalized = m_currentFrame % frames;
+        normalized != m_currentFrame)
+    {
+        // Consumers cache the frame they were last told about. Normalizing in
+        // silence left them correct only because the canvas happens to be the
+        // first documentChanged connection, so everyone else re-read the
+        // document after this had already run.
+        m_currentFrame = normalized;
+        emit currentFrameChanged(m_currentFrame);
+    }
     updateFrameCacheBudget();
     updateTimerInterval();
     notifyZoomChanged();

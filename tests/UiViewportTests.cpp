@@ -478,6 +478,28 @@ private slots:
                           << " ms; remaining frames were warmed asynchronously";
     }
 
+    void shrinkingTheAnimationPublishesTheNormalizedFrame()
+    {
+        Document document = Document::createDefault(QSize(64, 64));
+        document.animationFrames = 8;
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.setAnimating(false);
+        canvas.setCurrentFrame(5);
+        QCOMPARE(canvas.currentFrame(), 5);
+
+        // Whoever is told about the frame keeps it; normalizing in silence
+        // would leave every consumer that is connected ahead of the canvas
+        // holding a frame the document no longer has.
+        QSignalSpy frameChanges(&canvas, &CanvasWidget::currentFrameChanged);
+        controller.setAnimationFrames(3);
+        QCOMPARE(canvas.currentFrame(), 2);
+        QCOMPARE(frameChanges.size(), 1);
+        QCOMPARE(frameChanges.at(0).at(0).toInt(), 2);
+    }
+
     void keepsEveryPreviewSurfaceInsideTheDeclaredBudget()
     {
         const QSize canvasSize(4096, 4096);
