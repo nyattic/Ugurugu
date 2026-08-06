@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #pragma once
 
 #include "app/BackgroundWork.hpp"
@@ -15,6 +18,7 @@
 #include "render/RenderEngine.hpp"
 #include "support/CanvasWidgetTestAccess.hpp"
 #include "support/MainWindowTestAccess.hpp"
+#include "ui/AboutDialog.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BrushPresetButton.hpp"
 #include "ui/BrushSizeRow.hpp"

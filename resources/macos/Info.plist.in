@@ -28,6 +28,8 @@
     <string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 Nyabi (nyattic). Licensed under GPL-3.0-or-later.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>SUEnableAutomaticChecks</key>

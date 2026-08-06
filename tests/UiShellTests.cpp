@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
@@ -1473,6 +1476,38 @@ private slots:
         QVERIFY(browser->toPlainText().contains(QStringLiteral("WebP")));
         help->close();
         Theme::setAccent(*qApp, Theme::defaultAccent());
+    }
+
+    // The About dialog is where the program states its copyright, the license
+    // it is offered under and the absence of a warranty, so each of those has
+    // to survive edits to the notice.
+    void showsLicenseNoticeInAboutDialog()
+    {
+        MainWindow window;
+        QAction *aboutAction =
+            window.findChild<QAction *>(QStringLiteral("aboutAction"));
+        QVERIFY(aboutAction);
+        QCOMPARE(aboutAction->menuRole(), QAction::AboutRole);
+        aboutAction->trigger();
+
+        AboutDialog *about = window.findChild<AboutDialog *>();
+        QTRY_VERIFY(about);
+        QTextBrowser *browser =
+            about->findChild<QTextBrowser *>(QStringLiteral("aboutBrowser"));
+        QVERIFY(browser);
+        const QString notice = browser->toPlainText();
+        QVERIFY(!QApplication::applicationVersion().isEmpty());
+        QVERIFY(notice.contains(QApplication::applicationVersion()));
+        QVERIFY(notice.contains(QStringLiteral("Copyright")));
+        QVERIFY(notice.contains(QStringLiteral("GNU General Public License")));
+        QVERIFY(notice.contains(QStringLiteral("any later version")));
+        QVERIFY(notice.contains(QStringLiteral("WITHOUT ANY WARRANTY")));
+
+        // Reopening has to reuse the one dialog rather than stack copies of
+        // the notice on top of each other.
+        aboutAction->trigger();
+        QCOMPARE(window.findChildren<AboutDialog *>().size(), 1);
+        about->close();
     }
 
     void migratesGlobalStrokeStabilizationToDrawingTools()

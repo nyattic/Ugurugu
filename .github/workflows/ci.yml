@@ -32,6 +32,22 @@ jobs:
           git ls-files -z -- '*.cpp' '*.hpp' '*.mm' |
           xargs -0 xcrun clang-format --dry-run --Werror
 
+      - name: Check license headers
+        shell: bash
+        run: |
+          identifier='SPDX-License-Identifier: GPL-3.0-or-later'
+          missing=()
+          while IFS= read -r file; do
+            if ! head -n 3 "$file" | grep -qF "$identifier"; then
+              missing+=("$file")
+            fi
+          done < <(git ls-files -- '*.cpp' '*.hpp' '*.mm' '*.vert' '*.frag' '*.js')
+          if [[ ${#missing[@]} -ne 0 ]]; then
+            echo "Sources missing the '$identifier' header:"
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+
       - name: Test download badge aggregation
         run: node --test .github/scripts/update-download-badge.test.js
 

@@ -124,6 +124,8 @@ set(UGURUGU_CORE_SOURCES
 )
 
 set(UGURUGU_UI_SOURCES
+    src/ui/AboutDialog.cpp
+    src/ui/AboutDialog.hpp
     src/ui/BrushPopoverPanel.cpp
     src/ui/BrushPopoverPanel.hpp
     src/ui/BrushPresetButton.cpp

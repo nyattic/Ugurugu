@@ -6,7 +6,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/nyattic/Ugurugu?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/Ugurugu/releases/latest)
 [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FUgurugu%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/Ugurugu/releases)
-![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
+![License](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
 <p align="center"><b>KR</b> · <a href="README.en.md">EN</a> · <a href="README.ja.md">JP</a></p>
@@ -198,10 +198,25 @@ WiggleWiggleTool 10에서 저장한 `.wawa` 파일을 **파일 → 열기**로 �
 - Development support by seuppi
 - App icon artwork by seuppi
 
+앱 아이콘(`resources/icons/`)의 저작권은 seuppi에게 있으며, 프로젝트의
+나머지 부분과 동일하게 GPL-3.0-or-later로 배포됩니다.
+
 ## 라이선스
 
-Ugurugu는 [GNU General Public License v3.0](LICENSE)으로
-배포됩니다. 포함된 글꼴과 라이브러리의 자세한 저작권 및 이용 조건은
-[서드파티 고지](THIRD_PARTY_NOTICES.md)에서 확인할 수 있습니다.
-
 Copyright (C) 2026 Nyabi (nyattic)
+
+이 프로그램은 자유 소프트웨어입니다. 자유 소프트웨어 재단이 공표한
+[GNU General Public License](LICENSE) 버전 3, 또는 (선택에 따라) 그 이후
+버전의 조건에 따라 재배포하거나 수정할 수 있습니다.
+
+이 프로그램은 유용하게 쓰이기를 바라며 배포되지만, 어떠한 보증도 하지
+않습니다. 상품성이나 특정 목적에의 적합성에 대한 묵시적 보증도 없습니다.
+자세한 내용은 GNU General Public License를 참고하세요. 이 프로그램과 함께
+GNU General Public License 사본을 받았어야 합니다. 받지 못했다면
+<https://www.gnu.org/licenses/>를 확인하세요.
+
+SPDX 식별자: `GPL-3.0-or-later`
+
+기여물 역시 같은 조건으로 받습니다. 자세한 내용은
+[기여 안내](CONTRIBUTING.md)를 참고하세요. 포함된 글꼴과 라이브러리의
+저작권 및 이용 조건은 [서드파티 고지](THIRD_PARTY_NOTICES.md)에 있습니다.

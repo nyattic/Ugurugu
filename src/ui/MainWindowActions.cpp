@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
+#include "ui/AboutDialog.hpp"
 #include "ui/BrushPopoverPanel.hpp"
 #include "ui/BucketPopoverPanel.hpp"
 #include "ui/CanvasWidget.hpp"
@@ -189,6 +193,14 @@ void MainWindow::createActions()
     helpAction->setObjectName(QStringLiteral("helpAction"));
     registerShortcut(helpAction, QKeySequence(Qt::Key_F1));
     connect(helpAction, &QAction::triggered, this, &MainWindow::showHelp);
+
+    auto *aboutAction = new QAction(tr("&About Ugurugu"), this);
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+    // macOS moves this into the application menu. Naming the role leaves that
+    // to the platform instead of to Qt's guess at the action's text.
+    aboutAction->setMenuRole(QAction::AboutRole);
+    registerShortcut(aboutAction, {});
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
 
     QAction *undoAction = new QAction(tr("&Undo"), this);
     undoAction->setObjectName(QStringLiteral("undoAction"));
@@ -814,6 +826,7 @@ void MainWindow::createActions()
     addAction(m_playAction);
     addAction(checkForUpdatesAction);
     addAction(helpAction);
+    addAction(aboutAction);
     addAction(importPresetAction);
     addAction(exportPresetAction);
 }
@@ -916,6 +929,8 @@ void MainWindow::createMenus()
     helpMenu->addSeparator();
     helpMenu->addAction(
         findChild<QAction *>(QStringLiteral("checkForUpdatesAction")));
+    helpMenu->addSeparator();
+    helpMenu->addAction(findChild<QAction *>(QStringLiteral("aboutAction")));
 }
 
 void MainWindow::showHelp()
@@ -928,6 +943,19 @@ void MainWindow::showHelp()
         return;
     }
     auto *dialog = new HelpDialog(this);
+    dialog->show();
+}
+
+void MainWindow::showAbout()
+{
+    if (auto *existing = findChild<AboutDialog *>())
+    {
+        existing->show();
+        existing->raise();
+        existing->activateWindow();
+        return;
+    }
+    auto *dialog = new AboutDialog(this);
     dialog->show();
 }
 

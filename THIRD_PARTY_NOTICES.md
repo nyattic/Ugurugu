@@ -1,8 +1,13 @@
 # Third-party notices
 
-Ugurugu includes or dynamically links the following third-party
-software. The corresponding license texts are installed next to this file in
-release packages.
+Ugurugu itself is licensed under GPL-3.0-or-later; `LICENSE` holds the GNU
+GPL version 3 text that grant refers to. The notices below cover software and
+assets that Ugurugu includes or dynamically links, not Ugurugu's own code.
+The corresponding license texts are installed next to this file in release
+packages.
+
+The app icon artwork in `resources/icons/` is copyright © seuppi and is
+distributed under GPL-3.0-or-later with the rest of the project.
 
 ## Qt 6
 

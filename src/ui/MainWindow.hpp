@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #pragma once
 
 #include "app/RecoveryWriter.hpp"
@@ -102,6 +105,7 @@ private:
     void importWwpPreset();
     void exportWwpPreset();
     void showHelp();
+    void showAbout();
     void exportGif();
     void exportWebP();
     void exportAnimation(ExportWorker::Kind kind);

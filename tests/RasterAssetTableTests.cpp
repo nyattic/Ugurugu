@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #include "io/serializer/RasterAssetTable.hpp"
 #include "support/DocumentTestSuites.hpp"
 

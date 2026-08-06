@@ -6,7 +6,7 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/nyattic/Ugurugu?style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e&color=ffc94a)](https://github.com/nyattic/Ugurugu/releases/latest)
 [![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnyattic%2FUgurugu%2Fdownload-badge%2Fdownloads.json&style=for-the-badge&logo=github&logoColor=white&labelColor=1e1b2e)](https://github.com/nyattic/Ugurugu/releases)
-![License](https://img.shields.io/badge/license-GPL--3.0-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
+![License](https://img.shields.io/badge/license-GPL--3.0--or--later-ffc94a?style=for-the-badge&logo=gnu&logoColor=white&labelColor=1e1b2e)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-ffc94a?style=for-the-badge&logo=qt&logoColor=white&labelColor=1e1b2e)
 
 <p align="center"><a href="README.md">KR</a> · <b>EN</b> · <a href="README.ja.md">JP</a></p>
@@ -198,11 +198,27 @@ See [BUILDING.md](BUILDING.md) if you want to build the app from source.
 - Development support by seuppi
 - App icon artwork by seuppi
 
+The app icon artwork in `resources/icons/` is copyright seuppi and is
+distributed under GPL-3.0-or-later along with the rest of the project.
+
 ## License
 
-Ugurugu is distributed under the
-[GNU General Public License v3.0](LICENSE). Copyright and license details for
-the included font and libraries are in the
-[third-party notices](THIRD_PARTY_NOTICES.md).
-
 Copyright (C) 2026 Nyabi (nyattic)
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the [GNU General Public License](LICENSE) as published by
+the Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details. You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+SPDX identifier: `GPL-3.0-or-later`
+
+Contributions are accepted under the same terms; see the
+[contributing guide](CONTRIBUTING.md). Copyright and license details for the
+included font and libraries are in the
+[third-party notices](THIRD_PARTY_NOTICES.md).

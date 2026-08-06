@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Nyabi (nyattic)
+
 #include "document/DocumentController.hpp"
 #include "document/history/HistoryMemory.hpp"
 #include "document/history/LogicalHistoryCommand.hpp"
