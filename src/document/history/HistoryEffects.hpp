@@ -21,9 +21,13 @@ namespace history
 // recorded once at commit so undo and redo emit the exact same transition with
 // the two sides swapped rather than re-deriving it from the new state.
 //
-// Before-events are dispatched while the previous document is still current,
-// because their consumers read the outgoing state; after-events run once the
-// new state is installed.
+// The target document is installed before any of these signals: slots may
+// query or modify the controller synchronously. Before-events fire between
+// that installation and documentChanged, so consumers translating cached
+// geometry (selection masks, live lasso points) run against the new document
+// ahead of the general refresh; after-events fire once documentChanged has.
+// DocumentHistoryTests::installsTargetStateBeforeHistoryEffectSignals pins
+// this ordering.
 struct HistoryEffects
 {
     struct CanvasResize

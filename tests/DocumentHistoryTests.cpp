@@ -58,6 +58,39 @@ private slots:
         QVERIFY(controller.undoStack()->isClean());
     }
 
+    void installsTargetStateBeforeHistoryEffectSignals()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        QVERIFY(controller.resizeCanvas(QSize(130, 100), QPoint(5, 0)));
+        QCOMPARE(controller.document().size, QSize(130, 100));
+
+        QSize documentSizeAtEffect;
+        bool documentChangedAfterEffect = false;
+        bool effectSeen = false;
+        connect(&controller,
+            &DocumentController::canvasResized,
+            &controller,
+            [&controller, &documentSizeAtEffect, &effectSeen](
+                const QSize &, const QSize &, const QTransform &)
+            {
+                documentSizeAtEffect = controller.document().size;
+                effectSeen = true;
+            });
+        connect(&controller,
+            &DocumentController::documentChanged,
+            &controller,
+            [&documentChangedAfterEffect, &effectSeen]()
+            {
+                documentChangedAfterEffect = effectSeen;
+            });
+
+        controller.undoStack()->undo();
+        QVERIFY(effectSeen);
+        QCOMPARE(documentSizeAtEffect, QSize(100, 100));
+        QVERIFY(documentChangedAfterEffect);
+    }
+
     void undoesAndRedoesTransparentBackground()
     {
         DocumentController controller;
