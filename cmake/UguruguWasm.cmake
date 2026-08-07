@@ -11,6 +11,9 @@ target_link_libraries(
     Qt6::Gui
 )
 ugurugu_target_defaults(ugurugu_engine)
+# LTO covers only our own objects; the prebuilt Qt static archives stay
+# regular object files and wasm-ld links the mix as-is.
+target_compile_options(ugurugu_engine PRIVATE -flto)
 
 # Plain add_executable on purpose: the engine runs headless, so it must not
 # pull in the wasm QPA plugin or the qtloader HTML shell that
@@ -18,9 +21,24 @@ ugurugu_target_defaults(ugurugu_engine)
 add_executable(ugurugu_engine_spike src/wasm/EngineBridge.cpp)
 target_link_libraries(ugurugu_engine_spike PRIVATE ugurugu_engine)
 ugurugu_target_defaults(ugurugu_engine_spike)
+target_compile_options(ugurugu_engine_spike PRIVATE -flto)
+# The headless engine never shows a window or decodes gif/ico/jpeg payloads,
+# so the wasm QPA plugin (and the Qt6OpenGL it drags in) and the image format
+# plugins stay out of the binary.
+qt_import_plugins(
+    ugurugu_engine_spike
+    EXCLUDE_BY_TYPE
+    platforms
+    imageformats
+)
 target_link_options(
     ugurugu_engine_spike
     PRIVATE
+    # CMake's Release link line carries no -O flag, which emcc treats as -O0
+    # and skips wasm-opt plus JS minification entirely; -O3 must be stated
+    # here explicitly.
+    -O3
+    -flto
     --no-entry
     # Qt Core and Gui use emscripten::val internally, which needs embind's
     # JS-side runtime even in a headless engine.
