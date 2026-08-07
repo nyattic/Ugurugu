@@ -459,7 +459,7 @@ Qt를 유지한 채 Emscripten만 직접 쓰면 `QImage`/`QPainter`와 이벤트
 - Emscripten 4.0.7 고정
 - 웹 엔진에서는 Qt Widgets, Qt Concurrent, Qt GuiPrivate 제외
 - MVP 웹 엔진에서는 animated WebP가 필요할 때까지 libwebp/webpmux 제외, spdlog는 console adapter로 한정
-- TypeScript strict mode, React, Vite
+- TypeScript strict mode, Svelte 5, Vite (2026-08-07 결정으로 React에서 변경)
 - 일반 Dedicated Worker 1개를 1차 목표로 하되 Qt Core/Gui worker 초기화는 단계 1의 release gate
 - WebGL 2 texture presentation, Canvas 2D 표시 폴백
 - OffscreenCanvas는 feature detection 후 최적화
@@ -471,7 +471,7 @@ Qt를 유지한 채 Emscripten만 직접 쓰면 `QImage`/`QPainter`와 이벤트
 
 웹 font는 현재 OTF를 무조건 그대로 싣지 않고 라이선스를 확인한 뒤 WOFF2 변환과 필요한 문자 subset을 검토한다. 한글·일본어 UI를 지원하므로 무리한 subset이 번역 누락을 만들지 않는지 자동 glyph 검사도 필요하다.
 
-React를 권장하는 이유는 canvas 자체를 React로 그리기 위해서가 아니라 timeline, layer tree, tool property, dialog, responsive panel처럼 상태가 많은 UI를 안정적으로 구성하기 위해서다. 픽셀 프레임과 고빈도 pointer sampling은 React state를 통과시키지 않고 전용 canvas/input controller에서 처리한다.
+프레임워크를 두는 이유는 canvas 자체를 프레임워크로 그리기 위해서가 아니라 timeline, layer tree, tool property, dialog, responsive panel처럼 상태가 많은 UI를 안정적으로 구성하기 위해서다. Svelte 5를 선택한 근거는 핵심 화면이 어차피 자작 컴포넌트라 React 컴포넌트 생태계의 이점이 제한적이고, runes의 세밀한 반응성이 작은 값이 자주 바뀌는 도구 상태와 Worker state diff 수신 패턴에 맞으며, 1인 개발에서 보일러플레이트가 적다는 점이다. 접근성 프리미티브 생태계는 React(react-aria/Radix)가 더 성숙하므로 대화상자·슬라이더·트리는 bits-ui 또는 WAI-ARIA APG 패턴 직접 구현으로 보완한다. 픽셀 프레임과 고빈도 pointer sampling은 프레임워크 state를 통과시키지 않고 전용 canvas/input controller에서 처리한다.
 
 ### 7.2 전체 구조
 
@@ -500,7 +500,7 @@ React를 권장하는 이유는 canvas 자체를 React로 그리기 위해서가
                                       │ dirty pixels
                             ┌─────────▼────────────┐
                             │ TypeScript web UI   │
-                            │ React + canvas      │
+                            │ Svelte 5 + canvas   │
                             │ File/IDB/clipboard  │
                             └──────────────────────┘
 ```
@@ -580,7 +580,7 @@ Wasm linear memory 자체는 일반 Worker에서 UI로 transfer할 수 없으므
 
 | 영역 | 현재 문제 | 웹 설계 |
 |---|---|---|
-| MainWindow/도크/대화상자 | Widgets, 고정 최소 크기, 모달 | 반응형 React panel/sheet/dialog |
+| MainWindow/도크/대화상자 | Widgets, 고정 최소 크기, 모달 | 반응형 Svelte panel/sheet/dialog |
 | CanvasWidget input | QWidget event, touch disabled | Pointer Events와 gesture state machine |
 | CanvasFrameView | QRhiWidget/GuiPrivate | WebGL 2/Canvas 2D presenter |
 | path load/save | QFileDialog/QFile/QSaveFile | File/ArrayBuffer/Blob 비동기 adapter |
@@ -680,7 +680,7 @@ MVP 성공 기준:
 
 ### 단계 3. 웹 UI와 캔버스 — 3~4.5 인월
 
-- React shell, responsive desktop/mobile layout
+- Svelte shell, responsive desktop/mobile layout
 - WebGL 2 presenter와 Canvas 2D 표시 폴백
 - Pointer Events, pressure, capture, touch gesture
 - brush/eraser/color, layers, timeline, undo/redo
@@ -821,7 +821,7 @@ HTML 웹 실행은 사용자가 매번 최신 static build를 받으므로 데�
 
 - **itch.io 웹버전 배포 가능 여부:** 가능. 현재 데스크톱 실행 파일의 직접 업로드가 아니라 별도 HTML/TypeScript+WebAssembly 빌드가 필요하다.
 - **가장 추천하는 구현 방향:** 3번, 핵심 C++/Qt Core·Gui 로직을 단일 스레드 Wasm으로 재사용하고 UI를 TypeScript로 새로 구현한다.
-- **추천 기술 스택:** Qt 6.11.1 Core/Gui + Emscripten 4.0.7 + C ABI + TypeScript/React/Vite + WebGL 2 + File/Blob + IndexedDB. Dedicated Worker는 선행 spike 통과 시 사용하고, 실패 시 cooperative main-thread 또는 Qt 의존 축소를 재평가한다.
+- **추천 기술 스택:** Qt 6.11.1 Core/Gui + Emscripten 4.0.7 + C ABI + TypeScript/Svelte 5/Vite + WebGL 2 + File/Blob + IndexedDB. Dedicated Worker는 선행 spike 통과 시 사용하고, 실패 시 cooperative main-thread 또는 Qt 의존 축소를 재평가한다.
 - **가장 큰 장애물:** 데스크톱의 동기식 대화상자·경로 I/O·항상 실행되는 QThread/QtConcurrent와 4 GiB 메모리 정책을 브라우저의 비동기·제한 메모리 모델로 바꾸는 일이다.
 - **가장 먼저 진행해야 할 작업:** 2~4주 수직 spike로 Worker 안의 Qt Core/Gui Wasm이 `.ugu`를 읽고 static fixture의 동일 pixel과 animated/wobble의 일관된 Wasm baseline을 렌더한 뒤 round-trip하는지, 1024/2048 문서의 메모리·전송 비용과 itch.io iframe 입력/저장을 실제 브라우저에서 검증한다.
 
