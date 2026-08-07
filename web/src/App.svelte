@@ -1,12 +1,20 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { EngineClient } from "./lib/EngineClient";
-    import type { DocumentMeta, RenderedFrame } from "./lib/EngineClient";
+    import type {
+        BrushPresetInfo,
+        DocumentMeta,
+        LayerInfo,
+        RegionUpdate,
+    } from "./lib/EngineClient";
+    import LayerPanel from "./lib/LayerPanel.svelte";
 
     const engine = new EngineClient();
 
     let canvas: HTMLCanvasElement;
     let meta = $state<DocumentMeta | null>(null);
+    let layers = $state<LayerInfo[]>([]);
+    let presets = $state<BrushPresetInfo[]>([]);
     let frameIndex = $state(0);
     let playing = $state(false);
     let status = $state("엔진 로딩 중…");
@@ -17,6 +25,8 @@
     let colorHex = $state("#1d2129");
     let brushSize = $state(6);
     let tool = $state<"brush" | "eraser">("brush");
+    let presetIndex = $state(0);
+    let stabilization = $state(0);
 
     let playTimer: ReturnType<typeof setInterval> | null = null;
     let drawing = false;
@@ -24,37 +34,36 @@
     let chain = Promise.resolve();
 
     function enqueue(operation: () => Promise<void>) {
-        chain = chain
-            .then(operation)
-            .catch((error) => {
-                status = `오류: ${error}`;
-            });
+        chain = chain.then(operation).catch((error) => {
+            status = `오류: ${error}`;
+        });
     }
 
-    function presentFrame(rendered: RenderedFrame) {
+    function present(update: RegionUpdate) {
+        layers = update.layers;
+        canUndo = update.canUndo;
+        canRedo = update.canRedo;
+        if (!update.pixels || update.rect.width <= 0) {
+            return;
+        }
         const context = canvas.getContext("2d");
         if (!context) {
             return;
         }
-        if (
-            canvas.width !== rendered.width ||
-            canvas.height !== rendered.height
-        ) {
-            canvas.width = rendered.width;
-            canvas.height = rendered.height;
-        }
         context.putImageData(
-            new ImageData(rendered.pixels, rendered.width, rendered.height),
-            0,
-            0,
+            new ImageData(
+                update.pixels,
+                update.rect.width,
+                update.rect.height,
+            ),
+            update.rect.x,
+            update.rect.y,
         );
-        canUndo = rendered.canUndo;
-        canRedo = rendered.canRedo;
     }
 
     function requestRender(frame: number) {
         enqueue(async () => {
-            presentFrame(await engine.renderFrame(frame));
+            present(await engine.renderFrame(frame));
         });
     }
 
@@ -72,6 +81,33 @@
         );
     });
 
+    $effect(() => {
+        const index = presetIndex;
+        if (!meta) {
+            return;
+        }
+        enqueue(() => engine.setBrushPreset(index));
+    });
+
+    $effect(() => {
+        const strength = stabilization / 100;
+        if (!meta) {
+            return;
+        }
+        enqueue(() => engine.setStabilization(strength));
+    });
+
+    function onPresetChange(event: Event) {
+        const index = Number(
+            (event.currentTarget as HTMLSelectElement).value,
+        );
+        presetIndex = index;
+        const preset = presets[index];
+        if (preset) {
+            brushSize = Math.round(preset.defaultSize);
+        }
+    }
+
     async function openDocument(bytes: ArrayBuffer, name: string) {
         stopPlayback();
         status = `${name} 여는 중…`;
@@ -79,12 +115,16 @@
             meta = await engine.open(bytes);
             documentName = name;
             frameIndex = 0;
+            layers = meta.layers;
+            presets = meta.presets;
             canUndo = meta.canUndo;
             canRedo = meta.canRedo;
+            canvas.width = meta.width;
+            canvas.height = meta.height;
             status =
                 `${name} — ${meta.width}×${meta.height}, ` +
                 `${meta.frameCount}프레임 @ ${meta.fps}fps, ` +
-                `레이어 ${meta.layerCount}, 스키마 v${meta.schemaVersion}`;
+                `스키마 v${meta.schemaVersion}`;
             requestRender(0);
         } catch (error) {
             meta = null;
@@ -139,7 +179,7 @@
             }
             const points = pendingPoints;
             pendingPoints = [];
-            presentFrame(await engine.strokeAppend(frameIndex, points));
+            present(await engine.strokeAppend(frameIndex, points));
         });
     }
 
@@ -153,8 +193,11 @@
         pendingPoints = [];
         const { x, y, pressure } = canvasPosition(event);
         const frame = frameIndex;
+        const timestamp = event.timeStamp;
         enqueue(async () => {
-            presentFrame(await engine.strokeBegin(frame, x, y, pressure));
+            present(
+                await engine.strokeBegin(frame, x, y, pressure, timestamp),
+            );
         });
     }
 
@@ -168,7 +211,7 @@
                 : [event];
         for (const sample of samples) {
             const { x, y, pressure } = canvasPosition(sample);
-            pendingPoints.push(x, y, pressure);
+            pendingPoints.push(x, y, pressure, sample.timeStamp);
         }
         flushPendingPoints();
     }
@@ -182,21 +225,30 @@
         flushPendingPoints();
         const frame = frameIndex;
         enqueue(async () => {
-            presentFrame(await engine.strokeEnd(frame));
+            present(await engine.strokeEnd(frame));
         });
     }
 
     function undo() {
         stopPlayback();
         enqueue(async () => {
-            presentFrame(await engine.undo(frameIndex));
+            present(await engine.undo(frameIndex));
         });
     }
 
     function redo() {
         stopPlayback();
         enqueue(async () => {
-            presentFrame(await engine.redo(frameIndex));
+            present(await engine.redo(frameIndex));
+        });
+    }
+
+    function layerAction(
+        action: (frame: number) => Promise<RegionUpdate>,
+    ) {
+        stopPlayback();
+        enqueue(async () => {
+            present(await action(frameIndex));
         });
     }
 
@@ -263,13 +315,23 @@
             >
                 지우개
             </button>
+            <select
+                title="브러시 프리셋"
+                value={String(presetIndex)}
+                onchange={onPresetChange}
+                disabled={tool === "eraser"}
+            >
+                {#each presets as preset (preset.index)}
+                    <option value={String(preset.index)}>{preset.name}</option>
+                {/each}
+            </select>
             <input
                 type="color"
                 bind:value={colorHex}
                 title="브러시 색"
                 disabled={tool === "eraser"}
             />
-            <label class="size">
+            <label class="slider">
                 굵기
                 <input
                     type="range"
@@ -278,6 +340,16 @@
                     bind:value={brushSize}
                 />
                 <span>{brushSize}px</span>
+            </label>
+            <label class="slider">
+                보정
+                <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    bind:value={stabilization}
+                />
+                <span>{stabilization}%</span>
             </label>
             <button id="undo" onclick={undo} disabled={!canUndo}>
                 실행 취소
@@ -301,15 +373,39 @@
         </div>
     </header>
 
-    <section class="viewport">
-        <canvas
-            bind:this={canvas}
-            onpointerdown={onPointerDown}
-            onpointermove={onPointerMove}
-            onpointerup={onPointerUp}
-            onpointercancel={onPointerUp}
-        ></canvas>
-    </section>
+    <div class="workspace">
+        <section class="viewport">
+            <canvas
+                bind:this={canvas}
+                onpointerdown={onPointerDown}
+                onpointermove={onPointerMove}
+                onpointerup={onPointerUp}
+                onpointercancel={onPointerUp}
+            ></canvas>
+        </section>
+        <LayerPanel
+            {layers}
+            onactivate={(index) =>
+                layerAction((frame) => engine.layerActivate(frame, index))}
+            onvisible={(index, visible) =>
+                layerAction((frame) =>
+                    engine.layerVisible(frame, index, visible),
+                )}
+            onopacity={(index, opacity) =>
+                layerAction((frame) =>
+                    engine.layerOpacity(frame, index, opacity),
+                )}
+            onadd={() => layerAction((frame) => engine.layerAdd(frame))}
+            onremove={(index) =>
+                layerAction((frame) => engine.layerRemove(frame, index))}
+            onrename={(index, name) =>
+                layerAction((frame) =>
+                    engine.layerRename(frame, index, name),
+                )}
+            onmove={(index, offset) =>
+                layerAction((frame) => engine.layerMove(frame, index, offset))}
+        />
+    </div>
 
     <footer>
         {#if meta}
@@ -369,10 +465,11 @@
     .controls {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 0.5rem;
     }
 
-    .size {
+    .slider {
         display: flex;
         align-items: center;
         gap: 0.4rem;
@@ -380,9 +477,19 @@
         color: #9aa0a6;
     }
 
-    .size span {
+    .slider input[type="range"] {
+        inline-size: 6rem;
+    }
+
+    .slider span {
         min-width: 2.6rem;
         font-variant-numeric: tabular-nums;
+    }
+
+    .workspace {
+        flex: 1;
+        display: flex;
+        min-block-size: 0;
     }
 
     .viewport {
@@ -428,7 +535,8 @@
     }
 
     button,
-    .file-button {
+    .file-button,
+    select {
         padding: 0.35rem 0.9rem;
         border: 1px solid #3c4047;
         border-radius: 6px;
@@ -438,7 +546,8 @@
         cursor: pointer;
     }
 
-    button:disabled {
+    button:disabled,
+    select:disabled {
         opacity: 0.45;
         cursor: default;
     }

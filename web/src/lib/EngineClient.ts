@@ -1,3 +1,19 @@
+export interface LayerInfo {
+    index: number;
+    name: string;
+    group: boolean;
+    visible: boolean;
+    opacity: number;
+    active: boolean;
+    depth: number;
+}
+
+export interface BrushPresetInfo {
+    index: number;
+    name: string;
+    defaultSize: number;
+}
+
 export interface DocumentMeta {
     schemaVersion: number;
     width: number;
@@ -5,15 +21,16 @@ export interface DocumentMeta {
     frameCount: number;
     layerCount: number;
     fps: number;
+    presets: BrushPresetInfo[];
+    layers: LayerInfo[];
     canUndo: boolean;
     canRedo: boolean;
 }
 
-export interface RenderedFrame {
-    frame: number;
-    width: number;
-    height: number;
-    pixels: Uint8ClampedArray;
+export interface RegionUpdate {
+    rect: { x: number; y: number; width: number; height: number };
+    pixels: Uint8ClampedArray | null;
+    layers: LayerInfo[];
     canUndo: boolean;
     canRedo: boolean;
 }
@@ -32,11 +49,10 @@ interface PendingRequest {
     reject: (reason: Error) => void;
 }
 
-interface RenderResponse {
-    frame: number;
-    width: number;
-    height: number;
-    pixels: ArrayBuffer;
+interface RegionResponse {
+    rect: { x: number; y: number; width: number; height: number };
+    pixels: ArrayBuffer | null;
+    layers: LayerInfo[];
     canUndo: boolean;
     canRedo: boolean;
 }
@@ -75,15 +91,23 @@ export class EngineClient {
         });
     }
 
-    static #toFrame(response: RenderResponse): RenderedFrame {
+    static #toRegion(response: RegionResponse): RegionUpdate {
         return {
-            frame: response.frame,
-            width: response.width,
-            height: response.height,
-            pixels: new Uint8ClampedArray(response.pixels),
+            rect: response.rect,
+            pixels: response.pixels
+                ? new Uint8ClampedArray(response.pixels)
+                : null,
+            layers: response.layers,
             canUndo: response.canUndo,
             canRedo: response.canRedo,
         };
+    }
+
+    async #regionRequest(
+        message: Record<string, unknown>,
+    ): Promise<RegionUpdate> {
+        const response = await this.#request<RegionResponse>(message);
+        return EngineClient.#toRegion(response);
     }
 
     async open(bytes: ArrayBuffer): Promise<DocumentMeta> {
@@ -94,68 +118,107 @@ export class EngineClient {
         return response.meta;
     }
 
-    async renderFrame(frame: number): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
-            type: "render",
-            frame,
-        });
-        return EngineClient.#toFrame(response);
+    renderFrame(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "render", frame });
     }
 
     async setBrush(brush: BrushSettings): Promise<void> {
         await this.#request({ type: "brush", ...brush });
     }
 
-    async strokeBegin(
+    async setBrushPreset(index: number): Promise<void> {
+        await this.#request({ type: "brushPreset", index });
+    }
+
+    async setStabilization(strength: number): Promise<void> {
+        await this.#request({ type: "stabilization", strength });
+    }
+
+    strokeBegin(
         frame: number,
         x: number,
         y: number,
         pressure: number,
-    ): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
+        timestamp: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
             type: "strokeBegin",
             frame,
             x,
             y,
             pressure,
+            timestamp,
         });
-        return EngineClient.#toFrame(response);
     }
 
-    async strokeAppend(
+    strokeAppend(frame: number, points: number[]): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "strokeAppend", frame, points });
+    }
+
+    strokeEnd(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "strokeEnd", frame });
+    }
+
+    undo(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "undo", frame });
+    }
+
+    redo(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "redo", frame });
+    }
+
+    layerActivate(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerActivate", frame, index });
+    }
+
+    layerVisible(
         frame: number,
-        points: number[],
-    ): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
-            type: "strokeAppend",
+        index: number,
+        visible: boolean,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerVisible",
             frame,
-            points,
+            index,
+            visible,
         });
-        return EngineClient.#toFrame(response);
     }
 
-    async strokeEnd(frame: number): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
-            type: "strokeEnd",
+    layerOpacity(
+        frame: number,
+        index: number,
+        opacity: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerOpacity",
             frame,
+            index,
+            opacity,
         });
-        return EngineClient.#toFrame(response);
     }
 
-    async undo(frame: number): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
-            type: "undo",
-            frame,
-        });
-        return EngineClient.#toFrame(response);
+    layerAdd(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerAdd", frame });
     }
 
-    async redo(frame: number): Promise<RenderedFrame> {
-        const response = await this.#request<RenderResponse>({
-            type: "redo",
-            frame,
-        });
-        return EngineClient.#toFrame(response);
+    layerRemove(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerRemove", frame, index });
+    }
+
+    layerRename(
+        frame: number,
+        index: number,
+        name: string,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerRename", frame, index, name });
+    }
+
+    layerMove(
+        frame: number,
+        index: number,
+        offset: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerMove", frame, index, offset });
     }
 
     async serialize(): Promise<ArrayBuffer> {

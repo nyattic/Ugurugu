@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Nyabi (nyattic)
 
+#include "brush/BrushPreset.hpp"
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
+#include "input/StrokeStabilizer.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/serializer/SerializerSchema.hpp"
+#include "render/IncrementalStrokeRenderer.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QByteArray>
 #include <QColor>
 #include <QImage>
+#include <QPainter>
 #include <QRandomGenerator>
 #include <QString>
 #include <QUuid>
@@ -27,10 +31,20 @@ struct BridgeDocument
     std::unique_ptr<ugurugu::DocumentController> controller =
         std::make_unique<ugurugu::DocumentController>();
     ugurugu::Stroke brushTemplate;
+    ugurugu::StrokeStabilizer stabilizer;
     ugurugu::Stroke activeStroke;
     bool strokeInProgress = false;
+    int strokeFrame = 0;
+    QPointF lastRawPosition;
+    quint64 lastTimestamp = 0;
+    ugurugu::RenderEngine::LayerSplitFrame split;
+    ugurugu::IncrementalStrokeRenderer incremental;
+    QImage strokeLayerImage;
+    bool incrementalActive = false;
     QImage renderedFrame;
+    QRect dirty;
     QByteArray serialized;
+    QByteArray scratchText;
 };
 
 QByteArray &lastError()
@@ -54,6 +68,35 @@ QUuid paintTargetLayer(const ugurugu::Document &document)
         }
     }
     return {};
+}
+
+const ugurugu::Layer *layerAtIndex(const BridgeDocument *handle, int index)
+{
+    const auto &layers = handle->controller->document().layers;
+    if (index < 0 || index >= layers.size())
+    {
+        return nullptr;
+    }
+    return &layers[index];
+}
+
+void renderCommittedFrame(BridgeDocument *handle, int frameIndex)
+{
+    handle->renderedFrame = ugurugu::RenderEngine::render(
+        handle->controller->document(), frameIndex);
+    handle->dirty = handle->renderedFrame.rect();
+}
+
+void renderFullStrokePreview(BridgeDocument *handle)
+{
+    ugurugu::Document preview = handle->controller->document();
+    if (ugurugu::Layer *layer = preview.layer(paintTargetLayer(preview)))
+    {
+        layer->strokes.append(handle->activeStroke);
+    }
+    handle->renderedFrame =
+        ugurugu::RenderEngine::render(preview, handle->strokeFrame);
+    handle->dirty = handle->renderedFrame.rect();
 }
 
 }
@@ -124,6 +167,45 @@ extern "C"
         return handle->controller->document().framesPerSecond;
     }
 
+    EMSCRIPTEN_KEEPALIVE int ugu_brush_preset_count()
+    {
+        return static_cast<int>(ugurugu::BrushPresetCatalog::builtIns().size());
+    }
+
+    EMSCRIPTEN_KEEPALIVE const char *ugu_brush_preset_name(
+        BridgeDocument *handle, int index)
+    {
+        const auto &presets = ugurugu::BrushPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return "";
+        }
+        handle->scratchText =
+            ugurugu::BrushPresetCatalog::displayName(presets[index]).toUtf8();
+        return handle->scratchText.constData();
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_brush_preset_default_size(int index)
+    {
+        const auto &presets = ugurugu::BrushPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return 6.0;
+        }
+        return presets[index].defaultSize;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_set_brush_preset(
+        BridgeDocument *handle, int index)
+    {
+        const auto &presets = ugurugu::BrushPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return;
+        }
+        handle->brushTemplate.brush = presets[index].settings;
+    }
+
     EMSCRIPTEN_KEEPALIVE void ugu_set_brush(BridgeDocument *handle,
         int red,
         int green,
@@ -138,34 +220,117 @@ extern "C"
                                                 : ugurugu::StrokeMode::Paint;
     }
 
-    EMSCRIPTEN_KEEPALIVE int ugu_stroke_begin(
-        BridgeDocument *handle, double x, double y, double pressure)
+    EMSCRIPTEN_KEEPALIVE void ugu_set_stabilization(
+        BridgeDocument *handle, double strength)
     {
-        const QUuid layerId = paintTargetLayer(handle->controller->document());
+        handle->stabilizer.setStrength(strength);
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_stroke_begin(BridgeDocument *handle,
+        int frame,
+        double x,
+        double y,
+        double pressure,
+        double timestamp)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = paintTargetLayer(document);
         if (layerId.isNull())
         {
             lastError() = QByteArrayLiteral("document has no paint layer");
             return 0;
         }
+        handle->strokeFrame = frame;
         handle->activeStroke = handle->brushTemplate;
         handle->activeStroke.id = QUuid::createUuid();
         handle->activeStroke.seed = QRandomGenerator::global()->generate64();
-        handle->activeStroke.points = {
-            ugurugu::StrokePoint{QPointF(x, y), pressure}};
+        const QPointF raw(x, y);
+        const auto time = static_cast<quint64>(timestamp);
+        handle->activeStroke.points = {ugurugu::StrokePoint{
+            handle->stabilizer.begin(raw, time), pressure}};
+        handle->lastRawPosition = raw;
+        handle->lastTimestamp = time;
         handle->strokeInProgress = true;
+
+        handle->split = ugurugu::RenderEngine::renderLayerSplit(document,
+            frame,
+            document.size,
+            layerId,
+            ugurugu::RenderEngine::ScaledRenderMode::NativeExact);
+        handle->incrementalActive = handle->split.valid;
+        if (handle->incrementalActive)
+        {
+            handle->strokeLayerImage = handle->split.layerBase;
+            handle->incremental.clear();
+        }
+        renderCommittedFrame(handle, frame);
         lastError().clear();
         return 1;
     }
 
-    EMSCRIPTEN_KEEPALIVE void ugu_stroke_append(
-        BridgeDocument *handle, double x, double y, double pressure)
+    EMSCRIPTEN_KEEPALIVE void ugu_stroke_append(BridgeDocument *handle,
+        double x,
+        double y,
+        double pressure,
+        double timestamp)
     {
         if (!handle->strokeInProgress)
         {
             return;
         }
-        handle->activeStroke.points.append(
-            ugurugu::StrokePoint{QPointF(x, y), pressure});
+        const QPointF raw(x, y);
+        const auto time = static_cast<quint64>(timestamp);
+        handle->activeStroke.points.append(ugurugu::StrokePoint{
+            handle->stabilizer.update(raw, time), pressure});
+        handle->lastRawPosition = raw;
+        handle->lastTimestamp = time;
+    }
+
+    // Renders the active stroke's pending points into the frame buffer and
+    // narrows the dirty rectangle to the touched tiles when the incremental
+    // path holds; otherwise the whole frame is re-rendered and dirty.
+    EMSCRIPTEN_KEEPALIVE int ugu_stroke_render(BridgeDocument *handle)
+    {
+        if (!handle->strokeInProgress)
+        {
+            return 0;
+        }
+        if (!handle->incrementalActive)
+        {
+            renderFullStrokePreview(handle);
+            return 1;
+        }
+        const ugurugu::Document &document = handle->controller->document();
+        const auto update = handle->incremental.update(handle->split.layerBase,
+            document,
+            handle->activeStroke,
+            handle->strokeFrame,
+            document.size);
+        if (!update.valid)
+        {
+            handle->incrementalActive = false;
+            renderFullStrokePreview(handle);
+            return 1;
+        }
+        handle->incremental.applyTo(handle->strokeLayerImage);
+        QRect dirty;
+        QPainter painter(&handle->renderedFrame);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        for (const auto &patch : update.patches)
+        {
+            const QImage region =
+                ugurugu::RenderEngine::composeLayerSplitRegion(
+                    handle->split, handle->strokeLayerImage, patch.bounds);
+            if (region.isNull())
+            {
+                continue;
+            }
+            painter.drawImage(patch.bounds.topLeft(), region);
+            dirty = dirty.united(patch.bounds);
+        }
+        painter.end();
+        handle->dirty = dirty.intersected(handle->renderedFrame.rect());
+        return 1;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_stroke_end(BridgeDocument *handle)
@@ -174,11 +339,23 @@ extern "C"
         {
             return -1;
         }
+        const QPointF finished = handle->stabilizer.finish(
+            handle->lastRawPosition, handle->lastTimestamp);
+        if (!handle->activeStroke.points.isEmpty()
+            && handle->activeStroke.points.last().position != finished)
+        {
+            handle->activeStroke.points.append(ugurugu::StrokePoint{
+                finished, handle->activeStroke.points.last().pressure});
+        }
         handle->strokeInProgress = false;
+        handle->incrementalActive = false;
+        handle->split = {};
+        handle->strokeLayerImage = {};
         const QUuid layerId = paintTargetLayer(handle->controller->document());
         const auto result = handle->controller->addStroke(
             layerId, std::move(handle->activeStroke));
         handle->activeStroke = {};
+        renderCommittedFrame(handle, handle->strokeFrame);
         using AddStrokeResult = ugurugu::DocumentController::AddStrokeResult;
         if (result != AddStrokeResult::Added
             && result != AddStrokeResult::AddedWithResampledPoints)
@@ -191,7 +368,11 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE void ugu_stroke_cancel(BridgeDocument *handle)
     {
         handle->strokeInProgress = false;
+        handle->incrementalActive = false;
+        handle->split = {};
+        handle->strokeLayerImage = {};
         handle->activeStroke = {};
+        renderCommittedFrame(handle, handle->strokeFrame);
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_can_undo(const BridgeDocument *handle)
@@ -214,38 +395,150 @@ extern "C"
         handle->controller->undoStack()->redo();
     }
 
+    EMSCRIPTEN_KEEPALIVE const char *ugu_layer_name(
+        BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return "";
+        }
+        handle->scratchText = layer->name.toUtf8();
+        return handle->scratchText.constData();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_kind(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr && layer->kind == ugurugu::LayerKind::Group ? 1
+                                                                            : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_visible(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr && layer->visible ? 1 : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_layer_opacity(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr ? layer->opacity : 1.0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_is_active(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr
+                       && layer->id
+                              == handle->controller->document().activeLayerId
+                   ? 1
+                   : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_depth(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return 0;
+        }
+        return handle->controller->document().layerDepth(layer->id);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_activate(
+        BridgeDocument *handle, int index)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setActiveLayer(layer->id);
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_visible(
+        BridgeDocument *handle, int index, int visible)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setLayerVisible(layer->id, visible != 0);
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_opacity(
+        BridgeDocument *handle, int index, double opacity)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setLayerOpacity(layer->id, opacity);
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_add(BridgeDocument *handle)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        QUuid parentGroupId;
+        if (const ugurugu::Layer *active =
+                document.layer(document.activeLayerId))
+        {
+            parentGroupId = active->parentGroupId;
+        }
+        handle->controller->addLayer(parentGroupId);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_remove(
+        BridgeDocument *handle, int index)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->removeLayer(layer->id);
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_rename(
+        BridgeDocument *handle, int index, const char *name)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->renameLayer(layer->id, QString::fromUtf8(name));
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_move(
+        BridgeDocument *handle, int index, int offset)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->moveLayer(layer->id, offset);
+        }
+    }
+
     // The returned buffer is QImage::Format_ARGB32_Premultiplied: on the
     // little-endian wasm heap each pixel is the byte sequence B, G, R, A with
     // premultiplied color channels. Rows are ugu_frame_bytes_per_line() apart.
     // The pointer stays valid until the next render or close on the same
-    // handle. A stroke in progress is composed on top of the committed
-    // document so pointer sampling can preview without touching history.
+    // handle. ugu_dirty_* describe the region the last render actually
+    // changed; consumers may upload just that region.
     EMSCRIPTEN_KEEPALIVE const std::uint8_t *ugu_render_frame(
         BridgeDocument *handle, int frameIndex)
     {
-        const ugurugu::Document &committed = handle->controller->document();
-        if (handle->strokeInProgress && !handle->activeStroke.points.isEmpty())
-        {
-            ugurugu::Document preview = committed;
-            if (ugurugu::Layer *layer =
-                    preview.layer(paintTargetLayer(preview)))
-            {
-                layer->strokes.append(handle->activeStroke);
-            }
-            handle->renderedFrame =
-                ugurugu::RenderEngine::render(preview, frameIndex);
-        }
-        else
-        {
-            handle->renderedFrame =
-                ugurugu::RenderEngine::render(committed, frameIndex);
-        }
+        renderCommittedFrame(handle, frameIndex);
         if (handle->renderedFrame.isNull())
         {
             lastError() = QByteArrayLiteral("render produced a null frame");
             return nullptr;
         }
         lastError().clear();
+        return handle->renderedFrame.constBits();
+    }
+
+    EMSCRIPTEN_KEEPALIVE const std::uint8_t *ugu_frame_pixels(
+        const BridgeDocument *handle)
+    {
         return handle->renderedFrame.constBits();
     }
 
@@ -263,6 +556,26 @@ extern "C"
         const BridgeDocument *handle)
     {
         return static_cast<int>(handle->renderedFrame.bytesPerLine());
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_dirty_x(const BridgeDocument *handle)
+    {
+        return handle->dirty.x();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_dirty_y(const BridgeDocument *handle)
+    {
+        return handle->dirty.y();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_dirty_width(const BridgeDocument *handle)
+    {
+        return handle->dirty.width();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_dirty_height(const BridgeDocument *handle)
+    {
+        return handle->dirty.height();
     }
 
     // The pointer stays valid until the next serialize or close on the same
