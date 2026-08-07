@@ -1,21 +1,11 @@
-set(UGURUGU_CORE_SOURCES
-    src/app/ApplicationInstanceLock.cpp
-    src/app/ApplicationInstanceLock.hpp
-    src/app/BackgroundWork.cpp
-    src/app/BackgroundWork.hpp
-    src/app/Logging.cpp
-    src/app/Logging.hpp
+# Engine sources stay buildable against Qt Core and Gui alone; the
+# WebAssembly build compiles exactly this list. Desktop services below may
+# use threads, file paths, spdlog and libwebp, and only ever depend on the
+# engine, never the other way around. MemoryBudget is the one src/app file
+# engine headers include.
+set(UGURUGU_ENGINE_SOURCES
     src/app/MemoryBudget.cpp
     src/app/MemoryBudget.hpp
-    src/app/RecoveryStore.cpp
-    src/app/RecoveryStore.hpp
-    src/app/RecoveryWriter.cpp
-    src/app/RecoveryWriter.hpp
-    src/app/ReleaseNotes.cpp
-    src/app/ReleaseNotes.hpp
-    src/app/UpdateCheckPolicy.cpp
-    src/app/UpdateCheckPolicy.hpp
-    src/app/WatchedFutureResult.hpp
     src/brush/BrushPreset.cpp
     src/brush/BrushPreset.hpp
     src/brush/EraserPreset.cpp
@@ -73,12 +63,8 @@ set(UGURUGU_CORE_SOURCES
     src/io/serializer/RasterAssetTable.cpp
     src/io/serializer/RasterAssetTable.hpp
     src/io/serializer/SerializerSchema.hpp
-    src/io/ExportWorker.cpp
-    src/io/ExportWorker.hpp
     src/io/GifWriter.cpp
     src/io/GifWriter.hpp
-    src/io/WebPWriter.cpp
-    src/io/WebPWriter.hpp
     src/io/RenderExportPolicy.cpp
     src/io/RenderExportPolicy.hpp
     src/render/BrokenLineModel.cpp
@@ -121,6 +107,33 @@ set(UGURUGU_CORE_SOURCES
     src/render/StrokeRenderer.hpp
     src/render/StrokeMotionModel.cpp
     src/render/StrokeMotionModel.hpp
+)
+
+set(UGURUGU_DESKTOP_SERVICE_SOURCES
+    src/app/ApplicationInstanceLock.cpp
+    src/app/ApplicationInstanceLock.hpp
+    src/app/BackgroundWork.cpp
+    src/app/BackgroundWork.hpp
+    src/app/Logging.cpp
+    src/app/Logging.hpp
+    src/app/RecoveryStore.cpp
+    src/app/RecoveryStore.hpp
+    src/app/RecoveryWriter.cpp
+    src/app/RecoveryWriter.hpp
+    src/app/ReleaseNotes.cpp
+    src/app/ReleaseNotes.hpp
+    src/app/UpdateCheckPolicy.cpp
+    src/app/UpdateCheckPolicy.hpp
+    src/app/WatchedFutureResult.hpp
+    src/io/ExportWorker.cpp
+    src/io/ExportWorker.hpp
+    src/io/WebPWriter.cpp
+    src/io/WebPWriter.hpp
+)
+
+set(UGURUGU_CORE_SOURCES
+    ${UGURUGU_ENGINE_SOURCES}
+    ${UGURUGU_DESKTOP_SERVICE_SOURCES}
 )
 
 set(UGURUGU_UI_SOURCES
