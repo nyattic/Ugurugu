@@ -8,6 +8,12 @@
         RegionUpdate,
     } from "./lib/EngineClient";
     import LayerPanel from "./lib/LayerPanel.svelte";
+    import {
+        clearRecoverySnapshot,
+        readRecoverySnapshot,
+        writeRecoverySnapshot,
+    } from "./lib/RecoveryStore";
+    import type { RecoverySnapshot } from "./lib/RecoveryStore";
 
     const engine = new EngineClient();
 
@@ -28,10 +34,16 @@
     let presetIndex = $state(0);
     let stabilization = $state(0);
 
+    let recoveryOffer = $state<RecoverySnapshot | null>(null);
+    let autosaveStatus = $state("");
+
     let playTimer: ReturnType<typeof setInterval> | null = null;
     let drawing = false;
     let pendingPoints: number[] = [];
     let chain = Promise.resolve();
+    let contentRevision = 0;
+    let snapshotRevision = 0;
+    let snapshotBusy = false;
 
     function enqueue(operation: () => Promise<void>) {
         chain = chain.then(operation).catch((error) => {
@@ -115,6 +127,8 @@
             meta = await engine.open(bytes);
             documentName = name;
             frameIndex = 0;
+            contentRevision = 0;
+            snapshotRevision = 0;
             layers = meta.layers;
             presets = meta.presets;
             canUndo = meta.canUndo;
@@ -226,6 +240,7 @@
         const frame = frameIndex;
         enqueue(async () => {
             present(await engine.strokeEnd(frame));
+            contentRevision += 1;
         });
     }
 
@@ -233,6 +248,7 @@
         stopPlayback();
         enqueue(async () => {
             present(await engine.undo(frameIndex));
+            contentRevision += 1;
         });
     }
 
@@ -240,6 +256,7 @@
         stopPlayback();
         enqueue(async () => {
             present(await engine.redo(frameIndex));
+            contentRevision += 1;
         });
     }
 
@@ -249,6 +266,7 @@
         stopPlayback();
         enqueue(async () => {
             present(await action(frameIndex));
+            contentRevision += 1;
         });
     }
 
@@ -284,8 +302,98 @@
         }
     }
 
+    function exportFramePng() {
+        stopPlayback();
+        const frame = frameIndex;
+        enqueue(async () => {
+            present(await engine.renderFrame(frame));
+            const blob = await new Promise<Blob | null>((resolve) => {
+                canvas.toBlob(resolve, "image/png");
+            });
+            if (!blob) {
+                throw new Error("PNG 인코딩에 실패했습니다");
+            }
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download =
+                `${documentName.replace(/\.ugu$/i, "")}-frame` +
+                `${frame + 1}.png`;
+            anchor.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    async function snapshotRecovery() {
+        if (
+            !meta ||
+            drawing ||
+            snapshotBusy ||
+            contentRevision === snapshotRevision
+        ) {
+            return;
+        }
+        snapshotBusy = true;
+        const revision = contentRevision;
+        try {
+            const bytes = await engine.serialize();
+            await writeRecoverySnapshot({
+                name: documentName,
+                bytes,
+                savedAt: Date.now(),
+            });
+            snapshotRevision = revision;
+            const time = new Date().toLocaleTimeString();
+            autosaveStatus = `복구 스냅샷 저장됨 ${time}`;
+        } catch (error) {
+            const detail =
+                error instanceof Error
+                    ? `${error.name}: ${error.message}`
+                    : String(error);
+            autosaveStatus = `복구 저장 실패 — ${detail}`;
+        } finally {
+            snapshotBusy = false;
+        }
+    }
+
+    function restoreRecovery() {
+        const offer = recoveryOffer;
+        recoveryOffer = null;
+        if (!offer) {
+            return;
+        }
+        void openDocument(offer.bytes, offer.name);
+    }
+
+    async function discardRecovery() {
+        recoveryOffer = null;
+        try {
+            await clearRecoverySnapshot();
+        } catch (error) {
+            autosaveStatus = `복구 슬롯 삭제 실패 — ${error}`;
+        }
+    }
+
+    // Reload-safety knob: the interval is short because a browser tab can go
+    // away without any reliable shutdown callback. Tests pass ?autosave=1.
+    function autosaveIntervalMs() {
+        const parameter = new URLSearchParams(window.location.search).get(
+            "autosave",
+        );
+        const seconds = Number(parameter);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return 15000;
+        }
+        return Math.min(600, Math.max(1, seconds)) * 1000;
+    }
+
     onMount(() => {
         void (async () => {
+            try {
+                recoveryOffer = await readRecoverySnapshot();
+            } catch (error) {
+                autosaveStatus = `복구 슬롯 확인 실패 — ${error}`;
+            }
             try {
                 const response = await fetch("/engine/Wave.ugu");
                 await openDocument(await response.arrayBuffer(), "Wave.ugu");
@@ -293,7 +401,20 @@
                 status = `데모 문서 로드 실패: ${error}`;
             }
         })();
-        return stopPlayback;
+        const snapshotTimer = setInterval(() => {
+            void snapshotRecovery();
+        }, autosaveIntervalMs());
+        const onHidden = () => {
+            if (document.visibilityState === "hidden") {
+                void snapshotRecovery();
+            }
+        };
+        document.addEventListener("visibilitychange", onHidden);
+        return () => {
+            clearInterval(snapshotTimer);
+            document.removeEventListener("visibilitychange", onHidden);
+            stopPlayback();
+        };
     });
 </script>
 
@@ -370,8 +491,27 @@
             <button onclick={downloadDocument} disabled={!meta}>
                 .ugu 저장
             </button>
+            <button id="export-png" onclick={exportFramePng} disabled={!meta}>
+                PNG 내보내기
+            </button>
         </div>
     </header>
+
+    {#if recoveryOffer}
+        <div class="recovery-banner" role="alert">
+            <span>
+                저장되지 않은 작업이 있습니다 —
+                {recoveryOffer.name},
+                {new Date(recoveryOffer.savedAt).toLocaleString()}
+            </span>
+            <button id="recovery-restore" onclick={restoreRecovery}>
+                복구
+            </button>
+            <button id="recovery-discard" onclick={discardRecovery}>
+                삭제
+            </button>
+        </div>
+    {/if}
 
     <div class="workspace">
         <section class="viewport">
@@ -428,6 +568,7 @@
             </span>
         {/if}
         <p id="status">{status}</p>
+        <p id="autosave-status">{autosaveStatus}</p>
     </footer>
 </main>
 
@@ -532,6 +673,23 @@
         font-size: 0.85rem;
         color: #9aa0a6;
         white-space: nowrap;
+    }
+
+    #autosave-status {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #7f8b99;
+        white-space: nowrap;
+    }
+
+    .recovery-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+        background: #4a3b1f;
+        color: #f4e3bd;
+        font-size: 0.9rem;
     }
 
     button,
