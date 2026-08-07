@@ -520,6 +520,7 @@ jobs:
             --icon resources/icons/Ugurugu.ico `
             --releaseNotes $releaseNotes `
             --runtime win10-x64 `
+            --framework vcredist145-x64 `
             --channel win `
             --delta None `
             --noPortable true `

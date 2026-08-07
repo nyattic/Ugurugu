@@ -135,11 +135,24 @@ if(APPLE)
     )
 endif()
 
+set(UGURUGU_DEPLOY_RUNTIME_OPTIONS)
+if(WIN32)
+    # The deploy script's compiler runtime copy depends on windeployqt
+    # finding the VC redist directory in the environment and silently skips
+    # it otherwise, which shipped releases without MSVCP140_1.dll. The
+    # Velopack installer owns the prerequisite instead (--framework
+    # vcredist145-x64 in release.yml), which installs the official
+    # redistributable when missing and keeps it serviced by Windows Update
+    # instead of shipping loose runtime DLLs.
+    set(UGURUGU_DEPLOY_RUNTIME_OPTIONS NO_COMPILER_RUNTIME)
+endif()
+
 qt_generate_deploy_app_script(
     TARGET Ugurugu
     OUTPUT_SCRIPT ugurugu_deploy_script
     DEPLOY_TOOL_OPTIONS ${UGURUGU_DEPLOY_TOOL_OPTIONS}
     ${UGURUGU_DEPLOY_PLUGIN_OPTIONS}
+    ${UGURUGU_DEPLOY_RUNTIME_OPTIONS}
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
 install(SCRIPT ${ugurugu_deploy_script})
