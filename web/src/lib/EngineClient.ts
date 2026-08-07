@@ -5,6 +5,8 @@ export interface DocumentMeta {
     frameCount: number;
     layerCount: number;
     fps: number;
+    canUndo: boolean;
+    canRedo: boolean;
 }
 
 export interface RenderedFrame {
@@ -12,11 +14,31 @@ export interface RenderedFrame {
     width: number;
     height: number;
     pixels: Uint8ClampedArray;
+    canUndo: boolean;
+    canRedo: boolean;
+}
+
+export interface BrushSettings {
+    red: number;
+    green: number;
+    blue: number;
+    alpha: number;
+    width: number;
+    erase: boolean;
 }
 
 interface PendingRequest {
     resolve: (value: never) => void;
     reject: (reason: Error) => void;
+}
+
+interface RenderResponse {
+    frame: number;
+    width: number;
+    height: number;
+    pixels: ArrayBuffer;
+    canUndo: boolean;
+    canRedo: boolean;
 }
 
 export class EngineClient {
@@ -53,6 +75,17 @@ export class EngineClient {
         });
     }
 
+    static #toFrame(response: RenderResponse): RenderedFrame {
+        return {
+            frame: response.frame,
+            width: response.width,
+            height: response.height,
+            pixels: new Uint8ClampedArray(response.pixels),
+            canUndo: response.canUndo,
+            canRedo: response.canRedo,
+        };
+    }
+
     async open(bytes: ArrayBuffer): Promise<DocumentMeta> {
         const response = await this.#request<{ meta: DocumentMeta }>(
             { type: "open", bytes },
@@ -62,18 +95,67 @@ export class EngineClient {
     }
 
     async renderFrame(frame: number): Promise<RenderedFrame> {
-        const response = await this.#request<{
-            frame: number;
-            width: number;
-            height: number;
-            pixels: ArrayBuffer;
-        }>({ type: "render", frame });
-        return {
-            frame: response.frame,
-            width: response.width,
-            height: response.height,
-            pixels: new Uint8ClampedArray(response.pixels),
-        };
+        const response = await this.#request<RenderResponse>({
+            type: "render",
+            frame,
+        });
+        return EngineClient.#toFrame(response);
+    }
+
+    async setBrush(brush: BrushSettings): Promise<void> {
+        await this.#request({ type: "brush", ...brush });
+    }
+
+    async strokeBegin(
+        frame: number,
+        x: number,
+        y: number,
+        pressure: number,
+    ): Promise<RenderedFrame> {
+        const response = await this.#request<RenderResponse>({
+            type: "strokeBegin",
+            frame,
+            x,
+            y,
+            pressure,
+        });
+        return EngineClient.#toFrame(response);
+    }
+
+    async strokeAppend(
+        frame: number,
+        points: number[],
+    ): Promise<RenderedFrame> {
+        const response = await this.#request<RenderResponse>({
+            type: "strokeAppend",
+            frame,
+            points,
+        });
+        return EngineClient.#toFrame(response);
+    }
+
+    async strokeEnd(frame: number): Promise<RenderedFrame> {
+        const response = await this.#request<RenderResponse>({
+            type: "strokeEnd",
+            frame,
+        });
+        return EngineClient.#toFrame(response);
+    }
+
+    async undo(frame: number): Promise<RenderedFrame> {
+        const response = await this.#request<RenderResponse>({
+            type: "undo",
+            frame,
+        });
+        return EngineClient.#toFrame(response);
+    }
+
+    async redo(frame: number): Promise<RenderedFrame> {
+        const response = await this.#request<RenderResponse>({
+            type: "redo",
+            frame,
+        });
+        return EngineClient.#toFrame(response);
     }
 
     async serialize(): Promise<ArrayBuffer> {
