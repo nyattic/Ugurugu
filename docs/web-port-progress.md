@@ -33,6 +33,8 @@
 셸 번들 48 KB(gzip 18.6 KB). 실행: `cmake --build --preset wasm-release && cd web && npm install && npm run dev`.
 
 - `be6c378` — IndexedDB 자동 복구 슬롯 1개: 변경이 있을 때만 15초 주기(및 탭 hidden 시)로 `.ugu` 바이트 스냅샷을 저장하고, 재접속 시 배너로 복구/삭제를 제안하며, quota 등 저장·읽기 실패는 상태 표시줄에 노출한다(`web/src/lib/RecoveryStore.ts`). 현재 프레임 PNG export 버튼(캔버스 `toBlob`, 내보내기 직전 전체 렌더로 프레임 확정). headless Chromium 자동 검증 `web/tests/browser-verify.mjs`(playwright-core devDependency): 그리기→자동 저장→재접속→복구 배너→복구 후 픽셀 수 일치, PNG 서명 확인, IndexedDB 강제 실패 시 상태 표시줄 노출까지 확인.
+- `d4b2e0f` — 데스크톱 패널 동등화. 레이어 썸네일(`LayerThumbnailRenderer`를 `src/render/`로 옮겨 엔진에 편입 — frame 0·wobble off 정적 렌더, dpr 반영, 커밋 후 250ms 디바운스 갱신), 컬러 서클(`ColorWheel.svelte` — 휴 링+SV 사각, 데스크톱처럼 회색이어도 링 위치 유지), 스포이드(표시 캔버스 픽셀 샘플링, 드래그 연속 추출), 최근 색 히스토리(스트로크 커밋 시 기록·localStorage 유지, 데스크톱 `ColorHistoryGrid` 의미), 레이어 불투명도는 데스크톱 LayerDock처럼 패널 하단 고정 슬라이더.
+- `817303a` — GIF 내보내기. 브리지 `ugu_export_gif`가 데스크톱 `ExportWorker`와 같은 경로로 인코딩: NativeExact 전체 프레임 렌더, drift 보정 딜레이(공용화한 `AnimationExportPolicy::frameDurations`), GIF89a. 프레임 세트를 메모리에 들고 인코딩하므로 **폭×높이×4×프레임 수가 128 MiB(1024²·30프레임 수준)를 넘는 문서는 사전 거부**하고 상태 표시줄에 사유를 표시한다. WebP는 libwebp의 wasm 빌드가 필요해 계속 제외.
 
 ### 단계 1 잔여 측정 (2026-08-07, `web-measure-recovery` 브랜치, `bbe2d6c`/`2c96537`)
 
@@ -86,7 +88,7 @@
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), PNG export, IndexedDB 실패 노출을 자동 검증. 이전 세션의 Worker 게이트·드로잉·레이어 시나리오도 같은 방식으로 검증했다.
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출을 자동 검증(19개 체크). 이전 세션의 Worker 게이트·드로잉·레이어 시나리오도 같은 방식으로 검증했다.
 
 ## 2. 남은 작업
 
@@ -105,7 +107,7 @@
 
 - WebGL 2 presenter (현재 Canvas 2D `putImageData`)
 - pan/zoom, 두 손가락 제스처, 모바일 반응형 레이아웃
-- 채우기/선택 도구, 색 히스토리, 키보드 단축키
+- 채우기/선택 도구, 키보드 단축키
 - 접근성: 키보드 전용 조작, 스크린 리더 레이블
 
 ### 단계 4 잔여 (배포)
@@ -122,5 +124,7 @@
 
 - 진행 중 스트로크 프리뷰의 최초 프레임과 커밋 직후 프레임은 전체 렌더 1회씩을 쓴다(시작은 `renderLayerSplit`까지 포함해 사실상 2회). 스트레스 측정으로 정량화됨: 2,000 스트로크 밀도에서 시작 p95 5.7 s(1024²)/11.5 s(2048²), 커밋 p95 2.9/5.7 s. **웹 이식에서 가장 시급한 최적화 지점**이며, 후보는 커밋 시 split 재사용(전체 재렌더 대신 마지막 증분 상태 확정)과 wobble 프레임 캐시다. 배치 경로는 p95 0.4 ms 수준이라 문제가 없다.
 - 자동 복구 스냅샷은 스트로크 진행 중에는 건너뛰고 다음 주기에 저장한다. serialize가 수백 ms인 대형 문서에서는 스냅샷 주기 동안 Worker가 그 시간만큼 다른 명령을 받지 못한다.
+- GIF 내보내기는 인코딩이 끝날 때까지 Worker를 블로킹한다(프레임 수 × 전체 렌더 + 인코딩). Wave 규모는 1초 미만이지만 스트로크 밀도가 높은 문서는 분 단위가 될 수 있다. 진행률·취소가 필요해지면 프레임 단위 분할이 다음 단계다.
+- `npm run dev`는 시작할 때만 엔진 아티팩트를 복사한다. dev 서버를 띄운 채 wasm을 다시 빌드하면 `npm run sync-engine`을 다시 실행해야 브라우저가 새 엔진을 받는다(안 하면 새 UI가 이전 엔진의 없는 export를 불러 `is not a function` 오류가 난다).
 - 웹 엔진 아티팩트(`ugurugu_engine_spike.{js,wasm}`)는 저장소에 커밋하지 않으며 `npm run sync-engine`이 `out/build/wasm-release`에서 복사한다.
 - 지우개는 현재 기본 Line 설정 고정이다(`EraserPreset` 카탈로그 미연결).
