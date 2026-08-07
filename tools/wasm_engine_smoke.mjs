@@ -6,7 +6,8 @@ const modulePath = new URL(
     "../out/build/wasm-release/ugurugu_engine_spike.js",
     import.meta.url,
 );
-const fixturePath = new URL("../examples/Wave.ugu", import.meta.url);
+const fixturePath =
+    process.argv[2] ?? new URL("../examples/Wave.ugu", import.meta.url);
 
 const { default: createUguruguEngine } = await import(
     fileURLToPath(modulePath)
