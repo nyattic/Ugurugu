@@ -11,7 +11,7 @@
 #include "ui/Icons.hpp"
 #include "ui/LayerItemDelegate.hpp"
 #include "ui/LayerListWidget.hpp"
-#include "ui/LayerThumbnailRenderer.hpp"
+#include "render/LayerThumbnailRenderer.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
 #include "ui/ResponsiveGrid.hpp"
 

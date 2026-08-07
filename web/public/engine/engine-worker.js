@@ -84,30 +84,18 @@ function openDocument(engine, bytes) {
 }
 
 // The engine hands out premultiplied BGRA rows; putImageData wants straight
-// RGBA, so the dirty region is swizzled and unpremultiplied here in the
-// worker before it crosses to the main thread.
-function dirtyRegion(engine) {
-    const handle = requireDocument();
-    const rect = {
-        x: engine._ugu_dirty_x(handle),
-        y: engine._ugu_dirty_y(handle),
-        width: engine._ugu_dirty_width(handle),
-        height: engine._ugu_dirty_height(handle),
-    };
-    if (rect.width <= 0 || rect.height <= 0) {
-        return { rect: { x: 0, y: 0, width: 0, height: 0 }, pixels: null };
-    }
-    const pixels = engine._ugu_frame_pixels(handle);
-    const stride = engine._ugu_frame_bytes_per_line(handle);
-    const rgba = new Uint8ClampedArray(rect.width * rect.height * 4);
-    for (let row = 0; row < rect.height; row += 1) {
-        const sourceStart = pixels + (rect.y + row) * stride + rect.x * 4;
+// RGBA, so pixel regions are swizzled and unpremultiplied here in the worker
+// before they cross to the main thread.
+function bgraToRgba(engine, pointer, offsetX, offsetY, width, height, stride) {
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let row = 0; row < height; row += 1) {
+        const sourceStart = pointer + (offsetY + row) * stride + offsetX * 4;
         const source = engine.HEAPU8.subarray(
             sourceStart,
-            sourceStart + rect.width * 4,
+            sourceStart + width * 4,
         );
-        const targetOffset = row * rect.width * 4;
-        for (let x = 0; x < rect.width; x += 1) {
+        const targetOffset = row * width * 4;
+        for (let x = 0; x < width; x += 1) {
             const b = source[x * 4];
             const g = source[x * 4 + 1];
             const r = source[x * 4 + 2];
@@ -125,7 +113,62 @@ function dirtyRegion(engine) {
             rgba[target + 3] = a;
         }
     }
+    return rgba;
+}
+
+function dirtyRegion(engine) {
+    const handle = requireDocument();
+    const rect = {
+        x: engine._ugu_dirty_x(handle),
+        y: engine._ugu_dirty_y(handle),
+        width: engine._ugu_dirty_width(handle),
+        height: engine._ugu_dirty_height(handle),
+    };
+    if (rect.width <= 0 || rect.height <= 0) {
+        return { rect: { x: 0, y: 0, width: 0, height: 0 }, pixels: null };
+    }
+    const rgba = bgraToRgba(
+        engine,
+        engine._ugu_frame_pixels(handle),
+        rect.x,
+        rect.y,
+        rect.width,
+        rect.height,
+        engine._ugu_frame_bytes_per_line(handle),
+    );
     return { rect, pixels: rgba.buffer };
+}
+
+function layerThumbnails(engine, devicePixelRatio) {
+    const handle = requireDocument();
+    const count = engine._ugu_document_layer_count(handle);
+    const thumbnails = [];
+    const transfers = [];
+    for (let index = 0; index < count; index += 1) {
+        const pointer = engine._ugu_layer_thumbnail(
+            handle,
+            index,
+            devicePixelRatio,
+        );
+        if (!pointer) {
+            thumbnails.push({ index, width: 0, height: 0, pixels: null });
+            continue;
+        }
+        const width = engine._ugu_thumbnail_width(handle);
+        const height = engine._ugu_thumbnail_height(handle);
+        const rgba = bgraToRgba(
+            engine,
+            pointer,
+            0,
+            0,
+            width,
+            height,
+            engine._ugu_thumbnail_bytes_per_line(handle),
+        );
+        thumbnails.push({ index, width, height, pixels: rgba.buffer });
+        transfers.push(rgba.buffer);
+    }
+    return { thumbnails, transfers };
 }
 
 function regionReply(engine, id) {
@@ -174,6 +217,14 @@ self.onmessage = async (event) => {
         if (type === "serialize") {
             const bytes = serializeDocument(engine);
             postMessage({ id, ok: true, bytes }, [bytes]);
+            return;
+        }
+        if (type === "layerThumbnails") {
+            const { thumbnails, transfers } = layerThumbnails(
+                engine,
+                event.data.devicePixelRatio,
+            );
+            postMessage({ id, ok: true, thumbnails }, transfers);
             return;
         }
         if (type === "render") {

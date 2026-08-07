@@ -14,6 +14,13 @@ export interface BrushPresetInfo {
     defaultSize: number;
 }
 
+export interface LayerThumbnail {
+    index: number;
+    width: number;
+    height: number;
+    pixels: Uint8ClampedArray | null;
+}
+
 export interface DocumentMeta {
     schemaVersion: number;
     width: number;
@@ -226,5 +233,26 @@ export class EngineClient {
             type: "serialize",
         });
         return response.bytes;
+    }
+
+    async layerThumbnails(
+        devicePixelRatio: number,
+    ): Promise<LayerThumbnail[]> {
+        const response = await this.#request<{
+            thumbnails: Array<{
+                index: number;
+                width: number;
+                height: number;
+                pixels: ArrayBuffer | null;
+            }>;
+        }>({ type: "layerThumbnails", devicePixelRatio });
+        return response.thumbnails.map((thumbnail) => ({
+            index: thumbnail.index,
+            width: thumbnail.width,
+            height: thumbnail.height,
+            pixels: thumbnail.pixels
+                ? new Uint8ClampedArray(thumbnail.pixels)
+                : null,
+        }));
     }
 }

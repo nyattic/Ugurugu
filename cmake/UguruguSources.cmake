@@ -83,6 +83,8 @@ set(UGURUGU_ENGINE_SOURCES
     src/render/IncrementalStrokeRenderer.hpp
     src/render/LayerCompositionPlan.cpp
     src/render/LayerCompositionPlan.hpp
+    src/render/LayerThumbnailRenderer.cpp
+    src/render/LayerThumbnailRenderer.hpp
     src/render/MotionTimeModel.cpp
     src/render/MotionTimeModel.hpp
     src/render/engine/DisplayScaleReplay.cpp
@@ -200,8 +202,6 @@ set(UGURUGU_UI_SOURCES
     src/ui/LayerItemDelegate.hpp
     src/ui/LayerListWidget.cpp
     src/ui/LayerListWidget.hpp
-    src/ui/LayerThumbnailRenderer.cpp
-    src/ui/LayerThumbnailRenderer.hpp
     src/ui/LassoPopoverPanel.cpp
     src/ui/LassoPopoverPanel.hpp
     src/ui/DrawingToolSettings.cpp

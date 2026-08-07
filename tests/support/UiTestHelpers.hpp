@@ -38,7 +38,7 @@
 #include "ui/LayerDock.hpp"
 #include "ui/LayerItemDelegate.hpp"
 #include "ui/LayerListWidget.hpp"
-#include "ui/LayerThumbnailRenderer.hpp"
+#include "render/LayerThumbnailRenderer.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SelectionShapeButton.hpp"

@@ -8,6 +8,7 @@
 #include "io/DocumentSerializer.hpp"
 #include "io/serializer/SerializerSchema.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
+#include "render/LayerThumbnailRenderer.hpp"
 #include "render/RenderEngine.hpp"
 
 #include <QByteArray>
@@ -43,6 +44,7 @@ struct BridgeDocument
     bool incrementalActive = false;
     QImage renderedFrame;
     QRect dirty;
+    QImage thumbnail;
     QByteArray serialized;
     QByteArray scratchText;
 };
@@ -591,6 +593,43 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE int ugu_dirty_height(const BridgeDocument *handle)
     {
         return handle->dirty.height();
+    }
+
+    // Renders the layer subtree at index as a static thumbnail (frame 0,
+    // wobble off), the same picture the desktop layer dock shows. The buffer
+    // is premultiplied BGRA like ugu_render_frame and stays valid until the
+    // next thumbnail render or close on the same handle.
+    EMSCRIPTEN_KEEPALIVE const std::uint8_t *ugu_layer_thumbnail(
+        BridgeDocument *handle, int index, double devicePixelRatio)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return nullptr;
+        }
+        handle->thumbnail = ugurugu::LayerThumbnailRenderer::renderImage(
+            handle->controller->document(), *layer, devicePixelRatio);
+        if (handle->thumbnail.isNull())
+        {
+            return nullptr;
+        }
+        return handle->thumbnail.constBits();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_thumbnail_width(const BridgeDocument *handle)
+    {
+        return handle->thumbnail.width();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_thumbnail_height(const BridgeDocument *handle)
+    {
+        return handle->thumbnail.height();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_thumbnail_bytes_per_line(
+        const BridgeDocument *handle)
+    {
+        return static_cast<int>(handle->thumbnail.bytesPerLine());
     }
 
     // The pointer stays valid until the next serialize or close on the same

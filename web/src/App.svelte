@@ -5,8 +5,10 @@
         BrushPresetInfo,
         DocumentMeta,
         LayerInfo,
+        LayerThumbnail,
         RegionUpdate,
     } from "./lib/EngineClient";
+    import ColorPanel from "./lib/ColorPanel.svelte";
     import LayerPanel from "./lib/LayerPanel.svelte";
     import {
         clearRecoverySnapshot,
@@ -30,20 +32,80 @@
 
     let colorHex = $state("#1d2129");
     let brushSize = $state(6);
-    let tool = $state<"brush" | "eraser">("brush");
+    let tool = $state<"brush" | "eraser" | "eyedropper">("brush");
     let presetIndex = $state(0);
     let stabilization = $state(0);
+    let thumbnails = $state<LayerThumbnail[]>([]);
+    let recentColors = $state<string[]>(loadRecentColors());
+
+    const recentColorCapacity = 16;
 
     let recoveryOffer = $state<RecoverySnapshot | null>(null);
     let autosaveStatus = $state("");
 
     let playTimer: ReturnType<typeof setInterval> | null = null;
     let drawing = false;
+    let picking = false;
     let pendingPoints: number[] = [];
     let chain = Promise.resolve();
     let contentRevision = 0;
     let snapshotRevision = 0;
     let snapshotBusy = false;
+    let thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function loadRecentColors(): string[] {
+        try {
+            const stored = window.localStorage.getItem(
+                "ugurugu-web-color-history",
+            );
+            const parsed = stored ? JSON.parse(stored) : [];
+            return Array.isArray(parsed)
+                ? parsed.filter(
+                      (value) =>
+                          typeof value === "string" &&
+                          /^#[0-9a-f]{6}$/.test(value),
+                  )
+                : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function recordRecentColor(color: string) {
+        recentColors = [
+            color,
+            ...recentColors.filter((existing) => existing !== color),
+        ].slice(0, recentColorCapacity);
+        try {
+            window.localStorage.setItem(
+                "ugurugu-web-color-history",
+                JSON.stringify(recentColors),
+            );
+        } catch {
+            // History is a convenience; drawing must not fail on storage.
+        }
+    }
+
+    function chooseColor(color: string) {
+        colorHex = color;
+        if (tool !== "brush") {
+            tool = "brush";
+        }
+    }
+
+    function scheduleThumbnailRefresh() {
+        if (thumbnailTimer !== null) {
+            clearTimeout(thumbnailTimer);
+        }
+        thumbnailTimer = setTimeout(() => {
+            thumbnailTimer = null;
+            enqueue(async () => {
+                thumbnails = await engine.layerThumbnails(
+                    window.devicePixelRatio || 1,
+                );
+            });
+        }, 250);
+    }
 
     function enqueue(operation: () => Promise<void>) {
         chain = chain.then(operation).catch((error) => {
@@ -140,6 +202,8 @@
                 `${meta.frameCount}프레임 @ ${meta.fps}fps, ` +
                 `스키마 v${meta.schemaVersion}`;
             requestRender(0);
+            thumbnails = [];
+            scheduleThumbnailRefresh();
         } catch (error) {
             meta = null;
             status = `열기 실패: ${error}`;
@@ -197,12 +261,36 @@
         });
     }
 
+    function pickColor(event: PointerEvent) {
+        const context = canvas.getContext("2d");
+        if (!context) {
+            return;
+        }
+        const { x, y } = canvasPosition(event);
+        const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor(x)));
+        const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor(y)));
+        const [red, green, blue] = context.getImageData(
+            pixelX,
+            pixelY,
+            1,
+            1,
+        ).data;
+        colorHex = `#${((red << 16) | (green << 8) | blue)
+            .toString(16)
+            .padStart(6, "0")}`;
+    }
+
     function onPointerDown(event: PointerEvent) {
         if (!meta || event.button !== 0) {
             return;
         }
         stopPlayback();
         canvas.setPointerCapture(event.pointerId);
+        if (tool === "eyedropper") {
+            picking = true;
+            pickColor(event);
+            return;
+        }
         drawing = true;
         pendingPoints = [];
         const { x, y, pressure } = canvasPosition(event);
@@ -216,6 +304,10 @@
     }
 
     function onPointerMove(event: PointerEvent) {
+        if (picking) {
+            pickColor(event);
+            return;
+        }
         if (!drawing) {
             return;
         }
@@ -231,6 +323,11 @@
     }
 
     function onPointerUp(event: PointerEvent) {
+        if (picking) {
+            picking = false;
+            canvas.releasePointerCapture(event.pointerId);
+            return;
+        }
         if (!drawing) {
             return;
         }
@@ -238,10 +335,15 @@
         canvas.releasePointerCapture(event.pointerId);
         flushPendingPoints();
         const frame = frameIndex;
+        const usedColor = tool === "brush" ? colorHex : null;
         enqueue(async () => {
             present(await engine.strokeEnd(frame));
             contentRevision += 1;
+            if (usedColor) {
+                recordRecentColor(usedColor);
+            }
         });
+        scheduleThumbnailRefresh();
     }
 
     function undo() {
@@ -250,6 +352,7 @@
             present(await engine.undo(frameIndex));
             contentRevision += 1;
         });
+        scheduleThumbnailRefresh();
     }
 
     function redo() {
@@ -258,6 +361,7 @@
             present(await engine.redo(frameIndex));
             contentRevision += 1;
         });
+        scheduleThumbnailRefresh();
     }
 
     function layerAction(
@@ -268,6 +372,7 @@
             present(await action(frameIndex));
             contentRevision += 1;
         });
+        scheduleThumbnailRefresh();
     }
 
     function onSliderInput(event: Event) {
@@ -412,6 +517,9 @@
         document.addEventListener("visibilitychange", onHidden);
         return () => {
             clearInterval(snapshotTimer);
+            if (thumbnailTimer !== null) {
+                clearTimeout(thumbnailTimer);
+            }
             document.removeEventListener("visibilitychange", onHidden);
             stopPlayback();
         };
@@ -435,6 +543,15 @@
                 onclick={() => (tool = "eraser")}
             >
                 지우개
+            </button>
+            <button
+                id="eyedropper"
+                class="tool-button"
+                class:active={tool === "eyedropper"}
+                title="캔버스에서 색 추출"
+                onclick={() => (tool = "eyedropper")}
+            >
+                스포이드
             </button>
             <select
                 title="브러시 프리셋"
@@ -523,28 +640,41 @@
                 onpointercancel={onPointerUp}
             ></canvas>
         </section>
-        <LayerPanel
-            {layers}
-            onactivate={(index) =>
-                layerAction((frame) => engine.layerActivate(frame, index))}
-            onvisible={(index, visible) =>
-                layerAction((frame) =>
-                    engine.layerVisible(frame, index, visible),
-                )}
-            onopacity={(index, opacity) =>
-                layerAction((frame) =>
-                    engine.layerOpacity(frame, index, opacity),
-                )}
-            onadd={() => layerAction((frame) => engine.layerAdd(frame))}
-            onremove={(index) =>
-                layerAction((frame) => engine.layerRemove(frame, index))}
-            onrename={(index, name) =>
-                layerAction((frame) =>
-                    engine.layerRename(frame, index, name),
-                )}
-            onmove={(index, offset) =>
-                layerAction((frame) => engine.layerMove(frame, index, offset))}
-        />
+        <div class="side">
+            <ColorPanel
+                color={colorHex}
+                {recentColors}
+                onchange={(hex) => (colorHex = hex)}
+                onrecent={chooseColor}
+            />
+            <LayerPanel
+                {layers}
+                {thumbnails}
+                onactivate={(index) =>
+                    layerAction((frame) =>
+                        engine.layerActivate(frame, index),
+                    )}
+                onvisible={(index, visible) =>
+                    layerAction((frame) =>
+                        engine.layerVisible(frame, index, visible),
+                    )}
+                onopacity={(index, opacity) =>
+                    layerAction((frame) =>
+                        engine.layerOpacity(frame, index, opacity),
+                    )}
+                onadd={() => layerAction((frame) => engine.layerAdd(frame))}
+                onremove={(index) =>
+                    layerAction((frame) => engine.layerRemove(frame, index))}
+                onrename={(index, name) =>
+                    layerAction((frame) =>
+                        engine.layerRename(frame, index, name),
+                    )}
+                onmove={(index, offset) =>
+                    layerAction((frame) =>
+                        engine.layerMove(frame, index, offset),
+                    )}
+            />
+        </div>
     </div>
 
     <footer>
@@ -648,6 +778,15 @@
         box-shadow: 0 4px 24px rgb(0 0 0 / 45%);
         touch-action: none;
         cursor: crosshair;
+    }
+
+    .side {
+        display: flex;
+        flex-direction: column;
+        inline-size: 15rem;
+        min-block-size: 0;
+        border-inline-start: 1px solid #3c4047;
+        background: #26292f;
     }
 
     footer {

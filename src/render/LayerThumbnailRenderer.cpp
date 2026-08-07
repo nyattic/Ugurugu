@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Nyabi (nyattic)
 
-#include "ui/LayerThumbnailRenderer.hpp"
+#include "render/LayerThumbnailRenderer.hpp"
 
 #include "document/LayerHierarchy.hpp"
 #include "render/RenderEngine.hpp"
