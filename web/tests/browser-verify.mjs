@@ -277,6 +277,22 @@ const browser = await chromium.launch({
         `export produced a PNG (${pngBytes.length} bytes)`,
     );
 
+    const gifDownloadPromise = page.waitForEvent("download", {
+        timeout: 60000,
+    });
+    await page.locator("#export-gif").click();
+    const gifDownload = await gifDownloadPromise;
+    const gifBytes = await readFile(await gifDownload.path());
+    check(
+        gifDownload.suggestedFilename().endsWith(".gif"),
+        `gif export filename: ${gifDownload.suggestedFilename()}`,
+    );
+    check(
+        gifBytes.length > 6 &&
+            gifBytes.slice(0, 6).toString("latin1") === "GIF89a",
+        `animated GIF exported (${gifBytes.length} bytes)`,
+    );
+
     await waitForThumbnails(page);
     check(true, "layer thumbnails rendered for the restored document");
 

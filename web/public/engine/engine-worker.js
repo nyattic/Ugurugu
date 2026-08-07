@@ -201,6 +201,16 @@ function serializeDocument(engine) {
     return engine.HEAPU8.slice(pointer, pointer + size).buffer;
 }
 
+function exportGif(engine) {
+    const handle = requireDocument();
+    const pointer = engine._ugu_export_gif(handle);
+    if (!pointer) {
+        throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
+    }
+    const size = engine._ugu_export_size(handle);
+    return engine.HEAPU8.slice(pointer, pointer + size).buffer;
+}
+
 self.onmessage = async (event) => {
     const { id, type } = event.data;
     try {
@@ -216,6 +226,11 @@ self.onmessage = async (event) => {
         }
         if (type === "serialize") {
             const bytes = serializeDocument(engine);
+            postMessage({ id, ok: true, bytes }, [bytes]);
+            return;
+        }
+        if (type === "exportGif") {
+            const bytes = exportGif(engine);
             postMessage({ id, ok: true, bytes }, [bytes]);
             return;
         }

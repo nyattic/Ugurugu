@@ -235,6 +235,13 @@ export class EngineClient {
         return response.bytes;
     }
 
+    async exportGif(): Promise<ArrayBuffer> {
+        const response = await this.#request<{ bytes: ArrayBuffer }>({
+            type: "exportGif",
+        });
+        return response.bytes;
+    }
+
     async layerThumbnails(
         devicePixelRatio: number,
     ): Promise<LayerThumbnail[]> {

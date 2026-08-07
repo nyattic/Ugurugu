@@ -4,7 +4,10 @@
 #include "io/AnimationExportPolicy.hpp"
 
 #include "app/MemoryBudget.hpp"
+#include "document/DocumentLimits.hpp"
 #include "io/RenderExportPolicy.hpp"
+
+#include <algorithm>
 
 namespace ugurugu
 {
@@ -52,6 +55,27 @@ bool AnimationExportPolicy::fitsMemoryBudget(
     const Document &document, const QSize &frameSize)
 {
     return RenderExportPolicy::animatedGifFitsMemoryBudget(document, frameSize);
+}
+
+QVector<int> AnimationExportPolicy::frameDurations(
+    int frameCount, qreal framesPerSecond, int unitsPerSecond)
+{
+    const qreal fps = std::clamp(framesPerSecond,
+        DocumentLimits::minimumFramesPerSecond,
+        DocumentLimits::maximumFramesPerSecond);
+    QVector<int> delays;
+    delays.reserve(frameCount);
+    qint64 emittedUnits = 0;
+    for (int frame = 1; frame <= frameCount; ++frame)
+    {
+        const qint64 targetUnits =
+            qRound64(static_cast<qreal>(frame) * unitsPerSecond / fps);
+        const int delay =
+            static_cast<int>(std::max<qint64>(1, targetUnits - emittedUnits));
+        delays.append(delay);
+        emittedUnits += delay;
+    }
+    return delays;
 }
 
 }

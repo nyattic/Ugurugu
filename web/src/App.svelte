@@ -42,6 +42,7 @@
 
     let recoveryOffer = $state<RecoverySnapshot | null>(null);
     let autosaveStatus = $state("");
+    let exportingGif = $state(false);
 
     let playTimer: ReturnType<typeof setInterval> | null = null;
     let drawing = false;
@@ -418,14 +419,38 @@
             if (!blob) {
                 throw new Error("PNG 인코딩에 실패했습니다");
             }
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement("a");
-            anchor.href = url;
-            anchor.download =
+            downloadBlob(
+                blob,
                 `${documentName.replace(/\.ugu$/i, "")}-frame` +
-                `${frame + 1}.png`;
-            anchor.click();
-            URL.revokeObjectURL(url);
+                    `${frame + 1}.png`,
+            );
+        });
+    }
+
+    function downloadBlob(blob: Blob, filename: string) {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function exportGif() {
+        stopPlayback();
+        exportingGif = true;
+        status = "GIF 내보내는 중…";
+        enqueue(async () => {
+            try {
+                const bytes = await engine.exportGif();
+                downloadBlob(
+                    new Blob([bytes], { type: "image/gif" }),
+                    `${documentName.replace(/\.ugu$/i, "")}.gif`,
+                );
+                status = "GIF 내보내기 완료";
+            } finally {
+                exportingGif = false;
+            }
         });
     }
 
@@ -610,6 +635,13 @@
             </button>
             <button id="export-png" onclick={exportFramePng} disabled={!meta}>
                 PNG 내보내기
+            </button>
+            <button
+                id="export-gif"
+                onclick={exportGif}
+                disabled={!meta || exportingGif}
+            >
+                {exportingGif ? "GIF 내보내는 중…" : "GIF 내보내기"}
             </button>
         </div>
     </header>

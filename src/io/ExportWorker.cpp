@@ -3,7 +3,7 @@
 
 #include "io/ExportWorker.hpp"
 
-#include "document/DocumentLimits.hpp"
+#include "io/AnimationExportPolicy.hpp"
 #include "io/GifWriter.hpp"
 #include "io/WebPWriter.hpp"
 #include "render/RenderEngine.hpp"
@@ -14,37 +14,11 @@
 #include <QPainter>
 #include <QSaveFile>
 
-#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
 namespace ugurugu
 {
-namespace
-{
-
-QVector<int> frameDurations(
-    int frameCount, qreal framesPerSecond, int unitsPerSecond)
-{
-    const qreal fps = std::clamp(framesPerSecond,
-        DocumentLimits::minimumFramesPerSecond,
-        DocumentLimits::maximumFramesPerSecond);
-    QVector<int> delays;
-    delays.reserve(frameCount);
-    qint64 emittedUnits = 0;
-    for (int frame = 1; frame <= frameCount; ++frame)
-    {
-        const qint64 targetUnits =
-            qRound64(static_cast<qreal>(frame) * unitsPerSecond / fps);
-        const int delay =
-            static_cast<int>(std::max<qint64>(1, targetUnits - emittedUnits));
-        delays.append(delay);
-        emittedUnits += delay;
-    }
-    return delays;
-}
-
-}
 
 ExportWorker::ExportWorker(QObject *parent)
     : QObject(parent)
@@ -360,7 +334,8 @@ bool ExportWorker::writeAnimation(const Request &request, QString *error)
     {
         return WebPWriter::write(request.filePath,
             frames,
-            frameDurations(request.document.animationFrames,
+            AnimationExportPolicy::frameDurations(
+                request.document.animationFrames,
                 request.document.framesPerSecond,
                 1000),
             error,
@@ -368,7 +343,7 @@ bool ExportWorker::writeAnimation(const Request &request, QString *error)
     }
     return GifWriter::write(request.filePath,
         frames,
-        frameDurations(request.document.animationFrames,
+        AnimationExportPolicy::frameDurations(request.document.animationFrames,
             request.document.framesPerSecond,
             100),
         error,

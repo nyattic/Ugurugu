@@ -6,6 +6,7 @@
 #include "document/Document.hpp"
 
 #include <QSize>
+#include <QVector>
 
 namespace ugurugu
 {
@@ -22,6 +23,10 @@ public:
     static bool fitsMemoryBudget(const Document &document);
     static bool fitsMemoryBudget(
         const Document &document, const QSize &frameSize);
+    // Per-frame delays in encoder units (100/s for GIF, 1000/s for WebP),
+    // drift-corrected so the emitted total tracks frame×unit/fps exactly.
+    static QVector<int> frameDurations(
+        int frameCount, qreal framesPerSecond, int unitsPerSecond);
 };
 
 }
