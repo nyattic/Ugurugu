@@ -39,7 +39,7 @@ struct BridgeDocument
     quint64 lastTimestamp = 0;
     ugurugu::RenderEngine::LayerSplitFrame split;
     ugurugu::IncrementalStrokeRenderer incremental;
-    QImage strokeLayerImage;
+    QUuid strokeLayerId;
     bool incrementalActive = false;
     QImage renderedFrame;
     QRect dirty;
@@ -241,6 +241,7 @@ extern "C"
             return 0;
         }
         handle->strokeFrame = frame;
+        handle->strokeLayerId = layerId;
         handle->activeStroke = handle->brushTemplate;
         handle->activeStroke.id = QUuid::createUuid();
         handle->activeStroke.seed = QRandomGenerator::global()->generate64();
@@ -260,7 +261,6 @@ extern "C"
         handle->incrementalActive = handle->split.valid;
         if (handle->incrementalActive)
         {
-            handle->strokeLayerImage = handle->split.layerBase;
             handle->incremental.clear();
         }
         renderCommittedFrame(handle, frame);
@@ -301,8 +301,20 @@ extern "C"
             return 1;
         }
         const ugurugu::Document &document = handle->controller->document();
+        const ugurugu::Layer *strokeLayer =
+            document.layer(handle->strokeLayerId);
+        if (strokeLayer == nullptr)
+        {
+            handle->incrementalActive = false;
+            renderFullStrokePreview(handle);
+            return 1;
+        }
+        // The live stroke has to wobble the way its own layer does, not the
+        // way the document does.
+        const ugurugu::Document strokeDocument =
+            ugurugu::documentForLayer(document, *strokeLayer);
         const auto update = handle->incremental.update(handle->split.layerBase,
-            document,
+            strokeDocument,
             handle->activeStroke,
             handle->strokeFrame,
             document.size);
@@ -312,18 +324,23 @@ extern "C"
             renderFullStrokePreview(handle);
             return 1;
         }
-        handle->incremental.applyTo(handle->strokeLayerImage);
         QRect dirty;
         QPainter painter(&handle->renderedFrame);
         painter.setCompositionMode(QPainter::CompositionMode_Source);
         for (const auto &patch : update.patches)
         {
+            // composeLayerSplitRegion wants the tile-sized patch image, not a
+            // full layer surface; a null result means the contract broke, so
+            // fall back to the full preview instead of dropping the patch.
             const QImage region =
                 ugurugu::RenderEngine::composeLayerSplitRegion(
-                    handle->split, handle->strokeLayerImage, patch.bounds);
+                    handle->split, patch.layerImage, patch.bounds);
             if (region.isNull())
             {
-                continue;
+                painter.end();
+                handle->incrementalActive = false;
+                renderFullStrokePreview(handle);
+                return 1;
             }
             painter.drawImage(patch.bounds.topLeft(), region);
             dirty = dirty.united(patch.bounds);
@@ -350,7 +367,6 @@ extern "C"
         handle->strokeInProgress = false;
         handle->incrementalActive = false;
         handle->split = {};
-        handle->strokeLayerImage = {};
         const QUuid layerId = paintTargetLayer(handle->controller->document());
         const auto result = handle->controller->addStroke(
             layerId, std::move(handle->activeStroke));
@@ -370,7 +386,6 @@ extern "C"
         handle->strokeInProgress = false;
         handle->incrementalActive = false;
         handle->split = {};
-        handle->strokeLayerImage = {};
         handle->activeStroke = {};
         renderCommittedFrame(handle, handle->strokeFrame);
     }

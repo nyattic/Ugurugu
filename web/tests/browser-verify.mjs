@@ -99,6 +99,28 @@ async function drawStroke(page) {
             centerY - 20 + step * 5,
         );
     }
+    // The live preview must appear while the pointer is still down; it once
+    // silently regressed to commit-only rendering.
+    await page.waitForFunction(
+        () => {
+            const canvas = document.querySelector("canvas");
+            const data = canvas
+                .getContext("2d")
+                .getImageData(0, 0, canvas.width, canvas.height).data;
+            for (let index = 0; index < data.length; index += 4) {
+                if (
+                    data[index] === 29 &&
+                    data[index + 1] === 33 &&
+                    data[index + 2] === 41
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        undefined,
+        { timeout: 15000 },
+    );
     await page.mouse.up();
     await page.waitForFunction(
         () => {
