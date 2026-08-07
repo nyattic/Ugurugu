@@ -88,6 +88,25 @@
       }
     },
     {
+      "name": "wasm-release",
+      "inherits": "base",
+      "displayName": "WebAssembly Release",
+      "toolchainFile": "$penv{HOME}/Qt/6.11.1/wasm_singlethread/lib/cmake/Qt6/qt.toolchain.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "environment": {
+        "EMSDK": "$penv{HOME}/emsdk"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "QT_HOST_PATH": "$penv{HOME}/Qt/6.11.1/macos",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
       "name": "windows-debug",
       "inherits": "base",
       "displayName": "Windows Debug",
@@ -152,6 +171,10 @@
     {
       "name": "macos-coverage",
       "configurePreset": "macos-coverage"
+    },
+    {
+      "name": "wasm-release",
+      "configurePreset": "wasm-release"
     },
     {
       "name": "windows-debug",

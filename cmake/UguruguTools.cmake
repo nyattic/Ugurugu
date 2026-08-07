@@ -177,3 +177,15 @@ target_link_libraries(
     ugurugu_core
 )
 ugurugu_target_defaults(ugurugu_wawa_v10_probe)
+
+add_executable(
+    ugurugu_engine_digest_probe
+    EXCLUDE_FROM_ALL
+    tools/EngineDigestProbe.cpp
+)
+target_link_libraries(
+    ugurugu_engine_digest_probe
+    PRIVATE
+    ugurugu_core
+)
+ugurugu_target_defaults(ugurugu_engine_digest_probe)

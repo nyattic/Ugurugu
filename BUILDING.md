@@ -54,6 +54,30 @@ cmake --install out/build/windows-release --config Release --prefix out/install/
 .\out\install\windows-release\Ugurugu.exe
 ```
 
+## WebAssembly engine (experimental)
+
+The `wasm-release` preset cross-compiles the engine subset — document,
+brush, input, render, serializer, no Widgets UI — to single-threaded
+WebAssembly with a small C ABI bridge. It expects:
+
+- Qt 6.11.1 `wasm_singlethread` and `macos` kits under `~/Qt/6.11.1`,
+  for example via `aqt install-qt all_os wasm 6.11.1 wasm_singlethread`
+  and `aqt install-qt mac desktop 6.11.1 clang_64 --archives qtbase`
+- Emscripten 4.0.7, the version Qt 6.11.1 pins, activated in `~/emsdk`
+
+```sh
+cmake --preset wasm-release
+cmake --build --preset wasm-release
+node tools/wasm_engine_smoke.mjs
+```
+
+The smoke script loads `examples/Wave.ugu`, renders three frames, and
+round-trips the serializer in Node. `tools/wasm_worker_harness/` runs
+the same check inside a browser Dedicated Worker: serve `index.html`,
+`engine-worker.js`, the two `ugurugu_engine_spike.*` build outputs, and
+`Wave.ugu` from one directory over HTTP. The native counterpart for
+comparing digests is the `ugurugu_engine_digest_probe` tool target.
+
 ## Tests
 
 Use the debug preset for the current platform:
