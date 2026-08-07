@@ -87,6 +87,11 @@ extern "C"
         return static_cast<int>(handle->document.layers.size());
     }
 
+    EMSCRIPTEN_KEEPALIVE double ugu_document_fps(const BridgeDocument *handle)
+    {
+        return handle->document.framesPerSecond;
+    }
+
     // The returned buffer is QImage::Format_ARGB32_Premultiplied: on the
     // little-endian wasm heap each pixel is the byte sequence B, G, R, A with
     // premultiplied color channels. Rows are ugu_frame_bytes_per_line() apart.
