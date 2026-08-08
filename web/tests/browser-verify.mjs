@@ -6,12 +6,12 @@
 // Run `npm run build` first, then `npm run test:browser`.
 
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const distRoot = fileURLToPath(new URL("../dist", import.meta.url));
-const chromiumPath = "/Applications/Chromium.app/Contents/MacOS/Chromium";
 const brushColor = { red: 29, green: 33, blue: 41 };
 
 const contentTypes = {
@@ -177,9 +177,37 @@ function check(condition, label) {
 }
 
 const { chromium } = await import("playwright-core");
+// playwright-core never downloads a browser, so the executable has to come from
+// the environment, a Playwright install, or a local Chromium app bundle.
+function resolveChromiumPath() {
+    const candidates = [
+        process.env.UGURUGU_CHROMIUM_PATH,
+        safeExecutablePath(),
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ];
+    for (const candidate of candidates) {
+        if (candidate && existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    throw new Error(
+        "No Chromium found. Run `npx playwright install chromium` or set " +
+            "UGURUGU_CHROMIUM_PATH.",
+    );
+}
+
+function safeExecutablePath() {
+    try {
+        return chromium.executablePath();
+    } catch {
+        return null;
+    }
+}
+
 const { server, origin } = await startServer();
 const browser = await chromium.launch({
-    executablePath: chromiumPath,
+    executablePath: resolveChromiumPath(),
     headless: true,
 });
 

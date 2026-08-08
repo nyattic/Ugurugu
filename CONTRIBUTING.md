@@ -43,6 +43,7 @@ whose license is incompatible with `GPL-3.0-or-later` cannot be linked in.
 ## Before you open a pull request
 
 - Build and run the tests as described in [BUILDING.md](BUILDING.md).
+- Run `npm run check` in `web/` when you touch the web shell.
 - Format sources with `clang-format` using the repository `.clang-format`.
 - Add Korean and Japanese translations for every new `tr()` string. CI
   rejects `.ts` files that still contain unfinished entries.

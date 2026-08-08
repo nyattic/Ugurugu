@@ -270,7 +270,7 @@
         const { x, y } = canvasPosition(event);
         const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor(x)));
         const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor(y)));
-        const [red, green, blue] = context.getImageData(
+        const [red = 0, green = 0, blue = 0] = context.getImageData(
             pixelX,
             pixelY,
             1,

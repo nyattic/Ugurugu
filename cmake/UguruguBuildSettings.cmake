@@ -30,6 +30,14 @@ option(
     "Treat compiler warnings as errors"
     OFF
 )
+# Instruments every target for coverage-guided fuzzing and builds the
+# libFuzzer entry points under tests/fuzz. Meant to be combined with
+# UGURUGU_ENABLE_SANITIZERS so that a mis-parse becomes a crash.
+option(
+    UGURUGU_ENABLE_FUZZING
+    "Build libFuzzer entry points for the untrusted-input parsers"
+    OFF
+)
 
 if(UGURUGU_ENABLE_SANITIZERS AND MSVC)
     message(FATAL_ERROR "UGURUGU_ENABLE_SANITIZERS requires Clang or GCC")
@@ -58,6 +66,13 @@ if(UGURUGU_ENABLE_COVERAGE
 endif()
 if(UGURUGU_ENABLE_SANITIZERS AND UGURUGU_ENABLE_COVERAGE)
     message(FATAL_ERROR "Sanitizers and coverage cannot be enabled together")
+endif()
+# MSVC covers clang-cl too, whose driver does not accept the sanitizer flags
+# below.
+if(UGURUGU_ENABLE_FUZZING
+    AND (MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+)
+    message(FATAL_ERROR "UGURUGU_ENABLE_FUZZING requires Clang or GCC")
 endif()
 
 if(WIN32)
@@ -104,6 +119,13 @@ function(ugurugu_target_defaults target)
                 PRIVATE
                 -fsanitize=address,undefined
                 -fno-sanitize-recover=all
+            )
+        endif()
+        if(UGURUGU_ENABLE_FUZZING)
+            target_compile_options(
+                ${target}
+                PRIVATE
+                -fsanitize=fuzzer-no-link
             )
         endif()
         if(UGURUGU_ENABLE_THREAD_SANITIZER)

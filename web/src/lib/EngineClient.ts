@@ -18,7 +18,7 @@ export interface LayerThumbnail {
     index: number;
     width: number;
     height: number;
-    pixels: Uint8ClampedArray | null;
+    pixels: Uint8ClampedArray<ArrayBuffer> | null;
 }
 
 export interface DocumentMeta {
@@ -36,7 +36,7 @@ export interface DocumentMeta {
 
 export interface RegionUpdate {
     rect: { x: number; y: number; width: number; height: number };
-    pixels: Uint8ClampedArray | null;
+    pixels: Uint8ClampedArray<ArrayBuffer> | null;
     layers: LayerInfo[];
     canUndo: boolean;
     canRedo: boolean;
@@ -52,7 +52,7 @@ export interface BrushSettings {
 }
 
 interface PendingRequest {
-    resolve: (value: never) => void;
+    resolve: (value: unknown) => void;
     reject: (reason: Error) => void;
 }
 
@@ -93,7 +93,10 @@ export class EngineClient {
         const id = this.#nextId;
         this.#nextId += 1;
         return new Promise<T>((resolve, reject) => {
-            this.#pending.set(id, { resolve: resolve as never, reject });
+            this.#pending.set(id, {
+                resolve: resolve as (value: unknown) => void,
+                reject,
+            });
             this.#worker.postMessage({ id, ...message }, transfer);
         });
     }

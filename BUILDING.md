@@ -89,3 +89,44 @@ ctest --preset macos-debug
 ```
 
 On Windows, replace `macos-debug` with `windows-debug`.
+
+## Fuzzing
+
+The `macos-fuzzing` preset instruments the build for libFuzzer and adds
+AddressSanitizer and UndefinedBehaviorSanitizer, then builds one entry
+point per parser that reads untrusted bytes: the legacy `.wagle`
+importer, the project JSON serializer, the selection clipboard codec,
+and the WWP preset codec.
+
+```sh
+cmake --preset macos-fuzzing
+cmake --build --preset macos-fuzzing
+out/build/macos-fuzzing/ugurugu_fuzz_document_json \
+    out/build/macos-fuzzing/fuzz-corpus/ugurugu_fuzz_document_json \
+    -max_total_time=90
+```
+
+Each target's corpus directory is seeded from the repository fixtures at
+build time and libFuzzer writes newly discovered inputs back into it.
+Leak detection is left off in CI because Qt's process-lifetime caches
+are indistinguishable from leaks; run with `ASAN_OPTIONS=detect_leaks=1`
+when a leak is what you are looking for.
+
+## Web shell
+
+The Svelte shell in `web/` wraps the WebAssembly engine.
+
+```sh
+cd web
+npm ci
+npm run check
+npm run build
+```
+
+`npm run check` runs `svelte-check` over the TypeScript and the
+components. `npm run build` copies the `wasm-release` outputs into
+`public/engine` when they exist, and warns instead of failing when they
+do not, so the shell can be type-checked and bundled without a wasm
+build. `npm run test:browser` drives the built shell in headless
+Chromium; it needs a real wasm build plus a browser from
+`npx playwright install chromium` or `UGURUGU_CHROMIUM_PATH`.

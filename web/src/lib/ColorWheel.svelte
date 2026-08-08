@@ -25,11 +25,10 @@
     let dragging: "none" | "ring" | "field" = "none";
 
     function hexToHsv(hex: string) {
-        const match = /^#([0-9a-f]{6})$/i.exec(hex);
-        if (!match) {
+        if (!/^#[0-9a-f]{6}$/i.test(hex)) {
             return null;
         }
-        const packed = Number.parseInt(match[1], 16);
+        const packed = Number.parseInt(hex.slice(1), 16);
         const red = ((packed >> 16) & 0xff) / 255;
         const green = ((packed >> 8) & 0xff) / 255;
         const blue = (packed & 0xff) / 255;
@@ -143,10 +142,11 @@
         const ringMarkerY = center - Math.sin(hue * tau) * markerRadius;
         const fieldMarkerX = fieldStart + saturation * fieldSide;
         const fieldMarkerY = fieldStart + (1 - value) * fieldSide;
-        for (const [x, y] of [
+        const markers: [number, number][] = [
             [ringMarkerX, ringMarkerY],
             [fieldMarkerX, fieldMarkerY],
-        ]) {
+        ];
+        for (const [x, y] of markers) {
             context.beginPath();
             context.arc(x, y, 5, 0, tau);
             context.lineWidth = 2;
