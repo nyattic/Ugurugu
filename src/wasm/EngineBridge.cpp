@@ -25,6 +25,7 @@
 #include <QString>
 #include <QUuid>
 
+#include <algorithm>
 #include <cstdint>
 #include <emscripten/emscripten.h>
 #include <memory>
@@ -130,6 +131,20 @@ const ugurugu::Layer *layerAtIndex(const BridgeDocument *handle, int index)
         return nullptr;
     }
     return &layers[index];
+}
+
+// addStroke refuses a stroke outright when any point falls outside the canvas
+// (isValidInputStrokePoint), so a drag that leaves the canvas would silently
+// lose the whole line. The desktop clamps at begin, continue and end through
+// CanvasWidget::clampedDocumentPosition; this is the same contract.
+ugurugu::StrokePoint canvasPoint(
+    const BridgeDocument *handle, const QPointF &position, double pressure)
+{
+    const QSize size = handle->controller->document().size;
+    return ugurugu::StrokePoint{
+        QPointF(std::clamp(position.x(), 0.0, static_cast<qreal>(size.width())),
+            std::clamp(position.y(), 0.0, static_cast<qreal>(size.height()))),
+        std::clamp(pressure, 0.0, 1.0)};
 }
 
 void invalidateSplit(BridgeDocument *handle)
@@ -464,8 +479,8 @@ extern "C"
         handle->activeStroke.seed = QRandomGenerator::global()->generate64();
         const QPointF raw(x, y);
         const auto time = static_cast<quint64>(timestamp);
-        handle->activeStroke.points = {ugurugu::StrokePoint{
-            handle->stabilizer.begin(raw, time), pressure}};
+        handle->activeStroke.points = {
+            canvasPoint(handle, handle->stabilizer.begin(raw, time), pressure)};
         handle->lastRawPosition = raw;
         handle->lastTimestamp = time;
         handle->strokeInProgress = true;
@@ -539,8 +554,8 @@ extern "C"
         }
         const QPointF raw(x, y);
         const auto time = static_cast<quint64>(timestamp);
-        handle->activeStroke.points.append(ugurugu::StrokePoint{
-            handle->stabilizer.update(raw, time), pressure});
+        handle->activeStroke.points.append(canvasPoint(
+            handle, handle->stabilizer.update(raw, time), pressure));
         handle->lastRawPosition = raw;
         handle->lastTimestamp = time;
     }
@@ -577,8 +592,11 @@ extern "C"
         {
             return -1;
         }
-        const QPointF finished = handle->stabilizer.finish(
-            handle->lastRawPosition, handle->lastTimestamp);
+        const QPointF finished = canvasPoint(handle,
+            handle->stabilizer.finish(
+                handle->lastRawPosition, handle->lastTimestamp),
+            1.0)
+                                     .position;
         if (auto &points = handle->activeStroke.points; !points.isEmpty())
         {
             const QPointF delta = finished - points.last().position;

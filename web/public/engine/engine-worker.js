@@ -380,7 +380,11 @@ self.onmessage = async (event) => {
             }
             engine._ugu_stroke_render(handle);
         } else if (type === "strokeEnd") {
-            engine._ugu_stroke_end(handleFor());
+            // 0 Added, 1 AddedWithResampledPoints; anything else means the
+            // stroke was dropped, which must not pass silently.
+            if (engine._ugu_stroke_end(handleFor()) > 1) {
+                throw engineError(engine);
+            }
         } else if (type === "undo") {
             engine._ugu_undo(handleFor());
             fullRender(engine, event.data.frame);

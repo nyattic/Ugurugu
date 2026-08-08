@@ -480,6 +480,32 @@ const browser = await chromium.launch({
     await page.keyboard.press("Control+z");
     await alias(false);
 
+    // addStroke refuses a stroke when any point falls outside the canvas, so
+    // a drag that leaves the viewport used to lose the whole line.
+    const beforeExit = await countBrushPixels(page);
+    const canvasBox = await page.locator(".viewport canvas").boundingBox();
+    const startX = canvasBox.x + canvasBox.width / 2;
+    const startY = canvasBox.y + canvasBox.height / 2 + 60;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step += 1) {
+        // Runs well past the right edge of the document and back inside.
+        await page.mouse.move(startX + step * 90, startY + step * 4);
+    }
+    await page.mouse.move(startX + 40, startY + 30);
+    await page.mouse.up();
+    await page.waitForFunction(
+        (before) => window.__uguruguBrushCount?.() > before,
+        beforeExit,
+        { timeout: 20000 },
+    );
+    check(true, "a stroke that leaves the canvas still commits");
+    check(
+        !(await page.locator("#status").textContent())?.includes("Error"),
+        "leaving the canvas reports no error",
+    );
+    await page.keyboard.press("Control+z");
+
     // Drawing pauses the wobble but must not switch playback off, or the user
     // has to restart it after every stroke. CanvasWidget::advanceFrame does
     // the same by skipping frames instead of clearing m_animating.
