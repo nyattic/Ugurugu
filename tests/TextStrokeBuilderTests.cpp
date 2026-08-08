@@ -90,7 +90,7 @@ private slots:
     void fillsGlyphInteriorsWithFrozenCoverage()
     {
         TextStrokeBuilder::Options options = defaultOptions();
-        const int outlineCount = TextStrokeBuilder::build(options).size();
+        const qsizetype outlineCount = TextStrokeBuilder::build(options).size();
         options.filled = true;
         const QVector<Stroke> strokes = TextStrokeBuilder::build(options);
         QCOMPARE(strokes.size(), outlineCount + 1);

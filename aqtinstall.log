@@ -1,0 +1,80 @@
+2026-08-08 22:36:36,480 - aqt.main - INFO - installer 8441471360 aqtinstall(aqt) v3.3.1.dev162 on Python 3.14.6 [CPython Clang 21.0.0 (clang-2100.0.123.102)]
+2026-08-08 22:36:36,480 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_6111/qt6_6111/Updates.xml.sha256
+2026-08-08 22:36:39,422 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/extensions/qtwebengine/6111/clang_64/Updates.xml.sha256
+2026-08-08 22:36:41,735 - aqt.archives - INFO - archives 8441471360 Found extension qtwebengine
+2026-08-08 22:36:41,735 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/extensions/qtpdf/6111/clang_64/Updates.xml.sha256
+2026-08-08 22:36:44,235 - aqt.archives - INFO - archives 8441471360 Found extension qtpdf
+2026-08-08 22:36:44,452 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_6111/qt6_6111/qt.qt6.6111.clang_64/6.11.1-0-202605090526qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z.sha256
+2026-08-08 22:36:45,819 - aqt.helper - INFO - helper 8441471360 Downloading qtbase...
+2026-08-08 22:36:45,820 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_6111/qt6_6111/qt.qt6.6111.clang_64/6.11.1-0-202605090526qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z
+2026-08-08 22:36:47,015 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/mac_x64/desktop/qt6_6111/qt6_6111/qt.qt6.6111.clang_64/6.11.1-0-202605090526qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z
+2026-08-08 22:36:47,015 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:00,533 - aqt.installer - INFO - installer 8441471360 Finished installation of qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z in 16.08249388
+2026-08-08 22:37:00,595 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/bin/qmake
+2026-08-08 22:37:00,599 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Platform.pc
+2026-08-08 22:37:00,599 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Concurrent.pc
+2026-08-08 22:37:00,599 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Xml.pc
+2026-08-08 22:37:00,599 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6OpenGLWidgets.pc
+2026-08-08 22:37:00,599 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6PrintSupport.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Core.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Gui.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6OpenGL.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Test.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Network.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Sql.pc
+2026-08-08 22:37:00,600 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6DBus.pc
+2026-08-08 22:37:00,601 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/pkgconfig/Qt6Widgets.pc
+2026-08-08 22:37:00,601 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/libQt6FbSupport.prl
+2026-08-08 22:37:00,601 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/macos/lib/libQt6DeviceDiscoverySupport.prl
+2026-08-08 22:37:00,601 - aqt.main - INFO - installer 8441471360 Finished installation
+2026-08-08 22:37:00,601 - aqt.main - INFO - installer 8441471360 Time elapsed: 24.12137833 second
+2026-08-08 22:37:00,726 - aqt.main - INFO - installer 8441471360 aqtinstall(aqt) v3.3.1.dev162 on Python 3.14.6 [CPython Clang 21.0.0 (clang-2100.0.123.102)]
+2026-08-08 22:37:00,726 - aqt.main - INFO - installer 8441471360 Found installed mac-desktop Qt at /Users/nyabi/Qt/6.11.1/macos
+2026-08-08 22:37:00,726 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:03,151 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtwebengine/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:04,439 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtwebengine/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:05,647 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtwebengine/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:06,871 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtwebengine/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:08,078 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtwebengine/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:09,238 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtpdf/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:10,582 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtpdf/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:11,739 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtpdf/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:43,801 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtpdf/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:44,992 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/extensions/qtpdf/6111/wasm_singlethread/Updates.xml.sha256
+2026-08-08 22:37:46,318 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtbase-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z.sha256
+2026-08-08 22:37:46,318 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtdeclarative-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z.sha256
+2026-08-08 22:37:46,318 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtsvg-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z.sha256
+2026-08-08 22:37:46,318 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttools-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z.sha256
+2026-08-08 22:37:47,550 - aqt.helper - INFO - helper 8441471360 Downloading qtsvg...
+2026-08-08 22:37:47,550 - aqt.helper - INFO - helper 8441471360 Downloading qtdeclarative...
+2026-08-08 22:37:47,550 - aqt.helper - INFO - helper 8441471360 Downloading qtbase...
+2026-08-08 22:37:47,550 - aqt.helper - INFO - helper 8441471360 Downloading qttools...
+2026-08-08 22:37:47,551 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtsvg-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:47,551 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtdeclarative-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:47,551 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttools-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:47,551 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtbase-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:48,682 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtsvg-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:48,682 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:48,684 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtdeclarative-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:48,684 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttools-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:48,684 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:48,684 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:48,713 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qtbase-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:48,713 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:50,523 - aqt.installer - INFO - installer 8441471360 Finished installation of qtsvg-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z in 4.20566017
+2026-08-08 22:37:50,528 - aqt.helper - DEBUG - helper 8441471360 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttranslations-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z.sha256
+2026-08-08 22:37:51,219 - aqt.installer - INFO - installer 8441471360 Finished installation of qttools-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z in 4.90157213
+2026-08-08 22:37:51,731 - aqt.helper - INFO - helper 8441471360 Downloading qttranslations...
+2026-08-08 22:37:51,731 - aqt.installer - DEBUG - installer 8441471360 Download URL: https://download.qt.io/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttranslations-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:52,897 - aqt.helper - DEBUG - helper 8441471360 Asked to redirect(302) to: https://ftp.jaist.ac.jp/pub/qtproject/online/qtsdkrepository/all_os/wasm/qt6_6111/qt6_6111_wasm_singlethread/qt.qt6.6111.wasm_singlethread/6.11.1-0-202605090529qttranslations-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z
+2026-08-08 22:37:52,897 - aqt.helper - INFO - helper 8441471360 Redirected: ftp.jaist.ac.jp
+2026-08-08 22:37:56,765 - aqt.installer - INFO - installer 8441471360 Finished installation of qttranslations-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z in 6.23736417
+2026-08-08 22:37:57,740 - aqt.installer - INFO - installer 8441471360 Finished installation of qtbase-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z in 11.42334762
+2026-08-08 22:37:58,684 - aqt.installer - INFO - installer 8441471360 Finished installation of qtdeclarative-Windows-Windows_11_24H2-Clang-Windows-WebAssembly-X86_64.7z in 12.36663146
+2026-08-08 22:37:58,732 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/wasm_singlethread/bin/qmake
+2026-08-08 22:37:58,732 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/wasm_singlethread/bin/qtpaths
+2026-08-08 22:37:58,733 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/wasm_singlethread/bin/qmake6
+2026-08-08 22:37:58,733 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/wasm_singlethread/bin/qtpaths6
+2026-08-08 22:37:58,733 - aqt.updater - INFO - updater 8441471360 Patching /Users/nyabi/Qt/6.11.1/wasm_singlethread/bin/target_qt.conf
+2026-08-08 22:37:58,734 - aqt.main - INFO - installer 8441471360 Finished installation
+2026-08-08 22:37:58,734 - aqt.main - INFO - installer 8441471360 Time elapsed: 58.00853442 second

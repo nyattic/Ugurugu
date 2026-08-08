@@ -100,9 +100,9 @@ QVector<StrokePoint> contourPoints(
     // Overshooting the ring start hides the seam: the renderer's endpoint
     // tangents are one-sided and its midpoint smoothing treats the junction
     // as a corner, so a contour that merely closes shows a notch there.
-    const int ringSize = points.size();
+    const qsizetype ringSize = points.size();
     qreal walked = 0.0;
-    for (int index = 1;
+    for (qsizetype index = 1;
         index < ringSize && walked < overlapLength
         && points.size() < DocumentLimits::maximumPointsPerStroke;
         ++index)
