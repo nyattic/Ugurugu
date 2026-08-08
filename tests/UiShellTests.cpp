@@ -1917,9 +1917,22 @@ private slots:
         // The report came from the Korean UI, whose rail labels lay out
         // differently from the English source strings, so the test runs
         // with the Korean translation installed.
+        // The multi-config Windows build nests the test binary one level
+        // below where qt_add_translation writes the .qm files.
         QTranslator korean;
-        QVERIFY(korean.load(QCoreApplication::applicationDirPath()
-                            + QStringLiteral("/ugurugu_ko.qm")));
+        const QString applicationDir = QCoreApplication::applicationDirPath();
+        bool koreanLoaded = false;
+        for (const QString &directory : {applicationDir,
+                 applicationDir + QStringLiteral("/.."),
+                 applicationDir + QStringLiteral("/../..")})
+        {
+            if (korean.load(QStringLiteral("ugurugu_ko"), directory))
+            {
+                koreanLoaded = true;
+                break;
+            }
+        }
+        QVERIFY(koreanLoaded);
         QCoreApplication::installTranslator(&korean);
         const auto removeTranslator = qScopeGuard(
             [&korean]()
