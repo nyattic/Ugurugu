@@ -67,12 +67,15 @@ endif()
 if(UGURUGU_ENABLE_SANITIZERS AND UGURUGU_ENABLE_COVERAGE)
     message(FATAL_ERROR "Sanitizers and coverage cannot be enabled together")
 endif()
-# MSVC covers clang-cl too, whose driver does not accept the sanitizer flags
-# below.
+# clang-cl arrives here as MSVC. It compiles the instrumentation happily, but
+# LLVM ships clang_rt.fuzzer as RuntimeLibrary=MT_StaticRelease while the
+# prebuilt Qt forces MD_DynamicRelease on everything that links against it.
+# Mixing the two runtimes puts a second CRT heap in the process, so the fuzzer
+# would report allocator mismatches instead of parser defects.
 if(UGURUGU_ENABLE_FUZZING
     AND (MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 )
-    message(FATAL_ERROR "UGURUGU_ENABLE_FUZZING requires Clang or GCC")
+    message(FATAL_ERROR "UGURUGU_ENABLE_FUZZING requires a non-MSVC Clang")
 endif()
 
 if(WIN32)

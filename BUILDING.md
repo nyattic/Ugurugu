@@ -108,6 +108,9 @@ out/build/macos-fuzzing/ugurugu_fuzz_document_json \
 
 Each target's corpus directory is seeded from the repository fixtures at
 build time and libFuzzer writes newly discovered inputs back into it.
+There is no Windows equivalent: clang-cl compiles the instrumentation,
+but LLVM's libFuzzer runtime wants the static CRT and the prebuilt Qt
+requires the dynamic one.
 Leak detection is left off in CI because Qt's process-lifetime caches
 are indistinguishable from leaks; run with `ASAN_OPTIONS=detect_leaks=1`
 when a leak is what you are looking for.
