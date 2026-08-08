@@ -52,7 +52,7 @@ Copyright (C) 2026 Nyabi (nyattic)
         aria-labelledby="new-document-title"
         bind:this={dialog}
     >
-        <h2 id="new-document-title">새 문서</h2>
+        <h2 id="new-document-title">New document</h2>
         <!--
           novalidate on purpose: max below is the affordance, but a typed
           out-of-range value should clamp to the web policy rather than block
@@ -60,7 +60,7 @@ Copyright (C) 2026 Nyabi (nyattic)
         -->
         <form novalidate onsubmit={confirm}>
             <label>
-                가로
+                Width
                 <input
                     id="new-document-width"
                     type="number"
@@ -70,7 +70,7 @@ Copyright (C) 2026 Nyabi (nyattic)
                 />
             </label>
             <label>
-                세로
+                Height
                 <input
                     id="new-document-height"
                     type="number"
@@ -80,12 +80,12 @@ Copyright (C) 2026 Nyabi (nyattic)
                 />
             </label>
             <p class="hint">
-                웹 상한 {profile.maximumCanvasEdge}×{profile.maximumCanvasEdge}
-                — 프레임당 약 {(estimatedBytes / (1024 * 1024)).toFixed(1)} MiB
+                Web limit {profile.maximumCanvasEdge}&times;{profile.maximumCanvasEdge}
+                &mdash; about {(estimatedBytes / (1024 * 1024)).toFixed(1)} MiB per frame
             </p>
             <div class="actions">
-                <button type="button" onclick={oncancel}>취소</button>
-                <button id="new-document-confirm" type="submit">만들기</button>
+                <button type="button" onclick={oncancel}>Cancel</button>
+                <button id="new-document-confirm" type="submit">Create</button>
             </div>
         </form>
     </div>

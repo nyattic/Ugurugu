@@ -38,7 +38,7 @@ export class CanvasPresenter {
         }
         this.#surfaceContext = context;
         this.#display = display;
-        this.#initialiseDisplay();
+        this.#initializeDisplay();
     }
 
     get usingWebGL(): boolean {
@@ -49,7 +49,7 @@ export class CanvasPresenter {
         return this.#surface;
     }
 
-    #initialiseDisplay() {
+    #initializeDisplay() {
         const gl = this.#display.getContext("webgl2", {
             alpha: true,
             antialias: false,
@@ -73,8 +73,12 @@ export class CanvasPresenter {
         gl.bindTexture(gl.TEXTURE_2D, this.#texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        // Bilinear both ways, because that is what the desktop shows. Its GPU
+        // blit samples Nearest, but only after ImageResampler has already
+        // resampled the frame to the display size with bilinear taps, so
+        // magnifying with NEAREST here would be a visible regression.
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         // The engine hands out straight (unpremultiplied) RGBA, and the
         // context above was created the same way, so no unpack conversion.
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -188,7 +192,7 @@ export class CanvasPresenter {
             const ratio = this.#display.width / Math.max(1, cssWidth);
             context.setTransform(ratio, 0, 0, ratio, 0, 0);
             context.clearRect(0, 0, cssWidth, cssHeight);
-            context.imageSmoothingEnabled = view.scale < 1;
+            context.imageSmoothingEnabled = true;
             context.drawImage(
                 this.#surface,
                 topLeft.x,

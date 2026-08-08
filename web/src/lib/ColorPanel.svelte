@@ -16,13 +16,13 @@
 
 <section class="color-panel">
     <div class="panel-header">
-        <h2>색상</h2>
+        <h2>Color</h2>
         <span class="current" style={`background: ${color}`}></span>
     </div>
     <ColorWheel {color} {onchange} />
     {#if recentColors.length > 0}
         <div class="recent">
-            <span class="recent-label">최근 색</span>
+            <span class="recent-label">Recent</span>
             <div class="swatches" id="recent-colors">
                 {#each recentColors as recentColor (recentColor)}
                     <button
@@ -30,7 +30,7 @@
                         class:selected={color === recentColor}
                         style={`background: ${recentColor}`}
                         title={recentColor}
-                        aria-label={`최근 색 ${recentColor}`}
+                        aria-label={`Recent color ${recentColor}`}
                         onclick={() => onrecent(recentColor)}
                     ></button>
                 {/each}

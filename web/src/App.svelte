@@ -44,7 +44,7 @@
     let eraserPresets = $state<BrushPresetInfo[]>([]);
     let frameIndex = $state(0);
     let playing = $state(false);
-    let status = $state("엔진 로딩 중…");
+    let status = $state("Loading engine…");
     let documentName = $state("Wave.ugu");
     let canUndo = $state(false);
     let canRedo = $state(false);
@@ -60,6 +60,11 @@
     let view = $state<ViewState>({ scale: 1, centerX: 0, centerY: 0 });
     let showNewDocument = $state(false);
     let usingWebGL = $state(false);
+    // Same default as the desktop's canvas/animateWhileDrawing setting.
+    let animateWhileDrawing = $state(
+        window.localStorage.getItem("ugurugu-web-animate-while-drawing") ===
+            "1",
+    );
 
     const recentColorCapacity = 16;
     const zoomPercent = $derived(Math.round(view.scale * 100));
@@ -140,7 +145,7 @@
 
     function enqueue(operation: () => Promise<void>) {
         chain = chain.then(operation).catch((error) => {
-            status = `오류: ${error}`;
+            status = `Error: ${error}`;
         });
     }
 
@@ -246,6 +251,17 @@
         presenter?.draw(current);
     });
 
+    $effect(() => {
+        try {
+            window.localStorage.setItem(
+                "ugurugu-web-animate-while-drawing",
+                animateWhileDrawing ? "1" : "0",
+            );
+        } catch {
+            // A preference that cannot be stored still applies this session.
+        }
+    });
+
     function onPresetChange(event: Event) {
         const index = Number((event.currentTarget as HTMLSelectElement).value);
         presetIndex = index;
@@ -292,34 +308,36 @@
         stopPlayback();
         const verdict = checkImportSize(bytes.byteLength, profile);
         if (!verdict.allowed) {
-            status = `열기 거부됨 — ${verdict.reason}`;
+            status = `Cannot open — ${verdict.reason}`;
             return;
         }
-        status = `${name} 여는 중…`;
+        status = `Opening ${name}…`;
         try {
             const next = await engine.open(bytes, profile.undoLimit);
             adoptDocument(next, name);
             const warning = verdict.warning ? ` ⚠ ${verdict.warning}` : "";
             status =
                 `${name} — ${next.width}×${next.height}, ` +
-                `${next.frameCount}프레임 @ ${next.fps}fps, ` +
-                `스키마 v${next.schemaVersion}${warning}`;
+                `${next.frameCount} frames @ ${next.fps} fps, ` +
+                `schema v${next.schemaVersion}${warning}`;
         } catch (error) {
             meta = null;
-            status = `열기 실패: ${error}`;
+            status = `Open failed: ${error}`;
         }
     }
 
     async function createDocument(width: number, height: number) {
         showNewDocument = false;
         stopPlayback();
-        status = `새 문서 ${width}×${height} 만드는 중…`;
+        status = `Creating a ${width}×${height} document…`;
         try {
             const next = await engine.create(width, height, profile.undoLimit);
             adoptDocument(next, "Untitled.ugu");
-            status = `새 문서 — ${width}×${height}, ${next.frameCount}프레임`;
+            status =
+                `New document — ${width}×${height}, ` +
+                `${next.frameCount} frames`;
         } catch (error) {
-            status = `새 문서 실패: ${error}`;
+            status = `New document failed: ${error}`;
         }
     }
 
@@ -341,7 +359,13 @@
         }
         playing = true;
         playTimer = setInterval(() => {
-            if (!meta) {
+            // Mirrors CanvasWidget::advanceFrame: playback stays on through an
+            // interaction and only stops advancing, so releasing the pointer
+            // resumes the wobble instead of leaving it parked.
+            if (!meta || panning || picking) {
+                return;
+            }
+            if (drawing && !animateWhileDrawing) {
                 return;
             }
             frameIndex = (frameIndex + 1) % meta.frameCount;
@@ -444,7 +468,6 @@
         if (event.button !== 0) {
             return;
         }
-        stopPlayback();
         displayCanvas.setPointerCapture(event.pointerId);
         if (tool === "eyedropper") {
             picking = true;
@@ -478,7 +501,7 @@
         return Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
     }
 
-    function touchCentre() {
+    function touchCenter() {
         const pair = touchPair();
         if (!pair) {
             return { clientX: 0, clientY: 0 };
@@ -499,7 +522,7 @@
                 const distance = touchDistance();
                 if (pinchDistance > 0 && distance > 0) {
                     const rect = displayCanvas.getBoundingClientRect();
-                    const centre = touchCentre();
+                    const centre = touchCenter();
                     view = zoomAround(
                         view,
                         { width: rect.width, height: rect.height },
@@ -648,7 +671,7 @@
             anchor.click();
             URL.revokeObjectURL(url);
         } catch (error) {
-            status = `저장 실패: ${error}`;
+            status = `Save failed: ${error}`;
         }
     }
 
@@ -659,7 +682,7 @@
             present(await engine.renderFrame(frame));
             const blob = await presenter?.toBlob("image/png");
             if (!blob) {
-                throw new Error("PNG 인코딩에 실패했습니다");
+                throw new Error("PNG encoding failed");
             }
             downloadBlob(
                 blob,
@@ -681,7 +704,7 @@
     function exportGif() {
         stopPlayback();
         exportingGif = true;
-        status = "GIF 내보내는 중…";
+        status = "Exporting GIF…";
         enqueue(async () => {
             try {
                 const bytes = await engine.exportGif();
@@ -689,7 +712,7 @@
                     new Blob([bytes], { type: "image/gif" }),
                     `${documentName.replace(/\.ugu$/i, "")}.gif`,
                 );
-                status = "GIF 내보내기 완료";
+                status = "GIF export complete";
             } finally {
                 exportingGif = false;
             }
@@ -716,13 +739,13 @@
             });
             snapshotRevision = revision;
             const time = new Date().toLocaleTimeString();
-            autosaveStatus = `복구 스냅샷 저장됨 ${time}`;
+            autosaveStatus = `Recovery snapshot saved ${time}`;
         } catch (error) {
             const detail =
                 error instanceof Error
                     ? `${error.name}: ${error.message}`
                     : String(error);
-            autosaveStatus = `복구 저장 실패 — ${detail}`;
+            autosaveStatus = `Recovery save failed — ${detail}`;
         } finally {
             snapshotBusy = false;
         }
@@ -742,7 +765,7 @@
         try {
             await clearRecoverySnapshot();
         } catch (error) {
-            autosaveStatus = `복구 슬롯 삭제 실패 — ${error}`;
+            autosaveStatus = `Could not clear the recovery slot — ${error}`;
         }
     }
 
@@ -810,7 +833,7 @@
             try {
                 recoveryOffer = await readRecoverySnapshot();
             } catch (error) {
-                autosaveStatus = `복구 슬롯 확인 실패 — ${error}`;
+                autosaveStatus = `Could not read the recovery slot — ${error}`;
             }
             try {
                 const response = await fetch(
@@ -818,7 +841,7 @@
                 );
                 await openDocument(await response.arrayBuffer(), "Wave.ugu");
             } catch (error) {
-                status = `데모 문서 로드 실패: ${error}`;
+                status = `Demo document failed to load: ${error}`;
             }
         })();
         const snapshotTimer = setInterval(() => {
@@ -851,32 +874,32 @@
             <button
                 class="tool-button"
                 class:active={tool === "brush"}
-                title="브러시 (B)"
+                title="Brush (B)"
                 onclick={() => (tool = "brush")}
             >
-                브러시
+                Brush
             </button>
             <button
                 class="tool-button"
                 class:active={tool === "eraser"}
-                title="지우개 (E)"
+                title="Eraser (E)"
                 onclick={() => (tool = "eraser")}
             >
-                지우개
+                Eraser
             </button>
             <button
                 id="eyedropper"
                 class="tool-button"
                 class:active={tool === "eyedropper"}
-                title="캔버스에서 색 추출 (I)"
+                title="Pick a color from the canvas (I)"
                 onclick={() => (tool = "eyedropper")}
             >
-                스포이드
+                Eyedropper
             </button>
             {#if tool === "eraser"}
                 <select
                     id="eraser-preset"
-                    title="지우개 프리셋"
+                    title="Eraser preset"
                     value={String(eraserPresetIndex)}
                     onchange={onEraserPresetChange}
                 >
@@ -888,7 +911,7 @@
                 </select>
             {:else}
                 <select
-                    title="브러시 프리셋"
+                    title="Brush preset"
                     value={String(presetIndex)}
                     onchange={onPresetChange}
                 >
@@ -901,11 +924,11 @@
                 <input
                     type="color"
                     bind:value={colorHex}
-                    title="브러시 색"
+                    title="Brush color"
                 />
             {/if}
             <label class="slider">
-                굵기
+                Size
                 <input
                     type="range"
                     min="1"
@@ -915,7 +938,7 @@
                 <span>{brushSize}px</span>
             </label>
             <label class="slider">
-                보정
+                Smoothing
                 <input
                     type="range"
                     min="0"
@@ -925,18 +948,18 @@
                 <span>{stabilization}%</span>
             </label>
             <button id="undo" onclick={undo} disabled={!canUndo}>
-                실행 취소
+                Undo
             </button>
             <button id="redo" onclick={redo} disabled={!canRedo}>
-                다시 실행
+                Redo
             </button>
         </div>
         <div class="controls">
             <button id="new-document" onclick={() => (showNewDocument = true)}>
-                새 문서
+                New
             </button>
             <label class="file-button">
-                .ugu 열기
+                Open .ugu
                 <input
                     bind:this={fileInput}
                     type="file"
@@ -945,17 +968,17 @@
                 />
             </label>
             <button onclick={downloadDocument} disabled={!meta}>
-                .ugu 저장
+                Save .ugu
             </button>
             <button id="export-png" onclick={exportFramePng} disabled={!meta}>
-                PNG 내보내기
+                Export PNG
             </button>
             <button
                 id="export-gif"
                 onclick={exportGif}
                 disabled={!meta || exportingGif}
             >
-                {exportingGif ? "GIF 내보내는 중…" : "GIF 내보내기"}
+                {exportingGif ? "Exporting GIF…" : "Export GIF"}
             </button>
         </div>
     </header>
@@ -963,15 +986,15 @@
     {#if recoveryOffer}
         <div class="recovery-banner" role="alert">
             <span>
-                저장되지 않은 작업이 있습니다 —
+                Unsaved work from an earlier session —
                 {recoveryOffer.name},
                 {new Date(recoveryOffer.savedAt).toLocaleString()}
             </span>
             <button id="recovery-restore" onclick={restoreRecovery}>
-                복구
+                Restore
             </button>
             <button id="recovery-discard" onclick={discardRecovery}>
-                삭제
+                Discard
             </button>
         </div>
     {/if}
@@ -987,7 +1010,7 @@
         <section class="viewport" bind:this={viewportElement}>
             <canvas
                 bind:this={displayCanvas}
-                aria-label="그림 캔버스"
+                aria-label="Drawing canvas"
                 class:panning={panning || spaceHeld}
                 onpointerdown={onPointerDown}
                 onpointermove={onPointerMove}
@@ -997,15 +1020,15 @@
             ></canvas>
             <div class="zoom-controls">
                 <button
-                    title="축소 (Ctrl/Cmd -)"
+                    title="Zoom out (Ctrl/Cmd −)"
                     onclick={() => zoomBy(1 / 1.25)}
                 >
                     −
                 </button>
-                <button id="zoom-fit" title="화면에 맞춤 (Ctrl/Cmd 0)" onclick={zoomToFit}>
+                <button id="zoom-fit" title="Fit to window (Ctrl/Cmd 0)" onclick={zoomToFit}>
                     {zoomPercent}%
                 </button>
-                <button title="확대 (Ctrl/Cmd +)" onclick={() => zoomBy(1.25)}>
+                <button title="Zoom in (Ctrl/Cmd +)" onclick={() => zoomBy(1.25)}>
                     +
                 </button>
             </div>
@@ -1052,19 +1075,27 @@
                 onclick={togglePlayback}
                 disabled={meta.frameCount < 2}
             >
-                {playing ? "정지" : "재생"}
+                {playing ? "Stop" : "Play"}
             </button>
             <input
                 type="range"
                 min="0"
                 max={meta.frameCount - 1}
                 value={frameIndex}
-                aria-label="프레임"
+                aria-label="Frame"
                 oninput={onSliderInput}
             />
             <span class="frame-label">
                 {frameIndex + 1}/{meta.frameCount}
             </span>
+            <label class="toggle" title="Keep the wobble running while drawing">
+                <input
+                    id="animate-while-drawing"
+                    type="checkbox"
+                    bind:checked={animateWhileDrawing}
+                />
+                Wobble while drawing
+            </label>
         {/if}
         <p id="status">{status}</p>
         <p id="autosave-status">{autosaveStatus}</p>
@@ -1205,6 +1236,15 @@
         min-width: 4rem;
         text-align: right;
         font-variant-numeric: tabular-nums;
+    }
+
+    .toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.85rem;
+        color: #9aa0a6;
+        white-space: nowrap;
     }
 
     #status {

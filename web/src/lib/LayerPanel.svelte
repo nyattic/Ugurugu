@@ -27,7 +27,7 @@
     const activeLayer = $derived(layers.find((layer) => layer.active));
 
     function rename(layer: LayerInfo) {
-        const name = window.prompt("레이어 이름", layer.name);
+        const name = window.prompt("Layer name", layer.name);
         if (name !== null && name.trim() !== "" && name !== layer.name) {
             onrename(layer.index, name.trim());
         }
@@ -63,28 +63,28 @@
 
 <aside>
     <div class="panel-header">
-        <h2>레이어</h2>
+        <h2>Layers</h2>
         <div class="panel-actions">
-            <button id="layer-add" title="레이어 추가" onclick={onadd}>
+            <button id="layer-add" title="Add layer" onclick={onadd}>
                 +
             </button>
             <button
                 id="layer-remove"
-                title="레이어 삭제"
+                title="Delete layer"
                 disabled={!activeLayer || layers.length < 2}
                 onclick={() => activeLayer && onremove(activeLayer.index)}
             >
                 −
             </button>
             <button
-                title="위로"
+                title="Move up"
                 disabled={!activeLayer}
                 onclick={() => activeLayer && onmove(activeLayer.index, 1)}
             >
                 ↑
             </button>
             <button
-                title="아래로"
+                title="Move down"
                 disabled={!activeLayer}
                 onclick={() => activeLayer && onmove(activeLayer.index, -1)}
             >
@@ -100,7 +100,7 @@
             >
                 <input
                     type="checkbox"
-                    title="표시"
+                    title="Visible"
                     checked={layer.visible}
                     onchange={(event) =>
                         onvisible(
@@ -128,7 +128,7 @@
     </ul>
     <div class="opacity-controls">
         <label>
-            불투명도
+            Opacity
             <input
                 type="range"
                 min="0"

@@ -112,7 +112,7 @@ async function waitForDocumentLoaded(page) {
         () =>
             document
                 .querySelector("#status")
-                ?.textContent.includes("스키마 v"),
+                ?.textContent.includes("schema v"),
         undefined,
         { timeout: 30000 },
     );
@@ -268,7 +268,7 @@ const browser = await chromium.launch({
         () =>
             document
                 .querySelector("#autosave-status")
-                ?.textContent.includes("복구 스냅샷 저장됨"),
+                ?.textContent.includes("Recovery snapshot saved"),
         undefined,
         { timeout: 20000 },
     );
@@ -430,6 +430,21 @@ const browser = await chromium.launch({
         { timeout: 20000 },
     );
     check(true, "the Ctrl+Z shortcut undid the stroke");
+
+    // Drawing pauses the wobble but must not switch playback off, or the user
+    // has to restart it after every stroke. CanvasWidget::advanceFrame does
+    // the same by skipping frames instead of clearing m_animating.
+    await page.locator(".play").click();
+    check(
+        (await page.locator(".play").textContent())?.trim() === "Stop",
+        "playback started",
+    );
+    await drawStroke(page);
+    check(
+        (await page.locator(".play").textContent())?.trim() === "Stop",
+        "playback survives a stroke",
+    );
+    await page.locator(".play").click();
     await context.close();
 }
 
@@ -444,7 +459,7 @@ const browser = await chromium.launch({
     await page.locator("#new-document-width").fill("640");
     await page.locator("#new-document-height").fill("480");
     await page.locator("#new-document-confirm").click();
-    // "새 문서 … 만드는 중" is also a status, so wait for the surface itself.
+    // "Creating a … document" is also a status, so wait for the surface.
     await page.waitForFunction(
         () => document.querySelector("#document-surface")?.height === 480,
         undefined,
@@ -512,7 +527,7 @@ const browser = await chromium.launch({
         () =>
             document
                 .querySelector("#autosave-status")
-                ?.textContent.includes("복구 슬롯 확인 실패"),
+                ?.textContent.includes("Could not read the recovery slot"),
         undefined,
         { timeout: 15000 },
     );
@@ -523,7 +538,7 @@ const browser = await chromium.launch({
         () =>
             document
                 .querySelector("#autosave-status")
-                ?.textContent.includes("복구 저장 실패"),
+                ?.textContent.includes("Recovery save failed"),
         undefined,
         { timeout: 20000 },
     );

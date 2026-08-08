@@ -124,6 +124,9 @@
   - 스포이드와 PNG 내보내기가 문서 표면을 읽으므로 확대·이동과 무관하게 정확하다. 이전 구조에서는 표시 캔버스를 읽고 있어 확대를 도입하는 순간 깨질 코드였다.
 - `web/src/lib/ViewTransform.ts` — 커서 고정 확대, 이동, 화면 맞춤. 휠 이동, Ctrl/Cmd+휠 확대, 스페이스·가운데 버튼 드래그 이동, 두 손가락 핀치 확대·이동을 지원한다. 두 번째 손가락이 닿으면 진행 중 스트로크는 커밋된다.
 - `web/src/lib/Shortcuts.ts` — undo/redo, 저장, 열기, 새 문서, 도구 전환(B/E/I), 굵기(`[`/`]`), 확대(Ctrl/Cmd +/−/0/1), 프레임 이동(←/→), 재생(Enter). 브라우저·OS가 소유한 조합은 건드리지 않고, 모든 단축키에 대응하는 화면 컨트롤을 남겼다.
+- 확대 시 표시 필터는 LINEAR다. 데스크톱은 GPU blit 자체는 Nearest지만 그 전에 `ImageResampler`가 bilinear로 표시 크기에 맞춰 리샘플하므로, NEAREST 확대는 데스크톱에 없는 계단을 만든다.
+- 그리는 동안 재생은 꺼지지 않고 프레임 전진만 멈춘다(`CanvasWidget::advanceFrame`과 같음). 손을 떼면 우글거림이 저절로 이어진다. 데스크톱의 `canvas/animateWhileDrawing` 설정에 대응하는 토글을 재생 옆에 뒀다.
+- 웹 셸 UI 문구는 전부 영어다. 데스크톱은 ko/en/ja 번역을 갖지만 웹은 아직 번역 계층이 없다.
 - 지우개가 `EraserPresetCatalog`에 연결됐다(`ugu_eraser_preset_*`). 지우개를 고르면 프리셋 선택이 지우개 카탈로그로 바뀐다.
 - itch.io 배포를 위해 Vite `base: "./"`와 상대 경로 Worker·에셋 URL로 바꾸고, `tools/check_itchio_package.mjs`가 진입 파일·절대 경로·파일 수·경로 길이·크기·대소문자 충돌을 검사한다. CI의 웹 job이 이 검사를 실행한다.
 
@@ -132,7 +135,7 @@
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프를 자동 검증(29개 체크).
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지를 자동 검증(31개 체크).
 - itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
 
 ## 2. 남은 작업
@@ -149,6 +152,8 @@
 
 ### 단계 3 잔여 (웹 UI)
 
+- 확대 시 표시 크기로 재렌더. 지금은 네이티브 해상도로 렌더한 뒤 GPU가 확대하므로 200% 이상에서 데스크톱보다 흐리다. 데스크톱은 `PreviewRenderPolicy::renderSize`로 표시 배율에 맞춰 렌더한다.
+- 웹 UI 번역 계층 (현재 영어 고정, 데스크톱은 ko/en/ja)
 - 채우기/선택 도구
 - 모바일 반응형 레이아웃. 핀치·이동 제스처는 있으나 패널 배치는 데스크톱 고정이다.
 - 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.

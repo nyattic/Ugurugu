@@ -78,17 +78,17 @@ export function checkImportSize(
         return {
             allowed: false,
             reason:
-                `파일이 ${formatMebibytes(bytes)}로 웹 한도 ` +
-                `${formatMebibytes(profile.importRejectionBytes)}를 넘습니다. ` +
-                `데스크톱 앱에서 열어 주세요.`,
+                `the file is ${formatMebibytes(bytes)}, over the ` +
+                `${formatMebibytes(profile.importRejectionBytes)} web limit. ` +
+                `Open it in the desktop app instead.`,
         };
     }
     if (bytes > profile.importWarningBytes) {
         return {
             allowed: true,
             warning:
-                `${formatMebibytes(bytes)} 문서입니다. 메모리가 부족하면 ` +
-                `탭이 닫힐 수 있으니 자주 저장하세요.`,
+                `This is a ${formatMebibytes(bytes)} document. The tab ` +
+                `may be closed if memory runs short, so save often.`,
         };
     }
     return { allowed: true, warning: null };
