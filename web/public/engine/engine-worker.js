@@ -3,7 +3,22 @@
 
 importScripts("ugurugu_engine_spike.js");
 
-const enginePromise = createUguruguEngine();
+// Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
+// under public/engine used to surface as "… is not a function" deep inside an
+// unrelated call; refusing here names the real problem instead.
+const expectedAbiVersion = 1;
+
+const enginePromise = createUguruguEngine().then((engine) => {
+    const version = engine._ugu_abi_version?.();
+    if (version !== expectedAbiVersion) {
+        throw new Error(
+            `engine ABI ${version ?? "unknown"} does not match the shell's ` +
+                `${expectedAbiVersion}; rebuild the wasm-release preset and ` +
+                `run npm run sync-engine`,
+        );
+    }
+    return engine;
+});
 let documentHandle = 0;
 
 function requireDocument() {
@@ -57,20 +72,36 @@ function presetList(engine) {
     return presets;
 }
 
-function openDocument(engine, bytes) {
-    if (documentHandle) {
-        engine._ugu_document_close(documentHandle);
-        documentHandle = 0;
+function eraserPresetList(engine) {
+    const handle = requireDocument();
+    const count = engine._ugu_eraser_preset_count();
+    const presets = [];
+    for (let index = 0; index < count; index += 1) {
+        presets.push({
+            index,
+            name: engine.UTF8ToString(
+                engine._ugu_eraser_preset_name(handle, index),
+            ),
+            defaultSize: engine._ugu_eraser_preset_default_size(index),
+        });
     }
-    const pointer = engine._malloc(bytes.length);
-    engine.HEAPU8.set(bytes, pointer);
-    const handle = engine._ugu_document_open(pointer, bytes.length);
-    engine._free(pointer);
-    if (!handle) {
-        throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
-    }
+    return presets;
+}
+
+function engineError(engine) {
+    return new Error(
+        `${engine.UTF8ToString(engine._ugu_last_error())} ` +
+            `(code ${engine._ugu_last_error_code()})`,
+    );
+}
+
+function adoptDocument(engine, handle, undoLimit) {
     documentHandle = handle;
+    if (undoLimit > 0) {
+        engine._ugu_set_undo_limit(handle, undoLimit);
+    }
     return {
+        abiVersion: engine._ugu_abi_version(),
         schemaVersion: engine._ugu_schema_version(),
         width: engine._ugu_document_width(handle),
         height: engine._ugu_document_height(handle),
@@ -78,9 +109,38 @@ function openDocument(engine, bytes) {
         layerCount: engine._ugu_document_layer_count(handle),
         fps: engine._ugu_document_fps(handle),
         presets: presetList(engine),
+        eraserPresets: eraserPresetList(engine),
         layers: layerList(engine),
         ...historyState(engine),
     };
+}
+
+function closeDocument(engine) {
+    if (documentHandle) {
+        engine._ugu_document_close(documentHandle);
+        documentHandle = 0;
+    }
+}
+
+function createDocument(engine, width, height, undoLimit) {
+    closeDocument(engine);
+    const handle = engine._ugu_document_new(width, height);
+    if (!handle) {
+        throw engineError(engine);
+    }
+    return adoptDocument(engine, handle, undoLimit);
+}
+
+function openDocument(engine, bytes, undoLimit) {
+    closeDocument(engine);
+    const pointer = engine._malloc(bytes.length);
+    engine.HEAPU8.set(bytes, pointer);
+    const handle = engine._ugu_document_open(pointer, bytes.length);
+    engine._free(pointer);
+    if (!handle) {
+        throw engineError(engine);
+    }
+    return adoptDocument(engine, handle, undoLimit);
 }
 
 // The engine hands out premultiplied BGRA rows; putImageData wants straight
@@ -187,7 +247,7 @@ function regionReply(engine, id) {
 function fullRender(engine, frame) {
     const handle = requireDocument();
     if (!engine._ugu_render_frame(handle, frame)) {
-        throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
+        throw engineError(engine);
     }
 }
 
@@ -195,7 +255,7 @@ function serializeDocument(engine) {
     const handle = requireDocument();
     const pointer = engine._ugu_serialize(handle);
     if (!pointer) {
-        throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
+        throw engineError(engine);
     }
     const size = engine._ugu_serialized_size(handle);
     return engine.HEAPU8.slice(pointer, pointer + size).buffer;
@@ -205,7 +265,7 @@ function exportGif(engine) {
     const handle = requireDocument();
     const pointer = engine._ugu_export_gif(handle);
     if (!pointer) {
-        throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
+        throw engineError(engine);
     }
     const size = engine._ugu_export_size(handle);
     return engine.HEAPU8.slice(pointer, pointer + size).buffer;
@@ -220,7 +280,24 @@ self.onmessage = async (event) => {
             postMessage({
                 id,
                 ok: true,
-                meta: openDocument(engine, new Uint8Array(event.data.bytes)),
+                meta: openDocument(
+                    engine,
+                    new Uint8Array(event.data.bytes),
+                    event.data.undoLimit,
+                ),
+            });
+            return;
+        }
+        if (type === "create") {
+            postMessage({
+                id,
+                ok: true,
+                meta: createDocument(
+                    engine,
+                    event.data.width,
+                    event.data.height,
+                    event.data.undoLimit,
+                ),
             });
             return;
         }
@@ -261,6 +338,10 @@ self.onmessage = async (event) => {
             engine._ugu_set_brush_preset(handleFor(), event.data.index);
             postMessage({ id, ok: true });
             return;
+        } else if (type === "eraserPreset") {
+            engine._ugu_set_eraser_preset(handleFor(), event.data.index);
+            postMessage({ id, ok: true });
+            return;
         } else if (type === "stabilization") {
             engine._ugu_set_stabilization(handleFor(), event.data.strength);
             postMessage({ id, ok: true });
@@ -275,7 +356,7 @@ self.onmessage = async (event) => {
                 event.data.timestamp,
             );
             if (!started) {
-                throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
+                throw engineError(engine);
             }
             engine._ugu_stroke_render(handleFor());
         } else if (type === "strokeAppend") {

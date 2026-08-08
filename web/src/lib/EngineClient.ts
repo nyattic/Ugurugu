@@ -22,6 +22,7 @@ export interface LayerThumbnail {
 }
 
 export interface DocumentMeta {
+    abiVersion: number;
     schemaVersion: number;
     width: number;
     height: number;
@@ -29,6 +30,7 @@ export interface DocumentMeta {
     layerCount: number;
     fps: number;
     presets: BrushPresetInfo[];
+    eraserPresets: BrushPresetInfo[];
     layers: LayerInfo[];
     canUndo: boolean;
     canRedo: boolean;
@@ -70,7 +72,11 @@ export class EngineClient {
     #nextId = 0;
 
     constructor() {
-        this.#worker = new Worker("/engine/engine-worker.js");
+        // Relative to the page so the worker stays same-origin under
+        // itch.io's project subdirectory as well as the dev server.
+        this.#worker = new Worker(
+            new URL("engine/engine-worker.js", document.baseURI),
+        );
         this.#worker.onmessage = (event) => {
             const { id, ok, error } = event.data;
             const pending = this.#pending.get(id);
@@ -120,11 +126,25 @@ export class EngineClient {
         return EngineClient.#toRegion(response);
     }
 
-    async open(bytes: ArrayBuffer): Promise<DocumentMeta> {
+    async open(bytes: ArrayBuffer, undoLimit: number): Promise<DocumentMeta> {
         const response = await this.#request<{ meta: DocumentMeta }>(
-            { type: "open", bytes },
+            { type: "open", bytes, undoLimit },
             [bytes],
         );
+        return response.meta;
+    }
+
+    async create(
+        width: number,
+        height: number,
+        undoLimit: number,
+    ): Promise<DocumentMeta> {
+        const response = await this.#request<{ meta: DocumentMeta }>({
+            type: "create",
+            width,
+            height,
+            undoLimit,
+        });
         return response.meta;
     }
 
@@ -138,6 +158,10 @@ export class EngineClient {
 
     async setBrushPreset(index: number): Promise<void> {
         await this.#request({ type: "brushPreset", index });
+    }
+
+    async setEraserPreset(index: number): Promise<void> {
+        await this.#request({ type: "eraserPreset", index });
     }
 
     async setStabilization(strength: number): Promise<void> {
