@@ -80,6 +80,14 @@ endif()
 
 if(WIN32)
     set(CMAKE_INSTALL_BINDIR ".")
+    # MSBuild overlaps whole projects but not the sources inside one, and
+    # clang-cl has no /MP, so ugurugu_core and ugurugu_ui would compile a file
+    # at a time. The multi-tool task scheduler parallelises within a project.
+    set(
+        CMAKE_VS_GLOBALS
+        "UseMultiToolTask=true"
+        "EnforceProcessCountAcrossBuilds=true"
+    )
 endif()
 
 function(ugurugu_target_defaults target)
