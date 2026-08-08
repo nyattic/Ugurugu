@@ -140,6 +140,80 @@ jobs:
       - name: Build shell
         run: npm run build
 
+      - name: Check the itch.io package rules
+        run: node ../tools/check_itchio_package.mjs dist
+
+  wasm:
+    name: Wasm engine parity
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+
+      # The desktop kit builds the native probe and, as QT_HOST_PATH, supplies
+      # moc and rcc for the cross build.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730
+        with:
+          version: '${{ env.QT_VERSION }}'
+          aqtsource: '${{ env.AQT_SOURCE }}'
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: qtshadertools
+          cache: true
+
+      # Qt ships wasm as a single Windows-built archive; only qtbase exists for
+      # it, which is all the engine subset needs. The preset resolves the
+      # toolchain file under ~/Qt, so it has to land there.
+      - name: Install the Qt wasm kit
+        run: |
+          python3 -m pip install --break-system-packages "$AQT_SOURCE"
+          python3 -m aqt install-qt all_os wasm "$QT_VERSION" \
+            wasm_singlethread --outputdir "$HOME/Qt"
+
+      # Pinned by Qt 6.11.1: the ABI has to match exactly.
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git \
+            "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 4.0.7
+          "$HOME/emsdk/emsdk" activate 4.0.7
+
+      - name: Build the wasm engine
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          cmake --preset wasm-release -DQT_HOST_PATH="$QT_ROOT_DIR"
+          cmake --build --preset wasm-release --parallel
+
+      - name: Smoke the wasm engine
+        run: node tools/wasm_engine_smoke.mjs examples/Wave.ugu |
+          tee "$RUNNER_TEMP/wasm.txt"
+
+      - name: Build the native probe
+        run: |
+          cmake --preset macos-debug
+          cmake --build --preset macos-debug \
+            --target ugurugu_engine_digest_probe --parallel
+
+      - name: Compare native and wasm digests
+        run: |
+          ./out/build/macos-debug/ugurugu_engine_digest_probe \
+            examples/Wave.ugu > "$RUNNER_TEMP/native.txt"
+          cat "$RUNNER_TEMP/native.txt"
+          # The smoke script prints the same lines plus a header and a verdict,
+          # so every probe line has to appear verbatim in its output.
+          while IFS= read -r line; do
+            if ! grep -qxF "$line" "$RUNNER_TEMP/wasm.txt"; then
+              echo "native line missing from the wasm run: $line"
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/native.txt"
+
   fuzz:
     name: Fuzz parsers
     runs-on: macos-15
@@ -430,7 +504,7 @@ jobs:
   quality:
     name: Quality gate
     if: always()
-    needs: [static, translations, web, fuzz, tidy, build, package]
+    needs: [static, translations, web, wasm, fuzz, tidy, build, package]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -439,13 +513,14 @@ jobs:
           STATIC_RESULT: ${{ needs.static.result }}
           TRANSLATIONS_RESULT: ${{ needs.translations.result }}
           WEB_RESULT: ${{ needs.web.result }}
+          WASM_RESULT: ${{ needs.wasm.result }}
           FUZZ_RESULT: ${{ needs.fuzz.result }}
           TIDY_RESULT: ${{ needs.tidy.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
         run: |
           failed=0
-          for check in STATIC TRANSLATIONS WEB FUZZ TIDY BUILD PACKAGE; do
+          for check in STATIC TRANSLATIONS WEB WASM FUZZ TIDY BUILD PACKAGE; do
             result_variable="${check}_RESULT"
             result="${!result_variable}"
             if [[ "$result" != "success" ]]; then

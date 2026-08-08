@@ -1,7 +1,7 @@
 # Ugurugu 웹 이식 진행 현황
 
-- 기준일: 2026-08-07
-- 브랜치: `wasm-engine-spike`(main에 머지), 이후 `web-measure-recovery`
+- 기준일: 2026-08-08
+- 브랜치: `wasm-engine-spike`·`web-measure-recovery`(main에 머지), 이후 `web-port-next`
 - 기준 계획: [web-itchio-feasibility.md](web-itchio-feasibility.md)의 권장 3번 방향과 단계 0~6
 
 ## 1. 완료된 작업
@@ -83,48 +83,89 @@
 - 자동 복구 스냅샷은 변경이 있을 때만 15초 주기로 저장하므로 IndexedDB 쓰기 피크는 import 상한 규칙과 같은 수치로 묶인다.
 - 후속 제안: 링크 시 `-sMAXIMUM_MEMORY=512MB`를 고정해 브라우저별 기본 상한(2 GiB) 대신 명시적 실패를 조기에 받는 것을 검토한다(아직 미적용).
 
+### 스트로크 지연 최적화 (2026-08-08, `web-port-next`)
+
+이전 측정이 "가장 시급한 최적화 지점"으로 지목한 스트로크 시작·커밋 비용을 데스크톱 `CanvasWidget::endStroke`가 이미 쓰던 승격(promotion) 방식으로 없앴다.
+
+- `ugu_stroke_end`는 마지막 점까지 증분 갱신한 뒤 `IncrementalStrokeRenderer::applyTo`로 스트로크를 split의 `layerBase`에 굽는다. 커밋이 `Added`로 끝나면 그 split이 곧 커밋된 문서의 split이고 `renderedFrame`은 이미 결과를 보여 주고 있으므로 **전체 재렌더를 하지 않는다**. dirty는 마지막 증분 영역뿐이다.
+- 승격된 split은 다음 스트로크까지 살아남는다. 같은 레이어·같은 프레임이면 `ugu_stroke_begin`이 `renderLayerSplit`을 건너뛴다.
+- split을 새로 만들어야 할 때도 커밋 프레임은 `composeLayerSplit(split, split.layerBase)`로 합성한다. `tests/LayerSplitPreviewTests.cpp:41`이 이 합성이 `render()`와 같음을 이미 고정하고 있어, 전체 렌더 2회가 1회로 줄었다.
+- undo/redo와 레이어 조작은 split을 무효화한다. 승격된 split은 커밋된 문서에만 유효하기 때문이다.
+
+| 항목 | Wave.ugu | 스트레스 1024² | 스트레스 2048² |
+|---|---:|---:|---:|
+| 스트로크 시작 — 최초(cold) | 3 ms | 2.7 s | 5.5 s |
+| 스트로크 시작 — 이후(warm) p95 | 0.1 ms | **0.3 ms** | **0.3 ms** |
+| 스트로크 커밋 p95 | 3.4 ms | **1.7 ms** | **2.2 ms** |
+| (이전) 시작 p95 | 4 ms | 5.7 s | 11.5 s |
+| (이전) 커밋 p95 | 4 ms | 2.9 s | 5.7 s |
+
+커밋은 초 단위에서 밀리초 단위로, 연속 스트로크의 시작은 사실상 0이 됐다. 남은 초 단위 비용은 **문서를 열거나 undo한 직후의 첫 스트로크 한 번**뿐이고, 그 값은 첫 전체 렌더 비용과 같다(1024² 2.7 s / 2048² 5.5 s). 이는 사용자가 이미 문서를 열 때 한 번 기다리는 비용과 같은 크기이며, 더 줄이려면 wobble 프레임 캐시가 필요하다.
+
+벤치마크(`tools/wasm_engine_bench.mjs`)는 이제 cold/warm을 나눠 보고하며, 실제 드로잉을 반영하려고 스트로크 사이에 undo를 하지 않는다.
+
+### 단계 2 — 버전 있는 ABI와 오류 모델 (2026-08-08)
+
+- `ugu_abi_version()`을 추가했다. 워커가 시작할 때 값을 확인하고 다르면 즉시 실패한다. 이전에는 오래된 `public/engine` 아티팩트가 관계없는 지점의 `… is not a function`으로 나타났다.
+- `ugu_last_error_code()`가 구조화된 상태 코드를 돌려준다(0 ok, 1 invalid argument, 2 out of memory, 3 invalid document, 4 no paint layer, 5 stroke rejected, 6 render failed, 7 export too large, 8 export failed). 문자열은 진단용으로만 쓴다.
+- CI에 `Wasm engine parity` job을 추가했다. Qt wasm 킷과 Emscripten 4.0.7을 설치해 `wasm-release`를 빌드하고, Node 스모크의 해시가 네이티브 `ugurugu_engine_digest_probe` 출력과 일치하는지 확인한다. 지금까지 수동이던 게이트가 자동이 됐다.
+
+### 단계 2 — 새 문서와 메모리 정책 강제 (2026-08-08)
+
+- `ugu_document_new(width, height)`와 `ugu_set_undo_limit()`을 추가했다. 이전에는 웹 셸이 기존 `.ugu`만 열 수 있어 보고서 8.4 MVP 범위의 첫 항목인 "새 문서"가 비어 있었다.
+- `web/src/lib/MemoryPolicy.ts`가 아래 제안 표를 실제 코드로 옮겼다. 프로파일은 `(pointer: coarse)`와 화면 크기로 데스크톱/모바일을 나누며 `?profile=` 질의로 덮어쓸 수 있다.
+  - 새 문서 다이얼로그가 상한(데스크톱 2048, 모바일 1024)으로 클램프한다. 엔진 자체 한도 4096보다 낮다.
+  - `.ugu` 열기는 경고(32/16 MiB)와 거부(64 MiB) 기준을 적용하고 상태 표시줄에 사유를 남긴다.
+  - undo 한도를 프로파일에서 설정한다(데스크톱 64, 모바일 32). 엔진에 바이트 단위 히스토리 예산이 없어 개수로 근사한 값이다.
+
+### 단계 3 — 프레젠터, 확대·이동, 단축키, 지우개 프리셋 (2026-08-08)
+
+- `web/src/lib/CanvasPresenter.ts`가 표시 계층을 둘로 나눈다. 문서 해상도 2D 캔버스(`#document-surface`)가 픽셀의 권위이고, 보이는 캔버스는 WebGL 2로 그 텍스처를 뷰 변환에 맞춰 그린다. WebGL 2가 없거나 컨텍스트를 잃으면 Canvas 2D로 자동 폴백한다. dirty 영역만 `texSubImage2D`로 올린다.
+  - 스포이드와 PNG 내보내기가 문서 표면을 읽으므로 확대·이동과 무관하게 정확하다. 이전 구조에서는 표시 캔버스를 읽고 있어 확대를 도입하는 순간 깨질 코드였다.
+- `web/src/lib/ViewTransform.ts` — 커서 고정 확대, 이동, 화면 맞춤. 휠 이동, Ctrl/Cmd+휠 확대, 스페이스·가운데 버튼 드래그 이동, 두 손가락 핀치 확대·이동을 지원한다. 두 번째 손가락이 닿으면 진행 중 스트로크는 커밋된다.
+- `web/src/lib/Shortcuts.ts` — undo/redo, 저장, 열기, 새 문서, 도구 전환(B/E/I), 굵기(`[`/`]`), 확대(Ctrl/Cmd +/−/0/1), 프레임 이동(←/→), 재생(Enter). 브라우저·OS가 소유한 조합은 건드리지 않고, 모든 단축키에 대응하는 화면 컨트롤을 남겼다.
+- 지우개가 `EraserPresetCatalog`에 연결됐다(`ugu_eraser_preset_*`). 지우개를 고르면 프리셋 선택이 지우개 카탈로그로 바뀐다.
+- itch.io 배포를 위해 Vite `base: "./"`와 상대 경로 Worker·에셋 URL로 바꾸고, `tools/check_itchio_package.mjs`가 진입 파일·절대 경로·파일 수·경로 길이·크기·대소문자 충돌을 검사한다. CI의 웹 job이 이 검사를 실행한다.
+
 ### 검증 방법 (반복 실행 가능)
 
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출을 자동 검증(19개 체크). 이전 세션의 Worker 게이트·드로잉·레이어 시나리오도 같은 방식으로 검증했다.
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프를 자동 검증(29개 체크).
+- itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
 
 ## 2. 남은 작업
 
-### 단계 1 잔여
+계정·실기기·법률 검토가 필요한 항목이 남은 작업의 대부분이다. 코드로 닫을 수 있는 항목은 도구·기능 추가 쪽에 몰려 있다.
 
-- iOS Safari, Android Chrome 실제 장치 스모크
-- Qt GPLv3 정적 배포 의무 검토 (출시 전)
-- 웹 메모리 정책 수치의 확정(위 제안 표를 실기기 결과로 보정)과 셸에서의 실제 강제(import 검사, 새 문서 다이얼로그)
+### 실기기·계정·법률 (코드로 닫을 수 없음)
 
-### 단계 2 잔여 (경계 강화)
-
-- 현재 spike C ABI를 versioned command ABI로 정리하고 오류 모델 정의 (현 ABI는 안정 계약이 아님)
-- native/Wasm 공통 fixture round-trip·픽셀 해시를 CI gate로 (현재는 수동 실행)
+- iOS Safari, Android Chrome 실제 장치 스모크. 단계 1의 중단 기준 판단 재료이자 Mobile Friendly 표시의 전제다.
+- itch.io Restricted staging 프로젝트에 Butler push, 페이지 내/전체 viewport 실행, iframe origin·`crossOriginIsolated`·clipboard·fullscreen 실측. 패키징 검사는 CI에 있지만 **아직 한 번도 업로드하지 않았다**.
+- 데스크톱 4종 브라우저 행렬, context loss/visibility 시험. WebGL 컨텍스트 손실 시 Canvas 2D 폴백 경로는 구현했으나 실제 손실 상황에서는 검증하지 못했다.
+- Qt GPLv3 정적 배포 의무 검토, third-party notice와 대응 소스 제공 절차 (출시 전 필수).
+- 메모리 정책 수치를 실기기 결과로 보정. 현재 값은 측정 기반 제안치를 그대로 코드에 옮긴 것이다.
 
 ### 단계 3 잔여 (웹 UI)
 
-- WebGL 2 presenter (현재 Canvas 2D `putImageData`)
-- pan/zoom, 두 손가락 제스처, 모바일 반응형 레이아웃
-- 채우기/선택 도구, 키보드 단축키
-- 접근성: 키보드 전용 조작, 스크린 리더 레이블
+- 채우기/선택 도구
+- 모바일 반응형 레이아웃. 핀치·이동 제스처는 있으나 패널 배치는 데스크톱 고정이다.
+- 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.
 
-### 단계 4 잔여 (배포)
+### 단계 4·6 잔여
 
-- itch.io 패키징 검사(상대 경로·파일 수·크기)를 CI로, Butler push와 Restricted staging 프로젝트 스모크
 - File System Access 지원 브라우저의 "같은 파일에 다시 저장" (선택 기능)
-
-### 단계 5 (품질)
-
-- 데스크톱 4종 브라우저·모바일 실기기 행렬, context loss/visibility 시험
-- third-party notice와 대응 소스 제공 절차
+- GIF 내보내기 진행률·취소 (현재는 Worker 블로킹)
+- raster/Wawa import, 고급 selection과 layer group 편집
+- 링크 시 `-sMAXIMUM_MEMORY=512MB` 고정 검토 (아직 미적용)
 
 ## 3. 알려진 한계
 
-- 진행 중 스트로크 프리뷰의 최초 프레임과 커밋 직후 프레임은 전체 렌더 1회씩을 쓴다(시작은 `renderLayerSplit`까지 포함해 사실상 2회). 스트레스 측정으로 정량화됨: 2,000 스트로크 밀도에서 시작 p95 5.7 s(1024²)/11.5 s(2048²), 커밋 p95 2.9/5.7 s. **웹 이식에서 가장 시급한 최적화 지점**이며, 후보는 커밋 시 split 재사용(전체 재렌더 대신 마지막 증분 상태 확정)과 wobble 프레임 캐시다. 배치 경로는 p95 0.4 ms 수준이라 문제가 없다.
+- 문서를 연 직후나 undo 직후의 **첫 스트로크 한 번**은 여전히 전체 렌더 1회를 쓴다(2,000 스트로크 밀도에서 1024² 2.7 s, 2048² 5.5 s). 이후 스트로크는 승격된 split을 재사용해 시작 p95 0.3 ms, 커밋 p95 2 ms다. 첫 스트로크까지 없애려면 wobble 프레임 캐시가 필요하다.
 - 자동 복구 스냅샷은 스트로크 진행 중에는 건너뛰고 다음 주기에 저장한다. serialize가 수백 ms인 대형 문서에서는 스냅샷 주기 동안 Worker가 그 시간만큼 다른 명령을 받지 못한다.
 - GIF 내보내기는 인코딩이 끝날 때까지 Worker를 블로킹한다(프레임 수 × 전체 렌더 + 인코딩). Wave 규모는 1초 미만이지만 스트로크 밀도가 높은 문서는 분 단위가 될 수 있다. 진행률·취소가 필요해지면 프레임 단위 분할이 다음 단계다.
-- `npm run dev`는 시작할 때만 엔진 아티팩트를 복사한다. dev 서버를 띄운 채 wasm을 다시 빌드하면 `npm run sync-engine`을 다시 실행해야 브라우저가 새 엔진을 받는다(안 하면 새 UI가 이전 엔진의 없는 export를 불러 `is not a function` 오류가 난다).
+- `npm run dev`는 시작할 때만 엔진 아티팩트를 복사한다. dev 서버를 띄운 채 wasm을 다시 빌드하면 `npm run sync-engine`을 다시 실행해야 브라우저가 새 엔진을 받는다. ABI 버전이 어긋나면 이제 워커가 그 사실을 명시한 오류를 던지지만, 같은 ABI 안의 동작 변경은 여전히 조용히 낡은 채로 남는다.
 - 웹 엔진 아티팩트(`ugurugu_engine_spike.{js,wasm}`)는 저장소에 커밋하지 않으며 `npm run sync-engine`이 `out/build/wasm-release`에서 복사한다.
-- 지우개는 현재 기본 Line 설정 고정이다(`EraserPreset` 카탈로그 미연결).
+- 문서 표면과 WebGL 텍스처를 각각 하나씩 들고 있으므로 표시 계층 메모리는 문서 크기의 2배다(2048²에서 32 MiB). 메모리 정책의 상한 안에 들어오지만 zero-copy는 아니다.
+- undo 한도는 개수 기준이다. 엔진에 바이트 단위 히스토리 예산이 없어 정책 표의 MiB 값을 그대로 강제하지는 못한다.
