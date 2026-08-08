@@ -539,6 +539,72 @@ const browser = await chromium.launch({
         `antialiased stroke added ${smoothEdgesAfter - smoothEdgesBefore} ` +
             `partially covered edge pixels`,
     );
+
+    // Preset selection replaces the engine's brush template wholesale, which
+    // used to silently drop the toggle: cycling presets or visiting the
+    // eraser left the box checked but committed aliased strokes.
+    const smoothEdgeCensus = () => {
+        const canvas = document.querySelector("#document-surface");
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        let partial = 0;
+        for (let index = 0; index < data.length; index += 4) {
+            const value = data[index];
+            if (value > 60 && value < 200) {
+                partial += 1;
+            }
+        }
+        return partial;
+    };
+    const drawOffsetStroke = async (offsetY) => {
+        const box = await page.locator("#display-canvas").boundingBox();
+        const startX = box.x + box.width / 2 - 80;
+        const startY = box.y + box.height / 2 + offsetY;
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        for (let step = 1; step <= 12; step += 1) {
+            await page.mouse.move(startX + step * 7, startY + step * 2.5);
+        }
+        await page.mouse.up();
+    };
+    const expectSmootherAfter = async (baseline, label) => {
+        await page.waitForFunction(
+            (edges) => {
+                const canvas = document.querySelector("#document-surface");
+                const data = canvas
+                    .getContext("2d")
+                    .getImageData(0, 0, canvas.width, canvas.height).data;
+                let partial = 0;
+                for (let index = 0; index < data.length; index += 4) {
+                    const value = data[index];
+                    if (value > 60 && value < 200) {
+                        partial += 1;
+                    }
+                }
+                return partial > edges;
+            },
+            baseline,
+            { timeout: 15000 },
+        );
+        check(true, label);
+    };
+    await page.locator("#brush-preset").selectOption("1");
+    await page.locator("#brush-preset").selectOption("0");
+    const beforePresetCycle = await page.evaluate(smoothEdgeCensus);
+    await drawOffsetStroke(40);
+    await expectSmootherAfter(
+        beforePresetCycle,
+        "antialiasing survives a brush preset cycle",
+    );
+    await page.locator("#tool-eraser").click();
+    await page.locator("#tool-brush").click();
+    const beforeEraserRoundTrip = await page.evaluate(smoothEdgeCensus);
+    await drawOffsetStroke(80);
+    await expectSmootherAfter(
+        beforeEraserRoundTrip,
+        "antialiasing survives an eraser round-trip",
+    );
     await page.keyboard.press("Control+z");
     await alias(false);
 

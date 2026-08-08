@@ -47,6 +47,7 @@ struct BridgeDocument
     std::unique_ptr<ugurugu::DocumentController> controller =
         std::make_unique<ugurugu::DocumentController>();
     ugurugu::Stroke brushTemplate;
+    bool brushAntialiasing = false;
     ugurugu::StrokeStabilizer stabilizer;
     ugurugu::Stroke activeStroke;
     bool strokeInProgress = false;
@@ -755,10 +756,13 @@ extern "C"
     // The desktop carries this per stroke from a brush-panel toggle
     // (CanvasWidgetTools.cpp:83); BrushSettings defaults it off and no preset
     // sets it, so without this the web could only ever draw aliased strokes.
+    // Stored beside the template rather than on it because preset selection
+    // replaces the template's brush wholesale, which used to silently drop
+    // the toggle after switching tools.
     EMSCRIPTEN_KEEPALIVE void ugu_set_brush_antialiasing(
         BridgeDocument *handle, int antialiasing)
     {
-        handle->brushTemplate.brush.antialiasing = antialiasing != 0;
+        handle->brushAntialiasing = antialiasing != 0;
     }
 
     EMSCRIPTEN_KEEPALIVE void ugu_set_stabilization(
@@ -787,6 +791,12 @@ extern "C"
         handle->activeStroke = handle->brushTemplate;
         handle->activeStroke.id = QUuid::createUuid();
         handle->activeStroke.seed = QRandomGenerator::global()->generate64();
+        // Erasers keep their preset's antialiasing, matching the desktop's
+        // beginStroke which applies the toggle to paint strokes only.
+        if (handle->activeStroke.mode == ugurugu::StrokeMode::Paint)
+        {
+            handle->activeStroke.brush.antialiasing = handle->brushAntialiasing;
+        }
         // A selection made on this layer confines the stroke to it, exactly as
         // CanvasWidget::beginStroke does. Both the incremental preview and the
         // committed render honour clipMask, so what is drawn is what lands.
