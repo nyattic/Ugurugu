@@ -147,6 +147,14 @@
 
 알려진 차이: 웹의 선택 상태는 셸이 들고 있어 **실행 취소 대상이 아니다**. 데스크톱은 `pushSelectionStateCommand`로 선택 전환까지 히스토리에 넣는다. 선택 영역 이동·변형(`transformSelection`)도 아직 웹에 없다.
 
+### 단계 4 — itch.io 스테이징 첫 업로드 (2026-08-09)
+
+- 비공개(Draft) 스테이징 프로젝트 `nyattic/ugurugutest`에 butler로 첫 업로드를 마쳤다: `npm run build` → `check_itchio_package.mjs` → `butler push web/dist nyattic/ugurugutest:web --userversion <커밋>`. butler는 공식 broth 채널의 darwin-arm64 바이너리를 쓴다(Homebrew의 `butler`·`gitbutler`는 전부 다른 프로그램).
+- butler가 만든 업로드는 **"This file will be played in the browser" 플래그가 꺼진 채로 들어온다.** 편집 페이지에서 최초 1회 켜야 하며, 안 켜면 "haven't configured how your project is embedded" 오류로 실행이 거부된다. 이후 푸시에는 유지된다.
+- macOS 데스크톱 브라우저 실측 결과: Worker 부팅, wasm 로드, 새 문서 생성, WebGL 2 프레젠터, 데스크톱 메모리 프로파일 감지, 그리기까지 정상. SharedArrayBuffer 없이 동작하는 설계가 실환경에서 확인됐다.
+- **Embed in page(1280×720)는 현재 레이아웃과 맞지 않는다.** 좌우 패널이 고정 폭이라 캔버스 기둥이 좁아져 1024×768 문서가 9%로 축소된다. `Click to launch in fullscreen` + Fullscreen button 조합으로 전환해 해결했다. 페이지 내 임베드를 살리려면 단계 3 잔여의 반응형 레이아웃이 전제다.
+- 웹 셸은 이제 시작 시 데모 문서 대신 메모리 프로파일 기본 크기의 빈 문서를 만든다. 브리지의 브러시 안티앨리어싱 토글이 프리셋·도구 전환에 지워지던 버그도 수정했다(스트로크 시작 시 Paint 모드에만 적용, 데스크톱과 동일 계약).
+
 ### 검증 방법 (반복 실행 가능)
 
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
@@ -162,7 +170,7 @@
 ### 실기기·계정·법률 (코드로 닫을 수 없음)
 
 - iOS Safari, Android Chrome 실제 장치 스모크. 단계 1의 중단 기준 판단 재료이자 Mobile Friendly 표시의 전제다.
-- itch.io Restricted staging 프로젝트에 Butler push, 페이지 내/전체 viewport 실행, iframe origin·`crossOriginIsolated`·clipboard·fullscreen 실측. 패키징 검사는 CI에 있지만 **아직 한 번도 업로드하지 않았다**.
+- itch.io 스테이징 업로드와 전체 화면 실행은 확인됐다(위 단계 4 항목). 남은 실측: iframe 안 키보드 단축키, 새로고침 후 IndexedDB 복구 유지, PNG/GIF 다운로드 권한, clipboard, 그리고 데스크톱 브라우저별 차이.
 - 데스크톱 4종 브라우저 행렬, context loss/visibility 시험. WebGL 컨텍스트 손실 시 Canvas 2D 폴백 경로는 구현했으나 실제 손실 상황에서는 검증하지 못했다.
 - Qt GPLv3 정적 배포 의무 검토, third-party notice와 대응 소스 제공 절차 (출시 전 필수).
 - 메모리 정책 수치를 실기기 결과로 보정. 현재 값은 측정 기반 제안치를 그대로 코드에 옮긴 것이다.
