@@ -185,6 +185,13 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setBucketAntialiasing(boolSetting(
         settings, QString::fromLatin1(bucketAntialiasingKey), true));
 
+    m_canvas->setTextFontFamily(
+        settings.value(textFontFamilyKey).toString());
+    m_canvas->setTextFontSize(realSetting(
+        settings, QString::fromLatin1(textFontSizeKey), 48.0, 8.0, 512.0));
+    m_canvas->setTextFilled(
+        boolSetting(settings, QString::fromLatin1(textFilledKey), false));
+
     const std::optional<CanvasWidget::Tool> storedTool =
         toolFromSettingsId(settings.value(activeToolKey).toString());
     m_canvas->setTool(storedTool.value_or(CanvasWidget::Tool::Brush));
@@ -310,6 +317,27 @@ void MainWindow::connectDrawingToolSettings()
         {
             schedule();
         });
+    connect(m_canvas,
+        &CanvasWidget::textFontFamilyChanged,
+        this,
+        [schedule](const QString &)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::textFontSizeChanged,
+        this,
+        [schedule](qreal)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::textFilledChanged,
+        this,
+        [schedule](bool)
+        {
+            schedule();
+        });
 }
 
 void MainWindow::scheduleDrawingToolSettingsSave()
@@ -336,6 +364,9 @@ void MainWindow::saveDrawingToolSettings()
         fillComparisonSettingsId(m_canvas->fillComparison()));
     settings.setValue(fillToleranceKey, m_canvas->fillTolerance());
     settings.setValue(bucketAntialiasingKey, m_canvas->bucketAntialiasing());
+    settings.setValue(textFontFamilyKey, m_canvas->textFontFamily());
+    settings.setValue(textFontSizeKey, m_canvas->textFontSize());
+    settings.setValue(textFilledKey, m_canvas->textFilled());
     for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
     {
         settings.setValue(

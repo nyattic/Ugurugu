@@ -13,6 +13,7 @@
 
 #include <QCache>
 #include <QColor>
+#include <QFont>
 #include <QFutureWatcher>
 #include <QHash>
 #include <QImage>
@@ -74,6 +75,14 @@ public:
     bool bucketAntialiasing() const;
     SelectionShape selectionShape() const;
     LassoMode lassoMode() const;
+    QString textContent() const;
+    QString textFontFamily() const;
+    qreal textFontSize() const;
+    bool textFilled() const;
+    QFont textFont() const;
+    bool hasTextPlacement() const;
+    bool applyTextPlacement();
+    void cancelTextPlacement();
     bool isAnimating() const;
     bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
@@ -133,6 +142,10 @@ public slots:
     void setBucketAntialiasing(bool antialiasing);
     void setSelectionShape(SelectionShape shape);
     void setLassoMode(LassoMode mode);
+    void setTextContent(const QString &text);
+    void setTextFontFamily(const QString &family);
+    void setTextFontSize(qreal size);
+    void setTextFilled(bool filled);
     void setAnimating(bool animating);
     void toggleAnimating();
     void setAnimateWhileDrawing(bool animate);
@@ -167,6 +180,11 @@ signals:
     void bucketAntialiasingChanged(bool antialiasing);
     void selectionShapeChanged(SelectionShape shape);
     void lassoModeChanged(LassoMode mode);
+    void textContentChanged(const QString &text);
+    void textFontFamilyChanged(const QString &family);
+    void textFontSizeChanged(qreal size);
+    void textFilledChanged(bool filled);
+    void textPlacementChanged(bool active);
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
@@ -322,6 +340,13 @@ private:
     void pushSelectionChange(const SelectionState &previousSelection,
         const SelectionState &nextSelection,
         const QString &text);
+    void beginTextInteraction(const QPointF &documentPosition);
+    void continueTextDrag(const QPointF &documentPosition);
+    void endTextDrag();
+    QPainterPath textPreviewPath() const;
+    QRectF textPlacementBounds() const;
+    void drawTextPlacementOverlay(
+        QPainter &painter, const QTransform &transform);
     void computeWandSelection(const QPointF &documentPosition,
         SelectionCombine combine = SelectionCombine::Replace);
     void applyBucketFill(const QPointF &documentPosition);
@@ -390,6 +415,15 @@ private:
     bool m_bucketAntialiasing = true;
     SelectionShape m_selectionShape = SelectionShape::Freehand;
     LassoMode m_lassoMode = LassoMode::Select;
+    QString m_textContent;
+    QString m_textFontFamily;
+    qreal m_textFontSize = 48.0;
+    bool m_textFilled = false;
+    bool m_textPlacementActive = false;
+    bool m_textDragging = false;
+    QPointF m_textAnchor;
+    QPointF m_textDragStart;
+    QPointF m_textAnchorAtDragStart;
     bool m_animating = true;
     bool m_animateWhileDrawing = false;
     bool m_groupSelectionActive = false;

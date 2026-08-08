@@ -859,6 +859,7 @@ void CanvasWidget::setTool(Tool tool)
     cancelSelectionTransformForBoundary(tr(
         "The pending selection transform was canceled when changing tools."));
     cancelStroke();
+    cancelTextPlacement();
     endColorPick();
     setSelectionMoveMode(false);
     if (m_areaSelectionActive)
@@ -913,6 +914,10 @@ void CanvasWidget::handleEscape()
     else if (m_selectionMoveMode)
     {
         setSelectionMoveMode(false);
+    }
+    else if (m_textPlacementActive)
+    {
+        cancelTextPlacement();
     }
     else if (m_drawing || m_panning || m_zoomDragging || m_pickingColor)
     {
@@ -1404,6 +1409,7 @@ void CanvasWidget::cancelActiveInteraction()
     cancelStroke();
     cancelSelectionMove();
     cancelAreaSelection();
+    endTextDrag();
     if (restoreAreaSelection)
     {
         restoreSelectionState(selectionBeforeArea);

@@ -511,14 +511,16 @@
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="566"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="209"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="55"/>
         <source>The active layer is hidden. Make it visible to draw.</source>
         <translation>アクティブレイヤーが非表示です。描画するには表示してください。</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="690"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="277"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="278"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="544"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="197"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="41"/>
         <source>Add a layer before using this tool.</source>
         <translation>このツールを使う前にレイヤーを追加してください。</translation>
@@ -614,14 +616,15 @@
         <translation>ツールを変更したため、保留中の選択範囲の変形をキャンセルしました。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="261"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="494"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="262"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="512"/>
         <source>Drag inside the selection to move it.</source>
         <translation>選択範囲の内側をドラッグして移動してください。</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="550"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="630"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="203"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="47"/>
         <source>Groups can&apos;t be painted on. Select a paint layer to draw.</source>
         <translation>グループには描画できません。描画するにはペイントレイヤーを選択してください。</translation>
@@ -633,6 +636,7 @@
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="572"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="215"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="61"/>
         <source>The active layer opacity is 0%. Increase it to draw.</source>
         <translation>アクティブレイヤーの不透明度が0%です。描画するには上げてください。</translation>
@@ -773,6 +777,46 @@
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="292"/>
         <source>The stroke could not be added.</source>
         <translation>ストロークを追加できませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="233"/>
+        <source>Type some text to place it.</source>
+        <translation>配置するテキストを先に入力してください。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="245"/>
+        <source>Add text</source>
+        <translation>テキストを追加</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="267"/>
+        <source>The text could not be added because its layer is no longer available.</source>
+        <translation>レイヤーが利用できなくなったため、テキストを追加できませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="272"/>
+        <source>The text could not be added because the project stroke limit was reached.</source>
+        <translation>プロジェクトのストローク数の上限に達したため、テキストを追加できませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="277"/>
+        <source>The text could not be added because the project point limit was reached.</source>
+        <translation>プロジェクトのポイント数の上限に達したため、テキストを追加できませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="281"/>
+        <source>The text could not be added.</source>
+        <translation>テキストを追加できませんでした。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="325"/>
+        <source>Type in the Text panel to see it here.</source>
+        <translation>テキストパネルに入力すると、ここに表示されます。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="326"/>
+        <source>Drag to move · Enter applies · Esc cancels</source>
+        <translation>ドラッグで移動 · Enter で適用 · Esc でキャンセル</translation>
     </message>
 </context>
 <context>
@@ -1586,24 +1630,24 @@
 <context>
     <name>ugurugu::ExportWorker</name>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="174"/>
+        <location filename="../src/io/ExportWorker.cpp" line="148"/>
         <source>The export failed unexpectedly: %1</source>
         <translation>書き出し中に予期しないエラーが発生しました: %1</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="180"/>
+        <location filename="../src/io/ExportWorker.cpp" line="154"/>
         <source>The export failed unexpectedly.</source>
         <translation>書き出し中に予期しないエラーが発生しました。</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="244"/>
-        <location filename="../src/io/ExportWorker.cpp" line="255"/>
+        <location filename="../src/io/ExportWorker.cpp" line="218"/>
+        <location filename="../src/io/ExportWorker.cpp" line="229"/>
         <source>The image could not be rendered.</source>
         <translation>画像をレンダリングできませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="328"/>
-        <location filename="../src/io/ExportWorker.cpp" line="339"/>
+        <location filename="../src/io/ExportWorker.cpp" line="302"/>
+        <location filename="../src/io/ExportWorker.cpp" line="313"/>
         <source>An animation frame could not be rendered.</source>
         <translation>アニメーションフレームをレンダリングできませんでした。</translation>
     </message>
@@ -2666,108 +2710,123 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="671"/>
+        <source>Te&amp;xt</source>
+        <translation>テキスト(&amp;X)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="676"/>
+        <source>Place wobbly text drawn with the brush color</source>
+        <translation>ブラシの色で描いたうごうごするテキストを配置します</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="679"/>
         <source>E&amp;yedropper</source>
         <translation>スポイト(&amp;Y)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="676"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="684"/>
         <source>Pick a color from the canvas. Alt+click does the same from any paint tool.</source>
         <translation>キャンバスから色を取得します。どの描画ツールでもAlt+クリックで同じ操作ができます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="682"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="690"/>
         <source>Show &amp;animation bar</source>
         <translation>アニメーションバーを表示(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="700"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="708"/>
         <source>Reset panel layout</source>
         <translation>パネル配置をリセット</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="836"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="855"/>
         <source>&amp;File</source>
         <translation>ファイル(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="854"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="873"/>
         <source>&amp;Edit</source>
         <translation>編集(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="869"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="888"/>
         <source>&amp;Selection</source>
         <translation>選択範囲(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="893"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="912"/>
         <source>&amp;View</source>
         <translation>表示(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="902"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="921"/>
         <source>&amp;Tools</source>
         <translation>ツール(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="915"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="935"/>
         <source>&amp;Window</source>
         <translation>ウィンドウ(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="927"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="947"/>
         <source>&amp;Help</source>
         <translation>ヘルプ(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="964"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="984"/>
         <source>Tools</source>
         <translation>ツール</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="984"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1004"/>
         <source>Brush</source>
         <translation>ブラシ</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="985"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1005"/>
         <source>Eraser</source>
         <translation>消しゴム</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="986"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1006"/>
         <source>Area select</source>
         <translation>範囲選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="987"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1007"/>
         <source>Auto select</source>
         <translation>自動選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="988"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1008"/>
         <source>Paint bucket</source>
         <translation>塗りつぶし</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="989"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1009"/>
+        <source>Text</source>
+        <translation>テキスト</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1010"/>
         <source>Eyedropper</source>
         <translation>スポイト</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1065"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1066"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1086"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1087"/>
         <source>Canvas zoom</source>
         <translation>キャンバスのズーム</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1072"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1093"/>
         <source>%</source>
         <translation>%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1075"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1076"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1096"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1097"/>
         <source>Canvas zoom percentage</source>
         <translation>キャンバスのズーム倍率</translation>
     </message>
@@ -2878,37 +2937,37 @@ The recovery file was not deleted. You can find it at:
         <translation>画像で書き出す(&amp;I)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1012"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1033"/>
         <source>Quick access</source>
         <translation>クイックアクセス</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1021"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1042"/>
         <source>Open and close panels</source>
         <translation>パネルを開く・閉じる</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1022"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1043"/>
         <source>Panels</source>
         <translation>パネル</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1083"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1104"/>
         <source>Mirror</source>
         <translation>左右反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1092"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1113"/>
         <source>Fit</source>
         <translation>全体表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1101"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1122"/>
         <source>x %1  y %2</source>
         <translation>x %1  y %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1137"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1158"/>
         <source>Ready</source>
         <translation>準備完了</translation>
     </message>
@@ -3120,29 +3179,29 @@ The recovery file was not deleted. You can find it at:
         <translation>選択したストロークの色または太さを変更します</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="365"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="384"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="396"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="415"/>
         <source>Preset export failed</source>
         <translation>プリセットの書き出しに失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="366"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="397"/>
         <source>Could not prepare the preset.</source>
         <translation>プリセットを準備できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="370"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="401"/>
         <source>Export WWP preset</source>
         <translation>WWPプリセットを書き出す</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="372"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="396"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="403"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="427"/>
         <source>Ugurugu presets (*.wwpreset)</source>
         <translation>Uguruguプリセット (*.wwpreset)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="385"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="416"/>
         <source>Could not write the preset.
 
 %1</source>
@@ -3151,28 +3210,28 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="388"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="419"/>
         <source>Exported preset %1</source>
         <translation>プリセット%1を書き出しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="394"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="425"/>
         <source>Import WWP preset</source>
         <translation>WWPプリセットを読み込む</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="407"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="414"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="438"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="445"/>
         <source>The preset could not be read or is too large.</source>
         <translation>プリセットを読み込めないか、ファイルが大きすぎます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="426"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="457"/>
         <source>Preset import failed</source>
         <translation>プリセットの読み込みに失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="427"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="458"/>
         <source>Could not import the preset.
 
 %1</source>
@@ -3181,12 +3240,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="428"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="459"/>
         <source>The preset settings are invalid.</source>
         <translation>プリセットの設定が無効です。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="436"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="467"/>
         <source>Imported preset %1</source>
         <translation>プリセット%1を読み込みました</translation>
     </message>
@@ -3393,6 +3452,54 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
+    <name>ugurugu::TextPopoverPanel</name>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="28"/>
+        <source>TEXT</source>
+        <translation>テキスト</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="34"/>
+        <source>Type the text to place…</source>
+        <translation>配置するテキストを入力…</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="58"/>
+        <source>FONT</source>
+        <translation>フォント</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="88"/>
+        <source>Size</source>
+        <translation>サイズ</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="93"/>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="114"/>
+        <source>Fill the letters</source>
+        <translation>文字を塗りつぶす</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="137"/>
+        <source>Place text</source>
+        <translation>テキストを配置</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="139"/>
+        <source>Cancel</source>
+        <translation>キャンセル</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="164"/>
+        <source>Click the canvas to place the text, then drag it into position. The letters use the brush color and width, and wobble like drawn lines.</source>
+        <translation>キャンバスをクリックしてテキストを置き、ドラッグで位置を調整します。文字はブラシの色と太さを使い、描いた線のようにうごうごします。</translation>
+    </message>
+</context>
+<context>
     <name>ugurugu::TimelineBar</name>
     <message>
         <location filename="../src/ui/TimelineBar.cpp" line="89"/>
@@ -3449,12 +3556,12 @@ The recovery file was not deleted. You can find it at:
 <context>
     <name>ugurugu::ToolDock</name>
     <message>
-        <location filename="../src/ui/ToolDock.cpp" line="37"/>
+        <location filename="../src/ui/ToolDock.cpp" line="38"/>
         <source>Tool settings</source>
         <translation>ツール設定</translation>
     </message>
     <message>
-        <location filename="../src/ui/ToolDock.cpp" line="73"/>
+        <location filename="../src/ui/ToolDock.cpp" line="75"/>
         <source>Click the canvas to pick up its color.
 Alt+click does the same from the brush, eraser or paint bucket.</source>
         <translation>キャンバスをクリックして色を取得します。

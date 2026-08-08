@@ -582,6 +582,11 @@ void CanvasWidget::updateCursor()
         setCursor(Qt::ForbiddenCursor);
         return;
     }
+    if (m_tool == Tool::Text && !m_tabletPointerEraser)
+    {
+        setCursor(Qt::IBeamCursor);
+        return;
+    }
     const bool drawsWithRing = m_tabletPointerEraser || m_tool == Tool::Brush
                                || m_tool == Tool::Eraser;
     setCursor(drawsWithRing ? Qt::BlankCursor : Qt::CrossCursor);

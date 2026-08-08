@@ -9,6 +9,7 @@
 #include "ui/EraserPopoverPanel.hpp"
 #include "ui/LassoPopoverPanel.hpp"
 #include "ui/PaletteDockTitleBar.hpp"
+#include "ui/TextPopoverPanel.hpp"
 #include "ui/WandPopoverPanel.hpp"
 
 #include <QLabel>
@@ -68,6 +69,7 @@ void ToolDock::buildPanels()
     addToolPanel(CanvasTool::Lasso, new LassoPopoverPanel(m_canvas));
     addToolPanel(CanvasTool::Wand, new WandPopoverPanel(m_canvas));
     addToolPanel(CanvasTool::Bucket, new BucketPopoverPanel(m_canvas));
+    addToolPanel(CanvasTool::Text, new TextPopoverPanel(m_canvas));
 
     auto *eyedropperPanel = new QLabel(
         tr("Click the canvas to pick up its color.\nAlt+click does the same "

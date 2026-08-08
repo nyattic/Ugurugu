@@ -1958,7 +1958,7 @@ private slots:
         QVERIFY(toolRail);
         const QList<PopoverToolButton *> railButtons =
             toolRail->findChildren<PopoverToolButton *>();
-        QCOMPARE(railButtons.size(), 6);
+        QCOMPARE(railButtons.size(), 7);
         for (const PopoverToolButton *button : railButtons)
         {
             QVERIFY(!button->text().contains(QLatin1Char('(')));

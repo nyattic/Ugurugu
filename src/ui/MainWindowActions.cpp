@@ -668,6 +668,14 @@ void MainWindow::createActions()
     m_bucketAction->setObjectName(QStringLiteral("bucketAction"));
     registerShortcut(m_bucketAction, QKeySequence(QStringLiteral("G")));
 
+    m_textAction = new QAction(tr("Te&xt"), this);
+    m_textAction->setCheckable(true);
+    m_textAction->setIcon(Icons::toggleIcon(IconGlyph::Text));
+    m_textAction->setObjectName(QStringLiteral("textAction"));
+    m_textAction->setToolTip(
+        tr("Place wobbly text drawn with the brush color"));
+    registerShortcut(m_textAction, QKeySequence(QStringLiteral("T")));
+
     m_eyedropperAction = new QAction(tr("E&yedropper"), this);
     m_eyedropperAction->setCheckable(true);
     m_eyedropperAction->setIcon(Icons::toggleIcon(IconGlyph::Eyedropper));
@@ -716,6 +724,7 @@ void MainWindow::createActions()
     toolGroup->addAction(m_lassoAction);
     toolGroup->addAction(m_wandAction);
     toolGroup->addAction(m_bucketAction);
+    toolGroup->addAction(m_textAction);
     toolGroup->addAction(m_eyedropperAction);
     connect(m_brushAction,
         &QAction::triggered,
@@ -752,6 +761,13 @@ void MainWindow::createActions()
         {
             m_canvas->setTool(CanvasWidget::Tool::Bucket);
         });
+    connect(m_textAction,
+        &QAction::triggered,
+        this,
+        [this]()
+        {
+            m_canvas->setTool(CanvasWidget::Tool::Text);
+        });
     connect(m_eyedropperAction,
         &QAction::triggered,
         this,
@@ -777,6 +793,9 @@ void MainWindow::createActions()
             break;
         case CanvasWidget::Tool::Bucket:
             m_bucketAction->setChecked(true);
+            break;
+        case CanvasWidget::Tool::Text:
+            m_textAction->setChecked(true);
             break;
         case CanvasWidget::Tool::Eyedropper:
             m_eyedropperAction->setChecked(true);
@@ -905,6 +924,7 @@ void MainWindow::createMenus()
     toolMenu->addAction(m_lassoAction);
     toolMenu->addAction(m_wandAction);
     toolMenu->addAction(m_bucketAction);
+    toolMenu->addAction(m_textAction);
     toolMenu->addAction(m_eyedropperAction);
     toolMenu->addSeparator();
     toolMenu->addAction(
@@ -986,6 +1006,7 @@ void MainWindow::createToolBars()
     addRailButton(m_lassoAction, IconGlyph::Lasso, tr("Area select"));
     addRailButton(m_wandAction, IconGlyph::Wand, tr("Auto select"));
     addRailButton(m_bucketAction, IconGlyph::Bucket, tr("Paint bucket"));
+    addRailButton(m_textAction, IconGlyph::Text, tr("Text"));
     addRailButton(m_eyedropperAction, IconGlyph::Eyedropper, tr("Eyedropper"));
 
     connect(m_canvas,

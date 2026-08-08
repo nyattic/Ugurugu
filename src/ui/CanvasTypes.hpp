@@ -13,6 +13,7 @@ enum class CanvasTool
     Lasso,
     Wand,
     Bucket,
+    Text,
     Eyedropper
 };
 

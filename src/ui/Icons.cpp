@@ -420,6 +420,17 @@ Glyph cancelGlyph()
     return glyph;
 }
 
+Glyph textGlyph()
+{
+    Glyph glyph;
+    glyph.lines.append(polyline({{5.2, 5.6}, {18.8, 5.6}}));
+    glyph.lines.append(polyline({{5.2, 5.6}, {5.2, 8.2}}));
+    glyph.lines.append(polyline({{18.8, 5.6}, {18.8, 8.2}}));
+    glyph.lines.append(polyline({{12.0, 5.6}, {12.0, 19.2}}));
+    glyph.lines.append(polyline({{9.2, 19.2}, {14.8, 19.2}}));
+    return glyph;
+}
+
 Glyph glyphFor(IconGlyph glyph)
 {
     switch (glyph)
@@ -462,6 +473,8 @@ Glyph glyphFor(IconGlyph glyph)
         return wandGlyph();
     case IconGlyph::Bucket:
         return bucketGlyph();
+    case IconGlyph::Text:
+        return textGlyph();
     case IconGlyph::Eyedropper:
         return eyedropperGlyph();
     case IconGlyph::Wobble:

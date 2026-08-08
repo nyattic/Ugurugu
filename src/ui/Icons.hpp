@@ -31,6 +31,7 @@ enum class IconGlyph
     Lasso,
     Wand,
     Bucket,
+    Text,
     Eyedropper,
     Wobble,
     Panels,

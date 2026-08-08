@@ -42,6 +42,8 @@ set(UGURUGU_ENGINE_SOURCES
     src/document/SelectionVisibility.hpp
     src/document/StrokeMask.cpp
     src/document/StrokeMask.hpp
+    src/document/TextStrokeBuilder.cpp
+    src/document/TextStrokeBuilder.hpp
     src/input/StrokeStabilizer.cpp
     src/input/StrokeStabilizer.hpp
     src/io/AnimationExportPolicy.cpp
@@ -165,6 +167,7 @@ set(UGURUGU_UI_SOURCES
     src/ui/CanvasWidgetEvents.cpp
     src/ui/CanvasWidgetPreview.cpp
     src/ui/CanvasWidgetSelection.cpp
+    src/ui/CanvasWidgetText.cpp
     src/ui/CanvasWidgetTools.cpp
     src/ui/ColorDock.cpp
     src/ui/ColorDock.hpp
@@ -233,6 +236,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/StrokePropertiesDialog.hpp
     src/ui/StrokeStabilizationRow.cpp
     src/ui/StrokeStabilizationRow.hpp
+    src/ui/TextPopoverPanel.cpp
+    src/ui/TextPopoverPanel.hpp
     src/ui/SettingsDialog.cpp
     src/ui/SettingsDialog.hpp
     src/ui/Theme.cpp
@@ -286,6 +291,7 @@ set(UGURUGU_TEST_SOURCES
     tests/StrokeCoverageTests.cpp
     tests/StrokeRenderingTests.cpp
     tests/StrokeStabilizerTests.cpp
+    tests/TextStrokeBuilderTests.cpp
     tests/TestMain.cpp
     tests/TestSuites.hpp
     tests/WobbleAnimationTests.cpp

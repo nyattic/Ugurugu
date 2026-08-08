@@ -38,6 +38,9 @@ constexpr auto wandReferenceKey = "drawingTools/wand/reference";
 constexpr auto fillComparisonKey = "drawingTools/fill/comparison";
 constexpr auto fillToleranceKey = "drawingTools/fill/tolerance";
 constexpr auto bucketAntialiasingKey = "drawingTools/fill/antialiasing";
+constexpr auto textFontFamilyKey = "drawingTools/text/fontFamily";
+constexpr auto textFontSizeKey = "drawingTools/text/size";
+constexpr auto textFilledKey = "drawingTools/text/filled";
 constexpr auto legacyStabilizationKey = "canvas/strokeStabilization";
 
 constexpr qreal minimumRememberedStrokeWidth = 1.0;

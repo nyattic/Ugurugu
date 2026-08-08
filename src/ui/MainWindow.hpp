@@ -150,6 +150,7 @@ private:
     QAction *m_lassoAction = nullptr;
     QAction *m_wandAction = nullptr;
     QAction *m_bucketAction = nullptr;
+    QAction *m_textAction = nullptr;
     QAction *m_eyedropperAction = nullptr;
     QAction *m_showTimelineAction = nullptr;
     QAction *m_fillSelectionAction = nullptr;

@@ -511,14 +511,16 @@
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="566"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="209"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="55"/>
         <source>The active layer is hidden. Make it visible to draw.</source>
         <translation>활성 레이어가 숨겨져 있습니다. 표시한 후 그릴 수 있습니다.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidget.cpp" line="690"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="277"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="278"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="544"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="197"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="41"/>
         <source>Add a layer before using this tool.</source>
         <translation>이 도구를 사용하기 전에 레이어를 추가하세요.</translation>
@@ -614,14 +616,15 @@
         <translation>도구를 변경하여 대기 중인 선택 영역 변형을 취소했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="261"/>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="494"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="262"/>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="512"/>
         <source>Drag inside the selection to move it.</source>
         <translation>선택 영역 안을 드래그해 이동하세요.</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="550"/>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="630"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="203"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="47"/>
         <source>Groups can&apos;t be painted on. Select a paint layer to draw.</source>
         <translation>그룹에는 그릴 수 없습니다. 그리려면 페인트 레이어를 선택하세요.</translation>
@@ -633,6 +636,7 @@
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="572"/>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="215"/>
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="61"/>
         <source>The active layer opacity is 0%. Increase it to draw.</source>
         <translation>활성 레이어의 불투명도가 0%입니다. 높인 후 그릴 수 있습니다.</translation>
@@ -773,6 +777,46 @@
         <location filename="../src/ui/CanvasWidgetTools.cpp" line="292"/>
         <source>The stroke could not be added.</source>
         <translation>스트로크를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="233"/>
+        <source>Type some text to place it.</source>
+        <translation>배치할 텍스트를 먼저 입력하세요.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="245"/>
+        <source>Add text</source>
+        <translation>텍스트 추가</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="267"/>
+        <source>The text could not be added because its layer is no longer available.</source>
+        <translation>레이어를 더 이상 사용할 수 없어 텍스트를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="272"/>
+        <source>The text could not be added because the project stroke limit was reached.</source>
+        <translation>프로젝트의 스트로크 한도에 도달하여 텍스트를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="277"/>
+        <source>The text could not be added because the project point limit was reached.</source>
+        <translation>프로젝트의 포인트 한도에 도달하여 텍스트를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="281"/>
+        <source>The text could not be added.</source>
+        <translation>텍스트를 추가하지 못했습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="325"/>
+        <source>Type in the Text panel to see it here.</source>
+        <translation>텍스트 패널에 입력하면 여기에 표시됩니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/CanvasWidgetText.cpp" line="326"/>
+        <source>Drag to move · Enter applies · Esc cancels</source>
+        <translation>드래그로 이동 · Enter 적용 · Esc 취소</translation>
     </message>
 </context>
 <context>
@@ -1586,24 +1630,24 @@
 <context>
     <name>ugurugu::ExportWorker</name>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="174"/>
+        <location filename="../src/io/ExportWorker.cpp" line="148"/>
         <source>The export failed unexpectedly: %1</source>
         <translation>내보내기 중 예기치 않은 오류가 발생했습니다: %1</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="180"/>
+        <location filename="../src/io/ExportWorker.cpp" line="154"/>
         <source>The export failed unexpectedly.</source>
         <translation>내보내기 중 예기치 않은 오류가 발생했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="244"/>
-        <location filename="../src/io/ExportWorker.cpp" line="255"/>
+        <location filename="../src/io/ExportWorker.cpp" line="218"/>
+        <location filename="../src/io/ExportWorker.cpp" line="229"/>
         <source>The image could not be rendered.</source>
         <translation>이미지를 렌더링하지 못했습니다.</translation>
     </message>
     <message>
-        <location filename="../src/io/ExportWorker.cpp" line="328"/>
-        <location filename="../src/io/ExportWorker.cpp" line="339"/>
+        <location filename="../src/io/ExportWorker.cpp" line="302"/>
+        <location filename="../src/io/ExportWorker.cpp" line="313"/>
         <source>An animation frame could not be rendered.</source>
         <translation>애니메이션 프레임을 렌더링하지 못했습니다.</translation>
     </message>
@@ -2666,108 +2710,123 @@ The recovery file was not deleted. You can find it at:
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="671"/>
+        <source>Te&amp;xt</source>
+        <translation>텍스트(&amp;X)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="676"/>
+        <source>Place wobbly text drawn with the brush color</source>
+        <translation>브러시 색으로 그린 우글거리는 텍스트를 배치합니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="679"/>
         <source>E&amp;yedropper</source>
         <translation>스포이드(&amp;Y)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="676"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="684"/>
         <source>Pick a color from the canvas. Alt+click does the same from any paint tool.</source>
         <translation>캔버스에서 색상을 추출합니다. 페인트 도구에서 Alt+클릭해도 같습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="682"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="690"/>
         <source>Show &amp;animation bar</source>
         <translation>애니메이션 바 표시(&amp;A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="700"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="708"/>
         <source>Reset panel layout</source>
         <translation>패널 배치 초기화</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="836"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="855"/>
         <source>&amp;File</source>
         <translation>파일(&amp;F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="854"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="873"/>
         <source>&amp;Edit</source>
         <translation>편집(&amp;E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="869"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="888"/>
         <source>&amp;Selection</source>
         <translation>선택(&amp;S)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="893"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="912"/>
         <source>&amp;View</source>
         <translation>보기(&amp;V)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="902"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="921"/>
         <source>&amp;Tools</source>
         <translation>도구(&amp;T)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="915"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="935"/>
         <source>&amp;Window</source>
         <translation>창(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="927"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="947"/>
         <source>&amp;Help</source>
         <translation>도움말(&amp;H)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="964"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="984"/>
         <source>Tools</source>
         <translation>도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="984"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1004"/>
         <source>Brush</source>
         <translation>브러시</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="985"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1005"/>
         <source>Eraser</source>
         <translation>지우개</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="986"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1006"/>
         <source>Area select</source>
         <translation>영역 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="987"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1007"/>
         <source>Auto select</source>
         <translation>자동 선택</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="988"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1008"/>
         <source>Paint bucket</source>
         <translation>페인트 통</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="989"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1009"/>
+        <source>Text</source>
+        <translation>텍스트</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1010"/>
         <source>Eyedropper</source>
         <translation>스포이드</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1065"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1066"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1086"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1087"/>
         <source>Canvas zoom</source>
         <translation>캔버스 확대/축소</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1072"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1093"/>
         <source>%</source>
         <translation>%</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1075"/>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1076"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1096"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1097"/>
         <source>Canvas zoom percentage</source>
         <translation>캔버스 확대/축소 배율</translation>
     </message>
@@ -2878,37 +2937,37 @@ The recovery file was not deleted. You can find it at:
         <translation>이미지로 내보내기(&amp;I)…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1012"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1033"/>
         <source>Quick access</source>
         <translation>빠른 도구</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1021"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1042"/>
         <source>Open and close panels</source>
         <translation>패널 열기 및 닫기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1022"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1043"/>
         <source>Panels</source>
         <translation>패널</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1083"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1104"/>
         <source>Mirror</source>
         <translation>좌우 반전</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1092"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1113"/>
         <source>Fit</source>
         <translation>맞춤</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1101"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1122"/>
         <source>x %1  y %2</source>
         <translation>x %1  y %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="1137"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1158"/>
         <source>Ready</source>
         <translation>준비됨</translation>
     </message>
@@ -3120,29 +3179,29 @@ The recovery file was not deleted. You can find it at:
         <translation>선택한 선의 색상 또는 굵기를 변경합니다</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="365"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="384"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="396"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="415"/>
         <source>Preset export failed</source>
         <translation>프리셋 내보내기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="366"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="397"/>
         <source>Could not prepare the preset.</source>
         <translation>프리셋을 준비할 수 없습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="370"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="401"/>
         <source>Export WWP preset</source>
         <translation>WWP 프리셋 내보내기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="372"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="396"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="403"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="427"/>
         <source>Ugurugu presets (*.wwpreset)</source>
         <translation>Ugurugu 프리셋 (*.wwpreset)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="385"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="416"/>
         <source>Could not write the preset.
 
 %1</source>
@@ -3151,28 +3210,28 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="388"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="419"/>
         <source>Exported preset %1</source>
         <translation>프리셋 %1 내보냄</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="394"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="425"/>
         <source>Import WWP preset</source>
         <translation>WWP 프리셋 가져오기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="407"/>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="414"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="438"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="445"/>
         <source>The preset could not be read or is too large.</source>
         <translation>프리셋을 읽을 수 없거나 파일이 너무 큽니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="426"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="457"/>
         <source>Preset import failed</source>
         <translation>프리셋 가져오기 실패</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="427"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="458"/>
         <source>Could not import the preset.
 
 %1</source>
@@ -3181,12 +3240,12 @@ The recovery file was not deleted. You can find it at:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="428"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="459"/>
         <source>The preset settings are invalid.</source>
         <translation>프리셋 설정이 올바르지 않습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowSettings.cpp" line="436"/>
+        <location filename="../src/ui/MainWindowSettings.cpp" line="467"/>
         <source>Imported preset %1</source>
         <translation>프리셋 %1 가져옴</translation>
     </message>
@@ -3393,6 +3452,54 @@ The recovery file was not deleted. You can find it at:
     </message>
 </context>
 <context>
+    <name>ugurugu::TextPopoverPanel</name>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="28"/>
+        <source>TEXT</source>
+        <translation>텍스트</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="34"/>
+        <source>Type the text to place…</source>
+        <translation>배치할 텍스트를 입력하세요…</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="58"/>
+        <source>FONT</source>
+        <translation>글꼴</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="88"/>
+        <source>Size</source>
+        <translation>크기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="93"/>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="114"/>
+        <source>Fill the letters</source>
+        <translation>글자 채우기</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="137"/>
+        <source>Place text</source>
+        <translation>텍스트 배치</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="139"/>
+        <source>Cancel</source>
+        <translation>취소</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TextPopoverPanel.cpp" line="164"/>
+        <source>Click the canvas to place the text, then drag it into position. The letters use the brush color and width, and wobble like drawn lines.</source>
+        <translation>캔버스를 클릭해 텍스트를 놓고 드래그로 위치를 잡으세요. 글자는 브러시 색과 굵기를 사용하며, 그린 선처럼 우글거립니다.</translation>
+    </message>
+</context>
+<context>
     <name>ugurugu::TimelineBar</name>
     <message>
         <location filename="../src/ui/TimelineBar.cpp" line="89"/>
@@ -3449,12 +3556,12 @@ The recovery file was not deleted. You can find it at:
 <context>
     <name>ugurugu::ToolDock</name>
     <message>
-        <location filename="../src/ui/ToolDock.cpp" line="37"/>
+        <location filename="../src/ui/ToolDock.cpp" line="38"/>
         <source>Tool settings</source>
         <translation>도구 설정</translation>
     </message>
     <message>
-        <location filename="../src/ui/ToolDock.cpp" line="73"/>
+        <location filename="../src/ui/ToolDock.cpp" line="75"/>
         <source>Click the canvas to pick up its color.
 Alt+click does the same from the brush, eraser or paint bucket.</source>
         <translation>캔버스를 클릭하여 색상을 추출합니다.

@@ -163,6 +163,7 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
     }
 
     drawSelectionOverlay(painter, transform);
+    drawTextPlacementOverlay(painter, transform);
 
     const bool pointerUsesEraser =
         m_tabletPointerEraser || m_tool == Tool::Eraser;
@@ -297,6 +298,9 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
         case Tool::Bucket:
             applyBucketFill(documentPosition);
             break;
+        case Tool::Text:
+            beginTextInteraction(documentPosition);
+            break;
         }
         event->accept();
         return;
@@ -350,6 +354,12 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
     if (m_areaSelectionActive)
     {
         continueAreaSelection(mapToDocument(event->position()));
+        event->accept();
+        return;
+    }
+    if (m_textDragging && !m_tabletSequence)
+    {
+        continueTextDrag(mapToDocument(event->position()));
         event->accept();
         return;
     }
@@ -407,6 +417,14 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
     {
         continueAreaSelection(mapToDocument(event->position()));
         finishAreaSelection();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && m_textDragging
+        && !m_tabletSequence)
+    {
+        continueTextDrag(mapToDocument(event->position()));
+        endTextDrag();
         event->accept();
         return;
     }
@@ -523,6 +541,12 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             event->accept();
             return;
         }
+        if (!eraser && m_tool == Tool::Text)
+        {
+            beginTextInteraction(mapToDocument(event->position()));
+            event->accept();
+            return;
+        }
         beginStroke(
             event->position(), event->pressure(), eraser, event->timestamp());
         event->accept();
@@ -554,6 +578,10 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
         else if (m_areaSelectionActive)
         {
             continueAreaSelection(mapToDocument(event->position()));
+        }
+        else if (m_textDragging)
+        {
+            continueTextDrag(mapToDocument(event->position()));
         }
         else if (m_drawing)
         {
@@ -587,6 +615,11 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             continueAreaSelection(mapToDocument(event->position()));
             finishAreaSelection();
         }
+        else if (m_textDragging)
+        {
+            continueTextDrag(mapToDocument(event->position()));
+            endTextDrag();
+        }
         else if (m_drawing)
         {
             endStroke(event->position(), event->timestamp());
@@ -609,6 +642,13 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
     if (event->key() == Qt::Key_Escape)
     {
         handleEscape();
+        event->accept();
+        return;
+    }
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && m_textPlacementActive && m_tool == Tool::Text)
+    {
+        applyTextPlacement();
         event->accept();
         return;
     }
