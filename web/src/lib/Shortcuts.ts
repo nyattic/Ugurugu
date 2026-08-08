@@ -1,22 +1,37 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Nyabi (nyattic)
 
+import type { ToolId } from "./tools";
+
 export interface ShortcutActions {
     undo: () => void;
     redo: () => void;
     save: () => void;
     open: () => void;
     newDocument: () => void;
-    selectBrush: () => void;
-    selectEraser: () => void;
-    selectEyedropper: () => void;
+    selectTool: (tool: ToolId) => void;
     adjustBrushSize: (delta: number) => void;
     zoomBy: (factor: number) => void;
     zoomToFit: () => void;
     zoomToActualSize: () => void;
     stepFrame: (delta: number) => void;
     togglePlayback: () => void;
+    selectAll: () => void;
+    invertSelection: () => void;
+    deselect: () => void;
+    fillSelection: () => void;
+    deleteSelection: () => void;
 }
+
+// Tool letters match the desktop rail.
+const toolKeys: Record<string, ToolId> = {
+    b: "brush",
+    e: "eraser",
+    l: "lasso",
+    w: "wand",
+    g: "bucket",
+    i: "eyedropper",
+};
 
 // Browser- and OS-owned chords (Cmd/Ctrl+W, +L, +T, reload, native zoom) are
 // deliberately left alone: inside the itch.io iframe the app cannot assume it
@@ -57,6 +72,18 @@ export function handleShortcut(
             case "n":
                 actions.newDocument();
                 return true;
+            case "a":
+                actions.selectAll();
+                return true;
+            case "d":
+                actions.deselect();
+                return true;
+            case "i":
+                if (event.shiftKey) {
+                    actions.invertSelection();
+                    return true;
+                }
+                return false;
             case "0":
                 actions.zoomToFit();
                 return true;
@@ -75,20 +102,33 @@ export function handleShortcut(
         }
     }
 
+    // Alt+Delete fills the selection the way the desktop's Fill action does;
+    // plain Delete removes what is inside it.
+    if (key === "delete" || key === "backspace") {
+        if (event.altKey) {
+            actions.fillSelection();
+        } else {
+            actions.deleteSelection();
+        }
+        return true;
+    }
+
     if (event.altKey) {
         return false;
     }
 
+    if (key === "escape") {
+        actions.deselect();
+        return true;
+    }
+
+    const tool = toolKeys[key];
+    if (tool) {
+        actions.selectTool(tool);
+        return true;
+    }
+
     switch (key) {
-        case "b":
-            actions.selectBrush();
-            return true;
-        case "e":
-            actions.selectEraser();
-            return true;
-        case "i":
-            actions.selectEyedropper();
-            return true;
         case "[":
             actions.adjustBrushSize(-1);
             return true;

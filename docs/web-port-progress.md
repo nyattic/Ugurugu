@@ -133,12 +133,26 @@
 - 브러시 안티앨리어싱 토글(`ugu_set_brush_antialiasing`). `BrushSettings::antialiasing`은 기본값이 false이고 어떤 프리셋도 이 값을 설정하지 않는다. 데스크톱은 브러시 팝오버 토글에서 스트로크마다 실어 보내는데(`CanvasWidgetTools.cpp:83`) 웹에는 그 경로가 없어, 웹에서 그린 모든 선이 앨리어싱된 채로 커밋되고 있었다. 계단뿐 아니라 우글거리는 선분 이음매에 1px 틈이 보이던 것도 같은 원인이다. 데스크톱과 같이 기본은 꺼짐이고 localStorage에 유지된다.
 - itch.io 배포를 위해 Vite `base: "./"`와 상대 경로 Worker·에셋 URL로 바꾸고, `tools/check_itchio_package.mjs`가 진입 파일·절대 경로·파일 수·경로 길이·크기·대소문자 충돌을 검사한다. CI의 웹 job이 이 검사를 실행한다.
 
+### 단계 3 — 선택·채우기 도구와 좌측 툴 레일 (2026-08-08)
+
+보고서 8.4의 "채우기/선택 도구"가 닫혔다. 엔진 쪽 재료(`FloodFillMask`, `FrozenFillMask`, `SelectionOperation`, `StrokeMask`)는 이미 `UGURUGU_ENGINE_SOURCES`에 들어 있었으므로 새로 만든 것은 브리지와 셸뿐이다.
+
+- 마스크 경계 추적기를 `src/ui/CanvasViewport.cpp`에서 `src/document/SelectionOutline.{hpp,cpp}`로 옮겨 엔진에 편입했다. 데스크톱 `outlinePath`는 이 결과로 `QPainterPath`를 만드는 얇은 래퍼가 됐다. `LayerThumbnailRenderer`를 옮겼을 때와 같은 이유다.
+- ABI를 3으로 올리고 다음을 추가했다. 페인트통 `ugu_bucket_fill`, 올가미/사각/타원 `ugu_selection_shape`(데스크톱 LassoMode의 Paint 모드 포함), 마술봉 `ugu_selection_flood`, `ugu_selection_all`/`_invert`/`_clear`/`_fill`/`_delete`, 윤곽 읽기 `ugu_selection_outline{,_size}`, 옵션 `ugu_set_fill_options`. 상태 코드에 9(선택 없음), 10(빈 영역), 11(레이어에 그릴 수 없음)이 늘었다.
+- 선택은 브리지가 캔버스 크기 Grayscale8 마스크와 소속 레이어로 들고 있으며, `ugu_stroke_begin`이 그 마스크를 스트로크의 `clipMask`로 실어 보낸다. `CanvasWidget::beginStroke`와 같은 계약이라 증분 프리뷰와 커밋 렌더가 모두 선택 경계에서 잘린다. 페인트통과 선택 영역 채우기도 같은 마스크로 클립한다.
+- 윤곽은 닫힌 컨투어를 `[정점 수, x, y, …]`로 이어 붙인 float 버퍼로 넘긴다. 워커가 `selectionRevision`을 비교해 **바뀐 경우에만** 읽어 보내므로 스트로크 중 매 응답마다 마스크를 훑지 않는다. 순수 선택 변경은 픽셀을 옮기지 않으므로 이미지 데이터 없는 응답으로 답한다.
+- UI를 다시 배치했다. 도구가 여섯 개로 늘어 상단 바가 감당하지 못하므로 **좌측 세로 레일**(아이콘은 데스크톱 `src/ui/Icons.cpp` 글리프를 SVG로 옮긴 것)과 그 옆의 도구별 옵션 열로 나눴다. 팔레트는 데스크톱 `Theme.cpp` 값(그래파이트 + 앰버 `#FFC94A`)을 그대로 쓴다. 활성 도구 테두리는 프레임마다 다시 그려지는 손그림 윤곽이며 `prefers-reduced-motion`에서는 첫 프레임으로 고정된다.
+- 마칭 앤츠는 표시 캔버스 위 오버레이 캔버스가 그리고, 선택이 없으면 애니메이션 루프가 돌지 않는다. 드래그 중인 올가미 경로도 같은 오버레이에 그린다.
+- 단축키는 데스크톱 레일과 같다. B/E/L/W/G/I, Ctrl+A 전체 선택, Ctrl+Shift+I 반전, Ctrl+D·Esc 해제, Delete 삭제, Alt+Delete 채우기.
+
+알려진 차이: 웹의 선택 상태는 셸이 들고 있어 **실행 취소 대상이 아니다**. 데스크톱은 `pushSelectionStateCommand`로 선택 전환까지 히스토리에 넣는다. 선택 영역 이동·변형(`transformSelection`)도 아직 웹에 없다.
+
 ### 검증 방법 (반복 실행 가능)
 
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋을 자동 검증(35개 체크).
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증(48개 체크).
 - itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
 
 ## 2. 남은 작업
@@ -156,7 +170,7 @@
 ### 단계 3 잔여 (웹 UI)
 
 - 웹 UI 번역 계층 (현재 영어 고정, 데스크톱은 ko/en/ja)
-- 채우기/선택 도구
+- 선택 영역 이동·확대·회전 (`transformSelection`)과 선택 전환의 실행 취소
 - 모바일 반응형 레이아웃. 핀치·이동 제스처는 있으나 패널 배치는 데스크톱 고정이다.
 - 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.
 

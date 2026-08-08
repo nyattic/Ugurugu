@@ -128,7 +128,12 @@
     </ul>
     <div class="opacity-controls">
         <label>
-            Opacity
+            <span class="field-label">
+                Opacity
+                <em>
+                    {activeLayer ? Math.round(activeLayer.opacity * 100) : 100}%
+                </em>
+            </span>
             <input
                 type="range"
                 min="0"
@@ -146,9 +151,6 @@
                         ) / 100,
                     )}
             />
-            <span>
-                {activeLayer ? Math.round(activeLayer.opacity * 100) : 100}%
-            </span>
         </label>
     </div>
 </aside>
@@ -159,7 +161,7 @@
         min-block-size: 0;
         display: flex;
         flex-direction: column;
-        background: #26292f;
+        background: var(--ink-850);
         overflow: hidden;
     }
 
@@ -167,33 +169,46 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.6rem 0.8rem;
-        border-block-end: 1px solid #3c4047;
+        padding: 0.6rem 0.75rem;
+        border-block-end: 1px solid var(--line);
     }
 
     h2 {
         margin: 0;
-        font-size: 0.95rem;
-        font-weight: 600;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--paper-dim);
     }
 
     .panel-actions {
         display: flex;
-        gap: 0.3rem;
+        gap: 0.2rem;
     }
 
     .panel-actions button {
-        inline-size: 1.8rem;
-        padding: 0.15rem 0;
-        border: 1px solid #3c4047;
-        border-radius: 5px;
-        background: #2f333a;
-        color: inherit;
+        inline-size: 1.7rem;
+        padding: 0.12rem 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--ink-800);
+        color: var(--paper-dim);
         cursor: pointer;
     }
 
+    .panel-actions button:hover:not(:disabled) {
+        background: var(--ink-750);
+        color: var(--paper);
+    }
+
+    .panel-actions button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+    }
+
     .panel-actions button:disabled {
-        opacity: 0.45;
+        opacity: 0.38;
         cursor: default;
     }
 
@@ -219,8 +234,12 @@
     }
 
     li.active {
-        background: #34415a;
-        outline: 1px solid #4f8ef7;
+        background: var(--accent-bed);
+        outline: 1px solid rgba(255, 201, 74, 0.42);
+    }
+
+    li input[type="checkbox"] {
+        accent-color: var(--accent);
     }
 
     .thumb-box {
@@ -230,10 +249,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid #3c4047;
-        border-radius: 3px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
         background:
-            repeating-conic-gradient(#3a3e45 0% 25%, #2c3036 0% 50%)
+            repeating-conic-gradient(var(--ink-750) 0% 25%, var(--ink-800) 0% 50%)
             0 0 / 12px 12px;
         overflow: hidden;
     }
@@ -258,25 +277,39 @@
     }
 
     .opacity-controls {
-        padding: 0.5rem 0.8rem;
-        border-block-start: 1px solid #3c4047;
+        padding: 0.5rem 0.75rem;
+        border-block-start: 1px solid var(--line);
     }
 
     .opacity-controls label {
         display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-size: 0.78rem;
-        color: #9aa0a6;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .field-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--paper-dim);
+    }
+
+    .field-label em {
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        font-style: normal;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0;
+        text-transform: none;
+        color: var(--paper);
     }
 
     .opacity-controls input[type="range"] {
-        flex: 1;
-    }
-
-    .opacity-controls span {
-        min-width: 2.4rem;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
+        inline-size: 100%;
+        accent-color: var(--accent);
     }
 </style>

@@ -119,7 +119,7 @@ async function waitForDocumentLoaded(page) {
 }
 
 async function drawStroke(page) {
-    const box = await page.locator(".viewport canvas").boundingBox();
+    const box = await page.locator("#display-canvas").boundingBox();
     const centerX = box.x + box.width / 2;
     const centerY = box.y + box.height / 2;
     const path = [{ x: centerX - 80, y: centerY - 20 }];
@@ -158,6 +158,68 @@ function hasBrushPixel() {
         }
     }
     return false;
+}
+
+async function dragBetween(page, from, to) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    const steps = 10;
+    for (let step = 1; step <= steps; step += 1) {
+        await page.mouse.move(
+            from.x + ((to.x - from.x) * step) / steps,
+            from.y + ((to.y - from.y) * step) / steps,
+        );
+    }
+    await page.mouse.up();
+}
+
+// A new document is opaque white, so ink has to be found by color: alpha is
+// 255 everywhere.
+function rightmostInk(page) {
+    return page.evaluate(() => {
+        const canvas = document.querySelector("#document-surface");
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        let rightmost = -1;
+        for (let y = 0; y < canvas.height; y += 1) {
+            for (let x = 0; x < canvas.width; x += 1) {
+                const index = (y * canvas.width + x) * 4;
+                if (
+                    data[index] === 29 &&
+                    data[index + 1] === 33 &&
+                    data[index + 2] === 41
+                ) {
+                    rightmost = Math.max(rightmost, x);
+                }
+            }
+        }
+        return rightmost;
+    });
+}
+
+// Serialised into the page, so it may not close over anything.
+function overlayHasInk() {
+    const canvas = document.querySelector("#selection-overlay");
+    if (!canvas || canvas.width < 2) {
+        return false;
+    }
+    const data = canvas
+        .getContext("2d")
+        .getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < data.length; index += 4) {
+        if (data[index] > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The play control is an icon button, so its state lives in the title rather
+// than in visible text.
+async function isPlaying(page) {
+    const title = await page.locator(".play").getAttribute("title");
+    return title?.startsWith("Stop") === true;
 }
 
 function firstThumbnailDataUrl(page) {
@@ -366,7 +428,7 @@ const browser = await chromium.launch({
 
     // Sampling a point the pointer itself passed through keeps this check
     // independent of the current pan and zoom.
-    await page.locator("#eyedropper").click();
+    await page.locator("#tool-eyedropper").click();
     const pickTarget = strokePath[Math.floor(strokePath.length / 2)];
     await page.mouse.click(pickTarget.x, pickTarget.y);
     check(
@@ -483,7 +545,7 @@ const browser = await chromium.launch({
     // addStroke refuses a stroke when any point falls outside the canvas, so
     // a drag that leaves the viewport used to lose the whole line.
     const beforeExit = await countBrushPixels(page);
-    const canvasBox = await page.locator(".viewport canvas").boundingBox();
+    const canvasBox = await page.locator("#display-canvas").boundingBox();
     const startX = canvasBox.x + canvasBox.width / 2;
     const startY = canvasBox.y + canvasBox.height / 2 + 60;
     await page.mouse.move(startX, startY);
@@ -510,15 +572,9 @@ const browser = await chromium.launch({
     // has to restart it after every stroke. CanvasWidget::advanceFrame does
     // the same by skipping frames instead of clearing m_animating.
     await page.locator(".play").click();
-    check(
-        (await page.locator(".play").textContent())?.trim() === "Stop",
-        "playback started",
-    );
+    check(await isPlaying(page), "playback started");
     await drawStroke(page);
-    check(
-        (await page.locator(".play").textContent())?.trim() === "Stop",
-        "playback survives a stroke",
-    );
+    check(await isPlaying(page), "playback survives a stroke");
     await page.locator(".play").click();
     await context.close();
 }
@@ -618,6 +674,181 @@ const browser = await chromium.launch({
         { timeout: 20000 },
     );
     check(true, "snapshot write failure surfaced in status bar");
+    await context.close();
+}
+
+// Scenario 4: the selection and fill tools — lasso, wand and bucket — plus the
+// marching-ants overlay that carries the engine's selection back to the shell.
+// A 640x480 document keeps every coordinate below in document space.
+{
+    const width = 640;
+    const height = 480;
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installPixelCounter(page);
+    await page.goto(`${origin}/`);
+    await waitForDocumentLoaded(page);
+
+    await page.locator("#new-document").click();
+    await page.locator("#new-document-width").fill(String(width));
+    await page.locator("#new-document-height").fill(String(height));
+    await page.locator("#new-document-confirm").click();
+    await page.waitForFunction(
+        (expected) =>
+            document.querySelector("#document-surface")?.height === expected,
+        height,
+        { timeout: 30000 },
+    );
+
+    const box = await page.locator("#display-canvas").boundingBox();
+    // The document is centred in a viewport that is usually larger than it, so
+    // screen coordinates have to be derived rather than guessed. Fit never
+    // magnifies, and nothing here pans, so the centre stays the document's.
+    const zoom =
+        Number(
+            (await page.locator("#zoom-fit").textContent())
+                ?.trim()
+                .replace("%", ""),
+        ) / 100;
+    const at = (documentX, documentY) => ({
+        x: box.x + box.width / 2 + (documentX - width / 2) * zoom,
+        y: box.y + box.height / 2 + (documentY - height / 2) * zoom,
+    });
+
+    await page.locator("#tool-lasso").click();
+    await page.locator("#selection-shape-rectangle").click();
+    check(
+        (await page.locator("#selection-actions").count()) === 0,
+        "no selection actions before anything is selected",
+    );
+
+    await dragBetween(page, at(250, 190), at(390, 290));
+    await page.locator("#selection-actions").waitFor({ timeout: 20000 });
+    check(true, "a rectangle lasso drag produced a selection");
+
+    // The ants are drawn from contours the engine traced, so ink on the
+    // overlay proves the outline survived the round trip.
+    await page.waitForFunction(overlayHasInk, undefined, { timeout: 20000 });
+    check(true, "the selection overlay drew marching ants");
+
+    await page.locator("#selection-fill").click();
+    await page.waitForFunction(
+        () => window.__uguruguBrushCount?.() > 0,
+        undefined,
+        { timeout: 20000 },
+    );
+    const filled = await countBrushPixels(page);
+    check(
+        filled > 13000 && filled <= 140 * 100,
+        `filling the 140x100 selection painted ${filled} px inside it`,
+    );
+
+    await page.keyboard.press("Control+d");
+    await page.waitForFunction(
+        () => document.querySelector("#selection-actions") === null,
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "Ctrl+D deselected");
+
+    // A stroke that starts inside a selection must stop at its edge, which is
+    // the clipMask the bridge attaches to every stroke.
+    await dragBetween(page, at(200, 140), at(440, 340));
+    await page.locator("#selection-actions").waitFor({ timeout: 20000 });
+    await page.locator("#tool-brush").click();
+    await page.mouse.move(at(320, 240).x, at(320, 240).y);
+    await page.mouse.down();
+    for (let step = 1; step <= 12; step += 1) {
+        const point = at(320 + step * 25, 240);
+        await page.mouse.move(point.x, point.y);
+    }
+    await page.mouse.up();
+    await page.waitForFunction(
+        (before) => window.__uguruguBrushCount?.() > before,
+        filled,
+        { timeout: 20000 },
+    );
+    const clippedRight = await rightmostInk(page);
+    check(
+        clippedRight > 400 && clippedRight < 460,
+        `the stroke stopped at the selection edge (rightmost ink x ` +
+            `${clippedRight}, edge 439)`,
+    );
+
+    await page.locator("#selection-delete").click();
+    await page.waitForFunction(
+        () => window.__uguruguBrushCount?.() === 0,
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "deleting the selection removed everything inside it");
+    check(
+        (await page.locator("#selection-actions").count()) === 0,
+        "deleting the selection also clears it",
+    );
+
+    // Nothing is drawn now, so an alpha-boundary flood has no walls to stop
+    // at and covers the whole canvas.
+    await page.locator("#tool-bucket").click();
+    const corner = at(20, 20);
+    await page.mouse.click(corner.x, corner.y);
+    await page.waitForFunction(
+        (expected) => window.__uguruguBrushCount?.() === expected,
+        width * height,
+        { timeout: 30000 },
+    );
+    check(true, `the bucket flooded the empty layer (${width * height} px)`);
+    check(
+        !(await page.locator("#status").textContent())?.includes("code"),
+        "the bucket reported no error",
+    );
+
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(
+        () => window.__uguruguBrushCount?.() === 0,
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "undo took the bucket fill back");
+
+    // Paint mode commits the lassoed area as a fill instead of selecting it.
+    await page.locator("#tool-lasso").click();
+    await page.locator("#lasso-mode-paint").click();
+    await page.locator("#selection-shape-ellipse").click();
+    await dragBetween(page, at(60, 60), at(200, 180));
+    await page.waitForFunction(
+        () => window.__uguruguBrushCount?.() > 0,
+        undefined,
+        { timeout: 20000 },
+    );
+    check(
+        (await page.locator("#selection-actions").count()) === 0,
+        "lasso paint mode fills without leaving a selection behind",
+    );
+
+    // The wand needs a seed the flood can start from, so it goes where no
+    // paint has reached.
+    await page.locator("#tool-wand").click();
+    const empty = at(600, 440);
+    await page.mouse.click(empty.x, empty.y);
+    await page.locator("#selection-actions").waitFor({ timeout: 20000 });
+    check(true, "the wand selected the area around the painted shape");
+
+    // The rail letters are the desktop's, and every one of them has a button.
+    for (const [key, id] of [
+        ["l", "tool-lasso"],
+        ["w", "tool-wand"],
+        ["g", "tool-bucket"],
+        ["b", "tool-brush"],
+    ]) {
+        await page.keyboard.press(key);
+        check(
+            (await page.locator(`#${id}`).getAttribute("aria-pressed")) ===
+                "true",
+            `the ${key.toUpperCase()} shortcut selects ${id}`,
+        );
+    }
+
     await context.close();
 }
 

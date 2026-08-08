@@ -11,10 +11,26 @@
     import ColorPanel from "./lib/ColorPanel.svelte";
     import LayerPanel from "./lib/LayerPanel.svelte";
     import NewDocumentDialog from "./lib/NewDocumentDialog.svelte";
+    import ToolIcon from "./lib/ToolIcon.svelte";
+    import ToolOptions from "./lib/ToolOptions.svelte";
+    import ToolRail from "./lib/ToolRail.svelte";
     import { CanvasPresenter } from "./lib/CanvasPresenter";
+    import { SelectionOverlay } from "./lib/SelectionOverlay";
+    import type { DragShape } from "./lib/SelectionOverlay";
     import { checkImportSize, detectMemoryProfile } from "./lib/MemoryPolicy";
     import type { MemoryProfile } from "./lib/MemoryPolicy";
     import { handleShortcut } from "./lib/Shortcuts";
+    import {
+        combineForModifiers,
+        selectionCombines,
+        selectionShapes,
+        toolDefinition,
+    } from "./lib/tools";
+    import type { CombineValue, ToolId } from "./lib/tools";
+    import {
+        loadToolSettings,
+        saveToolSettings,
+    } from "./lib/ToolSettings";
     import {
         fitToViewport,
         pan,
@@ -34,9 +50,11 @@
 
     let surfaceCanvas: HTMLCanvasElement;
     let displayCanvas: HTMLCanvasElement;
+    let overlayCanvas: HTMLCanvasElement;
     let viewportElement: HTMLElement;
     let fileInput: HTMLInputElement;
     let presenter: CanvasPresenter | null = null;
+    let overlay: SelectionOverlay | null = null;
 
     let meta = $state<DocumentMeta | null>(null);
     let layers = $state<LayerInfo[]>([]);
@@ -50,20 +68,14 @@
     let canRedo = $state(false);
 
     let colorHex = $state("#1d2129");
-    let brushSize = $state(6);
-    let tool = $state<"brush" | "eraser" | "eyedropper">("brush");
-    let presetIndex = $state(0);
-    let eraserPresetIndex = $state(0);
-    let stabilization = $state(0);
-    // Matches the desktop brush panel toggle, which also defaults to off.
-    let brushAntialiasing = $state(
-        window.localStorage.getItem("ugurugu-web-brush-antialiasing") === "1",
-    );
+    let tool = $state<ToolId>("brush");
+    const settings = $state(loadToolSettings());
     let thumbnails = $state<LayerThumbnail[]>([]);
     let recentColors = $state<string[]>(loadRecentColors());
     let view = $state<ViewState>({ scale: 1, centerX: 0, centerY: 0 });
     let showNewDocument = $state(false);
     let usingWebGL = $state(false);
+    let hasSelection = $state(false);
     // Same default as the desktop's canvas/animateWhileDrawing setting.
     let animateWhileDrawing = $state(
         window.localStorage.getItem("ugurugu-web-animate-while-drawing") ===
@@ -72,6 +84,7 @@
 
     const recentColorCapacity = 16;
     const zoomPercent = $derived(Math.round(view.scale * 100));
+    const activeTool = $derived(toolDefinition(tool));
 
     let recoveryOffer = $state<RecoverySnapshot | null>(null);
     let autosaveStatus = $state("");
@@ -92,6 +105,9 @@
     let snapshotRevision = 0;
     let snapshotBusy = false;
     let thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
+    let selectionDrag: DragShape | null = null;
+    let selectionCombine: CombineValue = selectionCombines.replace;
+    let antsFrame: number | null = null;
 
     function loadRecentColors(): string[] {
         try {
@@ -128,9 +144,15 @@
 
     function chooseColor(color: string) {
         colorHex = color;
-        if (tool !== "brush") {
+        // Picking a color says "paint with this", so the eyedropper hands the
+        // canvas back to the brush. Every other tool keeps working.
+        if (tool === "eyedropper") {
             tool = "brush";
         }
+    }
+
+    function describe(error: unknown): string {
+        return String(error).replace(/^(Error:\s*)+/, "");
     }
 
     function scheduleThumbnailRefresh() {
@@ -149,7 +171,7 @@
 
     function enqueue(operation: () => Promise<void>) {
         chain = chain.then(operation).catch((error) => {
-            status = `Error: ${error}`;
+            status = describe(error);
         });
     }
 
@@ -157,6 +179,11 @@
         layers = update.layers;
         canUndo = update.canUndo;
         canRedo = update.canRedo;
+        hasSelection = update.selection.active;
+        if (update.selection.contours) {
+            overlay?.setContours(update.selection.contours);
+            startAnts();
+        }
         if (!presenter) {
             return;
         }
@@ -164,6 +191,25 @@
             presenter.writeRegion(update.rect, update.pixels);
         }
         presenter.draw(view);
+        overlay?.draw(view);
+    }
+
+    // The ants only run while there is something to animate, so an idle
+    // document costs no frames.
+    function startAnts() {
+        if (antsFrame !== null || !overlay) {
+            return;
+        }
+        const step = () => {
+            if (!overlay?.advance()) {
+                antsFrame = null;
+                overlay?.draw(view);
+                return;
+            }
+            overlay.draw(view);
+            antsFrame = requestAnimationFrame(step);
+        };
+        antsFrame = requestAnimationFrame(step);
     }
 
     function requestRender(frame: number) {
@@ -182,12 +228,11 @@
             return;
         }
         const rect = viewportElement.getBoundingClientRect();
-        presenter.resizeDisplay(
-            rect.width,
-            rect.height,
-            window.devicePixelRatio || 1,
-        );
+        const ratio = window.devicePixelRatio || 1;
+        presenter.resizeDisplay(rect.width, rect.height, ratio);
+        overlay?.resize(rect.width, rect.height, ratio);
         presenter.draw(view);
+        overlay?.draw(view);
     }
 
     function zoomToFit() {
@@ -219,7 +264,7 @@
         const red = Number.parseInt(colorHex.slice(1, 3), 16);
         const green = Number.parseInt(colorHex.slice(3, 5), 16);
         const blue = Number.parseInt(colorHex.slice(5, 7), 16);
-        const width = brushSize;
+        const width = settings.brushSize;
         const erase = tool === "eraser";
         if (!meta) {
             return;
@@ -230,7 +275,10 @@
     });
 
     $effect(() => {
-        const index = tool === "eraser" ? eraserPresetIndex : presetIndex;
+        const index =
+            tool === "eraser"
+                ? settings.eraserPresetIndex
+                : settings.presetIndex;
         const erasing = tool === "eraser";
         if (!meta) {
             return;
@@ -243,7 +291,7 @@
     });
 
     $effect(() => {
-        const strength = stabilization / 100;
+        const strength = settings.stabilization / 100;
         if (!meta) {
             return;
         }
@@ -251,15 +299,7 @@
     });
 
     $effect(() => {
-        const antialiasing = brushAntialiasing;
-        try {
-            window.localStorage.setItem(
-                "ugurugu-web-brush-antialiasing",
-                antialiasing ? "1" : "0",
-            );
-        } catch {
-            // A preference that cannot be stored still applies this session.
-        }
+        const antialiasing = settings.brushAntialiasing;
         if (!meta) {
             return;
         }
@@ -267,8 +307,26 @@
     });
 
     $effect(() => {
+        const options = {
+            reference: settings.fillReference,
+            comparison: settings.fillComparison,
+            tolerance: settings.fillTolerance,
+            antialiasing: settings.bucketAntialiasing,
+        };
+        if (!meta) {
+            return;
+        }
+        enqueue(() => engine.setFillOptions(options));
+    });
+
+    $effect(() => {
+        saveToolSettings($state.snapshot(settings));
+    });
+
+    $effect(() => {
         const current = view;
         presenter?.draw(current);
+        overlay?.draw(current);
     });
 
     $effect(() => {
@@ -282,24 +340,6 @@
         }
     });
 
-    function onPresetChange(event: Event) {
-        const index = Number((event.currentTarget as HTMLSelectElement).value);
-        presetIndex = index;
-        const preset = presets[index];
-        if (preset) {
-            brushSize = Math.round(preset.defaultSize);
-        }
-    }
-
-    function onEraserPresetChange(event: Event) {
-        const index = Number((event.currentTarget as HTMLSelectElement).value);
-        eraserPresetIndex = index;
-        const preset = eraserPresets[index];
-        if (preset) {
-            brushSize = Math.round(preset.defaultSize);
-        }
-    }
-
     function adoptDocument(next: DocumentMeta, name: string) {
         meta = next;
         documentName = name;
@@ -309,13 +349,18 @@
         layers = next.layers;
         presets = next.presets;
         eraserPresets = next.eraserPresets;
-        presetIndex = Math.min(presetIndex, Math.max(0, presets.length - 1));
-        eraserPresetIndex = Math.min(
-            eraserPresetIndex,
+        settings.presetIndex = Math.min(
+            settings.presetIndex,
+            Math.max(0, presets.length - 1),
+        );
+        settings.eraserPresetIndex = Math.min(
+            settings.eraserPresetIndex,
             Math.max(0, eraserPresets.length - 1),
         );
         canUndo = next.canUndo;
         canRedo = next.canRedo;
+        hasSelection = false;
+        overlay?.setContours([]);
         presenter?.resizeDocument(next.width, next.height);
         resizeDisplay();
         zoomToFit();
@@ -342,7 +387,7 @@
                 `schema v${next.schemaVersion}${warning}`;
         } catch (error) {
             meta = null;
-            status = `Open failed: ${error}`;
+            status = `Open failed: ${describe(error)}`;
         }
     }
 
@@ -357,7 +402,7 @@
                 `New document — ${width}×${height}, ` +
                 `${next.frameCount} frames`;
         } catch (error) {
-            status = `New document failed: ${error}`;
+            status = `New document failed: ${describe(error)}`;
         }
     }
 
@@ -403,7 +448,9 @@
         requestRender(frameIndex);
     }
 
-    function documentPosition(event: PointerEvent | { clientX: number; clientY: number }) {
+    function documentPosition(
+        event: PointerEvent | { clientX: number; clientY: number },
+    ) {
         const rect = displayCanvas.getBoundingClientRect();
         return toDocument(
             view,
@@ -456,6 +503,136 @@
         displayCanvas.setPointerCapture(event.pointerId);
     }
 
+    function markContentChanged() {
+        contentRevision += 1;
+        scheduleThumbnailRefresh();
+    }
+
+    function bucketFill(event: PointerEvent) {
+        const { x, y } = documentPosition(event);
+        const frame = frameIndex;
+        const usedColor = colorHex;
+        enqueue(async () => {
+            present(await engine.bucketFill(frame, x, y));
+            recordRecentColor(usedColor);
+        });
+        markContentChanged();
+    }
+
+    function wandSelect(event: PointerEvent) {
+        const { x, y } = documentPosition(event);
+        const frame = frameIndex;
+        const combine = combineForModifiers(event);
+        enqueue(async () => {
+            present(await engine.selectionFlood(frame, x, y, combine));
+        });
+    }
+
+    function beginSelectionDrag(event: PointerEvent) {
+        const { x, y } = documentPosition(event);
+        selectionCombine = combineForModifiers(event);
+        selectionDrag = {
+            shape: settings.selectionShape,
+            points: [x, y],
+        };
+        overlay?.setDrag(selectionDrag);
+        startAnts();
+    }
+
+    function continueSelectionDrag(event: PointerEvent) {
+        if (!selectionDrag) {
+            return;
+        }
+        const { x, y } = documentPosition(event);
+        if (selectionDrag.shape === "freehand") {
+            const points = selectionDrag.points;
+            const lastX = points[points.length - 2] ?? x;
+            const lastY = points[points.length - 1] ?? y;
+            // Same 1px gate CanvasWidget::continueAreaSelection applies, so a
+            // slow drag does not pile up thousands of coincident vertices.
+            if (Math.hypot(x - lastX, y - lastY) < 1) {
+                return;
+            }
+            points.push(x, y);
+        } else if (selectionDrag.points.length >= 4) {
+            selectionDrag.points[2] = x;
+            selectionDrag.points[3] = y;
+        } else {
+            selectionDrag.points.push(x, y);
+        }
+        overlay?.setDrag(selectionDrag);
+        overlay?.draw(view);
+    }
+
+    function endSelectionDrag() {
+        const drag = selectionDrag;
+        selectionDrag = null;
+        overlay?.setDrag(null);
+        if (!drag) {
+            return;
+        }
+        const shape = selectionShapes[drag.shape];
+        const points = drag.points;
+        const combine = selectionCombine;
+        const paint = settings.lassoMode === "paint";
+        const frame = frameIndex;
+        const usedColor = colorHex;
+        if (points.length < 4) {
+            overlay?.draw(view);
+            return;
+        }
+        enqueue(async () => {
+            present(
+                await engine.selectionShape(
+                    frame,
+                    shape,
+                    points,
+                    combine,
+                    paint,
+                ),
+            );
+            if (paint) {
+                recordRecentColor(usedColor);
+            }
+        });
+        if (paint) {
+            markContentChanged();
+        }
+    }
+
+    function selectionAction(
+        action: "all" | "invert" | "fill" | "delete" | "deselect",
+    ) {
+        if (!meta) {
+            return;
+        }
+        const frame = frameIndex;
+        const usedColor = colorHex;
+        enqueue(async () => {
+            if (action === "all") {
+                present(await engine.selectAll());
+                return;
+            }
+            if (action === "invert") {
+                present(await engine.invertSelection());
+                return;
+            }
+            if (action === "deselect") {
+                present(await engine.deselect());
+                return;
+            }
+            if (action === "fill") {
+                present(await engine.fillSelection(frame));
+                recordRecentColor(usedColor);
+                return;
+            }
+            present(await engine.deleteSelection(frame));
+        });
+        if (action === "fill" || action === "delete") {
+            markContentChanged();
+        }
+    }
+
     function onPointerDown(event: PointerEvent) {
         if (!meta) {
             return;
@@ -476,6 +653,10 @@
                         contentRevision += 1;
                     });
                 }
+                if (selectionDrag) {
+                    selectionDrag = null;
+                    overlay?.setDrag(null);
+                }
                 pinchDistance = touchDistance();
                 return;
             }
@@ -492,6 +673,18 @@
         if (tool === "eyedropper") {
             picking = true;
             pickColor(event);
+            return;
+        }
+        if (tool === "bucket") {
+            bucketFill(event);
+            return;
+        }
+        if (tool === "wand") {
+            wandSelect(event);
+            return;
+        }
+        if (tool === "lasso") {
+            beginSelectionDrag(event);
             return;
         }
         drawing = true;
@@ -533,7 +726,10 @@
     }
 
     function onPointerMove(event: PointerEvent) {
-        if (event.pointerType === "touch" && activeTouches.has(event.pointerId)) {
+        if (
+            event.pointerType === "touch" &&
+            activeTouches.has(event.pointerId)
+        ) {
             activeTouches.set(event.pointerId, {
                 x: event.clientX,
                 y: event.clientY,
@@ -569,6 +765,10 @@
             pickColor(event);
             return;
         }
+        if (selectionDrag) {
+            continueSelectionDrag(event);
+            return;
+        }
         if (!drawing) {
             return;
         }
@@ -596,6 +796,11 @@
         if (picking) {
             picking = false;
             displayCanvas.releasePointerCapture(event.pointerId);
+            return;
+        }
+        if (selectionDrag) {
+            displayCanvas.releasePointerCapture(event.pointerId);
+            endSelectionDrag();
             return;
         }
         if (!drawing) {
@@ -682,16 +887,12 @@
     async function downloadDocument() {
         try {
             const bytes = await engine.serialize();
-            const url = URL.createObjectURL(
+            downloadBlob(
                 new Blob([bytes], { type: "application/octet-stream" }),
+                documentName,
             );
-            const anchor = document.createElement("a");
-            anchor.href = url;
-            anchor.download = documentName;
-            anchor.click();
-            URL.revokeObjectURL(url);
         } catch (error) {
-            status = `Save failed: ${error}`;
+            status = `Save failed: ${describe(error)}`;
         }
     }
 
@@ -805,7 +1006,12 @@
     function onKeyDown(event: KeyboardEvent) {
         if (event.key === " " && !spaceHeld) {
             const target = event.target as HTMLElement | null;
-            if (!target || !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName)) {
+            if (
+                !target ||
+                !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(
+                    target.tagName,
+                )
+            ) {
                 spaceHeld = true;
                 event.preventDefault();
             }
@@ -820,17 +1026,23 @@
             save: () => void downloadDocument(),
             open: () => fileInput?.click(),
             newDocument: () => (showNewDocument = true),
-            selectBrush: () => (tool = "brush"),
-            selectEraser: () => (tool = "eraser"),
-            selectEyedropper: () => (tool = "eyedropper"),
+            selectTool: (next) => (tool = next),
             adjustBrushSize: (delta) => {
-                brushSize = Math.min(64, Math.max(1, brushSize + delta));
+                settings.brushSize = Math.min(
+                    64,
+                    Math.max(1, settings.brushSize + delta),
+                );
             },
             zoomBy,
             zoomToFit,
             zoomToActualSize,
             stepFrame,
             togglePlayback,
+            selectAll: () => selectionAction("all"),
+            invertSelection: () => selectionAction("invert"),
+            deselect: () => selectionAction("deselect"),
+            fillSelection: () => selectionAction("fill"),
+            deleteSelection: () => selectionAction("delete"),
         });
         if (handled) {
             event.preventDefault();
@@ -845,6 +1057,7 @@
 
     onMount(() => {
         presenter = new CanvasPresenter(surfaceCanvas, displayCanvas);
+        overlay = new SelectionOverlay(overlayCanvas);
         usingWebGL = presenter.usingWebGL;
         const observer = new ResizeObserver(() => resizeDisplay());
         observer.observe(viewportElement);
@@ -861,7 +1074,7 @@
                 );
                 await openDocument(await response.arrayBuffer(), "Wave.ugu");
             } catch (error) {
-                status = `Demo document failed to load: ${error}`;
+                status = `Demo document failed to load: ${describe(error)}`;
             }
         })();
         const snapshotTimer = setInterval(() => {
@@ -879,6 +1092,9 @@
             if (thumbnailTimer !== null) {
                 clearTimeout(thumbnailTimer);
             }
+            if (antsFrame !== null) {
+                cancelAnimationFrame(antsFrame);
+            }
             document.removeEventListener("visibilitychange", onHidden);
             stopPlayback();
         };
@@ -888,106 +1104,39 @@
 <svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} />
 
 <main>
-    <header>
-        <h1>Ugurugu Web</h1>
-        <div class="tools">
+    <header class="bar">
+        <div class="identity">
+            <span class="wordmark">Ugurugu</span>
+            <span class="document" title={documentName}>{documentName}</span>
+        </div>
+
+        <div class="bar-group">
             <button
-                class="tool-button"
-                class:active={tool === "brush"}
-                title="Brush (B)"
-                onclick={() => (tool = "brush")}
+                id="undo"
+                class="icon-button"
+                title="Undo (Ctrl/Cmd Z)"
+                onclick={undo}
+                disabled={!canUndo}
             >
-                Brush
-            </button>
-            <button
-                class="tool-button"
-                class:active={tool === "eraser"}
-                title="Eraser (E)"
-                onclick={() => (tool = "eraser")}
-            >
-                Eraser
+                <ToolIcon name="undo" size={18} />
             </button>
             <button
-                id="eyedropper"
-                class="tool-button"
-                class:active={tool === "eyedropper"}
-                title="Pick a color from the canvas (I)"
-                onclick={() => (tool = "eyedropper")}
+                id="redo"
+                class="icon-button"
+                title="Redo (Ctrl/Cmd Shift Z)"
+                onclick={redo}
+                disabled={!canRedo}
             >
-                Eyedropper
-            </button>
-            {#if tool === "eraser"}
-                <select
-                    id="eraser-preset"
-                    title="Eraser preset"
-                    value={String(eraserPresetIndex)}
-                    onchange={onEraserPresetChange}
-                >
-                    {#each eraserPresets as preset (preset.index)}
-                        <option value={String(preset.index)}>
-                            {preset.name}
-                        </option>
-                    {/each}
-                </select>
-            {:else}
-                <select
-                    title="Brush preset"
-                    value={String(presetIndex)}
-                    onchange={onPresetChange}
-                >
-                    {#each presets as preset (preset.index)}
-                        <option value={String(preset.index)}>
-                            {preset.name}
-                        </option>
-                    {/each}
-                </select>
-                <input
-                    type="color"
-                    bind:value={colorHex}
-                    title="Brush color"
-                />
-            {/if}
-            <label class="slider">
-                Size
-                <input
-                    type="range"
-                    min="1"
-                    max="64"
-                    bind:value={brushSize}
-                />
-                <span>{brushSize}px</span>
-            </label>
-            <label class="toggle" title="Antialias brush edges">
-                <input
-                    id="brush-antialiasing"
-                    type="checkbox"
-                    bind:checked={brushAntialiasing}
-                />
-                Antialias
-            </label>
-            <label class="slider">
-                Smoothing
-                <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    bind:value={stabilization}
-                />
-                <span>{stabilization}%</span>
-            </label>
-            <button id="undo" onclick={undo} disabled={!canUndo}>
-                Undo
-            </button>
-            <button id="redo" onclick={redo} disabled={!canRedo}>
-                Redo
+                <ToolIcon name="redo" size={18} />
             </button>
         </div>
-        <div class="controls">
+
+        <div class="bar-group">
             <button id="new-document" onclick={() => (showNewDocument = true)}>
                 New
             </button>
             <label class="file-button">
-                Open .ugu
+                Open
                 <input
                     bind:this={fileInput}
                     type="file"
@@ -995,18 +1144,16 @@
                     onchange={onFileChosen}
                 />
             </label>
-            <button onclick={downloadDocument} disabled={!meta}>
-                Save .ugu
-            </button>
+            <button onclick={downloadDocument} disabled={!meta}>Save</button>
             <button id="export-png" onclick={exportFramePng} disabled={!meta}>
-                Export PNG
+                PNG
             </button>
             <button
                 id="export-gif"
                 onclick={exportGif}
                 disabled={!meta || exportingGif}
             >
-                {exportingGif ? "Exporting GIF…" : "Export GIF"}
+                {exportingGif ? "Exporting…" : "GIF"}
             </button>
         </div>
     </header>
@@ -1035,8 +1182,17 @@
     <canvas id="document-surface" bind:this={surfaceCanvas} hidden></canvas>
 
     <div class="workspace">
+        <ToolRail
+            {tool}
+            {hasSelection}
+            onselect={(next) => (tool = next)}
+            onselectionaction={selectionAction}
+        />
+        <ToolOptions {tool} {settings} {presets} {eraserPresets} />
+
         <section class="viewport" bind:this={viewportElement}>
             <canvas
+                id="display-canvas"
                 bind:this={displayCanvas}
                 aria-label="Drawing canvas"
                 class:panning={panning || spaceHeld}
@@ -1046,6 +1202,11 @@
                 onpointercancel={onPointerUp}
                 onwheel={onWheel}
             ></canvas>
+            <canvas
+                id="selection-overlay"
+                bind:this={overlayCanvas}
+                aria-hidden="true"
+            ></canvas>
             <div class="zoom-controls">
                 <button
                     title="Zoom out (Ctrl/Cmd −)"
@@ -1053,14 +1214,22 @@
                 >
                     −
                 </button>
-                <button id="zoom-fit" title="Fit to window (Ctrl/Cmd 0)" onclick={zoomToFit}>
+                <button
+                    id="zoom-fit"
+                    title="Fit to window (Ctrl/Cmd 0)"
+                    onclick={zoomToFit}
+                >
                     {zoomPercent}%
                 </button>
-                <button title="Zoom in (Ctrl/Cmd +)" onclick={() => zoomBy(1.25)}>
+                <button
+                    title="Zoom in (Ctrl/Cmd +)"
+                    onclick={() => zoomBy(1.25)}
+                >
                     +
                 </button>
             </div>
         </section>
+
         <div class="side">
             <ColorPanel
                 color={colorHex}
@@ -1097,39 +1266,48 @@
     </div>
 
     <footer>
-        {#if meta}
-            <button
-                class="play"
-                onclick={togglePlayback}
-                disabled={meta.frameCount < 2}
-            >
-                {playing ? "Stop" : "Play"}
-            </button>
-            <input
-                type="range"
-                min="0"
-                max={meta.frameCount - 1}
-                value={frameIndex}
-                aria-label="Frame"
-                oninput={onSliderInput}
-            />
-            <span class="frame-label">
-                {frameIndex + 1}/{meta.frameCount}
-            </span>
-            <label class="toggle" title="Keep the wobble running while drawing">
+        <div class="timeline">
+            {#if meta}
+                <button
+                    class="play icon-button"
+                    onclick={togglePlayback}
+                    disabled={meta.frameCount < 2}
+                    title={playing ? "Stop (Enter)" : "Play (Enter)"}
+                >
+                    <ToolIcon name={playing ? "pause" : "play"} size={18} />
+                </button>
                 <input
-                    id="animate-while-drawing"
-                    type="checkbox"
-                    bind:checked={animateWhileDrawing}
+                    type="range"
+                    min="0"
+                    max={meta.frameCount - 1}
+                    value={frameIndex}
+                    aria-label="Frame"
+                    oninput={onSliderInput}
                 />
-                Wobble while drawing
-            </label>
-        {/if}
-        <p id="status">{status}</p>
-        <p id="autosave-status">{autosaveStatus}</p>
-        <p id="presenter-status">
-            {usingWebGL ? "WebGL 2" : "Canvas 2D"} · {profile.name}
-        </p>
+                <span class="frame-label">
+                    {frameIndex + 1}/{meta.frameCount}
+                </span>
+                <label
+                    class="toggle"
+                    title="Keep the wobble running while drawing"
+                >
+                    <input
+                        id="animate-while-drawing"
+                        type="checkbox"
+                        bind:checked={animateWhileDrawing}
+                    />
+                    Wobble while drawing
+                </label>
+            {/if}
+        </div>
+        <div class="status-bar">
+            <p id="status">{status}</p>
+            <p id="autosave-status">{autosaveStatus}</p>
+            <p id="presenter-status">
+                {activeTool.label} · {usingWebGL ? "WebGL 2" : "Canvas 2D"} ·
+                {profile.name}
+            </p>
+        </div>
     </footer>
 </main>
 
@@ -1142,11 +1320,32 @@
 {/if}
 
 <style>
+    /*
+      Palette and control shapes come from the desktop's Theme.cpp, so the web
+      shell reads as the same product rather than a separate tool.
+    */
+    :global(:root) {
+        --ink-950: #141518;
+        --ink-900: #1b1d21;
+        --ink-850: #202226;
+        --ink-800: #24262b;
+        --ink-750: #2e3138;
+        --line: #3f434b;
+        --paper: #e8e8ea;
+        --paper-dim: #9aa0a8;
+        --paper-faint: #6a6f78;
+        --accent: #ffc94a;
+        --accent-bed: rgba(255, 201, 74, 0.13);
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    }
+
     :global(body) {
         margin: 0;
-        background: #1d1f24;
-        color: #e6e6e6;
-        font-family: system-ui, sans-serif;
+        background: var(--ink-900);
+        color: var(--paper);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
     }
 
     main {
@@ -1155,45 +1354,44 @@
         block-size: 100vh;
     }
 
-    header {
+    .bar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        padding: 0.6rem 1rem;
-        background: #26292f;
+        gap: 1rem;
+        padding: 0.45rem 0.75rem;
+        background: var(--ink-900);
+        border-block-end: 1px solid var(--line);
     }
 
-    h1 {
-        margin: 0;
-        font-size: 1.05rem;
-        font-weight: 600;
+    .identity {
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+        min-inline-size: 0;
+        margin-inline-end: auto;
     }
 
-    .tools,
-    .controls {
+    .wordmark {
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--accent);
+    }
+
+    .document {
+        overflow: hidden;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--paper-dim);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .bar-group {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    .slider {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-size: 0.85rem;
-        color: #9aa0a6;
-    }
-
-    .slider input[type="range"] {
-        inline-size: 6rem;
-    }
-
-    .slider span {
-        min-width: 2.6rem;
-        font-variant-numeric: tabular-nums;
+        gap: 0.3rem;
     }
 
     .workspace {
@@ -1208,8 +1406,8 @@
         min-inline-size: 0;
         overflow: hidden;
         background:
-            repeating-conic-gradient(#232529 0% 25%, #1d1f24 0% 50%) 50% / 24px
-            24px;
+            repeating-conic-gradient(var(--ink-800) 0% 25%, var(--ink-850) 0% 50%)
+            50% / 24px 24px;
     }
 
     .viewport canvas {
@@ -1218,11 +1416,18 @@
         inline-size: 100%;
         block-size: 100%;
         touch-action: none;
+    }
+
+    #display-canvas {
         cursor: crosshair;
     }
 
-    .viewport canvas.panning {
+    #display-canvas.panning {
         cursor: grab;
+    }
+
+    #selection-overlay {
+        pointer-events: none;
     }
 
     .zoom-controls {
@@ -1230,13 +1435,22 @@
         inset-block-end: 0.75rem;
         inset-inline-end: 0.75rem;
         display: flex;
-        gap: 0.25rem;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 9px;
+        background: rgba(20, 21, 24, 0.82);
+        backdrop-filter: blur(6px);
     }
 
     .zoom-controls button {
-        min-inline-size: 2.5rem;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.8rem;
+        min-inline-size: 2.4rem;
+        padding: 0.2rem 0.4rem;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
     }
 
     .side {
@@ -1244,92 +1458,132 @@
         flex-direction: column;
         inline-size: 15rem;
         min-block-size: 0;
-        border-inline-start: 1px solid #3c4047;
-        background: #26292f;
+        border-inline-start: 1px solid var(--line);
+        background: var(--ink-850);
     }
 
     footer {
+        border-block-start: 1px solid var(--line);
+        background: var(--ink-900);
+    }
+
+    .timeline {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.6rem 1rem;
-        background: #26292f;
+        padding: 0.4rem 0.75rem;
+        min-block-size: 1.6rem;
     }
 
-    footer input[type="range"] {
+    .timeline input[type="range"] {
         flex: 1;
+        accent-color: var(--accent);
     }
 
     .frame-label {
-        min-width: 4rem;
-        text-align: right;
+        min-inline-size: 3.5rem;
+        font-family: var(--mono);
+        font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
+        text-align: end;
+        color: var(--paper-dim);
+    }
+
+    .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 1.2rem;
+        padding: 0.3rem 0.75rem 0.45rem;
+        border-block-start: 1px solid var(--ink-850);
+    }
+
+    .status-bar p {
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.75rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #status {
+        flex: 1;
+        color: var(--paper-dim);
+    }
+
+    #autosave-status,
+    #presenter-status {
+        color: var(--paper-faint);
+    }
+
+    #presenter-status {
+        font-family: var(--mono);
     }
 
     .toggle {
         display: flex;
         align-items: center;
-        gap: 0.3rem;
-        font-size: 0.85rem;
-        color: #9aa0a6;
+        gap: 0.35rem;
+        font-size: 0.75rem;
+        color: var(--paper-dim);
         white-space: nowrap;
+        cursor: pointer;
     }
 
-    #status {
-        margin: 0;
-        font-size: 0.85rem;
-        color: #9aa0a6;
-        white-space: nowrap;
-    }
-
-    #autosave-status,
-    #presenter-status {
-        margin: 0;
-        font-size: 0.85rem;
-        color: #7f8b99;
-        white-space: nowrap;
+    .toggle input {
+        accent-color: var(--accent);
     }
 
     .recovery-banner {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.5rem 1rem;
-        background: #4a3b1f;
-        color: #f4e3bd;
-        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--accent-bed);
+        border-block-end: 1px solid var(--line);
+        color: var(--accent);
+        font-size: 0.8rem;
     }
 
     button,
-    .file-button,
-    select {
-        padding: 0.35rem 0.9rem;
-        border: 1px solid #3c4047;
-        border-radius: 6px;
-        background: #2f333a;
-        color: inherit;
-        font-size: 0.9rem;
+    .file-button {
+        padding: 0.3rem 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--ink-800);
+        color: var(--paper);
+        font: inherit;
+        font-size: 0.78rem;
         cursor: pointer;
     }
 
-    button:disabled,
-    select:disabled {
-        opacity: 0.45;
+    button:hover:not(:disabled),
+    .file-button:hover {
+        background: var(--ink-750);
+    }
+
+    button:focus-visible,
+    .file-button:focus-within {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+    }
+
+    button:disabled {
+        opacity: 0.38;
         cursor: default;
     }
 
-    .tool-button.active {
-        border-color: #4f8ef7;
-        background: #34415a;
+    .icon-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        inline-size: 2rem;
+        block-size: 1.85rem;
+        padding: 0;
+        color: var(--paper-dim);
     }
 
-    input[type="color"] {
-        inline-size: 2.2rem;
-        block-size: 2rem;
-        padding: 0.1rem;
-        border: 1px solid #3c4047;
-        border-radius: 6px;
-        background: #2f333a;
+    .icon-button:hover:not(:disabled) {
+        color: var(--paper);
     }
 
     .file-button input {
