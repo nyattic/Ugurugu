@@ -142,7 +142,7 @@ jobs:
 
   fuzz:
     name: Fuzz parsers
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -158,10 +158,21 @@ jobs:
           modules: qtshadertools
           cache: true
 
+      # Xcode's clang ships no libclang_rt.fuzzer_osx.a, so -fsanitize=fuzzer
+      # cannot link against it. Homebrew LLVM carries the runtime and defaults
+      # to the SDK's libc++, which keeps it ABI-compatible with the Qt build.
+      - name: Install LLVM 22
+        run: brew install llvm@22
+
+      # Deliberately without UGURUGU_WARNINGS_AS_ERRORS: the build jobs already
+      # gate warnings on the toolchains releases ship with, and a Homebrew LLVM
+      # bump should not be able to fail this job over a new diagnostic.
       - name: Configure
-        run: >-
-          cmake --preset macos-fuzzing
-          -DUGURUGU_WARNINGS_AS_ERRORS=ON
+        run: |
+          llvm_prefix="$(brew --prefix llvm@22)"
+          cmake --preset macos-fuzzing \
+            -DCMAKE_C_COMPILER="$llvm_prefix/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$llvm_prefix/bin/clang++"
 
       - name: Build
         run: cmake --build --preset macos-fuzzing --parallel

@@ -98,8 +98,14 @@ point per parser that reads untrusted bytes: the legacy `.wagle`
 importer, the project JSON serializer, the selection clipboard codec,
 and the WWP preset codec.
 
+Xcode's clang ships no libFuzzer runtime, so the build needs Homebrew
+LLVM:
+
 ```sh
-cmake --preset macos-fuzzing
+brew install llvm@22
+cmake --preset macos-fuzzing \
+    -DCMAKE_C_COMPILER="$(brew --prefix llvm@22)/bin/clang" \
+    -DCMAKE_CXX_COMPILER="$(brew --prefix llvm@22)/bin/clang++"
 cmake --build --preset macos-fuzzing
 out/build/macos-fuzzing/ugurugu_fuzz_document_json \
     out/build/macos-fuzzing/fuzz-corpus/ugurugu_fuzz_document_json \
