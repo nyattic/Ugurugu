@@ -6,6 +6,12 @@
 // latency percentiles, serialize time, and peak wasm linear memory. Wasm
 // memory only grows, so the heap size after each phase is that phase's peak.
 //
+// Stroke begin is reported twice because the engine promotes the layer split
+// across a committed stroke. "cold" is the first stroke after a full render or
+// an undo, which has to build the split; "warm" is every following stroke,
+// which reuses it. Real drawing is overwhelmingly the warm path, so the loop
+// here deliberately does not undo between strokes.
+//
 // usage: node tools/wasm_engine_bench.mjs <document.ugu> [more.ugu ...]
 
 import { readFile } from "node:fs/promises";
@@ -70,6 +76,7 @@ async function benchDocument(path) {
     const beginSamples = [];
     const batchSamples = [];
     const commitSamples = [];
+    let coldBeginMs = 0;
     for (let stroke = 0; stroke < strokesPerDocument; stroke += 1) {
         const originX = 8 + (stroke * 97) % Math.max(1, width - 16);
         const originY = 8 + (stroke * 61) % Math.max(1, height - 16);
@@ -89,7 +96,12 @@ async function benchDocument(path) {
             throw new Error(engine.UTF8ToString(engine._ugu_last_error()));
         }
         engine._ugu_stroke_render(handle);
-        beginSamples.push(performance.now() - beginStart);
+        const beginMs = performance.now() - beginStart;
+        if (stroke === 0) {
+            coldBeginMs = beginMs;
+        } else {
+            beginSamples.push(beginMs);
+        }
 
         for (let batch = 0; batch < batchesPerStroke; batch += 1) {
             const batchStart = performance.now();
@@ -113,7 +125,6 @@ async function benchDocument(path) {
         const commitStart = performance.now();
         engine._ugu_stroke_end(handle);
         commitSamples.push(performance.now() - commitStart);
-        engine._ugu_undo(handle);
     }
     const heapAfterStrokes = heapSize();
 
@@ -134,7 +145,8 @@ async function benchDocument(path) {
         height,
         openMs,
         firstRenderMs,
-        strokeBeginP95Ms: percentile(beginSamples, 0.95),
+        strokeBeginColdMs: coldBeginMs,
+        strokeBeginWarmP95Ms: percentile(beginSamples, 0.95),
         batchP50Ms: percentile(batchSamples, 0.5),
         batchP95Ms: percentile(batchSamples, 0.95),
         batchMaxMs: Math.max(...batchSamples),
@@ -162,12 +174,16 @@ for (const path of paths) {
     console.log(`\n${result.document} (${result.width}x${result.height}, ${megabytes(result.fileBytes)} MiB file)`);
     console.log(`  open: ${result.openMs.toFixed(0)} ms`);
     console.log(`  first full render: ${result.firstRenderMs.toFixed(0)} ms`);
-    console.log(`  stroke begin p95: ${result.strokeBeginP95Ms.toFixed(0)} ms`);
+    console.log(
+        `  stroke begin cold/warm p95: ` +
+            `${result.strokeBeginColdMs.toFixed(0)} / ` +
+            `${result.strokeBeginWarmP95Ms.toFixed(1)} ms`,
+    );
     console.log(
         `  stroke batch p50/p95/max: ${result.batchP50Ms.toFixed(1)} / ` +
             `${result.batchP95Ms.toFixed(1)} / ${result.batchMaxMs.toFixed(1)} ms`,
     );
-    console.log(`  stroke commit p95: ${result.commitP95Ms.toFixed(0)} ms`);
+    console.log(`  stroke commit p95: ${result.commitP95Ms.toFixed(1)} ms`);
     console.log(
         `  serialize: ${result.serializeMs.toFixed(0)} ms ` +
             `(${megabytes(result.serializedBytes)} MiB)`,

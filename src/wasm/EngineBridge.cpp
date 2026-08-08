@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Nyabi (nyattic)
 
 #include "brush/BrushPreset.hpp"
+#include "brush/EraserPreset.hpp"
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
+#include "document/DocumentLimits.hpp"
 #include "input/StrokeStabilizer.hpp"
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
@@ -19,6 +21,7 @@
 #include <QImage>
 #include <QPainter>
 #include <QRandomGenerator>
+#include <QSize>
 #include <QString>
 #include <QUuid>
 
@@ -41,11 +44,21 @@ struct BridgeDocument
     int strokeFrame = 0;
     QPointF lastRawPosition;
     quint64 lastTimestamp = 0;
+    // Survives a committed stroke: ugu_stroke_end bakes the finished stroke
+    // into layerBase, so the next stroke on the same layer and frame skips
+    // renderLayerSplit entirely. splitFrame/-Layer identify what it holds.
     ugurugu::RenderEngine::LayerSplitFrame split;
+    QUuid splitLayerId;
+    int splitFrame = -1;
+    bool splitUsable = false;
     ugurugu::IncrementalStrokeRenderer incremental;
     QUuid strokeLayerId;
     bool incrementalActive = false;
     QImage renderedFrame;
+    // Which frame renderedFrame shows, and whether it shows it without a live
+    // stroke drawn over it.
+    int renderedFrameIndex = -1;
+    bool renderedFrameCommitted = false;
     QRect dirty;
     QImage thumbnail;
     QByteArray serialized;
@@ -57,6 +70,39 @@ QByteArray &lastError()
 {
     static QByteArray error;
     return error;
+}
+
+int &lastErrorCode()
+{
+    static int code = 0;
+    return code;
+}
+
+// Mirrors the UguStatus values documented on ugu_last_error_code(). Kept as
+// plain ints because the C ABI carries them as ints anyway.
+enum BridgeStatus
+{
+    StatusOk = 0,
+    StatusInvalidArgument = 1,
+    StatusOutOfMemory = 2,
+    StatusDocumentInvalid = 3,
+    StatusNoPaintLayer = 4,
+    StatusStrokeRejected = 5,
+    StatusRenderFailed = 6,
+    StatusExportTooLarge = 7,
+    StatusExportFailed = 8
+};
+
+void setError(int code, QByteArray message)
+{
+    lastErrorCode() = code;
+    lastError() = std::move(message);
+}
+
+void clearError()
+{
+    lastErrorCode() = StatusOk;
+    lastError().clear();
 }
 
 QUuid paintTargetLayer(const ugurugu::Document &document)
@@ -86,29 +132,101 @@ const ugurugu::Layer *layerAtIndex(const BridgeDocument *handle, int index)
     return &layers[index];
 }
 
+void invalidateSplit(BridgeDocument *handle)
+{
+    handle->split = {};
+    handle->splitLayerId = {};
+    handle->splitFrame = -1;
+    handle->splitUsable = false;
+}
+
 void renderCommittedFrame(BridgeDocument *handle, int frameIndex)
 {
     handle->renderedFrame = ugurugu::RenderEngine::render(
         handle->controller->document(), frameIndex);
     handle->dirty = handle->renderedFrame.rect();
+    handle->renderedFrameIndex = frameIndex;
+    handle->renderedFrameCommitted = true;
 }
 
 void renderFullStrokePreview(BridgeDocument *handle)
 {
     ugurugu::Document preview = handle->controller->document();
-    if (ugurugu::Layer *layer = preview.layer(paintTargetLayer(preview)))
+    if (ugurugu::Layer *layer = preview.layer(handle->strokeLayerId))
     {
         layer->strokes.append(handle->activeStroke);
     }
     handle->renderedFrame =
         ugurugu::RenderEngine::render(preview, handle->strokeFrame);
     handle->dirty = handle->renderedFrame.rect();
+    handle->renderedFrameIndex = handle->strokeFrame;
+    handle->renderedFrameCommitted = false;
+}
+
+// Draws the active stroke's pending points over renderedFrame and reports the
+// tiles it touched. Returns false when the incremental contract broke and the
+// caller has to fall back to a full preview render.
+bool updateIncrementalStroke(BridgeDocument *handle, QRect *dirtyOut)
+{
+    const ugurugu::Document &document = handle->controller->document();
+    const ugurugu::Layer *strokeLayer = document.layer(handle->strokeLayerId);
+    if (strokeLayer == nullptr)
+    {
+        return false;
+    }
+    // The live stroke has to wobble the way its own layer does, not the way
+    // the document does.
+    const ugurugu::Document strokeDocument =
+        ugurugu::documentForLayer(document, *strokeLayer);
+    const auto update = handle->incremental.update(handle->split.layerBase,
+        strokeDocument,
+        handle->activeStroke,
+        handle->strokeFrame,
+        document.size);
+    if (!update.valid)
+    {
+        return false;
+    }
+    QRect dirty;
+    QPainter painter(&handle->renderedFrame);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    for (const auto &patch : update.patches)
+    {
+        // composeLayerSplitRegion wants the tile-sized patch image, not a
+        // full layer surface; a null result means the contract broke, so fall
+        // back to the full preview instead of dropping the patch.
+        const QImage region = ugurugu::RenderEngine::composeLayerSplitRegion(
+            handle->split, patch.layerImage, patch.bounds);
+        if (region.isNull())
+        {
+            painter.end();
+            return false;
+        }
+        painter.drawImage(patch.bounds.topLeft(), region);
+        dirty = dirty.united(patch.bounds);
+    }
+    painter.end();
+    handle->renderedFrameCommitted = false;
+    if (dirtyOut != nullptr)
+    {
+        *dirtyOut = dirty;
+    }
+    return true;
 }
 
 }
 
 extern "C"
 {
+
+    // Bumped whenever an exported function is added, removed, or changes
+    // meaning. The web worker refuses to run against a build whose version it
+    // does not know, which turns a stale engine artifact into one clear error
+    // instead of a missing-export TypeError somewhere later.
+    EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
+    {
+        return 1;
+    }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
     {
@@ -120,6 +238,49 @@ extern "C"
         return lastError().constData();
     }
 
+    // 0 ok, 1 invalid argument, 2 out of memory, 3 invalid document,
+    // 4 no paint layer, 5 stroke rejected, 6 render failed,
+    // 7 export too large, 8 export failed. Callers should branch on this and
+    // use ugu_last_error() only for diagnostics.
+    EMSCRIPTEN_KEEPALIVE int ugu_last_error_code()
+    {
+        return lastErrorCode();
+    }
+
+    EMSCRIPTEN_KEEPALIVE BridgeDocument *ugu_document_new(int width, int height)
+    {
+        if (width < ugurugu::DocumentLimits::minimumCanvasEdge
+            || height < ugurugu::DocumentLimits::minimumCanvasEdge
+            || width > ugurugu::DocumentLimits::maximumCanvasEdge
+            || height > ugurugu::DocumentLimits::maximumCanvasEdge)
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("canvas size is outside the engine limits"));
+            return nullptr;
+        }
+        auto handle = std::make_unique<BridgeDocument>();
+        QString error;
+        if (!handle->controller->newDocument(QSize(width, height), &error))
+        {
+            setError(StatusOutOfMemory, error.toUtf8());
+            return nullptr;
+        }
+        clearError();
+        return handle.release();
+    }
+
+    // Caps how many operations the undo stack keeps. The web shell sets this
+    // from its memory profile because the engine has no byte-level history
+    // budget; the desktop default of 64 is the upper bound.
+    EMSCRIPTEN_KEEPALIVE void ugu_set_undo_limit(
+        BridgeDocument *handle, int limit)
+    {
+        if (limit > 0)
+        {
+            handle->controller->undoStack()->setUndoLimit(limit);
+        }
+    }
+
     EMSCRIPTEN_KEEPALIVE BridgeDocument *ugu_document_open(
         const std::uint8_t *data, int size)
     {
@@ -128,16 +289,16 @@ extern "C"
         auto document = ugurugu::DocumentSerializer::fromJson(bytes, &error);
         if (!document)
         {
-            lastError() = error.toUtf8();
+            setError(StatusDocumentInvalid, error.toUtf8());
             return nullptr;
         }
         auto handle = std::make_unique<BridgeDocument>();
         if (!handle->controller->loadDocument(std::move(*document), &error))
         {
-            lastError() = error.toUtf8();
+            setError(StatusDocumentInvalid, error.toUtf8());
             return nullptr;
         }
-        lastError().clear();
+        clearError();
         return handle.release();
     }
 
@@ -212,6 +373,46 @@ extern "C"
         handle->brushTemplate.brush = presets[index].settings;
     }
 
+    EMSCRIPTEN_KEEPALIVE int ugu_eraser_preset_count()
+    {
+        return static_cast<int>(
+            ugurugu::EraserPresetCatalog::builtIns().size());
+    }
+
+    EMSCRIPTEN_KEEPALIVE const char *ugu_eraser_preset_name(
+        BridgeDocument *handle, int index)
+    {
+        const auto &presets = ugurugu::EraserPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return "";
+        }
+        handle->scratchText =
+            ugurugu::EraserPresetCatalog::displayName(presets[index]).toUtf8();
+        return handle->scratchText.constData();
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_eraser_preset_default_size(int index)
+    {
+        const auto &presets = ugurugu::EraserPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return 6.0;
+        }
+        return presets[index].defaultSize;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_set_eraser_preset(
+        BridgeDocument *handle, int index)
+    {
+        const auto &presets = ugurugu::EraserPresetCatalog::builtIns();
+        if (index < 0 || index >= presets.size())
+        {
+            return;
+        }
+        handle->brushTemplate.brush = presets[index].settings;
+    }
+
     EMSCRIPTEN_KEEPALIVE void ugu_set_brush(BridgeDocument *handle,
         int red,
         int green,
@@ -243,7 +444,8 @@ extern "C"
         const QUuid layerId = paintTargetLayer(document);
         if (layerId.isNull())
         {
-            lastError() = QByteArrayLiteral("document has no paint layer");
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
             return 0;
         }
         handle->strokeFrame = frame;
@@ -259,18 +461,60 @@ extern "C"
         handle->lastTimestamp = time;
         handle->strokeInProgress = true;
 
-        handle->split = ugurugu::RenderEngine::renderLayerSplit(document,
-            frame,
-            document.size,
-            layerId,
-            ugurugu::RenderEngine::ScaledRenderMode::NativeExact);
-        handle->incrementalActive = handle->split.valid;
-        if (handle->incrementalActive)
+        // A split promoted by the previous ugu_stroke_end already holds this
+        // layer's committed pixels, so the common case of drawing stroke after
+        // stroke never pays for renderLayerSplit again.
+        const bool reusable =
+            handle->splitUsable && handle->split.valid
+            && handle->splitLayerId == layerId && handle->splitFrame == frame
+            && handle->split.below.size() == document.size
+            && ugurugu::RenderEngine::supportsLayerSplit(document, layerId);
+        if (!reusable)
         {
-            handle->incremental.clear();
+            handle->split = ugurugu::RenderEngine::renderLayerSplit(document,
+                frame,
+                document.size,
+                layerId,
+                ugurugu::RenderEngine::ScaledRenderMode::NativeExact);
+            handle->splitLayerId = layerId;
+            handle->splitFrame = frame;
+            handle->splitUsable = handle->split.valid;
         }
-        renderCommittedFrame(handle, frame);
-        lastError().clear();
+        handle->incrementalActive = handle->split.valid;
+        if (!handle->incrementalActive)
+        {
+            renderCommittedFrame(handle, frame);
+            clearError();
+            return 1;
+        }
+
+        handle->incremental.clear();
+        if (!handle->renderedFrameCommitted
+            || handle->renderedFrameIndex != frame
+            || handle->renderedFrame.size() != document.size)
+        {
+            // Composing the split with its own base layer reproduces the
+            // committed frame exactly — LayerSplitPreviewTests pins that — and
+            // costs three image composites instead of a second full render.
+            QImage composed = ugurugu::RenderEngine::composeLayerSplit(
+                handle->split, handle->split.layerBase);
+            if (composed.isNull())
+            {
+                renderCommittedFrame(handle, frame);
+            }
+            else
+            {
+                handle->renderedFrame = std::move(composed);
+                handle->renderedFrameIndex = frame;
+                handle->renderedFrameCommitted = true;
+                handle->dirty = handle->renderedFrame.rect();
+            }
+        }
+        else
+        {
+            handle->dirty = QRect();
+        }
+        clearError();
         return 1;
     }
 
@@ -306,52 +550,14 @@ extern "C"
             renderFullStrokePreview(handle);
             return 1;
         }
-        const ugurugu::Document &document = handle->controller->document();
-        const ugurugu::Layer *strokeLayer =
-            document.layer(handle->strokeLayerId);
-        if (strokeLayer == nullptr)
-        {
-            handle->incrementalActive = false;
-            renderFullStrokePreview(handle);
-            return 1;
-        }
-        // The live stroke has to wobble the way its own layer does, not the
-        // way the document does.
-        const ugurugu::Document strokeDocument =
-            ugurugu::documentForLayer(document, *strokeLayer);
-        const auto update = handle->incremental.update(handle->split.layerBase,
-            strokeDocument,
-            handle->activeStroke,
-            handle->strokeFrame,
-            document.size);
-        if (!update.valid)
-        {
-            handle->incrementalActive = false;
-            renderFullStrokePreview(handle);
-            return 1;
-        }
         QRect dirty;
-        QPainter painter(&handle->renderedFrame);
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
-        for (const auto &patch : update.patches)
+        if (!updateIncrementalStroke(handle, &dirty))
         {
-            // composeLayerSplitRegion wants the tile-sized patch image, not a
-            // full layer surface; a null result means the contract broke, so
-            // fall back to the full preview instead of dropping the patch.
-            const QImage region =
-                ugurugu::RenderEngine::composeLayerSplitRegion(
-                    handle->split, patch.layerImage, patch.bounds);
-            if (region.isNull())
-            {
-                painter.end();
-                handle->incrementalActive = false;
-                renderFullStrokePreview(handle);
-                return 1;
-            }
-            painter.drawImage(patch.bounds.topLeft(), region);
-            dirty = dirty.united(patch.bounds);
+            handle->incrementalActive = false;
+            invalidateSplit(handle);
+            renderFullStrokePreview(handle);
+            return 1;
         }
-        painter.end();
         handle->dirty = dirty.intersected(handle->renderedFrame.rect());
         return 1;
     }
@@ -364,25 +570,65 @@ extern "C"
         }
         const QPointF finished = handle->stabilizer.finish(
             handle->lastRawPosition, handle->lastTimestamp);
-        if (!handle->activeStroke.points.isEmpty()
-            && handle->activeStroke.points.last().position != finished)
+        if (auto &points = handle->activeStroke.points; !points.isEmpty())
         {
-            handle->activeStroke.points.append(ugurugu::StrokePoint{
-                finished, handle->activeStroke.points.last().pressure});
+            const QPointF delta = finished - points.last().position;
+            // Matches CanvasWidget::endStroke: an endpoint the resampler would
+            // merge away is moved into the last point instead of appended, so
+            // the committed geometry matches what the preview drew.
+            if (points.size() >= ugurugu::DocumentLimits::maximumPointsPerStroke
+                || QPointF::dotProduct(delta, delta) < 0.75 * 0.75)
+            {
+                points.last().position = finished;
+            }
+            else
+            {
+                points.append(
+                    ugurugu::StrokePoint{finished, points.last().pressure});
+            }
         }
         handle->strokeInProgress = false;
+
+        // Bring the preview up to the final point and bake it into the split's
+        // base layer. If the commit then lands unchanged, that promoted split
+        // is the committed document's split and renderedFrame already shows
+        // it, so no full render is needed here or at the next stroke.
+        QRect tailDirty;
+        ugurugu::RenderEngine::LayerSplitFrame promoted;
+        bool promotable = false;
+        if (handle->incrementalActive
+            && updateIncrementalStroke(handle, &tailDirty))
+        {
+            promoted = handle->split;
+            promotable = handle->incremental.applyTo(promoted.layerBase);
+        }
         handle->incrementalActive = false;
-        handle->split = {};
-        const QUuid layerId = paintTargetLayer(handle->controller->document());
+
+        const QUuid layerId = handle->strokeLayerId;
         const auto result = handle->controller->addStroke(
             layerId, std::move(handle->activeStroke));
         handle->activeStroke = {};
-        renderCommittedFrame(handle, handle->strokeFrame);
         using AddStrokeResult = ugurugu::DocumentController::AddStrokeResult;
+        if (promotable && result == AddStrokeResult::Added)
+        {
+            handle->split = std::move(promoted);
+            handle->splitLayerId = layerId;
+            handle->splitFrame = handle->strokeFrame;
+            handle->splitUsable = true;
+            handle->renderedFrameIndex = handle->strokeFrame;
+            handle->renderedFrameCommitted = true;
+            handle->dirty = tailDirty.intersected(handle->renderedFrame.rect());
+        }
+        else
+        {
+            invalidateSplit(handle);
+            renderCommittedFrame(handle, handle->strokeFrame);
+        }
         if (result != AddStrokeResult::Added
             && result != AddStrokeResult::AddedWithResampledPoints)
         {
-            lastError() = QByteArrayLiteral("stroke rejected");
+            setError(
+                StatusStrokeRejected, QByteArrayLiteral("stroke rejected"));
         }
         return static_cast<int>(result);
     }
@@ -391,7 +637,7 @@ extern "C"
     {
         handle->strokeInProgress = false;
         handle->incrementalActive = false;
-        handle->split = {};
+        invalidateSplit(handle);
         handle->activeStroke = {};
         renderCommittedFrame(handle, handle->strokeFrame);
     }
@@ -409,11 +655,13 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE void ugu_undo(BridgeDocument *handle)
     {
         handle->controller->undoStack()->undo();
+        invalidateSplit(handle);
     }
 
     EMSCRIPTEN_KEEPALIVE void ugu_redo(BridgeDocument *handle)
     {
         handle->controller->undoStack()->redo();
+        invalidateSplit(handle);
     }
 
     EMSCRIPTEN_KEEPALIVE const char *ugu_layer_name(
@@ -478,6 +726,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->setActiveLayer(layer->id);
+            invalidateSplit(handle);
         }
     }
 
@@ -487,6 +736,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->setLayerVisible(layer->id, visible != 0);
+            invalidateSplit(handle);
         }
     }
 
@@ -496,6 +746,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->setLayerOpacity(layer->id, opacity);
+            invalidateSplit(handle);
         }
     }
 
@@ -509,6 +760,7 @@ extern "C"
             parentGroupId = active->parentGroupId;
         }
         handle->controller->addLayer(parentGroupId);
+        invalidateSplit(handle);
     }
 
     EMSCRIPTEN_KEEPALIVE void ugu_layer_remove(
@@ -517,6 +769,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->removeLayer(layer->id);
+            invalidateSplit(handle);
         }
     }
 
@@ -526,6 +779,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->renameLayer(layer->id, QString::fromUtf8(name));
+            invalidateSplit(handle);
         }
     }
 
@@ -535,6 +789,7 @@ extern "C"
         if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
         {
             handle->controller->moveLayer(layer->id, offset);
+            invalidateSplit(handle);
         }
     }
 
@@ -550,10 +805,11 @@ extern "C"
         renderCommittedFrame(handle, frameIndex);
         if (handle->renderedFrame.isNull())
         {
-            lastError() = QByteArrayLiteral("render produced a null frame");
+            setError(StatusRenderFailed,
+                QByteArrayLiteral("render produced a null frame"));
             return nullptr;
         }
-        lastError().clear();
+        clearError();
         return handle->renderedFrame.constBits();
     }
 
@@ -652,8 +908,8 @@ extern "C"
                                      * document.animationFrames;
         if (frameSetBytes > webFrameSetBudget)
         {
-            lastError() =
-                QByteArrayLiteral("document is too large for web GIF export");
+            setError(StatusExportTooLarge,
+                QByteArrayLiteral("document is too large for web GIF export"));
             return nullptr;
         }
 
@@ -664,8 +920,8 @@ extern "C"
             QImage image = ugurugu::RenderEngine::render(document, frame);
             if (image.isNull())
             {
-                lastError() =
-                    QByteArrayLiteral("an animation frame could not render");
+                setError(StatusRenderFailed,
+                    QByteArrayLiteral("an animation frame could not render"));
                 return nullptr;
             }
             frames.append(std::move(image));
@@ -679,13 +935,14 @@ extern "C"
                     document.animationFrames, document.framesPerSecond, 100),
                 &error))
         {
-            lastError() = error.toUtf8();
+            setError(StatusExportFailed, error.toUtf8());
             return nullptr;
         }
         QFile output(path);
         if (!output.open(QIODevice::ReadOnly))
         {
-            lastError() = QByteArrayLiteral("encoded GIF could not be read");
+            setError(StatusExportFailed,
+                QByteArrayLiteral("encoded GIF could not be read"));
             return nullptr;
         }
         handle->exportBytes = output.readAll();
@@ -693,10 +950,11 @@ extern "C"
         QFile::remove(path);
         if (handle->exportBytes.isEmpty())
         {
-            lastError() = QByteArrayLiteral("encoded GIF is empty");
+            setError(
+                StatusExportFailed, QByteArrayLiteral("encoded GIF is empty"));
             return nullptr;
         }
-        lastError().clear();
+        clearError();
         return reinterpret_cast<const std::uint8_t *>(
             handle->exportBytes.constData());
     }
@@ -715,10 +973,11 @@ extern "C"
             ugurugu::DocumentSerializer::toJson(handle->controller->document());
         if (handle->serialized.isEmpty())
         {
-            lastError() = QByteArrayLiteral("serialization produced no bytes");
+            setError(StatusExportFailed,
+                QByteArrayLiteral("serialization produced no bytes"));
             return nullptr;
         }
-        lastError().clear();
+        clearError();
         return reinterpret_cast<const std::uint8_t *>(
             handle->serialized.constData());
     }
