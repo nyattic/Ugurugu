@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 1;
+const expectedAbiVersion = 2;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -340,6 +340,13 @@ self.onmessage = async (event) => {
             return;
         } else if (type === "eraserPreset") {
             engine._ugu_set_eraser_preset(handleFor(), event.data.index);
+            postMessage({ id, ok: true });
+            return;
+        } else if (type === "brushAntialiasing") {
+            engine._ugu_set_brush_antialiasing(
+                handleFor(),
+                event.data.antialiasing ? 1 : 0,
+            );
             postMessage({ id, ok: true });
             return;
         } else if (type === "stabilization") {

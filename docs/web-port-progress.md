@@ -129,6 +129,7 @@
 - 그리는 동안 재생은 꺼지지 않고 프레임 전진만 멈춘다(`CanvasWidget::advanceFrame`과 같음). 손을 떼면 우글거림이 저절로 이어진다. 데스크톱의 `canvas/animateWhileDrawing` 설정에 대응하는 토글을 재생 옆에 뒀다.
 - 웹 셸 UI 문구는 전부 영어다. 데스크톱은 ko/en/ja 번역을 갖지만 웹은 아직 번역 계층이 없다.
 - 지우개가 `EraserPresetCatalog`에 연결됐다(`ugu_eraser_preset_*`). 지우개를 고르면 프리셋 선택이 지우개 카탈로그로 바뀐다.
+- 브러시 안티앨리어싱 토글(`ugu_set_brush_antialiasing`). `BrushSettings::antialiasing`은 기본값이 false이고 어떤 프리셋도 이 값을 설정하지 않는다. 데스크톱은 브러시 팝오버 토글에서 스트로크마다 실어 보내는데(`CanvasWidgetTools.cpp:83`) 웹에는 그 경로가 없어, 웹에서 그린 모든 선이 앨리어싱된 채로 커밋되고 있었다. 계단뿐 아니라 우글거리는 선분 이음매에 1px 틈이 보이던 것도 같은 원인이다. 데스크톱과 같이 기본은 꺼짐이고 localStorage에 유지된다.
 - itch.io 배포를 위해 Vite `base: "./"`와 상대 경로 Worker·에셋 URL로 바꾸고, `tools/check_itchio_package.mjs`가 진입 파일·절대 경로·파일 수·경로 길이·크기·대소문자 충돌을 검사한다. CI의 웹 job이 이 검사를 실행한다.
 
 ### 검증 방법 (반복 실행 가능)

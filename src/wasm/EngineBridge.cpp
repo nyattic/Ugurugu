@@ -225,7 +225,7 @@ extern "C"
     // instead of a missing-export TypeError somewhere later.
     EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
     {
-        return 1;
+        return 2;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
@@ -425,6 +425,15 @@ extern "C"
         handle->brushTemplate.width = width;
         handle->brushTemplate.mode = erase != 0 ? ugurugu::StrokeMode::Erase
                                                 : ugurugu::StrokeMode::Paint;
+    }
+
+    // The desktop carries this per stroke from a brush-panel toggle
+    // (CanvasWidgetTools.cpp:83); BrushSettings defaults it off and no preset
+    // sets it, so without this the web could only ever draw aliased strokes.
+    EMSCRIPTEN_KEEPALIVE void ugu_set_brush_antialiasing(
+        BridgeDocument *handle, int antialiasing)
+    {
+        handle->brushTemplate.brush.antialiasing = antialiasing != 0;
     }
 
     EMSCRIPTEN_KEEPALIVE void ugu_set_stabilization(

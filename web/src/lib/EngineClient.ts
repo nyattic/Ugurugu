@@ -164,6 +164,10 @@ export class EngineClient {
         await this.#request({ type: "eraserPreset", index });
     }
 
+    async setBrushAntialiasing(antialiasing: boolean): Promise<void> {
+        await this.#request({ type: "brushAntialiasing", antialiasing });
+    }
+
     async setStabilization(strength: number): Promise<void> {
         await this.#request({ type: "stabilization", strength });
     }

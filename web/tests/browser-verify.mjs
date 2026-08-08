@@ -431,6 +431,55 @@ const browser = await chromium.launch({
     );
     check(true, "the Ctrl+Z shortcut undid the stroke");
 
+    // BrushSettings::antialiasing defaults off and no preset sets it, so
+    // without this toggle the shell could only ever commit aliased strokes.
+    // Aliased edges also leave hairline seams where wobbled segments meet.
+    const alias = (checked) =>
+        page.evaluate((want) => {
+            const box = document.querySelector("#brush-antialiasing");
+            if (box.checked !== want) {
+                box.click();
+            }
+            return box.checked;
+        }, checked);
+    check((await alias(true)) === true, "antialiasing can be turned on");
+    const smoothEdgesBefore = await page.evaluate(() => {
+        const canvas = document.querySelector("#document-surface");
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        let partial = 0;
+        for (let index = 0; index < data.length; index += 4) {
+            const value = data[index];
+            if (value > 60 && value < 200) {
+                partial += 1;
+            }
+        }
+        return partial;
+    });
+    await drawStroke(page);
+    const smoothEdgesAfter = await page.evaluate(() => {
+        const canvas = document.querySelector("#document-surface");
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        let partial = 0;
+        for (let index = 0; index < data.length; index += 4) {
+            const value = data[index];
+            if (value > 60 && value < 200) {
+                partial += 1;
+            }
+        }
+        return partial;
+    });
+    check(
+        smoothEdgesAfter > smoothEdgesBefore,
+        `antialiased stroke added ${smoothEdgesAfter - smoothEdgesBefore} ` +
+            `partially covered edge pixels`,
+    );
+    await page.keyboard.press("Control+z");
+    await alias(false);
+
     // Drawing pauses the wobble but must not switch playback off, or the user
     // has to restart it after every stroke. CanvasWidget::advanceFrame does
     // the same by skipping frames instead of clearing m_animating.

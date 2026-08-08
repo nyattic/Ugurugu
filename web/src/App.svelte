@@ -55,6 +55,10 @@
     let presetIndex = $state(0);
     let eraserPresetIndex = $state(0);
     let stabilization = $state(0);
+    // Matches the desktop brush panel toggle, which also defaults to off.
+    let brushAntialiasing = $state(
+        window.localStorage.getItem("ugurugu-web-brush-antialiasing") === "1",
+    );
     let thumbnails = $state<LayerThumbnail[]>([]);
     let recentColors = $state<string[]>(loadRecentColors());
     let view = $state<ViewState>({ scale: 1, centerX: 0, centerY: 0 });
@@ -244,6 +248,22 @@
             return;
         }
         enqueue(() => engine.setStabilization(strength));
+    });
+
+    $effect(() => {
+        const antialiasing = brushAntialiasing;
+        try {
+            window.localStorage.setItem(
+                "ugurugu-web-brush-antialiasing",
+                antialiasing ? "1" : "0",
+            );
+        } catch {
+            // A preference that cannot be stored still applies this session.
+        }
+        if (!meta) {
+            return;
+        }
+        enqueue(() => engine.setBrushAntialiasing(antialiasing));
     });
 
     $effect(() => {
@@ -936,6 +956,14 @@
                     bind:value={brushSize}
                 />
                 <span>{brushSize}px</span>
+            </label>
+            <label class="toggle" title="Antialias brush edges">
+                <input
+                    id="brush-antialiasing"
+                    type="checkbox"
+                    bind:checked={brushAntialiasing}
+                />
+                Antialias
             </label>
             <label class="slider">
                 Smoothing
