@@ -992,6 +992,10 @@ void MainWindow::createToolBars()
     {
         auto *button = new PopoverToolButton(rail);
         button->setDefaultAction(action);
+        // The button re-reads the action's iconText whenever the action
+        // changes, and the default iconText keeps localized mnemonic
+        // suffixes like "지우개(E)", widening the rail on the first click.
+        action->setIconText(label);
         button->setText(label);
         button->setIconSize(rail->iconSize());
         button->setHoverGlyph(glyph);

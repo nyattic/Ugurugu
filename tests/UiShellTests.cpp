@@ -14,6 +14,7 @@
 #include <QTabBar>
 #include <QThreadPool>
 #include <QToolBar>
+#include <QTranslator>
 #include <QtConcurrentRun>
 
 #include <atomic>
@@ -1908,6 +1909,70 @@ private slots:
         {
             QVERIFY(window.isVisible());
             QVERIFY(window.isWindowModified());
+        }
+    }
+
+    void keepsToolRailAndDockWidthsStableAcrossToolSwitches()
+    {
+        // The report came from the Korean UI, whose rail labels lay out
+        // differently from the English source strings, so the test runs
+        // with the Korean translation installed.
+        QTranslator korean;
+        QVERIFY(korean.load(QCoreApplication::applicationDirPath()
+                            + QStringLiteral("/ugurugu_ko.qm")));
+        QCoreApplication::installTranslator(&korean);
+        const auto removeTranslator = qScopeGuard(
+            [&korean]()
+            {
+                QCoreApplication::removeTranslator(&korean);
+            });
+
+        MainWindow window;
+        window.resize(1280, 820);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCoreApplication::processEvents();
+
+        QToolBar *rail =
+            window.findChild<QToolBar *>(QStringLiteral("ToolRail"));
+        ToolDock *toolDock = window.findChild<ToolDock *>();
+        QVERIFY(rail);
+        QVERIFY(toolDock);
+        const int railWidth = rail->width();
+        const int dockWidth = toolDock->width();
+
+        const QList<PopoverToolButton *> buttons =
+            rail->findChildren<PopoverToolButton *>();
+        QCOMPARE(buttons.size(), 7);
+        for (PopoverToolButton *button : buttons)
+        {
+            // Hover first like a real pointer does, so the wobble icon
+            // animation and the action's checked toggle both run.
+            QTest::mouseMove(button, button->rect().center());
+            QTest::qWait(60);
+            QTest::mouseClick(button, Qt::LeftButton);
+            QTest::qWait(500);
+            QCoreApplication::processEvents();
+            if (rail->width() != railWidth || toolDock->width() != dockWidth)
+            {
+                qWarning() << "after" << button->text() << "rail"
+                           << rail->width() << "dock" << toolDock->width()
+                           << "expected" << railWidth << dockWidth;
+            }
+            QCOMPARE(rail->width(), railWidth);
+            QCOMPARE(toolDock->width(), dockWidth);
+        }
+        // Toggling re-syncs each button's text from its action, which would
+        // resurrect the menu mnemonics ("Te&xt", Korean "텍스트(&X)") that the
+        // rail labels deliberately omit — and mnemonic suffixes widen the
+        // rail on the first click in locales that render them.
+        const QList<PopoverToolButton *> railButtons =
+            rail->findChildren<PopoverToolButton *>();
+        QCOMPARE(railButtons.size(), 7);
+        for (const PopoverToolButton *button : railButtons)
+        {
+            QVERIFY(!button->text().contains(QLatin1Char('&')));
+            QVERIFY(!button->text().contains(QLatin1Char('(')));
         }
     }
 
