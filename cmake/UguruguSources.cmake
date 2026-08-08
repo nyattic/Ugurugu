@@ -36,6 +36,8 @@ set(UGURUGU_ENGINE_SOURCES
     src/document/DocumentOperations.hpp
     src/document/SelectionOperation.cpp
     src/document/SelectionOperation.hpp
+    src/document/SelectionOutline.cpp
+    src/document/SelectionOutline.hpp
     src/document/SelectionVisibility.cpp
     src/document/SelectionVisibility.hpp
     src/document/StrokeMask.cpp
