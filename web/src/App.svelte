@@ -63,7 +63,7 @@
     let frameIndex = $state(0);
     let playing = $state(false);
     let status = $state("Loading engine…");
-    let documentName = $state("Wave.ugu");
+    let documentName = $state("Untitled.ugu");
     let canUndo = $state(false);
     let canRedo = $state(false);
 
@@ -399,8 +399,9 @@
             const next = await engine.create(width, height, profile.undoLimit);
             adoptDocument(next, "Untitled.ugu");
             status =
-                `New document — ${width}×${height}, ` +
-                `${next.frameCount} frames`;
+                `New document — ${next.width}×${next.height}, ` +
+                `${next.frameCount} frames @ ${next.fps} fps, ` +
+                `schema v${next.schemaVersion}`;
         } catch (error) {
             status = `New document failed: ${describe(error)}`;
         }
@@ -1068,14 +1069,10 @@
             } catch (error) {
                 autosaveStatus = `Could not read the recovery slot — ${error}`;
             }
-            try {
-                const response = await fetch(
-                    new URL("engine/Wave.ugu", document.baseURI),
-                );
-                await openDocument(await response.arrayBuffer(), "Wave.ugu");
-            } catch (error) {
-                status = `Demo document failed to load: ${describe(error)}`;
-            }
+            await createDocument(
+                profile.defaultCanvasWidth,
+                profile.defaultCanvasHeight,
+            );
         })();
         const snapshotTimer = setInterval(() => {
             void snapshotRecovery();
