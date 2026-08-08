@@ -108,8 +108,7 @@ void CanvasWidget::setTextFilled(bool filled)
 
 QFont CanvasWidget::textFont() const
 {
-    QFont font =
-        m_textFontFamily.isEmpty() ? QFont() : QFont(m_textFontFamily);
+    QFont font = m_textFontFamily.isEmpty() ? QFont() : QFont(m_textFontFamily);
     font.setPixelSize(std::max(1, qRound(m_textFontSize)));
     return font;
 }
@@ -137,8 +136,8 @@ void CanvasWidget::beginTextInteraction(const QPointF &documentPosition)
 {
     if (m_textPlacementActive
         && textPlacementBounds()
-               .adjusted(-8.0, -8.0, 8.0, 8.0)
-               .contains(documentPosition))
+            .adjusted(-8.0, -8.0, 8.0, 8.0)
+            .contains(documentPosition))
     {
         m_textDragging = true;
         m_textDragStart = documentPosition;
@@ -312,8 +311,8 @@ void CanvasWidget::drawTextPlacementOverlay(
         painter.drawPath(path);
     }
 
-    const QRectF bounds = transform.mapRect(textPlacementBounds())
-                              .adjusted(-6.0, -6.0, 6.0, 6.0);
+    const QRectF bounds =
+        transform.mapRect(textPlacementBounds()).adjusted(-6.0, -6.0, 6.0, 6.0);
     QPen framePen(Theme::accent(), 1.0);
     framePen.setStyle(Qt::DashLine);
     painter.setPen(framePen);
@@ -322,10 +321,9 @@ void CanvasWidget::drawTextPlacementOverlay(
 
     painter.setPen(Theme::textMuted());
     const QString hint = m_textContent.trimmed().isEmpty()
-        ? tr("Type in the Text panel to see it here.")
-        : tr("Drag to move · Enter applies · Esc cancels");
-    painter.drawText(
-        QRectF(bounds.left(), bounds.bottom() + 4.0, 320.0, 24.0),
+                             ? tr("Type in the Text panel to see it here.")
+                             : tr("Drag to move · Enter applies · Esc cancels");
+    painter.drawText(QRectF(bounds.left(), bounds.bottom() + 4.0, 320.0, 24.0),
         Qt::AlignLeft | Qt::AlignTop,
         hint);
     painter.restore();

@@ -185,8 +185,7 @@ void MainWindow::restoreDrawingToolSettings()
     m_canvas->setBucketAntialiasing(boolSetting(
         settings, QString::fromLatin1(bucketAntialiasingKey), true));
 
-    m_canvas->setTextFontFamily(
-        settings.value(textFontFamilyKey).toString());
+    m_canvas->setTextFontFamily(settings.value(textFontFamilyKey).toString());
     m_canvas->setTextFontSize(realSetting(
         settings, QString::fromLatin1(textFontSizeKey), 48.0, 8.0, 512.0));
     m_canvas->setTextFilled(

@@ -15,8 +15,7 @@ class TextPopoverPanel final : public QWidget
     Q_OBJECT
 
 public:
-    explicit TextPopoverPanel(
-        CanvasWidget *canvas, QWidget *parent = nullptr);
+    explicit TextPopoverPanel(CanvasWidget *canvas, QWidget *parent = nullptr);
 };
 
 }

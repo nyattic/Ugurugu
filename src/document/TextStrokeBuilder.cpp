@@ -38,9 +38,8 @@ QPointF clampedPoint(const QPointF &point, const QSize &canvasSize)
         std::clamp(point.y(), 0.0, static_cast<qreal>(canvasSize.height())));
 }
 
-std::optional<Stroke> fillStroke(const QPainterPath &path,
-    const Options &options,
-    qreal strokeWidth)
+std::optional<Stroke> fillStroke(
+    const QPainterPath &path, const Options &options, qreal strokeWidth)
 {
     QImage coverage(options.canvasSize, QImage::Format_Grayscale8);
     if (coverage.isNull())
@@ -70,9 +69,8 @@ std::optional<Stroke> fillStroke(const QPainterPath &path,
     return fill;
 }
 
-QVector<StrokePoint> contourPoints(const QPolygonF &polygon,
-    const QSize &canvasSize,
-    qreal overlapLength)
+QVector<StrokePoint> contourPoints(
+    const QPolygonF &polygon, const QSize &canvasSize, qreal overlapLength)
 {
     QVector<StrokePoint> points;
     points.reserve(polygon.size() + 8);
@@ -94,8 +92,7 @@ QVector<StrokePoint> contourPoints(const QPolygonF &polygon,
     {
         return {};
     }
-    if (pointDistance(
-            points.constFirst().position, points.constLast().position)
+    if (pointDistance(points.constFirst().position, points.constLast().position)
         > 0.01)
     {
         points.append(points.constFirst());
@@ -105,13 +102,13 @@ QVector<StrokePoint> contourPoints(const QPolygonF &polygon,
     // as a corner, so a contour that merely closes shows a notch there.
     const int ringSize = points.size();
     qreal walked = 0.0;
-    for (int index = 1; index < ringSize && walked < overlapLength
-                        && points.size()
-                               < DocumentLimits::maximumPointsPerStroke;
+    for (int index = 1;
+        index < ringSize && walked < overlapLength
+        && points.size() < DocumentLimits::maximumPointsPerStroke;
         ++index)
     {
-        walked += pointDistance(
-            points[index].position, points[index - 1].position);
+        walked +=
+            pointDistance(points[index].position, points[index - 1].position);
         points.append(points[index]);
     }
     return points;

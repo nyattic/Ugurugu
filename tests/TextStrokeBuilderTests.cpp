@@ -31,8 +31,7 @@ bool pointsInsideCanvas(const Stroke &stroke, const QSize &canvasSize)
 {
     for (const StrokePoint &point : stroke.points)
     {
-        if (point.position.x() < 0.0
-            || point.position.x() > canvasSize.width()
+        if (point.position.x() < 0.0 || point.position.x() > canvasSize.width()
             || point.position.y() < 0.0
             || point.position.y() > canvasSize.height())
         {

@@ -115,10 +115,8 @@ TextPopoverPanel::TextPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     filledCheck->setObjectName(QStringLiteral("textFilledCheck"));
     filledCheck->setChecked(canvas->textFilled());
     layout->addWidget(filledCheck);
-    connect(filledCheck,
-        &QCheckBox::toggled,
-        canvas,
-        &CanvasWidget::setTextFilled);
+    connect(
+        filledCheck, &QCheckBox::toggled, canvas, &CanvasWidget::setTextFilled);
     connect(canvas,
         &CanvasWidget::textFilledChanged,
         filledCheck,
