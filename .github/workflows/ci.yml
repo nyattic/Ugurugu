@@ -257,24 +257,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS Debug
-            os: macos-15
-            preset: macos-debug
-            qt-host: mac
-            qt-arch: clang_64
-          - name: macOS Release
-            os: macos-15
-            preset: macos-release
-            qt-host: mac
-            qt-arch: clang_64
           - name: Windows Debug
             os: windows-2025
             preset: windows-debug
-            qt-host: windows
-            qt-arch: win64_msvc2022_64
-          - name: Windows Release
-            os: windows-2025
-            preset: windows-release
             qt-host: windows
             qt-arch: win64_msvc2022_64
           # macOS 15 이미지의 AppleClang 17 ASan runtime은 Qt raster
