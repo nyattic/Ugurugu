@@ -17,6 +17,11 @@ export interface Viewport {
     height: number;
 }
 
+// Never magnifies. Nothing renders above native resolution — the desktop
+// clamps PreviewRenderPolicy::renderSize to scale 1.0 and this shell renders
+// at document size — so a fit that enlarged a small document would only put
+// its own pixel grid on screen. Shrinking to fit a large document is the case
+// this is for; enlarging stays an explicit zoom.
 export function fitToViewport(
     document: { width: number; height: number },
     viewport: Viewport,
@@ -27,7 +32,7 @@ export function fitToViewport(
             : Math.min(
                   viewport.width / document.width,
                   viewport.height / document.height,
-                  maximumScale,
+                  1,
               );
     return {
         scale: Math.max(minimumScale, scale),
