@@ -6,11 +6,15 @@
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/SelectionOperation.hpp"
+#include "document/SelectionOutline.hpp"
+#include "document/StrokeMask.hpp"
 #include "input/StrokeStabilizer.hpp"
 #include "io/AnimationExportPolicy.hpp"
 #include "io/DocumentSerializer.hpp"
 #include "io/GifWriter.hpp"
 #include "io/serializer/SerializerSchema.hpp"
+#include "render/FloodFillMask.hpp"
 #include "render/IncrementalStrokeRenderer.hpp"
 #include "render/LayerThumbnailRenderer.hpp"
 #include "render/RenderEngine.hpp"
@@ -20,7 +24,11 @@
 #include <QFile>
 #include <QImage>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPointF>
+#include <QPolygonF>
 #include <QRandomGenerator>
+#include <QRectF>
 #include <QSize>
 #include <QString>
 #include <QUuid>
@@ -65,6 +73,20 @@ struct BridgeDocument
     QByteArray serialized;
     QByteArray exportBytes;
     QByteArray scratchText;
+    // Selection state, held exactly the way CanvasWidget holds it: a
+    // Grayscale8 mask the size of the canvas plus the layer it was made on.
+    // Strokes clip to it while it belongs to the layer being painted.
+    QImage selectionMask;
+    QUuid selectionLayerId;
+    // Bumped on every selection change so the shell can skip re-reading an
+    // outline it already has.
+    int selectionRevision = 0;
+    QVector<float> outlinePoints;
+    ugurugu::FloodFillMask::Comparison fillComparison =
+        ugurugu::FloodFillMask::Comparison::AlphaBoundary;
+    int fillTolerance = 32;
+    int fillReference = 0;
+    bool bucketAntialiasing = true;
 };
 
 QByteArray &lastError()
@@ -91,7 +113,34 @@ enum BridgeStatus
     StatusStrokeRejected = 5,
     StatusRenderFailed = 6,
     StatusExportTooLarge = 7,
-    StatusExportFailed = 8
+    StatusExportFailed = 8,
+    StatusNoSelection = 9,
+    StatusEmptyRegion = 10,
+    StatusLayerNotDrawable = 11
+};
+
+// Selection combine modes, matching CanvasSelectionCombine.
+enum BridgeCombine
+{
+    CombineReplace = 0,
+    CombineAdd = 1,
+    CombineSubtract = 2
+};
+
+// Selection shapes, matching CanvasSelectionShape.
+enum BridgeShape
+{
+    ShapeFreehand = 0,
+    ShapeRectangle = 1,
+    ShapeEllipse = 2
+};
+
+// Flood-fill reference sources, matching CanvasWandReference.
+enum BridgeReference
+{
+    ReferenceActiveLayer = 0,
+    ReferenceMarkedLayers = 1,
+    ReferenceAllVisibleLayers = 2
 };
 
 void setError(int code, QByteArray message)
@@ -229,6 +278,266 @@ bool updateIncrementalStroke(BridgeDocument *handle, QRect *dirtyOut)
     return true;
 }
 
+bool selectionAppliesTo(const BridgeDocument *handle, const QUuid &layerId)
+{
+    return !handle->selectionMask.isNull()
+           && handle->selectionLayerId == layerId
+           && handle->selectionMask.size()
+                  == handle->controller->document().size;
+}
+
+// Every selection change goes through here so the revision, the cached
+// outline and the "empty means no selection" rule stay in one place.
+void installSelection(BridgeDocument *handle, QImage mask, const QUuid &layerId)
+{
+    const QSize size = handle->controller->document().size;
+    const bool usable = !mask.isNull() && mask.size() == size
+                        && mask.format() == QImage::Format_Grayscale8
+                        && ugurugu::maskHasContent(mask) && !layerId.isNull();
+    handle->selectionMask = usable ? std::move(mask) : QImage();
+    handle->selectionLayerId = usable ? layerId : QUuid();
+    handle->selectionRevision += 1;
+
+    handle->outlinePoints.clear();
+    if (handle->selectionMask.isNull())
+    {
+        return;
+    }
+    // Flat float buffer: each contour is a vertex count followed by that many
+    // x, y pairs, so the shell can walk it without a second length array.
+    for (const QPolygonF &contour :
+        ugurugu::selectionOutline(handle->selectionMask))
+    {
+        if (contour.size() < 2)
+        {
+            continue;
+        }
+        handle->outlinePoints.append(static_cast<float>(contour.size()));
+        for (const QPointF &point : contour)
+        {
+            handle->outlinePoints.append(static_cast<float>(point.x()));
+            handle->outlinePoints.append(static_cast<float>(point.y()));
+        }
+    }
+}
+
+// Combines with the same >= 128 threshold every other selection consumer
+// uses, so a combined mask never disagrees with hit testing or packing.
+QImage combinedSelectionMask(
+    const QImage &base, const QImage &addition, int combine)
+{
+    if (base.isNull() || base.size() != addition.size()
+        || base.format() != addition.format())
+    {
+        return combine == CombineAdd ? addition : QImage();
+    }
+    QImage combined = base;
+    for (int y = 0; y < combined.height(); ++y)
+    {
+        uchar *line = combined.scanLine(y);
+        const uchar *additionLine = addition.constScanLine(y);
+        for (int x = 0; x < combined.width(); ++x)
+        {
+            if (combine == CombineAdd)
+            {
+                line[x] = std::max(line[x], additionLine[x]);
+            }
+            else if (additionLine[x] >= 128)
+            {
+                line[x] = 0;
+            }
+        }
+    }
+    return combined;
+}
+
+void applySelectionCombine(BridgeDocument *handle,
+    const QImage &mask,
+    const QUuid &layerId,
+    int combine)
+{
+    if (combine == CombineReplace || !selectionAppliesTo(handle, layerId))
+    {
+        installSelection(handle, mask, layerId);
+        return;
+    }
+    installSelection(handle,
+        combinedSelectionMask(handle->selectionMask, mask, combine),
+        layerId);
+}
+
+// The image the flood fill reads. Mirrors CanvasWidget's three reference
+// renderers: one isolated layer, every layer marked as a reference, or the
+// whole visible composite — always over transparency so alpha boundaries mean
+// what the user sees.
+QImage referenceImage(BridgeDocument *handle, int frame, const QUuid &layerId)
+{
+    ugurugu::Document document = handle->controller->document();
+    if (!document.size.isValid())
+    {
+        return {};
+    }
+    document.background = Qt::transparent;
+    if (handle->fillReference == ReferenceActiveLayer)
+    {
+        const ugurugu::Layer *layer = document.layer(layerId);
+        if (layer == nullptr)
+        {
+            return {};
+        }
+        ugurugu::Layer isolated = *layer;
+        isolated.visible = true;
+        isolated.opacity = 1.0;
+        isolated.parentGroupId = {};
+        document.layers = {isolated};
+        return ugurugu::RenderEngine::render(document, frame);
+    }
+    if (handle->fillReference == ReferenceMarkedLayers)
+    {
+        bool hasVisibleReference = false;
+        for (ugurugu::Layer &layer : document.layers)
+        {
+            if (layer.kind != ugurugu::LayerKind::Paint)
+            {
+                continue;
+            }
+            if (!layer.reference)
+            {
+                layer.visible = false;
+                continue;
+            }
+            hasVisibleReference =
+                hasVisibleReference || (layer.visible && layer.opacity > 0.0);
+        }
+        if (!hasVisibleReference)
+        {
+            return {};
+        }
+    }
+    return ugurugu::RenderEngine::render(document, frame);
+}
+
+QImage maskFromShape(
+    const QSize &size, int shape, const double *points, int count)
+{
+    if (!size.isValid() || points == nullptr || count < 2)
+    {
+        return {};
+    }
+    const auto pointAt = [points](int index)
+    {
+        return QPointF(points[index * 2], points[index * 2 + 1]);
+    };
+    QPainterPath path;
+    if (shape == ShapeFreehand)
+    {
+        if (count < 3)
+        {
+            return {};
+        }
+        path.moveTo(pointAt(0));
+        for (int index = 1; index < count; ++index)
+        {
+            path.lineTo(pointAt(index));
+        }
+    }
+    else
+    {
+        const QRectF bounds =
+            QRectF(pointAt(0), pointAt(count - 1)).normalized();
+        if (bounds.width() < 1.0 || bounds.height() < 1.0)
+        {
+            return {};
+        }
+        if (shape == ShapeRectangle)
+        {
+            path.addRect(bounds);
+        }
+        else
+        {
+            path.addEllipse(bounds);
+        }
+    }
+
+    QImage mask(size, QImage::Format_Grayscale8);
+    if (mask.isNull())
+    {
+        return {};
+    }
+    mask.fill(0);
+    // Antialiasing stays off: the mask is a binary stencil that packBinaryMask
+    // and every hit test read at the >= 128 threshold.
+    QPainter painter(&mask);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::white);
+    painter.drawPath(path);
+    painter.end();
+    return mask;
+}
+
+// Commits a coverage mask as a Fill stroke, the same shape of document
+// operation the desktop bucket and lasso-paint modes produce.
+int commitFrozenFill(BridgeDocument *handle, const QImage &coverage, int frame)
+{
+    const ugurugu::Document &document = handle->controller->document();
+    const QUuid layerId = paintTargetLayer(document);
+    const ugurugu::Layer *layer = document.layer(layerId);
+    if (layer == nullptr)
+    {
+        setError(StatusNoPaintLayer,
+            QByteArrayLiteral("document has no paint layer"));
+        return 0;
+    }
+    if (!layer->visible || layer->opacity <= 0.0)
+    {
+        setError(StatusLayerNotDrawable,
+            QByteArrayLiteral("the active layer is hidden or fully "
+                              "transparent"));
+        return 0;
+    }
+    const std::optional<ugurugu::PackedMaskRegion> packedCoverage =
+        ugurugu::packBinaryMask(coverage);
+    if (!packedCoverage)
+    {
+        setError(
+            StatusEmptyRegion, QByteArrayLiteral("no fillable area was found"));
+        return 0;
+    }
+
+    ugurugu::Stroke fill;
+    fill.id = QUuid::createUuid();
+    fill.seed = QRandomGenerator::global()->generate64();
+    fill.mode = ugurugu::StrokeMode::Fill;
+    fill.color = handle->brushTemplate.color;
+    fill.width = std::clamp(handle->brushTemplate.width,
+        ugurugu::DocumentLimits::minimumStrokeWidth,
+        ugurugu::DocumentLimits::maximumStrokeWidth);
+    fill.brush = handle->brushTemplate.brush;
+    fill.brush.antialiasing = handle->bucketAntialiasing;
+    fill.fillCoverage = *packedCoverage;
+    if (selectionAppliesTo(handle, layerId))
+    {
+        fill.clipMask = handle->selectionMask;
+    }
+    fill.points.append(
+        ugurugu::StrokePoint{QPointF(packedCoverage->bounds.center()), 1.0});
+
+    using AddStrokeResult = ugurugu::DocumentController::AddStrokeResult;
+    const auto result = handle->controller->addStroke(layerId, std::move(fill));
+    invalidateSplit(handle);
+    renderCommittedFrame(handle, frame);
+    if (result != AddStrokeResult::Added
+        && result != AddStrokeResult::AddedWithResampledPoints)
+    {
+        setError(StatusStrokeRejected,
+            QByteArrayLiteral("the fill was "
+                              "rejected"));
+        return 0;
+    }
+    clearError();
+    return 1;
+}
+
 }
 
 extern "C"
@@ -240,7 +549,7 @@ extern "C"
     // instead of a missing-export TypeError somewhere later.
     EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
     {
-        return 2;
+        return 3;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
@@ -255,8 +564,9 @@ extern "C"
 
     // 0 ok, 1 invalid argument, 2 out of memory, 3 invalid document,
     // 4 no paint layer, 5 stroke rejected, 6 render failed,
-    // 7 export too large, 8 export failed. Callers should branch on this and
-    // use ugu_last_error() only for diagnostics.
+    // 7 export too large, 8 export failed, 9 no selection,
+    // 10 empty region, 11 layer not drawable. Callers should branch on this
+    // and use ugu_last_error() only for diagnostics.
     EMSCRIPTEN_KEEPALIVE int ugu_last_error_code()
     {
         return lastErrorCode();
@@ -477,6 +787,13 @@ extern "C"
         handle->activeStroke = handle->brushTemplate;
         handle->activeStroke.id = QUuid::createUuid();
         handle->activeStroke.seed = QRandomGenerator::global()->generate64();
+        // A selection made on this layer confines the stroke to it, exactly as
+        // CanvasWidget::beginStroke does. Both the incremental preview and the
+        // committed render honour clipMask, so what is drawn is what lands.
+        if (selectionAppliesTo(handle, layerId))
+        {
+            handle->activeStroke.clipMask = handle->selectionMask;
+        }
         const QPointF raw(x, y);
         const auto time = static_cast<quint64>(timestamp);
         handle->activeStroke.points = {
@@ -667,6 +984,293 @@ extern "C"
         invalidateSplit(handle);
         handle->activeStroke = {};
         renderCommittedFrame(handle, handle->strokeFrame);
+    }
+
+    // reference: 0 active layer, 1 layers marked as references, 2 all visible
+    // layers. comparison: 0 alpha boundary, 1 color tolerance. tolerance is
+    // 0-255 and only applies to the color comparison.
+    EMSCRIPTEN_KEEPALIVE void ugu_set_fill_options(BridgeDocument *handle,
+        int reference,
+        int comparison,
+        int tolerance,
+        int antialiasing)
+    {
+        handle->fillReference = std::clamp(
+            reference, 0, static_cast<int>(ReferenceAllVisibleLayers));
+        handle->fillComparison =
+            comparison == 1 ? ugurugu::FloodFillMask::Comparison::Color
+                            : ugurugu::FloodFillMask::Comparison::AlphaBoundary;
+        handle->fillTolerance = std::clamp(tolerance, 0, 255);
+        handle->bucketAntialiasing = antialiasing != 0;
+    }
+
+    // Floods from the seed on the configured reference image and commits the
+    // result as one Fill stroke. Returns 1 on success; on 0 the status code
+    // says whether the point was outside the selection, the area was not
+    // fillable, or the layer refused the stroke.
+    EMSCRIPTEN_KEEPALIVE int ugu_bucket_fill(
+        BridgeDocument *handle, int frame, double x, double y)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QSize size = document.size;
+        if (!QRectF(QPointF(0.0, 0.0), QSizeF(size)).contains(QPointF(x, y)))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the fill point is outside the canvas"));
+            return 0;
+        }
+        const QUuid layerId = paintTargetLayer(document);
+        if (layerId.isNull())
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        const QPoint seed(std::clamp(static_cast<int>(x), 0, size.width() - 1),
+            std::clamp(static_cast<int>(y), 0, size.height() - 1));
+        // A selection is a wall: the desktop refuses a fill seeded outside it
+        // rather than quietly filling the whole layer and clipping it away.
+        if (selectionAppliesTo(handle, layerId)
+            && handle->selectionMask.constScanLine(seed.y())[seed.x()] < 128)
+        {
+            setError(StatusNoSelection,
+                QByteArrayLiteral("click inside the selected area to fill it"));
+            return 0;
+        }
+
+        const QImage reference = referenceImage(handle, frame, layerId);
+        if (reference.isNull())
+        {
+            setError(StatusEmptyRegion,
+                handle->fillReference == ReferenceMarkedLayers
+                    ? QByteArrayLiteral("mark a visible paint layer as a "
+                                        "reference first")
+                    : QByteArrayLiteral("the reference image could not be "
+                                        "rendered"));
+            return 0;
+        }
+        const QImage coverage = ugurugu::FloodFillMask::fromImage(
+            reference, seed, handle->fillComparison, handle->fillTolerance);
+        if (coverage.isNull())
+        {
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("no fillable area was found"));
+            return 0;
+        }
+        return commitFrozenFill(handle, coverage, frame);
+    }
+
+    // points is a flat x, y array of `count` document-space points: the path
+    // for a freehand lasso, or the two drag corners for a rectangle or
+    // ellipse. paint 1 fills the area instead of selecting it, which is the
+    // desktop lasso's Paint mode.
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_shape(BridgeDocument *handle,
+        int frame,
+        int shape,
+        const double *points,
+        int count,
+        int combine,
+        int paint)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = paintTargetLayer(document);
+        if (layerId.isNull())
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        const QImage mask = maskFromShape(document.size, shape, points, count);
+        if (mask.isNull())
+        {
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("the drawn area is too small to use"));
+            return 0;
+        }
+        if (paint != 0)
+        {
+            return commitFrozenFill(handle, mask, frame);
+        }
+        applySelectionCombine(handle, mask, layerId, combine);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_flood(
+        BridgeDocument *handle, int frame, double x, double y, int combine)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QSize size = document.size;
+        if (!QRectF(QPointF(0.0, 0.0), QSizeF(size)).contains(QPointF(x, y)))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the point is outside the canvas"));
+            return 0;
+        }
+        const QUuid layerId = paintTargetLayer(document);
+        if (layerId.isNull())
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        const QImage reference = referenceImage(handle, frame, layerId);
+        if (reference.isNull())
+        {
+            setError(StatusEmptyRegion,
+                handle->fillReference == ReferenceMarkedLayers
+                    ? QByteArrayLiteral("mark a visible paint layer as a "
+                                        "reference first")
+                    : QByteArrayLiteral("the reference image could not be "
+                                        "rendered"));
+            return 0;
+        }
+        const QPoint seed(std::clamp(static_cast<int>(x), 0, size.width() - 1),
+            std::clamp(static_cast<int>(y), 0, size.height() - 1));
+        const QImage mask = ugurugu::FloodFillMask::fromImage(
+            reference, seed, handle->fillComparison, handle->fillTolerance);
+        if (mask.isNull())
+        {
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("click an area enclosed by lines to select "
+                                  "it"));
+            return 0;
+        }
+        applySelectionCombine(handle, mask, layerId, combine);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_all(BridgeDocument *handle)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = paintTargetLayer(document);
+        if (layerId.isNull())
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        QImage mask(document.size, QImage::Format_Grayscale8);
+        if (mask.isNull())
+        {
+            setError(StatusOutOfMemory,
+                QByteArrayLiteral("the selection mask could not be allocated"));
+            return 0;
+        }
+        mask.fill(255);
+        installSelection(handle, std::move(mask), layerId);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_invert(BridgeDocument *handle)
+    {
+        if (handle->selectionMask.isNull())
+        {
+            setError(StatusNoSelection,
+                QByteArrayLiteral("there is no selection to invert"));
+            return 0;
+        }
+        QImage inverted = handle->selectionMask;
+        inverted.invertPixels();
+        installSelection(handle, std::move(inverted), handle->selectionLayerId);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_selection_clear(BridgeDocument *handle)
+    {
+        if (handle->selectionMask.isNull())
+        {
+            return;
+        }
+        installSelection(handle, QImage(), QUuid());
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_fill(
+        BridgeDocument *handle, int frame)
+    {
+        const QUuid layerId = paintTargetLayer(handle->controller->document());
+        if (!selectionAppliesTo(handle, layerId))
+        {
+            setError(StatusNoSelection,
+                QByteArrayLiteral("select an area on this layer to fill"));
+            return 0;
+        }
+        // Held by value: committing the fill may replace the selection, and
+        // the fill clips to the same mask so it lands exactly inside the
+        // marching ants instead of bleeding a pixel past them.
+        const QImage mask = handle->selectionMask;
+        return commitFrozenFill(handle, mask, frame);
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_delete(
+        BridgeDocument *handle, int frame)
+    {
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = paintTargetLayer(document);
+        if (!selectionAppliesTo(handle, layerId))
+        {
+            setError(StatusNoSelection,
+                QByteArrayLiteral("select an area on this layer to delete"));
+            return 0;
+        }
+        const ugurugu::Layer *layer = document.layer(layerId);
+        if (layer == nullptr)
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        // The desktop offers every stroke on the layer to the controller and
+        // lets removeSelectedContent decide which ones the mask actually
+        // covers; matching that keeps one definition of "selected content".
+        QVector<QUuid> strokeIds;
+        strokeIds.reserve(layer->strokes.size());
+        for (const ugurugu::Stroke &stroke : layer->strokes)
+        {
+            strokeIds.append(stroke.id);
+        }
+        const bool removed = handle->controller->removeSelectedContent(
+            layerId, strokeIds, handle->selectionMask);
+        if (!removed)
+        {
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("there is no content in the selected area"));
+            return 0;
+        }
+        installSelection(handle, QImage(), QUuid());
+        invalidateSplit(handle);
+        renderCommittedFrame(handle, frame);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_active(const BridgeDocument *handle)
+    {
+        return handle->selectionMask.isNull() ? 0 : 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_revision(
+        const BridgeDocument *handle)
+    {
+        return handle->selectionRevision;
+    }
+
+    // Flat float buffer of closed contours in document coordinates: a vertex
+    // count, then that many x, y pairs, repeated. Valid until the next
+    // selection change or close on the same handle.
+    EMSCRIPTEN_KEEPALIVE const float *ugu_selection_outline(
+        const BridgeDocument *handle)
+    {
+        return handle->outlinePoints.constData();
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_outline_size(
+        const BridgeDocument *handle)
+    {
+        return static_cast<int>(handle->outlinePoints.size());
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_can_undo(const BridgeDocument *handle)

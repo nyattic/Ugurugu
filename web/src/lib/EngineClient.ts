@@ -36,12 +36,35 @@ export interface DocumentMeta {
     canRedo: boolean;
 }
 
+// One closed ring of the selection boundary in document coordinates, as a
+// flat x, y list ready for Path2D.
+export type SelectionContour = Float32Array<ArrayBuffer>;
+
+export interface SelectionUpdate {
+    revision: number;
+    active: boolean;
+    // Absent when the outline has not changed since the last reply, so the
+    // shell keeps the contours it already holds.
+    contours: SelectionContour[] | null;
+}
+
 export interface RegionUpdate {
     rect: { x: number; y: number; width: number; height: number };
     pixels: Uint8ClampedArray<ArrayBuffer> | null;
     layers: LayerInfo[];
+    selection: SelectionUpdate;
     canUndo: boolean;
     canRedo: boolean;
+}
+
+export type SelectionShape = 0 | 1 | 2;
+export type SelectionCombine = 0 | 1 | 2;
+
+export interface FillOptions {
+    reference: number;
+    comparison: number;
+    tolerance: number;
+    antialiasing: boolean;
 }
 
 export interface BrushSettings {
@@ -62,8 +85,28 @@ interface RegionResponse {
     rect: { x: number; y: number; width: number; height: number };
     pixels: ArrayBuffer | null;
     layers: LayerInfo[];
+    selection: { revision: number; active: boolean; outline: ArrayBuffer | null };
     canUndo: boolean;
     canRedo: boolean;
+}
+
+// The engine packs every contour into one buffer: a vertex count, then that
+// many x, y pairs, repeated to the end.
+function splitContours(outline: ArrayBuffer): SelectionContour[] {
+    const values = new Float32Array(outline);
+    const contours: SelectionContour[] = [];
+    let index = 0;
+    while (index < values.length) {
+        const vertices = values[index] ?? 0;
+        index += 1;
+        const span = vertices * 2;
+        if (span <= 0 || index + span > values.length) {
+            break;
+        }
+        contours.push(values.slice(index, index + span));
+        index += span;
+    }
+    return contours;
 }
 
 export class EngineClient {
@@ -114,6 +157,13 @@ export class EngineClient {
                 ? new Uint8ClampedArray(response.pixels)
                 : null,
             layers: response.layers,
+            selection: {
+                revision: response.selection.revision,
+                active: response.selection.active,
+                contours: response.selection.outline
+                    ? splitContours(response.selection.outline)
+                    : null,
+            },
             canUndo: response.canUndo,
             canRedo: response.canRedo,
         };
@@ -170,6 +220,68 @@ export class EngineClient {
 
     async setStabilization(strength: number): Promise<void> {
         await this.#request({ type: "stabilization", strength });
+    }
+
+    async setFillOptions(options: FillOptions): Promise<void> {
+        await this.#request({ type: "fillOptions", ...options });
+    }
+
+    bucketFill(frame: number, x: number, y: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "bucketFill", frame, x, y });
+    }
+
+    // points is a flat x, y list: the traced path for a freehand lasso, or the
+    // two drag corners for a rectangle or ellipse.
+    selectionShape(
+        frame: number,
+        shape: SelectionShape,
+        points: number[],
+        combine: SelectionCombine,
+        paint: boolean,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "selectionShape",
+            frame,
+            shape,
+            points,
+            combine,
+            paint,
+        });
+    }
+
+    selectionFlood(
+        frame: number,
+        x: number,
+        y: number,
+        combine: SelectionCombine,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "selectionFlood",
+            frame,
+            x,
+            y,
+            combine,
+        });
+    }
+
+    selectAll(): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionAll" });
+    }
+
+    invertSelection(): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionInvert" });
+    }
+
+    deselect(): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionClear" });
+    }
+
+    fillSelection(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionFill", frame });
+    }
+
+    deleteSelection(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionDelete", frame });
     }
 
     strokeBegin(

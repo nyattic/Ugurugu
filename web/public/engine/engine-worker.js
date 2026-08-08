@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 2;
+const expectedAbiVersion = 3;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -20,6 +20,10 @@ const enginePromise = createUguruguEngine().then((engine) => {
     return engine;
 });
 let documentHandle = 0;
+// The outline is only worth reading back when it changed, so the worker
+// remembers what it last sent. Replies leave the worker in request order, so
+// the shell always sees a revision it can trust.
+let sentSelectionRevision = -1;
 
 function requireDocument() {
     if (!documentHandle) {
@@ -97,6 +101,9 @@ function engineError(engine) {
 
 function adoptDocument(engine, handle, undoLimit) {
     documentHandle = handle;
+    // A fresh handle starts at revision 0 with no selection; forcing a
+    // mismatch makes the first reply carry that empty outline.
+    sentSelectionRevision = -1;
     if (undoLimit > 0) {
         engine._ugu_set_undo_limit(handle, undoLimit);
     }
@@ -231,23 +238,90 @@ function layerThumbnails(engine, devicePixelRatio) {
     return { thumbnails, transfers };
 }
 
+function selectionState(engine) {
+    const handle = requireDocument();
+    const revision = engine._ugu_selection_revision(handle);
+    const state = {
+        revision,
+        active: engine._ugu_selection_active(handle) === 1,
+        outline: null,
+    };
+    if (revision !== sentSelectionRevision) {
+        sentSelectionRevision = revision;
+        const size = engine._ugu_selection_outline_size(handle);
+        if (size > 0) {
+            const pointer = engine._ugu_selection_outline(handle);
+            // Copies out of the wasm heap: the buffer moves when memory grows.
+            state.outline = engine.HEAPU8.slice(
+                pointer,
+                pointer + size * 4,
+            ).buffer;
+        } else {
+            state.outline = new ArrayBuffer(0);
+        }
+    }
+    return state;
+}
+
+// A selection change moves no pixels, so the reply carries the outline and
+// the panel state but no image data.
+function selectionReply(engine, id) {
+    const selection = selectionState(engine);
+    postMessage(
+        {
+            id,
+            ok: true,
+            rect: { x: 0, y: 0, width: 0, height: 0 },
+            pixels: null,
+            layers: layerList(engine),
+            selection,
+            ...historyState(engine),
+        },
+        selection.outline ? [selection.outline] : [],
+    );
+}
+
 function regionReply(engine, id) {
     const { rect, pixels } = dirtyRegion(engine);
+    const selection = selectionState(engine);
     const message = {
         id,
         ok: true,
         rect,
         pixels,
         layers: layerList(engine),
+        selection,
         ...historyState(engine),
     };
-    postMessage(message, pixels ? [pixels] : []);
+    const transfers = [];
+    if (pixels) {
+        transfers.push(pixels);
+    }
+    if (selection.outline) {
+        transfers.push(selection.outline);
+    }
+    postMessage(message, transfers);
 }
 
 function fullRender(engine, frame) {
     const handle = requireDocument();
     if (!engine._ugu_render_frame(handle, frame)) {
         throw engineError(engine);
+    }
+}
+
+// Copies a flat x, y point list into the wasm heap as doubles and runs the
+// call with it, freeing the buffer whichever way the call goes.
+function withPoints(engine, points, run) {
+    const bytes = points.length * 8;
+    const pointer = engine._malloc(bytes);
+    try {
+        new Float64Array(engine.HEAPU8.buffer, pointer, points.length).set(
+            points,
+        );
+        return run(pointer);
+    } finally {
+        engine._free(pointer);
     }
 }
 
@@ -353,6 +427,87 @@ self.onmessage = async (event) => {
             engine._ugu_set_stabilization(handleFor(), event.data.strength);
             postMessage({ id, ok: true });
             return;
+        } else if (type === "fillOptions") {
+            engine._ugu_set_fill_options(
+                handleFor(),
+                event.data.reference,
+                event.data.comparison,
+                event.data.tolerance,
+                event.data.antialiasing ? 1 : 0,
+            );
+            postMessage({ id, ok: true });
+            return;
+        } else if (type === "bucketFill") {
+            if (
+                !engine._ugu_bucket_fill(
+                    handleFor(),
+                    event.data.frame,
+                    event.data.x,
+                    event.data.y,
+                )
+            ) {
+                throw engineError(engine);
+            }
+        } else if (type === "selectionShape") {
+            const applied = withPoints(engine, event.data.points, (pointer) =>
+                engine._ugu_selection_shape(
+                    handleFor(),
+                    event.data.frame,
+                    event.data.shape,
+                    pointer,
+                    event.data.points.length / 2,
+                    event.data.combine,
+                    event.data.paint ? 1 : 0,
+                ),
+            );
+            if (!applied) {
+                throw engineError(engine);
+            }
+            // Paint mode commits a fill; Select mode only moves the ants.
+            if (event.data.paint) {
+                regionReply(engine, id);
+            } else {
+                selectionReply(engine, id);
+            }
+            return;
+        } else if (type === "selectionFlood") {
+            if (
+                !engine._ugu_selection_flood(
+                    handleFor(),
+                    event.data.frame,
+                    event.data.x,
+                    event.data.y,
+                    event.data.combine,
+                )
+            ) {
+                throw engineError(engine);
+            }
+            selectionReply(engine, id);
+            return;
+        } else if (type === "selectionAll") {
+            if (!engine._ugu_selection_all(handleFor())) {
+                throw engineError(engine);
+            }
+            selectionReply(engine, id);
+            return;
+        } else if (type === "selectionInvert") {
+            if (!engine._ugu_selection_invert(handleFor())) {
+                throw engineError(engine);
+            }
+            selectionReply(engine, id);
+            return;
+        } else if (type === "selectionClear") {
+            engine._ugu_selection_clear(handleFor());
+            selectionReply(engine, id);
+            return;
+        } else if (type === "selectionFill") {
+            if (!engine._ugu_selection_fill(handleFor(), event.data.frame)) {
+                throw engineError(engine);
+            }
+        } else if (type === "selectionDelete") {
+            if (!engine._ugu_selection_delete(handleFor(), event.data.frame)) {
+                throw engineError(engine);
+            }
         } else if (type === "strokeBegin") {
             const started = engine._ugu_stroke_begin(
                 handleFor(),
