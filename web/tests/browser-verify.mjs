@@ -641,6 +641,26 @@ const browser = await chromium.launch({
     check(await isPlaying(page), "playback started");
     await drawStroke(page);
     check(await isPlaying(page), "playback survives a stroke");
+
+    // Rendering a playback frame mid-stroke used to wipe the live stroke
+    // and replace the image the incremental compositor patches into, which
+    // flashed garbage until the pointer was released.
+    await page.locator("#animate-while-drawing").check();
+    const brushCountBeforeWobbleDraw = await page.evaluate(() =>
+        window.__uguruguBrushCount?.(),
+    );
+    await drawStroke(page);
+    check(
+        (await page.evaluate(() => window.__uguruguBrushCount?.())) >
+            brushCountBeforeWobbleDraw,
+        "a stroke drawn while wobbling commits",
+    );
+    check(
+        !(await page.locator("#status").textContent())?.includes("Error"),
+        "wobble-while-drawing reports no error",
+    );
+    check(await isPlaying(page), "playback survives a wobbling stroke");
+    await page.locator("#animate-while-drawing").uncheck();
     await page.locator(".play").click();
     await context.close();
 }

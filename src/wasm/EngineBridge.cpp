@@ -1443,7 +1443,22 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE const std::uint8_t *ugu_render_frame(
         BridgeDocument *handle, int frameIndex)
     {
-        renderCommittedFrame(handle, frameIndex);
+        if (handle->strokeInProgress)
+        {
+            // Playback advancing frames mid-stroke. A committed render would
+            // wipe the live stroke off the screen and replace the image the
+            // incremental compositor patches into, so later patches would land
+            // on the wrong frame's pixels. Follow the playback frame with a
+            // full preview instead; the incremental path stays off for the
+            // rest of this stroke because its base image is gone.
+            handle->strokeFrame = frameIndex;
+            handle->incrementalActive = false;
+            renderFullStrokePreview(handle);
+        }
+        else
+        {
+            renderCommittedFrame(handle, frameIndex);
+        }
         if (handle->renderedFrame.isNull())
         {
             setError(StatusRenderFailed,
