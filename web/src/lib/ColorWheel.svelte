@@ -87,7 +87,10 @@
             return;
         }
         const scale = window.devicePixelRatio || 1;
-        if (canvas.width !== size * scale) {
+        // Both axes are checked: a fresh canvas is 300×150, so testing the
+        // width alone silently leaves the height at 150 on any display where
+        // size × dpr lands on exactly 300, and the wheel draws as an arch.
+        if (canvas.width !== size * scale || canvas.height !== size * scale) {
             canvas.width = size * scale;
             canvas.height = size * scale;
         }
