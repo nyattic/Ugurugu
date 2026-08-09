@@ -22,6 +22,9 @@ made with WiggleWiggleTool.
 > [GitHub Issue](https://github.com/nyattic/Ugurugu/issues) and tell
 > us what you were doing and what happened. Attaching the `.ugu` file, when
 > possible, makes the problem much easier to find.
+>
+> Security vulnerabilities are the exception: please use the private channel in
+> the [security policy](SECURITY.md) instead of a public issue.
 
 ## Download and install
 
