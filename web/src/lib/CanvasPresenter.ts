@@ -21,6 +21,11 @@ export class CanvasPresenter {
     #surface: HTMLCanvasElement;
     #surfaceContext: CanvasRenderingContext2D;
     #display: HTMLCanvasElement;
+    // Second element, created only when the software path is in use. A canvas
+    // keeps the first context type it is ever given, so once WebGL has touched
+    // the display canvas, getContext("2d") on it returns null forever; the
+    // fallback has to be a different element.
+    #softwareCanvas: HTMLCanvasElement | null = null;
     #gl: WebGL2RenderingContext | null = null;
     #displayContext: CanvasRenderingContext2D | null = null;
     #program: WebGLProgram | null = null;
@@ -29,8 +34,14 @@ export class CanvasPresenter {
     #documentWidth = 0;
     #documentHeight = 0;
     #textureDirty = true;
+    #lastView: ViewState | null = null;
+    #onDisplayModeChange: (usingWebGL: boolean) => void;
 
-    constructor(surface: HTMLCanvasElement, display: HTMLCanvasElement) {
+    constructor(
+        surface: HTMLCanvasElement,
+        display: HTMLCanvasElement,
+        onDisplayModeChange: (usingWebGL: boolean) => void = () => {},
+    ) {
         this.#surface = surface;
         const context = surface.getContext("2d", { willReadFrequently: true });
         if (!context) {
@@ -38,6 +49,7 @@ export class CanvasPresenter {
         }
         this.#surfaceContext = context;
         this.#display = display;
+        this.#onDisplayModeChange = onDisplayModeChange;
         this.#initializeDisplay();
     }
 
@@ -58,12 +70,12 @@ export class CanvasPresenter {
             premultipliedAlpha: false,
         });
         if (!gl) {
-            this.#displayContext = this.#display.getContext("2d");
+            this.#useSoftwareDisplay();
             return;
         }
         const program = createProgram(gl);
         if (!program) {
-            this.#displayContext = this.#display.getContext("2d");
+            this.#useSoftwareDisplay();
             return;
         }
         this.#gl = gl;
@@ -83,15 +95,45 @@ export class CanvasPresenter {
         // context above was created the same way, so no unpack conversion.
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-        // A context loss leaves every object above invalid; falling back to 2D
-        // keeps the shell usable instead of freezing on a blank canvas.
+        // A context loss leaves every object above invalid; falling back to the
+        // software path keeps the shell usable instead of freezing on a blank
+        // canvas. The move is one way: a context that was lost once can be lost
+        // again, and the document surface holds every pixel we need anyway.
         this.#display.addEventListener("webglcontextlost", (event) => {
             event.preventDefault();
             this.#gl = null;
             this.#program = null;
             this.#texture = null;
-            this.#displayContext = this.#display.getContext("2d");
+            this.#textureDirty = true;
+            this.#useSoftwareDisplay();
         });
+    }
+
+    // Lays a 2D canvas over the display canvas and draws there from now on. It
+    // is transparent to pointer events so the display canvas keeps receiving
+    // them, and it is inserted directly after so the selection overlay stays on
+    // top of both.
+    #useSoftwareDisplay() {
+        if (this.#softwareCanvas) {
+            return;
+        }
+        const software = document.createElement("canvas");
+        software.id = "display-software";
+        software.setAttribute("aria-hidden", "true");
+        software.style.position = "absolute";
+        software.style.inset = "0";
+        software.style.inlineSize = "100%";
+        software.style.blockSize = "100%";
+        software.style.pointerEvents = "none";
+        software.width = Math.max(1, this.#display.width);
+        software.height = Math.max(1, this.#display.height);
+        this.#display.after(software);
+        this.#softwareCanvas = software;
+        this.#displayContext = software.getContext("2d");
+        this.#onDisplayModeChange(false);
+        if (this.#lastView) {
+            this.#drawSoftware(this.#lastView);
+        }
     }
 
     resizeDocument(width: number, height: number) {
@@ -106,14 +148,16 @@ export class CanvasPresenter {
     resizeDisplay(width: number, height: number, devicePixelRatio: number) {
         const pixelWidth = Math.max(1, Math.round(width * devicePixelRatio));
         const pixelHeight = Math.max(1, Math.round(height * devicePixelRatio));
-        if (
-            this.#display.width === pixelWidth &&
-            this.#display.height === pixelHeight
-        ) {
-            return;
+        for (const canvas of [this.#display, this.#softwareCanvas]) {
+            if (
+                canvas === null ||
+                (canvas.width === pixelWidth && canvas.height === pixelHeight)
+            ) {
+                continue;
+            }
+            canvas.width = pixelWidth;
+            canvas.height = pixelHeight;
         }
-        this.#display.width = pixelWidth;
-        this.#display.height = pixelHeight;
     }
 
     writeRegion(region: DirtyRegion, pixels: Uint8ClampedArray<ArrayBuffer>) {
@@ -177,31 +221,22 @@ export class CanvasPresenter {
     }
 
     draw(view: ViewState) {
-        const cssWidth = this.#display.clientWidth || this.#display.width;
-        const cssHeight = this.#display.clientHeight || this.#display.height;
-        const viewport = { width: cssWidth, height: cssHeight };
-        const topLeft = toViewport(view, viewport, 0, 0);
-        const width = this.#documentWidth * view.scale;
-        const height = this.#documentHeight * view.scale;
+        this.#lastView = view;
         const gl = this.#gl;
         if (!gl || !this.#program) {
-            const context = this.#displayContext;
-            if (!context) {
-                return;
-            }
-            const ratio = this.#display.width / Math.max(1, cssWidth);
-            context.setTransform(ratio, 0, 0, ratio, 0, 0);
-            context.clearRect(0, 0, cssWidth, cssHeight);
-            context.imageSmoothingEnabled = true;
-            context.drawImage(
-                this.#surface,
-                topLeft.x,
-                topLeft.y,
-                width,
-                height,
-            );
+            this.#drawSoftware(view);
             return;
         }
+        const cssWidth = this.#display.clientWidth || this.#display.width;
+        const cssHeight = this.#display.clientHeight || this.#display.height;
+        const topLeft = toViewport(
+            view,
+            { width: cssWidth, height: cssHeight },
+            0,
+            0,
+        );
+        const width = this.#documentWidth * view.scale;
+        const height = this.#documentHeight * view.scale;
         gl.viewport(0, 0, this.#display.width, this.#display.height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -219,9 +254,43 @@ export class CanvasPresenter {
             (width / cssWidth) * 2,
             (height / cssHeight) * 2,
         );
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        // Blending stays off. The context is premultipliedAlpha: false, so the
+        // compositor reads the drawing buffer as straight RGBA — exactly what
+        // the texture already holds. SRC_ALPHA blending over the transparent
+        // clear would premultiply the colour and square the alpha, which turned
+        // a half-opaque layer into something close to black.
+        gl.disable(gl.BLEND);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    #drawSoftware(view: ViewState) {
+        const context = this.#displayContext;
+        if (!context) {
+            return;
+        }
+        const target = this.#softwareCanvas ?? this.#display;
+        const cssWidth = target.clientWidth || target.width;
+        const cssHeight = target.clientHeight || target.height;
+        const ratio = target.width / Math.max(1, cssWidth);
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.clearRect(0, 0, cssWidth, cssHeight);
+        if (this.#documentWidth <= 0 || this.#documentHeight <= 0) {
+            return;
+        }
+        const topLeft = toViewport(
+            view,
+            { width: cssWidth, height: cssHeight },
+            0,
+            0,
+        );
+        context.imageSmoothingEnabled = true;
+        context.drawImage(
+            this.#surface,
+            topLeft.x,
+            topLeft.y,
+            this.#documentWidth * view.scale,
+            this.#documentHeight * view.scale,
+        );
     }
 
     readPixel(x: number, y: number): [number, number, number] {

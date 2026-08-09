@@ -5,10 +5,19 @@ import type { LassoMode, SelectionShapeName } from "./tools";
 
 // Everything the tool options column edits, in one object so the shell owns a
 // single source of truth and the panel can mutate it directly.
+// The desktop's brush popover slider runs to 128 and every built-in preset
+// default fits inside that; the web used to stop at 64, so picking a preset
+// above it left the slider pinned and the value unreachable again.
+export const minimumBrushSize = 1;
+export const maximumBrushSize = 128;
+
 export interface ToolSettings {
     presetIndex: number;
     eraserPresetIndex: number;
+    // Kept apart the way the desktop keeps m_brushWidth and m_eraserWidth, so
+    // reaching for the eraser does not resize the brush.
     brushSize: number;
+    eraserSize: number;
     stabilization: number;
     brushAntialiasing: boolean;
     lassoMode: LassoMode;
@@ -28,6 +37,7 @@ export function defaultToolSettings(): ToolSettings {
         presetIndex: 0,
         eraserPresetIndex: 0,
         brushSize: 6,
+        eraserSize: 6,
         stabilization: 0,
         brushAntialiasing: false,
         lassoMode: "select",

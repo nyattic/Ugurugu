@@ -113,6 +113,9 @@ export class EngineClient {
     #worker: Worker;
     #pending = new Map<number, PendingRequest>();
     #nextId = 0;
+    // Set once the worker is known to be dead. Every later request fails fast
+    // with the same reason instead of waiting for a reply that cannot come.
+    #failure: Error | null = null;
 
     constructor() {
         // Relative to the page so the worker stays same-origin under
@@ -133,12 +136,42 @@ export class EngineClient {
                 pending.reject(new Error(error));
             }
         };
+        // A worker that fails to load — a missing or blocked engine artifact,
+        // an exception before its onmessage handler is installed — never
+        // answers anything. Without this the shell sat on "Loading engine…"
+        // for as long as the tab was open, with no way to tell why.
+        this.#worker.onerror = (event) => {
+            this.#fail(
+                new Error(
+                    typeof event === "string" || !event.message
+                        ? "the drawing engine could not be loaded"
+                        : event.message,
+                ),
+            );
+        };
+        this.#worker.onmessageerror = () => {
+            this.#fail(
+                new Error("a reply from the drawing engine could not be read"),
+            );
+        };
+    }
+
+    #fail(error: Error) {
+        this.#failure ??= error;
+        const waiting = [...this.#pending.values()];
+        this.#pending.clear();
+        for (const pending of waiting) {
+            pending.reject(this.#failure);
+        }
     }
 
     #request<T>(
         message: Record<string, unknown>,
         transfer: Transferable[] = [],
     ): Promise<T> {
+        if (this.#failure) {
+            return Promise.reject(this.#failure);
+        }
         const id = this.#nextId;
         this.#nextId += 1;
         return new Promise<T>((resolve, reject) => {

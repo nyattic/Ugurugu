@@ -780,10 +780,29 @@ extern "C"
     {
         const ugurugu::Document &document = handle->controller->document();
         const QUuid layerId = paintTargetLayer(document);
-        if (layerId.isNull())
+        const ugurugu::Layer *target = document.layer(layerId);
+        if (layerId.isNull() || target == nullptr)
         {
             setError(StatusNoPaintLayer,
                 QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        // CanvasWidget::beginStroke refuses a stroke the artist could not see.
+        // Without the same guard the web committed invisible strokes to a
+        // hidden layer and said nothing, so the work only reappeared when the
+        // layer was switched back on.
+        if (!target->visible)
+        {
+            setError(StatusLayerNotDrawable,
+                QByteArrayLiteral("the active layer is hidden; make it "
+                                  "visible to draw"));
+            return 0;
+        }
+        if (target->opacity <= 0.0)
+        {
+            setError(StatusLayerNotDrawable,
+                QByteArrayLiteral("the active layer opacity is 0%; raise it "
+                                  "to draw"));
             return 0;
         }
         handle->strokeFrame = frame;

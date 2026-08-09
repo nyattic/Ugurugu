@@ -29,6 +29,8 @@
     import type { CombineValue, ToolId } from "./lib/tools";
     import {
         loadToolSettings,
+        maximumBrushSize,
+        minimumBrushSize,
         saveToolSettings,
     } from "./lib/ToolSettings";
     import {
@@ -108,6 +110,11 @@
     let selectionDrag: DragShape | null = null;
     let selectionCombine: CombineValue = selectionCombines.replace;
     let antsFrame: number | null = null;
+    // Playback renders at most one frame at a time. Without this the timer
+    // queued a render every tick regardless of whether the engine had finished
+    // the last one, so a document that renders slower than its frame interval
+    // built a backlog that outlived the stop button by minutes.
+    let playbackRenderPending = false;
 
     function loadRecentColors(): string[] {
         try {
@@ -173,6 +180,18 @@
         chain = chain.then(operation).catch((error) => {
             status = describe(error);
         });
+    }
+
+    // Same queue, but the caller can wait for its turn to finish. Swapping the
+    // document has to run in order with everything else: posted out of band it
+    // could land between the halves of an older operation, leaving queued work
+    // to be applied to a document the user never chose.
+    function enqueueExclusive(operation: () => Promise<void>): Promise<void> {
+        const next = chain.then(operation).catch((error) => {
+            status = describe(error);
+        });
+        chain = next;
+        return next;
     }
 
     function present(update: RegionUpdate) {
@@ -264,8 +283,8 @@
         const red = Number.parseInt(colorHex.slice(1, 3), 16);
         const green = Number.parseInt(colorHex.slice(3, 5), 16);
         const blue = Number.parseInt(colorHex.slice(5, 7), 16);
-        const width = settings.brushSize;
         const erase = tool === "eraser";
+        const width = erase ? settings.eraserSize : settings.brushSize;
         if (!meta) {
             return;
         }
@@ -369,46 +388,57 @@
         scheduleThumbnailRefresh();
     }
 
-    async function openDocument(bytes: ArrayBuffer, name: string) {
-        stopPlayback();
-        const verdict = checkImportSize(bytes.byteLength, profile);
-        if (!verdict.allowed) {
-            status = `Cannot open — ${verdict.reason}`;
-            return;
-        }
-        status = `Opening ${name}…`;
-        try {
-            const next = await engine.open(bytes, profile.undoLimit);
-            adoptDocument(next, name);
-            const warning = verdict.warning ? ` ⚠ ${verdict.warning}` : "";
-            status =
-                `${name} — ${next.width}×${next.height}, ` +
-                `${next.frameCount} frames @ ${next.fps} fps, ` +
-                `schema v${next.schemaVersion}${warning}`;
-        } catch (error) {
-            meta = null;
-            status = `Open failed: ${describe(error)}`;
-        }
+    function openDocument(bytes: ArrayBuffer, name: string): Promise<void> {
+        return enqueueExclusive(async () => {
+            stopPlayback();
+            const verdict = checkImportSize(bytes.byteLength, profile);
+            if (!verdict.allowed) {
+                status = `Cannot open — ${verdict.reason}`;
+                return;
+            }
+            status = `Opening ${name}…`;
+            try {
+                const next = await engine.open(bytes, profile.undoLimit);
+                adoptDocument(next, name);
+                const warning = verdict.warning ? ` ⚠ ${verdict.warning}` : "";
+                status =
+                    `${name} — ${next.width}×${next.height}, ` +
+                    `${next.frameCount} frames @ ${next.fps} fps, ` +
+                    `schema v${next.schemaVersion}${warning}`;
+            } catch (error) {
+                // The worker keeps the document that was already open when an
+                // open fails, so the shell keeps its own state and reports the
+                // failure rather than leaving the artist with nothing.
+                status = `Open failed: ${describe(error)}`;
+            }
+        });
     }
 
-    async function createDocument(width: number, height: number) {
+    function createDocument(width: number, height: number): Promise<void> {
         showNewDocument = false;
-        stopPlayback();
-        status = `Creating a ${width}×${height} document…`;
-        try {
-            const next = await engine.create(width, height, profile.undoLimit);
-            adoptDocument(next, "Untitled.ugu");
-            status =
-                `New document — ${next.width}×${next.height}, ` +
-                `${next.frameCount} frames @ ${next.fps} fps, ` +
-                `schema v${next.schemaVersion}`;
-        } catch (error) {
-            status = `New document failed: ${describe(error)}`;
-        }
+        return enqueueExclusive(async () => {
+            stopPlayback();
+            status = `Creating a ${width}×${height} document…`;
+            try {
+                const next = await engine.create(
+                    width,
+                    height,
+                    profile.undoLimit,
+                );
+                adoptDocument(next, "Untitled.ugu");
+                status =
+                    `New document — ${next.width}×${next.height}, ` +
+                    `${next.frameCount} frames @ ${next.fps} fps, ` +
+                    `schema v${next.schemaVersion}`;
+            } catch (error) {
+                status = `New document failed: ${describe(error)}`;
+            }
+        });
     }
 
     function stopPlayback() {
         playing = false;
+        playbackRenderPending = false;
         if (playTimer !== null) {
             clearInterval(playTimer);
             playTimer = null;
@@ -434,8 +464,22 @@
             if (drawing && !animateWhileDrawing) {
                 return;
             }
+            // Drop the tick rather than queue behind a render still in flight.
+            // Playback shares the request queue with drawing and undo, so a
+            // backlog here would stall the whole shell.
+            if (playbackRenderPending) {
+                return;
+            }
             frameIndex = (frameIndex + 1) % meta.frameCount;
-            requestRender(frameIndex);
+            const frame = frameIndex;
+            playbackRenderPending = true;
+            enqueue(async () => {
+                try {
+                    present(await engine.renderFrame(frame));
+                } finally {
+                    playbackRenderPending = false;
+                }
+            });
         }, 1000 / meta.fps);
     }
 
@@ -607,6 +651,12 @@
         if (!meta) {
             return;
         }
+        // Delete and Backspace reach here whether or not anything is selected;
+        // asking the engine anyway turned a stray keypress into an error in
+        // the status bar.
+        if (action !== "all" && action !== "deselect" && !hasSelection) {
+            return;
+        }
         const frame = frameIndex;
         const usedColor = colorHex;
         enqueue(async () => {
@@ -644,8 +694,10 @@
                 y: event.clientY,
             });
             if (activeTouches.size === 2) {
-                // A second finger turns an in-progress stroke into a gesture;
-                // cancelling beats committing a line the user did not mean.
+                // A second finger turns an in-progress stroke into a gesture.
+                // The line drawn so far is committed rather than dropped, so
+                // starting a pinch never silently throws away a stroke; undo
+                // is one keypress away if it was not wanted.
                 if (drawing) {
                     drawing = false;
                     pendingPoints = [];
@@ -694,9 +746,18 @@
         const frame = frameIndex;
         const timestamp = event.timeStamp;
         enqueue(async () => {
-            present(
-                await engine.strokeBegin(frame, x, y, pressure, timestamp),
-            );
+            try {
+                present(
+                    await engine.strokeBegin(frame, x, y, pressure, timestamp),
+                );
+            } catch (error) {
+                // The engine refused the stroke — a hidden layer, or none to
+                // paint on. Drop the local drawing state so the pointer up
+                // does not chase a stroke that never started.
+                drawing = false;
+                pendingPoints = [];
+                throw error;
+            }
         });
     }
 
@@ -919,8 +980,14 @@
         const anchor = document.createElement("a");
         anchor.href = url;
         anchor.download = filename;
+        // In the document because some browsers ignore click() on a detached
+        // anchor, and the URL outlives the call because revoking it in the
+        // same turn can cancel a download that has not started reading yet.
+        anchor.style.display = "none";
+        document.body.append(anchor);
         anchor.click();
-        URL.revokeObjectURL(url);
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
     function exportGif() {
@@ -1029,10 +1096,16 @@
             newDocument: () => (showNewDocument = true),
             selectTool: (next) => (tool = next),
             adjustBrushSize: (delta) => {
-                settings.brushSize = Math.min(
-                    64,
-                    Math.max(1, settings.brushSize + delta),
-                );
+                const clamp = (value: number) =>
+                    Math.min(
+                        maximumBrushSize,
+                        Math.max(minimumBrushSize, value),
+                    );
+                if (tool === "eraser") {
+                    settings.eraserSize = clamp(settings.eraserSize + delta);
+                } else {
+                    settings.brushSize = clamp(settings.brushSize + delta);
+                }
             },
             zoomBy,
             zoomToFit,
@@ -1056,8 +1129,18 @@
         }
     }
 
+    // Switching windows swallows the key up, and a stuck space turns every
+    // later click into a pan.
+    function onWindowBlur() {
+        spaceHeld = false;
+    }
+
     onMount(() => {
-        presenter = new CanvasPresenter(surfaceCanvas, displayCanvas);
+        presenter = new CanvasPresenter(
+            surfaceCanvas,
+            displayCanvas,
+            (webgl) => (usingWebGL = webgl),
+        );
         overlay = new SelectionOverlay(overlayCanvas);
         usingWebGL = presenter.usingWebGL;
         const observer = new ResizeObserver(() => resizeDisplay());
@@ -1098,7 +1181,11 @@
     });
 </script>
 
-<svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} />
+<svelte:window
+    onkeydown={onKeyDown}
+    onkeyup={onKeyUp}
+    onblur={onWindowBlur}
+/>
 
 <main>
     <header class="bar">
@@ -1141,7 +1228,9 @@
                     onchange={onFileChosen}
                 />
             </label>
-            <button onclick={downloadDocument} disabled={!meta}>Save</button>
+            <button id="save-document" onclick={downloadDocument} disabled={!meta}>
+                Save
+            </button>
             <button id="export-png" onclick={exportFramePng} disabled={!meta}>
                 PNG
             </button>

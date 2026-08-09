@@ -214,6 +214,26 @@ jobs:
             fi
           done < "$RUNNER_TEMP/native.txt"
 
+      # The shell's browser suite covers what neither the smoke nor the digest
+      # comparison can — drawing, recovery, export, selection, the presenter's
+      # fallbacks — and it needs a real engine, which only this job builds. The
+      # Web shell job deliberately runs without one.
+      - name: Install the web shell dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Bundle the shell against the engine built above
+        working-directory: web
+        run: npm run build
+
+      # playwright-core never downloads a browser, so the matching CLI does.
+      - name: Install Chromium
+        run: npx --yes playwright@1.62.1 install chromium
+
+      - name: Verify the web shell in a browser
+        working-directory: web
+        run: npm run test:browser
+
   fuzz:
     name: Fuzz parsers
     runs-on: macos-15

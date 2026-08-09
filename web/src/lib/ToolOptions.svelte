@@ -2,6 +2,7 @@
     import type { BrushPresetInfo } from "./EngineClient";
     import type { ToolId } from "./tools";
     import type { ToolSettings } from "./ToolSettings";
+    import { maximumBrushSize, minimumBrushSize } from "./ToolSettings";
     import {
         fillComparisons,
         fillReferences,
@@ -38,12 +39,19 @@
         { value: "ellipse", label: "Oval" },
     ] as const;
 
+    function presetSize(defaultSize: number) {
+        return Math.min(
+            maximumBrushSize,
+            Math.max(minimumBrushSize, Math.round(defaultSize)),
+        );
+    }
+
     function onPresetChange(event: Event) {
         const index = Number((event.currentTarget as HTMLSelectElement).value);
         settings.presetIndex = index;
         const preset = presets[index];
         if (preset) {
-            settings.brushSize = Math.round(preset.defaultSize);
+            settings.brushSize = presetSize(preset.defaultSize);
         }
     }
 
@@ -52,7 +60,7 @@
         settings.eraserPresetIndex = index;
         const preset = eraserPresets[index];
         if (preset) {
-            settings.brushSize = Math.round(preset.defaultSize);
+            settings.eraserSize = presetSize(preset.defaultSize);
         }
     }
 </script>
@@ -95,15 +103,30 @@
 
         <label class="field">
             <span class="field-label">
-                Size <em>{settings.brushSize}px</em>
+                Size
+                <em>
+                    {tool === "eraser"
+                        ? settings.eraserSize
+                        : settings.brushSize}px
+                </em>
             </span>
-            <input
-                id="brush-size"
-                type="range"
-                min="1"
-                max="64"
-                bind:value={settings.brushSize}
-            />
+            {#if tool === "eraser"}
+                <input
+                    id="eraser-size"
+                    type="range"
+                    min={minimumBrushSize}
+                    max={maximumBrushSize}
+                    bind:value={settings.eraserSize}
+                />
+            {:else}
+                <input
+                    id="brush-size"
+                    type="range"
+                    min={minimumBrushSize}
+                    max={maximumBrushSize}
+                    bind:value={settings.brushSize}
+                />
+            {/if}
         </label>
 
         <label class="field">

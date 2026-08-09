@@ -13,7 +13,8 @@
 
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,13 +30,20 @@ const contentTypes = {
     ".svg": "image/svg+xml",
 };
 
-function startServer() {
+// withoutEngine serves everything but the engine loader, which is how a
+// blocked or missing wasm artifact looks to the browser.
+function startServer({ withoutEngine = false } = {}) {
     const server = createServer(async (request, response) => {
         try {
             const url = new URL(request.url, "http://localhost");
             let path = normalize(decodeURIComponent(url.pathname));
             if (path.endsWith("/")) {
                 path += "index.html";
+            }
+            if (withoutEngine && path.includes("ugurugu_engine_spike.js")) {
+                response.writeHead(404);
+                response.end();
+                return;
             }
             const file = await readFile(join(distRoot, path));
             response.writeHead(200, {
@@ -241,6 +249,49 @@ async function waitForThumbnails(page) {
         undefined,
         { timeout: 20000 },
     );
+}
+
+function scratchFile(name) {
+    return join(tmpdir(), `ugurugu-verify-${process.pid}-${name}`);
+}
+
+// Reads what the compositor actually put on screen at one point. The display
+// canvas is WebGL without preserveDrawingBuffer, so it cannot be read back
+// directly; the screenshot goes to the page to be decoded instead.
+async function screenPixel(page, x, y) {
+    const shot = await page.screenshot({
+        clip: { x, y, width: 1, height: 1 },
+    });
+    return page.evaluate(async (encoded) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${encoded}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        return [...context.getImageData(0, 0, 1, 1).data];
+    }, shot.toString("base64"));
+}
+
+function opaquePixelCount(page, selector) {
+    return page.evaluate((id) => {
+        const canvas = document.querySelector(id);
+        if (!canvas) {
+            return -1;
+        }
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        let opaque = 0;
+        for (let index = 3; index < data.length; index += 4) {
+            if (data[index] > 0) {
+                opaque += 1;
+            }
+        }
+        return opaque;
+    }, selector);
 }
 
 const failures = [];
@@ -936,6 +987,319 @@ const browser = await chromium.launch({
     }
 
     await context.close();
+}
+
+// Scenario 5: a failed open must not take the open document with it.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installPixelCounter(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+    await drawStroke(page);
+    const drawn = await countBrushPixels(page);
+
+    const corrupt = scratchFile("corrupt.ugu");
+    await writeFile(corrupt, "this is not a ugu document");
+    await page.locator('input[type="file"]').setInputFiles(corrupt);
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector("#status")
+                ?.textContent.startsWith("Open failed"),
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "a corrupt file reports an open failure");
+    check(
+        await page.locator("#save-document").isEnabled(),
+        "the document that was open survives a failed open",
+    );
+    check(
+        (await countBrushPixels(page)) === drawn,
+        "a failed open leaves the artwork untouched",
+    );
+
+    // Still live: another stroke commits on the document that was kept.
+    const box = await page.locator("#display-canvas").boundingBox();
+    await dragBetween(
+        page,
+        { x: box.x + 60, y: box.y + box.height - 60 },
+        { x: box.x + 220, y: box.y + box.height - 60 },
+    );
+    await page.waitForFunction(
+        (before) => window.__uguruguBrushCount?.() > before,
+        drawn,
+        { timeout: 20000 },
+    );
+    check(true, "drawing still works after a failed open");
+    await context.close();
+}
+
+// Scenario 6: the engine refuses to paint where the artist cannot see, the way
+// CanvasWidget::beginStroke does.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installPixelCounter(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    await page.locator('aside li input[type="checkbox"]').first().uncheck();
+    const box = await page.locator("#display-canvas").boundingBox();
+    const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await dragBetween(
+        page,
+        { x: middle.x - 60, y: middle.y },
+        { x: middle.x + 60, y: middle.y },
+    );
+    await page.waitForFunction(
+        () =>
+            document.querySelector("#status")?.textContent.includes("hidden"),
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "drawing on a hidden layer is refused with a reason");
+
+    await page.locator('aside li input[type="checkbox"]').first().check();
+    await page.waitForFunction(
+        () => window.__uguruguBrushCount?.() === 0,
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "the refused stroke was never committed");
+
+    // The same keypress that deletes a selection must stay quiet when there is
+    // nothing selected, so the status bar has to read the same afterwards.
+    const statusBefore = await page.locator("#status").textContent();
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(500);
+    check(
+        (await page.locator("#status").textContent()) === statusBefore,
+        "Delete with no selection reports nothing",
+    );
+    await context.close();
+}
+
+// Scenario 7: brush and eraser keep their own size, and a preset default above
+// the old 64 ceiling is reachable.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    await page.locator("#brush-preset").selectOption({ label: "Ink Pen" });
+    const brushSize = await page.locator("#brush-size").inputValue();
+    await page.locator("#tool-eraser").click();
+    await page.locator("#eraser-preset").selectOption({ label: "Soft" });
+    const eraserSize = await page.locator("#eraser-size").inputValue();
+    check(
+        eraserSize !== brushSize,
+        `the eraser has its own size (brush ${brushSize}, eraser ${eraserSize})`,
+    );
+    await page.locator("#tool-brush").click();
+    check(
+        (await page.locator("#brush-size").inputValue()) === brushSize,
+        "picking an eraser preset leaves the brush size alone",
+    );
+
+    await page
+        .locator("#brush-preset")
+        .selectOption({ label: "Droplet Spray" });
+    check(
+        (await page.locator("#brush-size").inputValue()) === "72",
+        "a preset default above the old 64 ceiling is reachable",
+    );
+    await context.close();
+}
+
+// Scenario 8: a translucent document has to reach the screen as straight
+// alpha. Blending into the premultipliedAlpha: false drawing buffer used to
+// square the alpha, which turned a half-opaque layer nearly black.
+{
+    const context = await browser.newContext({ acceptDownloads: true });
+    const page = await context.newPage();
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    const download = page.waitForEvent("download");
+    await page.locator("#save-document").click();
+    const savedPath = scratchFile("saved.ugu");
+    await (await download).saveAs(savedPath);
+    const saved = JSON.parse(await readFile(savedPath, "utf8"));
+    saved.canvas.background = "#00ffffff";
+    const transparentPath = scratchFile("transparent.ugu");
+    await writeFile(transparentPath, JSON.stringify(saved));
+
+    await page.locator('input[type="file"]').setInputFiles(transparentPath);
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector("#status")
+                ?.textContent.includes("transparent"),
+        undefined,
+        { timeout: 30000 },
+    );
+
+    await page.evaluate(() => {
+        const input = document.querySelector('input[type="color"]');
+        input.value = "#ff0000";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.locator("#tool-bucket").click();
+    const box = await page.locator("#display-canvas").boundingBox();
+    const middle = {
+        x: Math.round(box.x + box.width / 2),
+        y: Math.round(box.y + box.height / 2),
+    };
+    await page.mouse.click(middle.x, middle.y);
+    await page.evaluate(() => {
+        const slider = document.querySelector(
+            ".opacity-controls input[type=range]",
+        );
+        slider.value = "50";
+        slider.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForFunction(
+        () => {
+            const canvas = document.querySelector("#document-surface");
+            const pixel = canvas
+                .getContext("2d")
+                .getImageData(
+                    Math.floor(canvas.width / 2),
+                    Math.floor(canvas.height / 2),
+                    1,
+                    1,
+                ).data;
+            return pixel[0] === 255 && pixel[3] > 100 && pixel[3] < 155;
+        },
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "a half-opaque red layer reaches the document surface");
+
+    const shown = await screenPixel(page, middle.x, middle.y);
+    // Straight alpha over the dark viewport backdrop lands near 145; the
+    // squared-alpha bug put it near 56.
+    check(
+        shown[0] > 120 && shown[0] < 175,
+        `the screen shows the layer at its real opacity (red ${shown[0]})`,
+    );
+    await context.close();
+}
+
+// Scenario 9: losing the WebGL context must fall back to a canvas that can
+// actually take a 2D context, not to the same element.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installPixelCounter(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+    const presenterStatus = await page
+        .locator("#presenter-status")
+        .textContent();
+    if (presenterStatus?.includes("WebGL 2")) {
+        await drawStroke(page);
+        await page.evaluate(() => {
+            const gl = document
+                .querySelector("#display-canvas")
+                .getContext("webgl2");
+            gl?.getExtension("WEBGL_lose_context")?.loseContext();
+        });
+        await page.waitForSelector("#display-software", { timeout: 20000 });
+        check(true, "a context loss creates the software display canvas");
+        await page.waitForFunction(
+            () =>
+                document
+                    .querySelector("#presenter-status")
+                    ?.textContent.includes("Canvas 2D"),
+            undefined,
+            { timeout: 20000 },
+        );
+        check(true, "the status bar stops claiming WebGL after the loss");
+        check(
+            (await opaquePixelCount(page, "#display-software")) > 0,
+            "the software display still shows the document",
+        );
+    } else {
+        console.log("skip: this browser has no WebGL 2 to lose");
+    }
+    await context.close();
+}
+
+// Scenario 10: playback must not queue renders it cannot keep up with. The
+// worker is delayed here to stand in for a document whose full render costs
+// more than one frame interval.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+        window.__sent = 0;
+        window.__received = 0;
+        const BaseWorker = window.Worker;
+        window.Worker = class extends BaseWorker {
+            constructor(...args) {
+                super(...args);
+                const post = this.postMessage.bind(this);
+                this.postMessage = (...rest) => {
+                    window.__sent += 1;
+                    if (window.__slowEngine) {
+                        setTimeout(
+                            () => post(...rest),
+                            window.__slowEngine,
+                        );
+                        return undefined;
+                    }
+                    return post(...rest);
+                };
+                this.addEventListener("message", () => {
+                    window.__received += 1;
+                });
+            }
+        };
+    });
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+    await page.evaluate(() => {
+        window.__slowEngine = 250;
+    });
+    await page.locator(".play").click();
+    check(await isPlaying(page), "playback started against a slow engine");
+    await page.waitForTimeout(4000);
+    await page.locator(".play").click();
+    const stoppedAt = Date.now();
+    await page.waitForFunction(
+        () => window.__sent === window.__received,
+        undefined,
+        { timeout: 120000 },
+    );
+    const drain = Date.now() - stoppedAt;
+    check(
+        drain < 3000,
+        `stopping playback leaves no render backlog (drained in ${drain} ms)`,
+    );
+    await context.close();
+}
+
+// Scenario 11: an engine artifact that never arrives has to say so.
+{
+    const blocked = await startServer({ withoutEngine: true });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(blocked.origin);
+    await page.waitForFunction(
+        () =>
+            /failed|could not/i.test(
+                document.querySelector("#status")?.textContent ?? "",
+            ),
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "a missing engine artifact surfaces instead of hanging");
+    await context.close();
+    blocked.server.close();
 }
 
 await browser.close();

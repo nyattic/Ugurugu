@@ -129,17 +129,21 @@ function closeDocument(engine) {
     }
 }
 
+// Both of these build the replacement first and only then let go of what is
+// already open. Closing up front used to destroy the artist's document on the
+// way to a failure — a corrupt file left the shell with no document at all and
+// nothing to save. The cost is that two documents are live for the length of
+// the parse, which MemoryPolicy's import ceiling already bounds.
 function createDocument(engine, width, height, undoLimit) {
-    closeDocument(engine);
     const handle = engine._ugu_document_new(width, height);
     if (!handle) {
         throw engineError(engine);
     }
+    closeDocument(engine);
     return adoptDocument(engine, handle, undoLimit);
 }
 
 function openDocument(engine, bytes, undoLimit) {
-    closeDocument(engine);
     const pointer = engine._malloc(bytes.length);
     engine.HEAPU8.set(bytes, pointer);
     const handle = engine._ugu_document_open(pointer, bytes.length);
@@ -147,6 +151,7 @@ function openDocument(engine, bytes, undoLimit) {
     if (!handle) {
         throw engineError(engine);
     }
+    closeDocument(engine);
     return adoptDocument(engine, handle, undoLimit);
 }
 
