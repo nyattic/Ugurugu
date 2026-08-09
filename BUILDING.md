@@ -142,3 +142,15 @@ do not, so the shell can be type-checked and bundled without a wasm
 build. `npm run test:browser` drives the built shell in headless
 Chromium; it needs a real wasm build plus a browser from
 `npx playwright install chromium` or `UGURUGU_CHROMIUM_PATH`.
+
+`web/src/assets/PretendardJP-ui.woff2` is the desktop font cut to Latin
+and Hangul. It is committed, and it lives under `src/` rather than
+`public/` so Vite emits a relative URL for it. Regenerating it needs
+`pip install fonttools brotli`:
+
+```sh
+python -m fontTools.subset resources/fonts/PretendardJP-Medium.otf \
+  --output-file=web/src/assets/PretendardJP-ui.woff2 \
+  --flavor=woff2 --layout-features='' --no-hinting --desubroutinize \
+  --unicodes='U+0020-007E,U+00A0-00FF,U+00D7,U+00B7,U+2010-2027,U+2030,U+20A9,U+2190-2193,U+3000-303F,U+3130-318F,U+AC00-D7A3'
+```

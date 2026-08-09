@@ -1321,6 +1321,25 @@
       Palette and control shapes come from the desktop's Theme.cpp, so the web
       shell reads as the same product rather than a separate tool.
     */
+    /*
+      The desktop app bundles Pretendard JP, so the shell ships the same family
+      cut to Latin and Hangul rather than falling back to whatever system-ui
+      resolves to — on Korean Windows that is Malgun Gothic, which sets the same
+      words in a visibly different voice. Anyone who already has the font
+      installed downloads nothing. BUILDING.md holds the subsetting command.
+      The url is relative because itch.io serves from a subdirectory.
+    */
+    @font-face {
+        font-family: "Pretendard JP UI";
+        src:
+            local("Pretendard JP Medium"),
+            local("PretendardJP-Medium"),
+            url("./assets/PretendardJP-ui.woff2") format("woff2");
+        font-weight: 500 700;
+        font-style: normal;
+        font-display: swap;
+    }
+
     :global(:root) {
         --ink-950: #141518;
         --ink-900: #1b1d21;
@@ -1340,7 +1359,12 @@
         margin: 0;
         background: var(--ink-900);
         color: var(--paper);
-        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-family:
+            "Pretendard JP UI",
+            system-ui,
+            -apple-system,
+            "Segoe UI",
+            sans-serif;
         font-size: 14px;
         -webkit-font-smoothing: antialiased;
     }
