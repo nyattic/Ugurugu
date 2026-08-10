@@ -204,6 +204,50 @@ bool normalizeAndValidate(Document &document)
     return true;
 }
 
+bool isLayerRenderable(const Document &document, const Layer &layer)
+{
+    if (!layer.visible || layer.opacity <= 0.0)
+    {
+        return false;
+    }
+    QUuid parentId = layer.parentGroupId;
+    // Bounded by the layer count so a malformed hierarchy with a parent cycle
+    // answers instead of spinning; an unterminated walk is not visible.
+    for (qsizetype step = 0; step < document.layers.size(); ++step)
+    {
+        if (parentId.isNull())
+        {
+            return true;
+        }
+        const Layer *parent = document.layer(parentId);
+        if (!parent || !parent->visible || parent->opacity <= 0.0)
+        {
+            return false;
+        }
+        parentId = parent->parentGroupId;
+    }
+    return parentId.isNull();
+}
+
+Document isolatedLayerDocument(const Document &document, const Layer &layer)
+{
+    Document single = document;
+    single.background = QColor(0, 0, 0, 0);
+    Layer isolated = layer;
+    isolated.visible = true;
+    isolated.opacity = 1.0;
+    // A layer kept inside its group, clipped to the layer below, or carrying a
+    // blend mode cannot composite on its own: the hierarchy compositor rejects
+    // a missing parent outright and skips a clipped layer that has no base, so
+    // both used to render nothing at all.
+    isolated.parentGroupId = QUuid();
+    isolated.clipToLayerBelow = false;
+    isolated.blendMode = LayerBlendMode::Normal;
+    single.activeLayerId = isolated.id;
+    single.layers = {std::move(isolated)};
+    return single;
+}
+
 }
 
 }

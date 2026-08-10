@@ -8,6 +8,7 @@
 #include "ui/MainWindow.hpp"
 
 #include <QApplication>
+#include <QLabel>
 #include <QString>
 
 #include <utility>
@@ -93,6 +94,17 @@ public:
         const QString &error)
     {
         window.handleAutosaveWritten(success, revision, error);
+    }
+
+    // Empty when the window is not telling the artist that recovery is broken.
+    // isHidden rather than isVisible: the label is a child of a window a test
+    // never has to show.
+    static QString recoveryFailureText(const MainWindow &window)
+    {
+        return window.m_recoveryFailureLabel
+                       && !window.m_recoveryFailureLabel->isHidden()
+                   ? window.m_recoveryFailureLabel->text()
+                   : QString();
     }
 
     static bool loadDocument(MainWindow &window, Document document)

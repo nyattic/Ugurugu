@@ -1,5 +1,8 @@
 export interface LayerInfo {
     index: number;
+    // Stable identity. Row indexes shift under every add, remove and move, so
+    // anything queued has to name the layer by this instead.
+    id: string;
     name: string;
     group: boolean;
     visible: boolean;

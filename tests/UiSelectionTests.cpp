@@ -2915,6 +2915,66 @@ private slots:
         QVERIFY(!missingReference.second);
     }
 
+    void wandAndBucketReachALayerInsideAGroup()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        document.layers.clear();
+        Layer group;
+        group.kind = LayerKind::Group;
+        group.name = QStringLiteral("Group");
+        group.initialCanvasSize = document.size;
+        Layer child;
+        child.name = QStringLiteral("Child");
+        child.parentGroupId = group.id;
+        child.initialCanvasSize = document.size;
+        Stroke outline;
+        outline.width = 4.0;
+        outline.brush.antialiasing = false;
+        outline.points = {{QPointF(20.0, 20.0), 1.0},
+            {QPointF(80.0, 20.0), 1.0},
+            {QPointF(80.0, 80.0), 1.0},
+            {QPointF(20.0, 80.0), 1.0},
+            {QPointF(20.0, 20.0), 1.0}};
+        child.strokes.append(outline);
+        const QUuid childId = child.id;
+        document.layers.append(std::move(group));
+        document.layers.append(std::move(child));
+        document.activeLayerId = childId;
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        // The active-layer reference used to render the layer on its own
+        // without detaching it from its group, so the composition plan saw a
+        // parent that was not there, refused the whole frame, and both tools
+        // returned in silence for every layer inside a group.
+        canvas.setWandReference(CanvasWidget::WandReference::ActiveLayer);
+        canvas.setTool(CanvasWidget::Tool::Wand);
+        QTest::mouseClick(
+            &canvas, Qt::LeftButton, Qt::NoModifier, canvas.rect().center());
+        QVERIFY(canvas.hasSelection());
+
+        canvas.setBrushColor(QColor(220, 30, 40));
+        canvas.setTool(CanvasWidget::Tool::Bucket);
+        QTest::mouseClick(
+            &canvas, Qt::LeftButton, Qt::NoModifier, canvas.rect().center());
+        const Layer *filled = controller.document().layer(childId);
+        QVERIFY(filled);
+        QCOMPARE(filled->strokes.size(), 2);
+        QCOMPARE(filled->strokes.constLast().mode, StrokeMode::Fill);
+        QCOMPARE(
+            RenderEngine::render(controller.document(), 0).pixelColor(50, 50),
+            canvas.brushColor());
+    }
+
     void selectionVisibilitySkipsRedundantStaticFrames()
     {
         Document document = Document::createDefault(QSize(64, 64));

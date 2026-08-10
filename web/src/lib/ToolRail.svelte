@@ -124,6 +124,8 @@
 <style>
     .rail {
         display: flex;
+        /* Never squeezed: the canvas column is the one that flexes. */
+        flex: none;
         flex-direction: column;
         align-items: center;
         gap: 0.75rem;

@@ -247,6 +247,13 @@
             return;
         }
         const rect = viewportElement.getBoundingClientRect();
+        // A viewport with no area is a layout the shell cannot draw into — a
+        // hidden tab, a collapsed iframe. Keeping the surfaces at their last
+        // real size means the view comes back unchanged instead of clamped to
+        // the 1px floor and refitted to nothing.
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
         const ratio = window.devicePixelRatio || 1;
         presenter.resizeDisplay(rect.width, rect.height, ratio);
         overlay?.resize(rect.width, rect.height, ratio);
@@ -255,10 +262,11 @@
     }
 
     function zoomToFit() {
-        if (!meta) {
+        const viewport = viewportSize();
+        if (!meta || viewport.width <= 0 || viewport.height <= 0) {
             return;
         }
-        view = fitToViewport(meta, viewportSize());
+        view = fitToViewport(meta, viewport);
     }
 
     function zoomToActualSize() {
@@ -519,13 +527,19 @@
         };
     }
 
+    // The batch is taken here, not inside the queued task. Reading the buffer
+    // when the task finally ran meant a fast second stroke could reset it
+    // first, so the tail of the previous line vanished — or worse, the new
+    // stroke's points were already in it and got appended to the line that was
+    // still open. Claiming them synchronously ties every batch to the stroke
+    // that produced it, because the queue preserves the order they went in.
     function flushPendingPoints() {
+        if (pendingPoints.length === 0) {
+            return;
+        }
+        const points = pendingPoints;
+        pendingPoints = [];
         enqueue(async () => {
-            if (pendingPoints.length === 0) {
-                return;
-            }
-            const points = pendingPoints;
-            pendingPoints = [];
             present(await engine.strokeAppend(frameIndex, points));
         });
     }
@@ -930,6 +944,30 @@
         scheduleThumbnailRefresh();
     }
 
+    // A row index is only valid against the layer list the click was made on.
+    // Layer commands go through the shared queue, so a second click lands
+    // while the first is still in flight and every row after a delete or a
+    // move has already been renumbered — two quick presses of Delete used to
+    // remove a second, unrelated layer. Resolving the id when the command
+    // actually runs is what keeps the engine acting on the layer the artist
+    // pointed at, or on nothing at all if it is already gone.
+    function layerCommand(
+        id: string,
+        action: (frame: number, index: number) => Promise<RegionUpdate>,
+    ) {
+        stopPlayback();
+        enqueue(async () => {
+            const index = layers.findIndex((layer) => layer.id === id);
+            if (index < 0) {
+                status = "That layer no longer exists";
+                return;
+            }
+            present(await action(frameIndex, index));
+            contentRevision += 1;
+        });
+        scheduleThumbnailRefresh();
+    }
+
     function onSliderInput(event: Event) {
         stopPlayback();
         frameIndex = Number((event.currentTarget as HTMLInputElement).value);
@@ -1326,25 +1364,29 @@
             <LayerPanel
                 {layers}
                 {thumbnails}
-                onactivate={(index) =>
-                    layerAction((frame) => engine.layerActivate(frame, index))}
-                onvisible={(index, visible) =>
-                    layerAction((frame) =>
+                onactivate={(id) =>
+                    layerCommand(id, (frame, index) =>
+                        engine.layerActivate(frame, index),
+                    )}
+                onvisible={(id, visible) =>
+                    layerCommand(id, (frame, index) =>
                         engine.layerVisible(frame, index, visible),
                     )}
-                onopacity={(index, opacity) =>
-                    layerAction((frame) =>
+                onopacity={(id, opacity) =>
+                    layerCommand(id, (frame, index) =>
                         engine.layerOpacity(frame, index, opacity),
                     )}
                 onadd={() => layerAction((frame) => engine.layerAdd(frame))}
-                onremove={(index) =>
-                    layerAction((frame) => engine.layerRemove(frame, index))}
-                onrename={(index, name) =>
-                    layerAction((frame) =>
+                onremove={(id) =>
+                    layerCommand(id, (frame, index) =>
+                        engine.layerRemove(frame, index),
+                    )}
+                onrename={(id, name) =>
+                    layerCommand(id, (frame, index) =>
                         engine.layerRename(frame, index, name),
                     )}
-                onmove={(index, offset) =>
-                    layerAction((frame) =>
+                onmove={(id, offset) =>
+                    layerCommand(id, (frame, index) =>
                         engine.layerMove(frame, index, offset),
                     )}
             />
@@ -1508,12 +1550,20 @@
         flex: 1;
         display: flex;
         min-block-size: 0;
+        /* Only reachable between the stacking breakpoint and the width the
+           four columns need. Scrolling there beats shrinking the canvas. */
+        overflow-x: auto;
     }
 
     .viewport {
         position: relative;
-        flex: 1;
-        min-inline-size: 0;
+        flex: 1 1 0;
+        /* A floor, not zero. The rail, the option column and the side panels
+           are wider than a phone on their own, and the canvas was the only
+           column flex could take that difference out of: its basis is zero, so
+           it absorbed the whole overflow and came out 0 wide with nothing left
+           to draw on. */
+        min-inline-size: 12rem;
         overflow: hidden;
         background:
             repeating-conic-gradient(var(--ink-800) 0% 25%, var(--ink-850) 0% 50%)
@@ -1565,11 +1615,38 @@
 
     .side {
         display: flex;
+        flex: none;
         flex-direction: column;
         inline-size: 15rem;
         min-block-size: 0;
         border-inline-start: 1px solid var(--line);
         background: var(--ink-850);
+    }
+
+    /* Below this the four columns cannot stand side by side at any usable
+       canvas width, so they stack instead: canvas first at full width, tools
+       and panels under it. The full responsive layout is still to come; this
+       is the part that has to hold, because a canvas nobody can draw on is a
+       broken shell rather than a cramped one. */
+    @media (max-width: 48rem) {
+        .workspace {
+            flex-wrap: wrap;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        .viewport {
+            order: -1;
+            flex: 1 1 100%;
+            min-block-size: 55vh;
+        }
+
+        .side {
+            flex: 1 1 100%;
+            inline-size: auto;
+            border-inline-start: 0;
+            border-block-start: 1px solid var(--line);
+        }
     }
 
     footer {

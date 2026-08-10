@@ -89,6 +89,56 @@ private slots:
         QVERIFY(!clip.pixelSelectionOp->drawDestination);
     }
 
+    void strokesFarOutsideTheSelectionAreNotPutOnTheClipboard()
+    {
+        Document document = Document::createDefault(QSize(96, 96));
+        document.background = Qt::transparent;
+        Layer &layer = document.layers.first();
+        Stroke inside;
+        inside.seed = 5;
+        inside.width = 3.0;
+        inside.points = {{QPointF(16, 16), 1.0}, {QPointF(24, 24), 1.0}};
+        layer.strokes.append(inside);
+        Stroke faraway;
+        faraway.seed = 6;
+        faraway.width = 3.0;
+        faraway.color = QColor(10, 200, 60);
+        faraway.points = {{QPointF(80, 80), 1.0}, {QPointF(90, 90), 1.0}};
+        layer.strokes.append(faraway);
+
+        const QImage mask =
+            rectangularSelectionMask(document.size, QRect(8, 8, 24, 24));
+        QString error;
+        const std::optional<SelectionClipboardCodec::Copy> copy =
+            SelectionClipboardCodec::makeCopy(
+                document, layer.id, mask, 0, &error);
+        QVERIFY2(copy.has_value(), qPrintable(error));
+
+        const std::optional<SelectionClipboardCodec::Pasted> pasted =
+            SelectionClipboardCodec::decode(copy->payload, &error);
+        QVERIFY2(pasted.has_value(), qPrintable(error));
+        // The stroke inside the selection plus the appended clip, and nothing
+        // of the stroke the selection never touched: it used to travel along,
+        // masked but fully recoverable by whoever dropped the clip.
+        QCOMPARE(pasted->layer.strokes.size(), 2);
+        QCOMPARE(pasted->layer.strokes.first().seed, inside.seed);
+        QCOMPARE(pasted->layer.strokes.last().mode, StrokeMode::PixelSelection);
+
+        // What the copy shows is unchanged: the dropped stroke never reached
+        // the selection on any frame, so clipping the whole layer and clipping
+        // the pruned one render the same.
+        Document clipped = document;
+        clipped.layers = {pasted->layer};
+        clipped.activeLayerId = pasted->layer.id;
+        Document unpruned = document;
+        unpruned.layers.first().strokes.append(pasted->layer.strokes.last());
+        for (const int frame : {0, 4, 17})
+        {
+            QCOMPARE(RenderEngine::render(clipped, frame),
+                RenderEngine::render(unpruned, frame));
+        }
+    }
+
     void fullCanvasSelectionSkipsClipOperation()
     {
         const Document document = clipboardSourceDocument();

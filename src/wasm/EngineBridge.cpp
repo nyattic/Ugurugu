@@ -6,6 +6,7 @@
 #include "document/Document.hpp"
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionOutline.hpp"
 #include "document/StrokeMask.hpp"
@@ -74,6 +75,9 @@ struct BridgeDocument
     QByteArray serialized;
     QByteArray exportBytes;
     QByteArray scratchText;
+    // Separate from scratchText so a caller can read a layer's name and its
+    // identity without the second call invalidating the first pointer.
+    QByteArray scratchLayerId;
     // Selection state, held exactly the way CanvasWidget holds it: a
     // Grayscale8 mask the size of the canvas plus the layer it was made on.
     // Strokes clip to it while it belongs to the layer being painted.
@@ -386,12 +390,10 @@ QImage referenceImage(BridgeDocument *handle, int frame, const QUuid &layerId)
         {
             return {};
         }
-        ugurugu::Layer isolated = *layer;
-        isolated.visible = true;
-        isolated.opacity = 1.0;
-        isolated.parentGroupId = {};
-        document.layers = {isolated};
-        return ugurugu::RenderEngine::render(document, frame);
+        return ugurugu::RenderEngine::render(
+            ugurugu::DocumentOperations::isolatedLayerDocument(
+                document, *layer),
+            frame);
     }
     if (handle->fillReference == ReferenceMarkedLayers)
     {
@@ -408,7 +410,9 @@ QImage referenceImage(BridgeDocument *handle, int frame, const QUuid &layerId)
                 continue;
             }
             hasVisibleReference =
-                hasVisibleReference || (layer.visible && layer.opacity > 0.0);
+                hasVisibleReference
+                || ugurugu::DocumentOperations::isLayerRenderable(
+                    document, layer);
         }
         if (!hasVisibleReference)
         {
@@ -489,7 +493,7 @@ int commitFrozenFill(BridgeDocument *handle, const QImage &coverage, int frame)
             QByteArrayLiteral("document has no paint layer"));
         return 0;
     }
-    if (!layer->visible || layer->opacity <= 0.0)
+    if (!ugurugu::DocumentOperations::isLayerRenderable(document, *layer))
     {
         setError(StatusLayerNotDrawable,
             QByteArrayLiteral("the active layer is hidden or fully "
@@ -550,7 +554,7 @@ extern "C"
     // instead of a missing-export TypeError somewhere later.
     EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
     {
-        return 3;
+        return 4;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
@@ -803,6 +807,15 @@ extern "C"
             setError(StatusLayerNotDrawable,
                 QByteArrayLiteral("the active layer opacity is 0%; raise it "
                                   "to draw"));
+            return 0;
+        }
+        // A layer inside a hidden group is just as invisible, and its own flags
+        // do not say so.
+        if (!ugurugu::DocumentOperations::isLayerRenderable(document, *target))
+        {
+            setError(StatusLayerNotDrawable,
+                QByteArrayLiteral("the group holding the active layer is "
+                                  "hidden; make it visible to draw"));
             return 0;
         }
         handle->strokeFrame = frame;
@@ -1334,6 +1347,22 @@ extern "C"
         }
         handle->scratchText = layer->name.toUtf8();
         return handle->scratchText.constData();
+    }
+
+    // The layer's stable identity. Indexes shift under every add, remove and
+    // move, so a shell that queues those operations has to name the layer it
+    // meant rather than the row it saw.
+    EMSCRIPTEN_KEEPALIVE const char *ugu_layer_id(
+        BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return "";
+        }
+        handle->scratchLayerId =
+            layer->id.toString(QUuid::WithoutBraces).toUtf8();
+        return handle->scratchLayerId.constData();
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_layer_kind(

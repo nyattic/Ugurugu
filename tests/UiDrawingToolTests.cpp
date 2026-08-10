@@ -718,6 +718,49 @@ private slots:
         QCOMPARE(rendered.pixelColor(20, 42), QColor(Qt::white));
     }
 
+    void aHiddenGroupRefusesStrokesOnTheLayersInside()
+    {
+        Document document = Document::createDefault(QSize(100, 100));
+        document.layers.clear();
+        Layer group;
+        group.kind = LayerKind::Group;
+        group.name = QStringLiteral("Group");
+        group.visible = false;
+        group.initialCanvasSize = document.size;
+        Layer child;
+        child.name = QStringLiteral("Child");
+        child.parentGroupId = group.id;
+        child.initialCanvasSize = document.size;
+        const QUuid childId = child.id;
+        document.layers.append(std::move(group));
+        document.layers.append(std::move(child));
+        document.activeLayerId = childId;
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        // The child is visible; the group holding it is not. The guard used to
+        // read the layer's own flag only, so the stroke was committed where
+        // nobody could see it and nothing said why.
+        QSignalSpy messages(&canvas, &CanvasWidget::interactionMessage);
+        const QPoint center = canvas.rect().center();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center - QPoint(40, 0));
+        QTest::mouseMove(&canvas, center + QPoint(40, 0), 5);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(40, 0));
+
+        const Layer *target = controller.document().layer(childId);
+        QVERIFY(target);
+        QVERIFY(target->strokes.isEmpty());
+        QCOMPARE(messages.size(), 1);
+    }
+
     void deactivationCancelsMouseAndTabletInput()
     {
         MainWindow window;

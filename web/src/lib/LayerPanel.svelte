@@ -14,13 +14,16 @@
     }: {
         layers: LayerInfo[];
         thumbnails: LayerThumbnail[];
-        onactivate: (index: number) => void;
-        onvisible: (index: number, visible: boolean) => void;
-        onopacity: (index: number, opacity: number) => void;
+        // Layers are named by their stable id, not by the row index the click
+        // happened to see: these commands are queued, and an earlier delete or
+        // move renumbers every row before the next one runs.
+        onactivate: (id: string) => void;
+        onvisible: (id: string, visible: boolean) => void;
+        onopacity: (id: string, opacity: number) => void;
         onadd: () => void;
-        onremove: (index: number) => void;
-        onrename: (index: number, name: string) => void;
-        onmove: (index: number, offset: number) => void;
+        onremove: (id: string) => void;
+        onrename: (id: string, name: string) => void;
+        onmove: (id: string, offset: number) => void;
     } = $props();
 
     const displayLayers = $derived([...layers].reverse());
@@ -29,7 +32,7 @@
     function rename(layer: LayerInfo) {
         const name = window.prompt("Layer name", layer.name);
         if (name !== null && name.trim() !== "" && name !== layer.name) {
-            onrename(layer.index, name.trim());
+            onrename(layer.id, name.trim());
         }
     }
 
@@ -72,21 +75,21 @@
                 id="layer-remove"
                 title="Delete layer"
                 disabled={!activeLayer || layers.length < 2}
-                onclick={() => activeLayer && onremove(activeLayer.index)}
+                onclick={() => activeLayer && onremove(activeLayer.id)}
             >
                 −
             </button>
             <button
                 title="Move up"
                 disabled={!activeLayer}
-                onclick={() => activeLayer && onmove(activeLayer.index, 1)}
+                onclick={() => activeLayer && onmove(activeLayer.id, 1)}
             >
                 ↑
             </button>
             <button
                 title="Move down"
                 disabled={!activeLayer}
-                onclick={() => activeLayer && onmove(activeLayer.index, -1)}
+                onclick={() => activeLayer && onmove(activeLayer.id, -1)}
             >
                 ↓
             </button>
@@ -104,7 +107,7 @@
                     checked={layer.visible}
                     onchange={(event) =>
                         onvisible(
-                            layer.index,
+                            layer.id,
                             (event.currentTarget as HTMLInputElement).checked,
                         )}
                 />
@@ -118,7 +121,7 @@
                 <button
                     class="name"
                     class:group={layer.group}
-                    onclick={() => onactivate(layer.index)}
+                    onclick={() => onactivate(layer.id)}
                     ondblclick={() => rename(layer)}
                 >
                     {layer.group ? "📁 " : ""}{layer.name}
@@ -145,7 +148,7 @@
                 onchange={(event) =>
                     activeLayer &&
                     onopacity(
-                        activeLayer.index,
+                        activeLayer.id,
                         Number(
                             (event.currentTarget as HTMLInputElement).value,
                         ) / 100,

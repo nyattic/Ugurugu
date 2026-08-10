@@ -26,6 +26,66 @@ void setCodecError(QString *error, const QString &message)
     }
 }
 
+bool maskCoversAnyPixelIn(const QImage &mask, const QRect &region)
+{
+    const QRect bounds = region.intersected(QRect(QPoint(), mask.size()));
+    for (int y = bounds.top(); y <= bounds.bottom(); ++y)
+    {
+        const uchar *line = mask.constScanLine(y);
+        for (int x = bounds.left(); x <= bounds.right(); ++x)
+        {
+            if (line[x] >= 128)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Leaves out the strokes that cannot put a pixel inside the selection at any
+// frame. The appended clip operation hides them, but hiding is not the same as
+// not carrying them: the payload used to be the whole source layer, so a copy
+// of a small selection published every stroke and every image asset of that
+// layer to the clipboard, recoverable by anyone who dropped the clip.
+//
+// Reach comes from the coverage plan, which folds in the wobble margin and
+// follows the later framebuffer operations, so a stroke that only enters the
+// selection after being moved there survives. Strokes are dropped only on
+// positive evidence — a non-empty reach that misses every selected pixel — so
+// an unanalysable layer keeps everything and stays correct through the clip.
+void dropStrokesOutsideSelection(
+    const Document &document, Layer &layer, const QImage &selectionMask)
+{
+    const RenderEngine::StrokeCoveragePlan plan =
+        RenderEngine::prepareStrokeCoverage(document, layer);
+    if (!plan.valid)
+    {
+        return;
+    }
+    QVector<Stroke> kept;
+    kept.reserve(layer.strokes.size());
+    for (int index = 0; index < layer.strokes.size(); ++index)
+    {
+        const Stroke &stroke = layer.strokes[index];
+        const bool paintsPixels = stroke.mode == StrokeMode::Paint
+                                  || stroke.mode == StrokeMode::Erase
+                                  || stroke.mode == StrokeMode::Fill
+                                  || stroke.mode == StrokeMode::Image;
+        if (paintsPixels)
+        {
+            const QRect reach = RenderEngine::conservativeStrokeCoverageBounds(
+                document, layer, index, plan);
+            if (!reach.isEmpty() && !maskCoversAnyPixelIn(selectionMask, reach))
+            {
+                continue;
+            }
+        }
+        kept.append(stroke);
+    }
+    layer.strokes = std::move(kept);
+}
+
 }
 
 QString SelectionClipboardCodec::mimeType()
@@ -89,6 +149,7 @@ std::optional<SelectionClipboardCodec::Copy> SelectionClipboardCodec::makeCopy(
     copy.clipToLayerBelow = false;
     copy.visible = true;
     copy.reference = false;
+    dropStrokesOutsideSelection(document, copy, selectionMask);
 
     QMap<QString, RasterAsset> rasterAssets;
     for (const Stroke &stroke : std::as_const(copy.strokes))

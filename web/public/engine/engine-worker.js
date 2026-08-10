@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 3;
+const expectedAbiVersion = 4;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -47,6 +47,9 @@ function layerList(engine) {
     for (let index = 0; index < count; index += 1) {
         layers.push({
             index,
+            // Stable across adds, removes and moves, unlike index. The shell
+            // resolves a queued layer operation back to a row through it.
+            id: engine.UTF8ToString(engine._ugu_layer_id(handle, index)),
             name: engine.UTF8ToString(
                 engine._ugu_layer_name(handle, index),
             ),

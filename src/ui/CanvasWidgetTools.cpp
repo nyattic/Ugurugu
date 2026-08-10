@@ -49,16 +49,8 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     }
     cancelSelectionTransformForBoundary(
         tr("The pending selection transform was canceled before drawing."));
-    if (!layer->visible)
+    if (!reportLayerAcceptsPaint(*layer))
     {
-        emit interactionMessage(
-            tr("The active layer is hidden. Make it visible to draw."));
-        return;
-    }
-    if (layer->opacity <= 0.0)
-    {
-        emit interactionMessage(
-            tr("The active layer opacity is 0%. Increase it to draw."));
         return;
     }
 

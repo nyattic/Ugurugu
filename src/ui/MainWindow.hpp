@@ -88,6 +88,8 @@ private:
     void clearRecoveryMetadata();
     void handleAutosaveWritten(
         bool success, quint64 revision, const QString &error);
+    void reportRecoveryFailure(const QString &reason);
+    void clearRecoveryFailure();
     void warnLegacyLayerHierarchy();
     void showShortcutChangeNoticeOnce();
     void writeAutosave();
@@ -172,6 +174,7 @@ private:
     QAction *m_mirrorCanvasAction = nullptr;
     QList<QAction *> m_shortcutActions;
     QLabel *m_pointerLabel = nullptr;
+    QLabel *m_recoveryFailureLabel = nullptr;
     QSlider *m_zoomSlider = nullptr;
     QSpinBox *m_zoomSpin = nullptr;
     QTimer m_autosaveTimer;
@@ -180,6 +183,7 @@ private:
     bool m_initialFitApplied = false;
     bool m_startupResolved = false;
     bool m_recoveryOwnedBySession = false;
+    bool m_recoveryFailureNoticeShown = false;
     QUuid m_recoverySessionId = QUuid::createUuid();
     quint64 m_recoveryRevision = 0;
     quint64 m_submittedRecoveryRevision = 0;

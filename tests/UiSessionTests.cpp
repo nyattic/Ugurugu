@@ -4,6 +4,8 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QMessageBox>
+
 namespace ugurugu
 {
 
@@ -276,6 +278,34 @@ private slots:
         QVERIFY2(snapshot.has_value(), qPrintable(error));
         QCOMPARE(
             static_cast<int>(snapshot->document.layers.size()), layerCount);
+    }
+
+    void aFailedRecoveryWriteIsShownToTheArtist()
+    {
+        EnvironmentVariableGuard environmentGuard(
+            QByteArrayLiteral("UGURUGU_RECOVERY_PATH"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        qputenv("UGURUGU_RECOVERY_PATH",
+            directory.filePath(QStringLiteral("recovery.ugu")).toUtf8());
+
+        MainWindow window;
+        QVERIFY(MainWindowTestAccess::recoveryFailureText(window).isEmpty());
+
+        // A failed snapshot only reached the log. Nothing in the window said
+        // the work had stopped being protected, so the artist kept drawing
+        // against an autosave that was not happening.
+        MainWindowTestAccess::deliverAutosaveCompletion(
+            window, false, 3, QStringLiteral("Disk is full."));
+        QVERIFY(!MainWindowTestAccess::recoveryFailureText(window).isEmpty());
+        QMessageBox *notice = window.findChild<QMessageBox *>(
+            QStringLiteral("recoveryFailureNotice"));
+        QVERIFY(notice);
+        notice->close();
+
+        MainWindowTestAccess::deliverAutosaveCompletion(
+            window, true, 4, QString());
+        QVERIFY(MainWindowTestAccess::recoveryFailureText(window).isEmpty());
     }
 
     void recoveryWriteReportsFailureWhenTheWriteThrows()

@@ -3,6 +3,7 @@
 
 #include "app/WatchedFutureResult.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
@@ -560,16 +561,8 @@ void CanvasWidget::applyBucketFill(const QPointF &documentPosition)
             tr("Click inside the selected area to fill it."));
         return;
     }
-    if (!layer->visible)
+    if (!reportLayerAcceptsPaint(*layer))
     {
-        emit interactionMessage(
-            tr("The active layer is hidden. Make it visible to draw."));
-        return;
-    }
-    if (layer->opacity <= 0.0)
-    {
-        emit interactionMessage(
-            tr("The active layer opacity is 0%. Increase it to draw."));
         return;
     }
 
@@ -642,11 +635,15 @@ void CanvasWidget::commitFrozenFill(const QImage &coverage)
 {
     const Document &document = m_controller->document();
     const Layer *layer = document.layer(document.activeLayerId);
-    if (!layer || layer->kind != LayerKind::Paint || !layer->visible
-        || layer->opacity <= 0.0 || coverage.size() != document.size
+    if (!layer || layer->kind != LayerKind::Paint
+        || coverage.size() != document.size
         || coverage.format() != QImage::Format_Grayscale8)
     {
         emit interactionMessage(tr("The fill could not be added."));
+        return;
+    }
+    if (!reportLayerAcceptsPaint(*layer))
+    {
         return;
     }
     const std::optional<PackedMaskRegion> packedCoverage =
@@ -1266,13 +1263,9 @@ QImage CanvasWidget::renderActiveLayerImage() const
     {
         return {};
     }
-    Document single = document;
-    single.background = Qt::transparent;
-    Layer visibleLayer = *layer;
-    visibleLayer.visible = true;
-    visibleLayer.opacity = 1.0;
-    single.layers = {visibleLayer};
-    return RenderEngine::render(single, m_currentFrame);
+    return RenderEngine::render(
+        DocumentOperations::isolatedLayerDocument(document, *layer),
+        m_currentFrame);
 }
 
 QImage CanvasWidget::renderReferenceLayersImage() const
@@ -1294,21 +1287,9 @@ QImage CanvasWidget::renderReferenceLayersImage() const
             layer.visible = false;
             continue;
         }
-        bool visible = layer.visible && layer.opacity > 0.0;
-        QUuid parentId = layer.parentGroupId;
-        for (int depth = 0;
-            !parentId.isNull() && depth < document.layers.size();
-            ++depth)
-        {
-            const Layer *parent = document.layer(parentId);
-            if (!parent || !parent->visible || parent->opacity <= 0.0)
-            {
-                visible = false;
-                break;
-            }
-            parentId = parent->parentGroupId;
-        }
-        hasVisibleReference = hasVisibleReference || visible;
+        hasVisibleReference =
+            hasVisibleReference
+            || DocumentOperations::isLayerRenderable(document, layer);
     }
     if (!hasVisibleReference)
     {

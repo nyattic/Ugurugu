@@ -1321,8 +1321,7 @@ void MainWindow::writeAutosave()
             m_controller.serializationSnapshot(&error);
         if (!snapshot)
         {
-            spdlog::warn(
-                "Skipped recovery snapshot: {}", error.toUtf8().constData());
+            reportRecoveryFailure(error);
             return;
         }
         m_recoveryWriter.submitWrite(std::move(*snapshot), metadata);
@@ -1336,11 +1335,10 @@ void MainWindow::handleAutosaveWritten(
 {
     if (!success)
     {
-        spdlog::warn("Failed to write recovery file {}: {}",
-            RecoveryStore::filePath().toUtf8().constData(),
-            error.toUtf8().constData());
+        reportRecoveryFailure(error);
         return;
     }
+    clearRecoveryFailure();
     m_recoveryRevision = std::max(m_recoveryRevision, revision);
     clearRecoveryMetadata();
     // Only the completion of the most recent submission may release the
@@ -1351,6 +1349,55 @@ void MainWindow::handleAutosaveWritten(
         && m_autosaveEditGeneration == m_submittedEditGeneration)
     {
         m_autosavePending = false;
+    }
+}
+
+// A recovery snapshot that never lands is the one failure the artist has no
+// other way to notice: the document still looks saved, the timer still runs,
+// and the work is unprotected until the next manual save. The log alone did
+// not reach anyone. The status bar keeps saying so for as long as it is true,
+// and the first failure of a streak also raises a modeless notice — modeless
+// because this arrives on a timer, not on something the artist just did.
+void MainWindow::reportRecoveryFailure(const QString &reason)
+{
+    spdlog::warn("Failed to write recovery file {}: {}",
+        RecoveryStore::filePath().toUtf8().constData(),
+        reason.toUtf8().constData());
+    const QString summary =
+        tr("Automatic recovery is not saving. Save your work yourself.");
+    if (m_recoveryFailureLabel)
+    {
+        m_recoveryFailureLabel->setText(summary);
+        m_recoveryFailureLabel->setToolTip(reason);
+        m_recoveryFailureLabel->setVisible(true);
+    }
+    statusBar()->showMessage(summary, 8000);
+    if (m_recoveryFailureNoticeShown)
+    {
+        return;
+    }
+    m_recoveryFailureNoticeShown = true;
+    auto *dialog = new QMessageBox(QMessageBox::Warning,
+        tr("Automatic recovery failed"),
+        tr("Ugurugu could not write its recovery snapshot, so unsaved work is "
+           "no longer protected against a crash. Save the project yourself.\n\n"
+           "%1")
+            .arg(reason),
+        QMessageBox::Ok,
+        this);
+    dialog->setObjectName(QStringLiteral("recoveryFailureNotice"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
+}
+
+void MainWindow::clearRecoveryFailure()
+{
+    m_recoveryFailureNoticeShown = false;
+    if (m_recoveryFailureLabel)
+    {
+        m_recoveryFailureLabel->clear();
+        m_recoveryFailureLabel->setToolTip(QString());
+        m_recoveryFailureLabel->setVisible(false);
     }
 }
 

@@ -505,6 +505,10 @@
 <context>
     <name>ugurugu::CanvasWidget</name>
     <message>
+        <source>The group holding the active layer is hidden. Make it visible to draw.</source>
+        <translation>アクティブレイヤーが入っているグループが非表示です。表示してから描画してください。</translation>
+    </message>
+    <message>
         <location filename="../src/ui/CanvasWidgetEvents.cpp" line="161"/>
         <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
         <translation>B ブラシ · E 消しゴム · Space 移動 · スクロール / Ctrl+Space ズーム · P 再生</translation>
@@ -2086,6 +2090,22 @@
 </context>
 <context>
     <name>ugurugu::MainWindow</name>
+    <message>
+        <source>Ugurugu could not write its recovery snapshot, so unsaved work is no longer protected against a crash. Save the project yourself.
+
+%1</source>
+        <translation>Ugurugu が復元スナップショットを書き込めなかったため、未保存の作業がクラッシュから保護されなくなりました。プロジェクトを手動で保存してください。
+
+%1</translation>
+    </message>
+    <message>
+        <source>Automatic recovery failed</source>
+        <translation>自動復元に失敗しました</translation>
+    </message>
+    <message>
+        <source>Automatic recovery is not saving. Save your work yourself.</source>
+        <translation>自動復元が保存できていません。手動で保存してください。</translation>
+    </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="279"/>
         <location filename="../src/ui/MainWindow.cpp" line="352"/>

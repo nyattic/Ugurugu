@@ -321,6 +321,7 @@ private:
     void notifyZoomChanged();
     QRect pointerUpdateRect() const;
     bool copySelectionToClipboard(SelectionClipboardCodec::Copy *outCopy);
+    bool reportLayerAcceptsPaint(const Layer &layer);
     bool selectionContains(const QPointF &documentPosition) const;
     void beginAreaSelection(const QPointF &documentPosition,
         SelectionCombine combine = SelectionCombine::Replace);

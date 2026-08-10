@@ -6,6 +6,7 @@
 #include "brush/BrushPreset.hpp"
 #include "brush/EraserPreset.hpp"
 #include "document/DocumentLimits.hpp"
+#include "document/DocumentOperations.hpp"
 #include "document/SelectionOperation.hpp"
 #include "document/SelectionVisibility.hpp"
 #include "document/StrokeMask.hpp"
@@ -564,6 +565,33 @@ void CanvasWidget::cancelSelectionTransform()
     resetSelectionTransformSession();
     setSelectionMoveMode(false);
     emit interactionMessage(tr("Selection transform canceled."));
+}
+
+// A layer inside a hidden group is as invisible as a hidden layer, and its own
+// flags do not say so. Without the hierarchy check the tools committed strokes
+// and fills nobody could see, exactly the failure the per-layer guard exists to
+// prevent.
+bool CanvasWidget::reportLayerAcceptsPaint(const Layer &layer)
+{
+    if (!layer.visible)
+    {
+        emit interactionMessage(
+            tr("The active layer is hidden. Make it visible to draw."));
+        return false;
+    }
+    if (layer.opacity <= 0.0)
+    {
+        emit interactionMessage(
+            tr("The active layer opacity is 0%. Increase it to draw."));
+        return false;
+    }
+    if (!DocumentOperations::isLayerRenderable(m_controller->document(), layer))
+    {
+        emit interactionMessage(tr("The group holding the active layer is "
+                                   "hidden. Make it visible to draw."));
+        return false;
+    }
+    return true;
 }
 
 bool CanvasWidget::copySelectionToClipboard(

@@ -294,6 +294,95 @@ function opaquePixelCount(page, selector) {
     }, selector);
 }
 
+// Columns of the document surface that carry brush ink, collapsed into runs.
+// Two separate strokes have to stay two runs: one run means something bridged
+// them, and a run that is only a few columns wide means a stroke lost the
+// points that came after its first.
+function inkColumnRuns(page) {
+    return page.evaluate((color) => {
+        const canvas = document.querySelector("#document-surface");
+        const data = canvas
+            .getContext("2d")
+            .getImageData(0, 0, canvas.width, canvas.height).data;
+        const runs = [];
+        let current = null;
+        for (let x = 0; x < canvas.width; x += 1) {
+            let inked = false;
+            for (let y = 0; y < canvas.height && !inked; y += 1) {
+                const index = (y * canvas.width + x) * 4;
+                inked =
+                    data[index] === color.red &&
+                    data[index + 1] === color.green &&
+                    data[index + 2] === color.blue;
+            }
+            if (inked) {
+                current ??= { start: x, end: x };
+                current.end = x;
+            } else if (current) {
+                runs.push(current);
+                current = null;
+            }
+        }
+        if (current) {
+            runs.push(current);
+        }
+        return runs;
+    }, brushColor);
+}
+
+// Delays every message on its way to the worker, which is how a document whose
+// renders cost more than the gap between two clicks behaves. Scenarios opt in
+// by setting window.__slowEngine to a number of milliseconds.
+function installWorkerDelay(page) {
+    return page.addInitScript(() => {
+        window.__sent = 0;
+        window.__received = 0;
+        const BaseWorker = window.Worker;
+        window.Worker = class extends BaseWorker {
+            constructor(...args) {
+                super(...args);
+                const post = this.postMessage.bind(this);
+                this.postMessage = (...rest) => {
+                    window.__sent += 1;
+                    if (window.__slowEngine) {
+                        setTimeout(() => post(...rest), window.__slowEngine);
+                        return undefined;
+                    }
+                    return post(...rest);
+                };
+                this.addEventListener("message", () => {
+                    window.__received += 1;
+                });
+            }
+        };
+    });
+}
+
+async function drainWorker(page) {
+    await page.evaluate(() => {
+        window.__slowEngine = 0;
+    });
+    await page.waitForFunction(
+        () => window.__sent === window.__received,
+        undefined,
+        { timeout: 120000 },
+    );
+}
+
+// A straight horizontal drag with no waiting in between, so the whole stroke is
+// handed to the shell before the engine has answered anything.
+async function quickStroke(page, box, fromFraction, toFraction, yFraction) {
+    const y = box.y + box.height * yFraction;
+    const from = box.x + box.width * fromFraction;
+    const to = box.x + box.width * toFraction;
+    await page.mouse.move(from, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step += 1) {
+        await page.mouse.move(from + ((to - from) * step) / 6, y);
+    }
+    await page.mouse.up();
+}
+
 const failures = [];
 
 function check(condition, label) {
@@ -1235,31 +1324,7 @@ const browser = await chromium.launch({
 {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.addInitScript(() => {
-        window.__sent = 0;
-        window.__received = 0;
-        const BaseWorker = window.Worker;
-        window.Worker = class extends BaseWorker {
-            constructor(...args) {
-                super(...args);
-                const post = this.postMessage.bind(this);
-                this.postMessage = (...rest) => {
-                    window.__sent += 1;
-                    if (window.__slowEngine) {
-                        setTimeout(
-                            () => post(...rest),
-                            window.__slowEngine,
-                        );
-                        return undefined;
-                    }
-                    return post(...rest);
-                };
-                this.addEventListener("message", () => {
-                    window.__received += 1;
-                });
-            }
-        };
-    });
+    await installWorkerDelay(page);
     await page.goto(origin);
     await waitForDocumentLoaded(page);
     await page.evaluate(() => {
@@ -1300,6 +1365,104 @@ const browser = await chromium.launch({
     check(true, "a missing engine artifact surfaces instead of hanging");
     await context.close();
     blocked.server.close();
+}
+
+// Scenario 12: two strokes drawn back to back, faster than the engine answers,
+// have to stay two strokes. The point batch used to be read when the queued
+// append finally ran rather than when the pointer produced it, so a second
+// stroke starting first either emptied the buffer under the open stroke or
+// handed it its own points.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installWorkerDelay(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+    await page.evaluate(() => {
+        window.__slowEngine = 400;
+    });
+
+    const box = await page.locator("#display-canvas").boundingBox();
+    await quickStroke(page, box, 0.1, 0.35, 0.5);
+    await quickStroke(page, box, 0.65, 0.9, 0.5);
+    await drainWorker(page);
+    await page.waitForFunction(
+        () => document.querySelector("#undo")?.disabled === false,
+        undefined,
+        { timeout: 30000 },
+    );
+
+    const runs = await inkColumnRuns(page);
+    check(
+        runs.length === 2,
+        `two quick strokes stay two strokes (${runs.length} ink run(s))`,
+    );
+    const widths = runs.map((run) => run.end - run.start);
+    check(
+        widths.every((width) => width > 20),
+        `neither quick stroke lost its tail (widths ${widths.join(", ")})`,
+    );
+    await context.close();
+}
+
+// Scenario 13: layer commands name the layer, not the row. Two deletes issued
+// before the first is answered used to remove the row index twice, taking a
+// second, unrelated layer with it.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installWorkerDelay(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    await page.locator("#layer-add").click();
+    await page.locator("#layer-add").click();
+    await page.waitForFunction(
+        () => document.querySelectorAll("aside ul li").length === 3,
+        undefined,
+        { timeout: 30000 },
+    );
+
+    await page.evaluate(() => {
+        window.__slowEngine = 400;
+    });
+    await page.locator("#layer-remove").click();
+    await page.locator("#layer-remove").click();
+    await drainWorker(page);
+    await page.waitForTimeout(250);
+
+    const remaining = await page.evaluate(
+        () => document.querySelectorAll("aside ul li").length,
+    );
+    check(
+        remaining === 2,
+        `a repeated delete removes one layer, not two (${remaining} left)`,
+    );
+    await context.close();
+}
+
+// Scenario 14: a phone-sized window still has a canvas to draw on. The fixed
+// tool and panel columns are wider than the screen on their own, and the
+// canvas column was the one flex took the difference out of — it came out zero
+// wide, so nothing could be drawn at all.
+{
+    const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+    });
+    const page = await context.newPage();
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    const box = await page.locator("#display-canvas").boundingBox();
+    check(
+        box.width >= 200 && box.height >= 200,
+        `phone-sized canvas is ${Math.round(box.width)}x` +
+            `${Math.round(box.height)}`,
+    );
+    await drawStroke(page);
+    const drawn = await countBrushPixels(page);
+    check(drawn > 0, `a phone-sized canvas takes a stroke (${drawn} px)`);
+    await context.close();
 }
 
 await browser.close();

@@ -278,6 +278,8 @@
 <style>
     .options {
         display: flex;
+        /* Never squeezed: the canvas column is the one that flexes. */
+        flex: none;
         flex-direction: column;
         gap: 0.85rem;
         inline-size: 13.5rem;

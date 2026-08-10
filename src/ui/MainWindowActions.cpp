@@ -1079,6 +1079,12 @@ void MainWindow::createToolBars()
 
 void MainWindow::createStatusBar()
 {
+    m_recoveryFailureLabel = new QLabel(this);
+    m_recoveryFailureLabel->setObjectName(
+        QStringLiteral("recoveryFailureLabel"));
+    m_recoveryFailureLabel->setVisible(false);
+    statusBar()->addPermanentWidget(m_recoveryFailureLabel);
+
     m_pointerLabel = new QLabel(this);
     m_pointerLabel->setMinimumWidth(150);
     statusBar()->addPermanentWidget(m_pointerLabel);

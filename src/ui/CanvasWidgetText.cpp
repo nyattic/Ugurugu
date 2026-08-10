@@ -202,16 +202,8 @@ bool CanvasWidget::applyTextPlacement()
             tr("Groups can't be painted on. Select a paint layer to draw."));
         return false;
     }
-    if (!layer->visible)
+    if (!reportLayerAcceptsPaint(*layer))
     {
-        emit interactionMessage(
-            tr("The active layer is hidden. Make it visible to draw."));
-        return false;
-    }
-    if (layer->opacity <= 0.0)
-    {
-        emit interactionMessage(
-            tr("The active layer opacity is 0%. Increase it to draw."));
         return false;
     }
 
