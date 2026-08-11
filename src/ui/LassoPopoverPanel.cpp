@@ -7,8 +7,10 @@
 #include "ui/SelectionShapeButton.hpp"
 
 #include <QButtonGroup>
+#include <QComboBox>
 #include <QLabel>
 #include <QRadioButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <array>
@@ -116,6 +118,48 @@ LassoPopoverPanel::LassoPopoverPanel(CanvasWidget *canvas, QWidget *parent)
                     group->button(static_cast<int>(shape)))
             {
                 button->setChecked(true);
+            }
+        });
+
+    auto *transformLabel = new QLabel(tr("TRANSFORM"), this);
+    transformLabel->setProperty("fieldLabel", true);
+    layout->addWidget(transformLabel);
+
+    auto *sampling = new QComboBox(this);
+    sampling->setObjectName(QStringLiteral("selectionTransformSamplingCombo"));
+    sampling->setAccessibleName(tr("Transform method"));
+    sampling->setToolTip(
+        tr("Smooth interpolates neighboring pixels during selection "
+           "transforms. Pixel-based skips interpolation without removing "
+           "existing transparency, but can create stepped edges."));
+    sampling->addItem(tr("Smooth"), static_cast<int>(SamplingMode::Smooth));
+    sampling->addItem(
+        tr("Pixel-based"), static_cast<int>(SamplingMode::Nearest));
+    sampling->setCurrentIndex(sampling->findData(
+        static_cast<int>(canvas->selectionTransformSampling())));
+    sampling->setMinimumWidth(48);
+    sampling->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    transformLabel->setBuddy(sampling);
+    layout->addWidget(sampling);
+
+    connect(sampling,
+        &QComboBox::currentIndexChanged,
+        canvas,
+        [canvas, sampling](int)
+        {
+            canvas->setSelectionTransformSampling(
+                static_cast<SamplingMode>(sampling->currentData().toInt()));
+        });
+    connect(canvas,
+        &CanvasWidget::selectionTransformSamplingChanged,
+        this,
+        [sampling](SamplingMode mode)
+        {
+            const int index = sampling->findData(static_cast<int>(mode));
+            if (index >= 0)
+            {
+                const QSignalBlocker blocker(sampling);
+                sampling->setCurrentIndex(index);
             }
         });
 }

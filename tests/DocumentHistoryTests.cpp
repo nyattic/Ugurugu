@@ -1298,6 +1298,12 @@ private slots:
         QVERIFY(
             !controller.transformSelection(layerId, {strokeId}, perspective));
         QCOMPARE(controller.undoStack()->count(), 1);
+        QVERIFY(!controller.transformSelection(layerId,
+            {strokeId},
+            QTransform::fromTranslate(1.0, 0.0),
+            {},
+            static_cast<SamplingMode>(99)));
+        QCOMPARE(controller.undoStack()->count(), 1);
         QCOMPARE(controller.document().layer(layerId)->strokes.first().points,
             transformed.points);
 

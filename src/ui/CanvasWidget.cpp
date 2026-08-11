@@ -272,6 +272,11 @@ bool CanvasWidget::brushAntialiasing() const
     return m_brushAntialiasing;
 }
 
+bool CanvasWidget::tabletPressureEnabled() const
+{
+    return m_tabletPressureEnabled;
+}
+
 bool CanvasWidget::isWobbleAnimationEnabled() const
 {
     return m_wobbleAnimationEnabled;
@@ -345,6 +350,11 @@ CanvasWidget::SelectionShape CanvasWidget::selectionShape() const
 CanvasWidget::LassoMode CanvasWidget::lassoMode() const
 {
     return m_lassoMode;
+}
+
+SamplingMode CanvasWidget::selectionTransformSampling() const
+{
+    return m_selectionTransformSampling;
 }
 
 bool CanvasWidget::isAnimating() const
@@ -545,7 +555,8 @@ bool CanvasWidget::applySelectionTransform()
     const bool applied = m_controller->transformSelection(session.layer,
         session.strokeIds,
         session.transform,
-        session.sourceMask);
+        session.sourceMask,
+        session.previewOperation.sampling);
     if (!applied)
     {
         m_selectionTransformSession = session;
@@ -1123,6 +1134,16 @@ void CanvasWidget::setBrushAntialiasing(bool antialiasing)
     requestDisplayUpdate();
 }
 
+void CanvasWidget::setTabletPressureEnabled(bool enabled)
+{
+    if (m_tabletPressureEnabled == enabled)
+    {
+        return;
+    }
+    m_tabletPressureEnabled = enabled;
+    emit tabletPressureEnabledChanged(enabled);
+}
+
 void CanvasWidget::setWobbleAnimationEnabled(bool enabled)
 {
     if (m_wobbleAnimationEnabled == enabled)
@@ -1288,6 +1309,26 @@ void CanvasWidget::setLassoMode(LassoMode mode)
     }
     m_lassoMode = mode;
     emit lassoModeChanged(mode);
+}
+
+void CanvasWidget::setSelectionTransformSampling(SamplingMode sampling)
+{
+    if ((sampling != SamplingMode::Smooth && sampling != SamplingMode::Nearest)
+        || m_selectionTransformSampling == sampling)
+    {
+        return;
+    }
+    m_selectionTransformSampling = sampling;
+    if (m_selectionTransformSession.active)
+    {
+        m_selectionTransformSession.previewOperation.sampling =
+            selectionSamplingForTransform(
+                m_selectionTransformSession.transform);
+        emit selectionTransformSessionChanged(
+            true, hasPendingSelectionTransform());
+        requestDisplayUpdate();
+    }
+    emit selectionTransformSamplingChanged(sampling);
 }
 
 void CanvasWidget::setAnimating(bool animating)

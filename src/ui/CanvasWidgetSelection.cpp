@@ -798,7 +798,7 @@ bool CanvasWidget::setPendingSelectionTransform(const QTransform &transform)
     m_selectionTransformSession.transform = transform;
     m_selectionTransformSession.previewOperation.transform = transform;
     m_selectionTransformSession.previewOperation.sampling =
-        samplingForSelectionTransform(transform);
+        selectionSamplingForTransform(transform);
     emit selectionTransformSessionChanged(true, !fuzzyIdentity(transform));
     updateSelectionActionBar();
     requestDisplayUpdate();
@@ -813,8 +813,16 @@ bool CanvasWidget::isValidSelectionTransform(const QTransform &transform) const
     }
     PixelSelectionOp operation = m_selectionTransformSession.previewOperation;
     operation.transform = transform;
-    operation.sampling = samplingForSelectionTransform(transform);
+    operation.sampling = selectionSamplingForTransform(transform);
     return isValidPixelSelectionOp(operation);
+}
+
+SamplingMode CanvasWidget::selectionSamplingForTransform(
+    const QTransform &transform) const
+{
+    return m_selectionTransformSampling == SamplingMode::Nearest
+               ? SamplingMode::Nearest
+               : samplingForSelectionTransform(transform);
 }
 
 void CanvasWidget::resetSelectionTransformSession()

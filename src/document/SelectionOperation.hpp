@@ -52,6 +52,13 @@ std::optional<PixelSelectionOp> makePixelSelectionOp(
     bool clearSource,
     bool drawDestination);
 
+std::optional<PixelSelectionOp> makePixelSelectionOp(
+    const QImage &selectionMask,
+    const QTransform &transform,
+    bool clearSource,
+    bool drawDestination,
+    SamplingMode sampling);
+
 bool isValidPixelSelectionOp(const PixelSelectionOp &operation);
 
 QImage transformedSelectionSupport(const QImage &selectionMask,

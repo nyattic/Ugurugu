@@ -9,6 +9,7 @@
 #include "ui/EraserPresetButton.hpp"
 #include "ui/ResponsiveGrid.hpp"
 #include "ui/StrokeStabilizationRow.hpp"
+#include "ui/TabletPressureRow.hpp"
 
 #include <QButtonGroup>
 #include <QVBoxLayout>
@@ -21,7 +22,7 @@ EraserPopoverPanel::EraserPopoverPanel(CanvasWidget *canvas, QWidget *parent)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(10);
+    layout->setSpacing(8);
 
     auto *presetGrid = new ResponsiveGrid(82, 3, 6, this);
     presetGrid->setObjectName(QStringLiteral("eraserPresetGrid"));
@@ -62,6 +63,8 @@ EraserPopoverPanel::EraserPopoverPanel(CanvasWidget *canvas, QWidget *parent)
         BrushSizeRow::Target::Eraser,
         QStringLiteral("eraserSize"),
         this));
+    layout->addWidget(new TabletPressureRow(
+        canvas, QStringLiteral("eraserTabletPressure"), this));
     layout->addWidget(new StrokeStabilizationRow(canvas,
         StrokeStabilizationRow::Target::Eraser,
         QStringLiteral("eraserStabilization"),

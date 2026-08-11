@@ -24,6 +24,16 @@ namespace ugurugu
 
 using namespace canvas_detail;
 
+namespace
+{
+
+qreal inputPressure(qreal pressure, bool enabled)
+{
+    return enabled ? std::clamp(pressure, 0.05, 1.0) : 1.0;
+}
+
+}
+
 void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     qreal pressure,
     bool tabletEraser,
@@ -66,6 +76,7 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     }
     m_activeStroke = Stroke();
     m_activeStroke.seed = QRandomGenerator::global()->generate64();
+    m_activeStrokeUsesTabletPressure = m_tabletPressureEnabled;
     const bool erasing = tabletEraser || m_tool == Tool::Eraser;
     m_activeStroke.mode = erasing ? StrokeMode::Erase : StrokeMode::Paint;
     m_activeStroke.color = m_brushColor;
@@ -83,7 +94,8 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
         erasing ? eraserStabilization() : brushStabilization());
     const QPointF position = m_strokeStabilizer.begin(
         clampedDocumentPosition(documentPosition), timestamp);
-    m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
+    m_activeStroke.points.append(
+        {position, inputPressure(pressure, m_activeStrokeUsesTabletPressure)});
     m_activeStrokeLayer = document.activeLayerId;
     m_drawing = true;
     invalidateActiveStrokePreview();
@@ -112,7 +124,8 @@ void CanvasWidget::continueStroke(
     {
         return;
     }
-    m_activeStroke.points.append({position, std::clamp(pressure, 0.05, 1.0)});
+    m_activeStroke.points.append(
+        {position, inputPressure(pressure, m_activeStrokeUsesTabletPressure)});
     invalidateActiveStrokePreview();
     // Resolving the preview here instead of in paintEvent costs nothing extra
     // (paintEvent reuses the resolved image) and yields the exact changed

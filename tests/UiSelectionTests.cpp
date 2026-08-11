@@ -3492,6 +3492,95 @@ private slots:
             DocumentSerializer::toJson(controller.document()), beforeTransform);
     }
 
+    void appliesChosenSelectionTransformSampling_data()
+    {
+        QTest::addColumn<int>("samplingValue");
+        QTest::newRow("smooth") << static_cast<int>(SamplingMode::Smooth);
+        QTest::newRow("pixel-based") << static_cast<int>(SamplingMode::Nearest);
+    }
+
+    void appliesChosenSelectionTransformSampling()
+    {
+        QFETCH(int, samplingValue);
+        const SamplingMode sampling = static_cast<SamplingMode>(samplingValue);
+
+        Document document = Document::createDefault(QSize(96, 96));
+        document.background = Qt::transparent;
+        document.wobbleAmount = 0.0;
+        Stroke source;
+        source.color = QColor(35, 105, 220);
+        source.width = 28.0;
+        source.points = {
+            {QPointF(32.0, 48.0), 1.0}, {QPointF(64.0, 48.0), 1.0}};
+        source.brush.tipShape = BrushTipShape::Square;
+        source.brush.sizeDynamics = 0.0;
+        source.brush.antialiasing = false;
+        document.layers.first().strokes.append(source);
+
+        DocumentController controller;
+        controller.loadDocument(document);
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QCOMPARE(canvas.selectionTransformSampling(), SamplingMode::Smooth);
+
+        canvas.selectAll();
+        QTRY_VERIFY(canvas.hasTransformableSelection());
+        QVERIFY(canvas.rotateSelection(17.0));
+        QVERIFY(canvas.hasPendingSelectionTransform());
+        canvas.setSelectionTransformSampling(sampling);
+        QCOMPARE(canvas.selectionTransformSampling(), sampling);
+
+        const Document pending = canvas.documentWithPendingSelectionTransform();
+        const Stroke &pendingOperation = pending.layers.first().strokes.last();
+        QVERIFY(pendingOperation.pixelSelectionOp.has_value());
+        QCOMPARE(pendingOperation.pixelSelectionOp->sampling, sampling);
+        const QImage pendingFrame = RenderEngine::render(pending, 0);
+        QVERIFY(!pendingFrame.isNull());
+
+        QVERIFY(canvas.applySelectionTransform());
+        const Stroke &committedOperation =
+            controller.document().layers.first().strokes.last();
+        QVERIFY(committedOperation.pixelSelectionOp.has_value());
+        QCOMPARE(committedOperation.pixelSelectionOp->sampling, sampling);
+        const QImage committedFrame =
+            RenderEngine::render(controller.document(), 0);
+        QCOMPARE(committedFrame, pendingFrame);
+
+        int partialAlphaPixels = 0;
+        for (int y = 0; y < committedFrame.height(); ++y)
+        {
+            const auto *line =
+                reinterpret_cast<const QRgb *>(committedFrame.constScanLine(y));
+            for (int x = 0; x < committedFrame.width(); ++x)
+            {
+                const int alpha = qAlpha(line[x]);
+                partialAlphaPixels += alpha > 0 && alpha < 255 ? 1 : 0;
+            }
+        }
+        if (sampling == SamplingMode::Smooth)
+        {
+            QVERIFY(partialAlphaPixels > 0);
+        }
+        else
+        {
+            QCOMPARE(partialAlphaPixels, 0);
+        }
+
+        controller.undoStack()->undo();
+        QCOMPARE(canvas.selectionTransformSampling(), sampling);
+        controller.undoStack()->redo();
+        QCOMPARE(canvas.selectionTransformSampling(), sampling);
+        QCOMPARE(controller.document()
+                     .layers.first()
+                     .strokes.last()
+                     .pixelSelectionOp->sampling,
+            sampling);
+    }
+
     void sequentialSmoothSelectionTransformLeavesNoSourceFringe()
     {
         Document document = Document::createDefault(QSize(160, 100));

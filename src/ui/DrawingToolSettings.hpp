@@ -30,9 +30,12 @@ constexpr auto activeColorKey = "drawingTools/brush/color";
 constexpr auto colorHistoryKey = "brush/colorHistory";
 constexpr auto recentColorsKey = "brush/recentColors";
 constexpr auto antialiasingKey = "drawingTools/brush/antialiasing";
+constexpr auto tabletPressureEnabledKey = "drawingTools/tablet/pressureEnabled";
 constexpr auto eraserWidthKey = "drawingTools/eraser/width";
 constexpr auto eraserStabilizationKey = "drawingTools/eraser/stabilization";
 constexpr auto selectionShapeKey = "drawingTools/selection/shape";
+constexpr auto selectionTransformSamplingKey =
+    "drawingTools/selection/transformSampling";
 constexpr auto lassoModeKey = "drawingTools/lasso/mode";
 constexpr auto wandReferenceKey = "drawingTools/wand/reference";
 constexpr auto fillComparisonKey = "drawingTools/fill/comparison";
@@ -68,6 +71,10 @@ std::optional<CanvasWidget::Tool> toolFromSettingsId(const QString &id);
 
 QString selectionShapeSettingsId(CanvasWidget::SelectionShape shape);
 std::optional<CanvasWidget::SelectionShape> selectionShapeFromSettingsId(
+    const QString &id);
+
+QString selectionTransformSamplingSettingsId(SamplingMode sampling);
+std::optional<SamplingMode> selectionTransformSamplingFromSettingsId(
     const QString &id);
 
 QString lassoModeSettingsId(CanvasWidget::LassoMode mode);

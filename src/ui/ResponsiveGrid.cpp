@@ -45,7 +45,7 @@ void ResponsiveGrid::addWidget(QWidget *widget)
 QSize ResponsiveGrid::minimumSizeHint() const
 {
     const QMargins margins = contentsMargins();
-    return QSize(m_minimumColumnWidth + margins.left() + margins.right(), 0);
+    return QSize(margins.left() + margins.right(), 0);
 }
 
 void ResponsiveGrid::resizeEvent(QResizeEvent *event)

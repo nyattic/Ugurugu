@@ -9,6 +9,7 @@
 #include "ui/CanvasWidget.hpp"
 #include "ui/ResponsiveGrid.hpp"
 #include "ui/StrokeStabilizationRow.hpp"
+#include "ui/TabletPressureRow.hpp"
 
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -41,7 +42,7 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(10);
+    layout->setSpacing(8);
 
     auto *tabGrid = new ResponsiveGrid(72, 4, 4, this);
     tabGrid->setObjectName(QStringLiteral("brushCategoryGrid"));
@@ -65,7 +66,7 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
         m_tabGroup->addButton(tab, categoryIndex);
         tabGrid->addWidget(tab);
 
-        auto *presetGrid = new ResponsiveGrid(124, 2, 6, m_stack);
+        auto *presetGrid = new ResponsiveGrid(124, 2, 4, m_stack);
         presetGrid->setObjectName(QStringLiteral("brushPresetGrid"));
         for (const BrushPreset &preset : BrushPresetCatalog::builtIns())
         {
@@ -74,6 +75,7 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
                 continue;
             }
             auto *button = new BrushPresetButton(preset, presetGrid);
+            button->setTabletPressureEnabled(canvas->tabletPressureEnabled());
             presetGroup->addButton(button);
             presetGrid->addWidget(button);
             connect(button,
@@ -98,6 +100,8 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
         BrushSizeRow::Target::Brush,
         QStringLiteral("brushSize"),
         this));
+    layout->addWidget(new TabletPressureRow(
+        canvas, QStringLiteral("brushTabletPressure"), this));
     layout->addWidget(new StrokeStabilizationRow(canvas,
         StrokeStabilizationRow::Target::Brush,
         QStringLiteral("brushStabilization"),
@@ -144,6 +148,16 @@ BrushPopoverPanel::BrushPopoverPanel(CanvasWidget *canvas, QWidget *parent)
         this,
         &BrushPopoverPanel::advancePreviews);
 
+    connect(canvas,
+        &CanvasWidget::tabletPressureEnabledChanged,
+        this,
+        [this](bool enabled)
+        {
+            for (BrushPresetButton *button : m_presetButtons)
+            {
+                button->setTabletPressureEnabled(enabled);
+            }
+        });
     connect(canvas,
         &CanvasWidget::brushPresetChanged,
         this,

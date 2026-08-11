@@ -89,10 +89,17 @@ QString visibilityCacheKey(const Stroke &stroke)
 std::optional<Stroke> selectionOperationStroke(const QImage &selectionMask,
     const QTransform &transform,
     bool clearSource,
-    bool drawDestination)
+    bool drawDestination,
+    std::optional<SamplingMode> sampling = std::nullopt)
 {
-    const std::optional<PixelSelectionOp> operation = makePixelSelectionOp(
-        selectionMask, transform, clearSource, drawDestination);
+    const std::optional<PixelSelectionOp> operation =
+        sampling ? makePixelSelectionOp(selectionMask,
+                       transform,
+                       clearSource,
+                       drawDestination,
+                       *sampling)
+                 : makePixelSelectionOp(
+                       selectionMask, transform, clearSource, drawDestination);
     if (!operation)
     {
         return std::nullopt;
@@ -359,6 +366,19 @@ bool DocumentController::transformSelection(const QUuid &layerId,
     const QTransform &transform,
     const QImage &selectionMask)
 {
+    return transformSelection(layerId,
+        strokeIds,
+        transform,
+        selectionMask,
+        samplingForSelectionTransform(transform));
+}
+
+bool DocumentController::transformSelection(const QUuid &layerId,
+    const QVector<QUuid> &strokeIds,
+    const QTransform &transform,
+    const QImage &selectionMask,
+    SamplingMode sampling)
+{
     const bool finite =
         std::isfinite(transform.m11()) && std::isfinite(transform.m12())
         && std::isfinite(transform.m13()) && std::isfinite(transform.m21())
@@ -367,7 +387,8 @@ bool DocumentController::transformSelection(const QUuid &layerId,
         && std::isfinite(transform.m33());
     const qreal determinant = transform.determinant();
     const qreal widthScale = std::sqrt(std::abs(determinant));
-    if (!finite || !transform.isAffine() || transform.isIdentity()
+    if ((sampling != SamplingMode::Smooth && sampling != SamplingMode::Nearest)
+        || !finite || !transform.isAffine() || transform.isIdentity()
         || !std::isfinite(widthScale) || widthScale <= 0.0)
     {
         return rejectHistoryMutation();
@@ -377,7 +398,8 @@ bool DocumentController::transformSelection(const QUuid &layerId,
         transform,
         widthScale,
         tr("Transform selection"),
-        selectionMask);
+        selectionMask,
+        sampling);
 }
 
 bool DocumentController::duplicateStrokes(const QUuid &layerId,
@@ -730,7 +752,8 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
     const QTransform &transform,
     qreal widthScale,
     const QString &text,
-    const QImage &selectionMask)
+    const QImage &selectionMask,
+    std::optional<SamplingMode> sampling)
 {
     const Document &current = document();
     const Layer *layer = current.layer(layerId);
@@ -780,8 +803,8 @@ bool DocumentController::transformStrokes(const QUuid &layerId,
         {
             return rejectHistoryMutation();
         }
-        const std::optional<Stroke> operation =
-            selectionOperationStroke(selectionMask, transform, true, true);
+        const std::optional<Stroke> operation = selectionOperationStroke(
+            selectionMask, transform, true, true, sampling);
         if (!operation || !operation->pixelSelectionOp)
         {
             return rejectHistoryMutation();

@@ -1921,6 +1921,31 @@
         <source>Drag to fit an oval area</source>
         <translation>楕円の領域に合わせてドラッグ</translation>
     </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="124"/>
+        <source>TRANSFORM</source>
+        <translation>変形</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="130"/>
+        <source>Transform method</source>
+        <translation>変形方式</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="132"/>
+        <source>Smooth interpolates neighboring pixels during selection transforms. Pixel-based skips interpolation without removing existing transparency, but can create stepped edges.</source>
+        <translation>「滑らか」は選択範囲の変形時に隣接するピクセルを補間します。「ピクセル単位」は既存の透明度を維持したまま補間を省略しますが、縁が階段状になることがあります。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="135"/>
+        <source>Smooth</source>
+        <translation>滑らか</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="137"/>
+        <source>Pixel-based</source>
+        <translation>ピクセル単位</translation>
+    </message>
 </context>
 <context>
     <name>ugurugu::LayerDock</name>
@@ -2623,6 +2648,26 @@ The recovery file was not deleted. You can find it at:
         <translation>選択範囲の変形をキャンセル（Esc）</translation>
     </message>
     <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="456"/>
+        <source>Smooth</source>
+        <translation>滑らか</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="461"/>
+        <source>Interpolate neighboring pixels during selection transforms</source>
+        <translation>選択範囲の変形時に隣接するピクセルを補間します</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="467"/>
+        <source>Pixel-based</source>
+        <translation>ピクセル単位</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="473"/>
+        <source>Skip interpolation without removing existing transparency; edges may look stepped</source>
+        <translation>既存の透明度を維持したまま補間を省略します。縁が階段状に見えることがあります</translation>
+    </message>
+    <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="452"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="456"/>
         <source>Delete selected content</source>
@@ -2802,6 +2847,11 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/MainWindowActions.cpp" line="888"/>
         <source>&amp;Selection</source>
         <translation>選択範囲(&amp;S)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="991"/>
+        <source>Transform method</source>
+        <translation>変形方式</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="912"/>
@@ -3910,6 +3960,24 @@ Alt+click does the same from the brush, eraser or paint bucket.</source>
         <location filename="../src/ui/WobblePreview.cpp" line="26"/>
         <source>Live preview of the wobble strength</source>
         <translation>現在のウォブルの強さをリアルタイムで表示します</translation>
+    </message>
+</context>
+<context>
+    <name>ugurugu::TabletPressureRow</name>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="24"/>
+        <source>PEN PRESSURE</source>
+        <translation>筆圧を反映</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="32"/>
+        <source>Vary stroke size and opacity with tablet pressure</source>
+        <translation>タブレットの筆圧に応じて線のサイズと不透明度を変えます</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="33"/>
+        <source>Use tablet pressure</source>
+        <translation>タブレットの筆圧を反映</translation>
     </message>
 </context>
 </TS>

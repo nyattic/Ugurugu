@@ -1921,6 +1921,31 @@
         <source>Drag to fit an oval area</source>
         <translation>타원 영역에 맞게 드래그</translation>
     </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="124"/>
+        <source>TRANSFORM</source>
+        <translation>변형</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="130"/>
+        <source>Transform method</source>
+        <translation>변형 방식</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="132"/>
+        <source>Smooth interpolates neighboring pixels during selection transforms. Pixel-based skips interpolation without removing existing transparency, but can create stepped edges.</source>
+        <translation>부드럽게는 선택 영역을 변형할 때 인접한 픽셀을 보간합니다. 픽셀 단위는 기존 투명도를 유지한 채 보간을 생략하지만, 가장자리가 계단처럼 보일 수 있습니다.</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="135"/>
+        <source>Smooth</source>
+        <translation>부드럽게</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/LassoPopoverPanel.cpp" line="137"/>
+        <source>Pixel-based</source>
+        <translation>픽셀 단위</translation>
+    </message>
 </context>
 <context>
     <name>ugurugu::LayerDock</name>
@@ -2623,6 +2648,26 @@ The recovery file was not deleted. You can find it at:
         <translation>선택 영역 변형 취소(Esc)</translation>
     </message>
     <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="456"/>
+        <source>Smooth</source>
+        <translation>부드럽게</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="461"/>
+        <source>Interpolate neighboring pixels during selection transforms</source>
+        <translation>선택 영역을 변형할 때 인접한 픽셀을 보간합니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="467"/>
+        <source>Pixel-based</source>
+        <translation>픽셀 단위</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="473"/>
+        <source>Skip interpolation without removing existing transparency; edges may look stepped</source>
+        <translation>기존 투명도를 유지한 채 보간을 생략합니다. 가장자리가 계단처럼 보일 수 있습니다</translation>
+    </message>
+    <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="452"/>
         <location filename="../src/ui/MainWindowActions.cpp" line="456"/>
         <source>Delete selected content</source>
@@ -2802,6 +2847,11 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/MainWindowActions.cpp" line="888"/>
         <source>&amp;Selection</source>
         <translation>선택(&amp;S)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="991"/>
+        <source>Transform method</source>
+        <translation>변형 방식</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="912"/>
@@ -3910,6 +3960,24 @@ Alt+click does the same from the brush, eraser or paint bucket.</source>
         <location filename="../src/ui/WobblePreview.cpp" line="26"/>
         <source>Live preview of the wobble strength</source>
         <translation>현재 우글거림 강도를 실시간으로 보여줍니다</translation>
+    </message>
+</context>
+<context>
+    <name>ugurugu::TabletPressureRow</name>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="24"/>
+        <source>PEN PRESSURE</source>
+        <translation>필압 반영</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="32"/>
+        <source>Vary stroke size and opacity with tablet pressure</source>
+        <translation>필압에 따라 선의 크기와 불투명도를 바꿉니다</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TabletPressureRow.cpp" line="33"/>
+        <source>Use tablet pressure</source>
+        <translation>필압 반영</translation>
     </message>
 </context>
 </TS>

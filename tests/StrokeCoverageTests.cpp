@@ -556,6 +556,122 @@ private slots:
         }
     }
 
+    void keepsSelectionSamplingAlphaSemantics()
+    {
+        const QSize canvasSize(64, 64);
+        const QRect canvasBounds(QPoint(), canvasSize);
+        const QRect sourceBounds(20, 20, 9, 9);
+        QImage source(sourceBounds.size(), QImage::Format_ARGB32_Premultiplied);
+        source.fill(Qt::transparent);
+        QImage selection(canvasSize, QImage::Format_Grayscale8);
+        selection.fill(0);
+        for (int y = 0; y < source.height(); ++y)
+        {
+            auto *sourceLine = reinterpret_cast<QRgb *>(source.scanLine(y));
+            uchar *selectionLine = selection.scanLine(y + sourceBounds.top());
+            for (int x = 0; x < source.width(); ++x)
+            {
+                if (std::abs(x - 4) + std::abs(y - 4) > 4)
+                {
+                    continue;
+                }
+                sourceLine[x] = qRgba(30, 120, 220, 255);
+                selectionLine[x + sourceBounds.left()] = 255;
+            }
+        }
+
+        const QPointF center = QRectF(sourceBounds).center();
+        QTransform rotation;
+        rotation.translate(center.x(), center.y());
+        rotation.rotate(27.0);
+        rotation.translate(-center.x(), -center.y());
+        for (const SamplingMode sampling :
+            {SamplingMode::Smooth, SamplingMode::Nearest})
+        {
+            const std::optional<PixelSelectionOp> operation =
+                makePixelSelectionOp(selection, rotation, true, true, sampling);
+            QVERIFY(operation.has_value());
+            QCOMPARE(operation->sampling, sampling);
+
+            QImage transformed(canvasSize, QImage::Format_ARGB32_Premultiplied);
+            transformed.fill(Qt::transparent);
+            QVERIFY(ImageAffineTransformer::compositeSourceOver(transformed,
+                canvasBounds,
+                source,
+                sourceBounds,
+                rotation,
+                sampling));
+
+            int partialAlphaPixels = 0;
+            int opaquePixels = 0;
+            for (int y = 0; y < transformed.height(); ++y)
+            {
+                const auto *line = reinterpret_cast<const QRgb *>(
+                    transformed.constScanLine(y));
+                for (int x = 0; x < transformed.width(); ++x)
+                {
+                    const QRgb pixel = line[x];
+                    const int alpha = qAlpha(pixel);
+                    partialAlphaPixels += alpha > 0 && alpha < 255 ? 1 : 0;
+                    opaquePixels += alpha == 255 ? 1 : 0;
+                    QVERIFY(qRed(pixel) <= alpha);
+                    QVERIFY(qGreen(pixel) <= alpha);
+                    QVERIFY(qBlue(pixel) <= alpha);
+                }
+            }
+            QVERIFY(opaquePixels > 0);
+            if (sampling == SamplingMode::Smooth)
+            {
+                QVERIFY(partialAlphaPixels > 0);
+            }
+            else
+            {
+                QCOMPARE(partialAlphaPixels, 0);
+            }
+        }
+
+        const QRgb translucentPixel = qRgba(30, 20, 10, 96);
+        QImage translucent(1, 1, QImage::Format_ARGB32_Premultiplied);
+        translucent.setPixel(0, 0, translucentPixel);
+        QImage translated(8, 8, QImage::Format_ARGB32_Premultiplied);
+        translated.fill(Qt::transparent);
+        QVERIFY(ImageAffineTransformer::compositeSourceOver(translated,
+            translated.rect(),
+            translucent,
+            QRect(2, 2, 1, 1),
+            QTransform::fromTranslate(3.0, 2.0),
+            SamplingMode::Nearest));
+        QCOMPARE(translated.pixel(5, 4), translucentPixel);
+
+        QImage translucentBlock(3, 3, QImage::Format_ARGB32_Premultiplied);
+        translucentBlock.fill(translucentPixel);
+        QImage rotatedBlock(12, 12, QImage::Format_ARGB32_Premultiplied);
+        rotatedBlock.fill(Qt::transparent);
+        QTransform blockRotation;
+        blockRotation.translate(5.5, 5.5);
+        blockRotation.rotate(27.0);
+        blockRotation.translate(-1.5, -1.5);
+        QVERIFY(ImageAffineTransformer::compositeSourceOver(rotatedBlock,
+            rotatedBlock.rect(),
+            translucentBlock,
+            QRect(0, 0, 3, 3),
+            blockRotation,
+            SamplingMode::Nearest));
+        int preservedTranslucentPixels = 0;
+        for (int y = 0; y < rotatedBlock.height(); ++y)
+        {
+            const auto *line =
+                reinterpret_cast<const QRgb *>(rotatedBlock.constScanLine(y));
+            for (int x = 0; x < rotatedBlock.width(); ++x)
+            {
+                const int alpha = qAlpha(line[x]);
+                QVERIFY(alpha == 0 || alpha == 96);
+                preservedTranslucentPixels += alpha == 96 ? 1 : 0;
+            }
+        }
+        QVERIFY(preservedTranslucentPixels > 0);
+    }
+
     void keepsAffineSelectionSupportAlignedAtHalfAlpha()
     {
         const QSize canvasSize(72, 56);

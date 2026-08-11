@@ -135,6 +135,8 @@ void MainWindow::restoreDrawingToolSettings()
                                   : defaultEraser.id);
     m_canvas->setBrushAntialiasing(
         boolSetting(settings, QString::fromLatin1(antialiasingKey), false));
+    m_canvas->setTabletPressureEnabled(boolSetting(
+        settings, QString::fromLatin1(tabletPressureEnabledKey), true));
 
     QColor storedColor(settings.value(activeColorKey).toString());
     if (!storedColor.isValid())
@@ -169,6 +171,12 @@ void MainWindow::restoreDrawingToolSettings()
             settings.value(selectionShapeKey).toString());
     m_canvas->setSelectionShape(
         storedSelectionShape.value_or(CanvasWidget::SelectionShape::Freehand));
+
+    const std::optional<SamplingMode> storedTransformSampling =
+        selectionTransformSamplingFromSettingsId(
+            settings.value(selectionTransformSamplingKey).toString());
+    m_canvas->setSelectionTransformSampling(
+        storedTransformSampling.value_or(SamplingMode::Smooth));
 
     const std::optional<CanvasWidget::LassoMode> storedLassoMode =
         lassoModeFromSettingsId(settings.value(lassoModeKey).toString());
@@ -261,6 +269,13 @@ void MainWindow::connectDrawingToolSettings()
             schedule();
         });
     connect(m_canvas,
+        &CanvasWidget::tabletPressureEnabledChanged,
+        this,
+        [schedule](bool)
+        {
+            schedule();
+        });
+    connect(m_canvas,
         &CanvasWidget::brushPresetChanged,
         this,
         [schedule](const QString &)
@@ -285,6 +300,13 @@ void MainWindow::connectDrawingToolSettings()
         &CanvasWidget::selectionShapeChanged,
         this,
         [schedule](CanvasWidget::SelectionShape)
+        {
+            schedule();
+        });
+    connect(m_canvas,
+        &CanvasWidget::selectionTransformSamplingChanged,
+        this,
+        [schedule](SamplingMode)
         {
             schedule();
         });
@@ -355,9 +377,14 @@ void MainWindow::saveDrawingToolSettings()
         activeColorKey, m_canvas->brushColor().name(QColor::HexArgb));
     settings.setValue(antialiasingKey, m_canvas->brushAntialiasing());
     settings.setValue(
+        tabletPressureEnabledKey, m_canvas->tabletPressureEnabled());
+    settings.setValue(
         wandReferenceKey, wandReferenceSettingsId(m_canvas->wandReference()));
     settings.setValue(selectionShapeKey,
         selectionShapeSettingsId(m_canvas->selectionShape()));
+    settings.setValue(selectionTransformSamplingKey,
+        selectionTransformSamplingSettingsId(
+            m_canvas->selectionTransformSampling()));
     settings.setValue(lassoModeKey, lassoModeSettingsId(m_canvas->lassoMode()));
     settings.setValue(fillComparisonKey,
         fillComparisonSettingsId(m_canvas->fillComparison()));

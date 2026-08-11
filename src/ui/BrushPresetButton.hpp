@@ -23,6 +23,7 @@ public:
 
     QString presetId() const;
     void setPreviewFrame(int frame);
+    void setTabletPressureEnabled(bool enabled);
     QSize sizeHint() const override;
     bool event(QEvent *event) override;
 
@@ -35,6 +36,7 @@ private:
     const BrushPreset *m_preset;
     QVector<QImage> m_frames;
     int m_frame = 0;
+    bool m_tabletPressureEnabled = true;
 };
 
 }

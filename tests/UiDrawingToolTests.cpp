@@ -5,6 +5,8 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QMenu>
+
 namespace ugurugu
 {
 
@@ -358,10 +360,12 @@ private slots:
             canvas->setEraserWidth(49.0);
             canvas->setEraserStabilization(0.12);
             canvas->setBrushAntialiasing(true);
+            canvas->setTabletPressureEnabled(false);
             canvas->setBrushColor(rememberedColor);
             canvas->setWandReference(
                 CanvasWidget::WandReference::AllVisibleLayers);
             canvas->setSelectionShape(CanvasWidget::SelectionShape::Ellipse);
+            canvas->setSelectionTransformSampling(SamplingMode::Nearest);
             canvas->setTool(CanvasWidget::Tool::Eraser);
 
             QVERIFY(window.close());
@@ -369,6 +373,16 @@ private slots:
                          .value(QStringLiteral("drawingTools/brush/presetId"))
                          .toString(),
                 QStringLiteral("soft-airbrush"));
+            QVERIFY(!QSettings()
+                    .value(
+                        QStringLiteral("drawingTools/tablet/pressureEnabled"),
+                        true)
+                    .toBool());
+            QCOMPARE(QSettings()
+                         .value(QStringLiteral(
+                             "drawingTools/selection/transformSampling"))
+                         .toString(),
+                QStringLiteral("nearest"));
         }
 
         QSettings persistedSettings;
@@ -384,12 +398,14 @@ private slots:
         QCOMPARE(restored->eraserWidth(), 49.0);
         QCOMPARE(restored->eraserStabilization(), 0.12);
         QVERIFY(restored->brushAntialiasing());
+        QVERIFY(!restored->tabletPressureEnabled());
         QCOMPARE(restored->brushColor(), rememberedColor);
         QCOMPARE(restored->tool(), CanvasWidget::Tool::Eraser);
         QCOMPARE(restored->wandReference(),
             CanvasWidget::WandReference::AllVisibleLayers);
         QCOMPARE(
             restored->selectionShape(), CanvasWidget::SelectionShape::Ellipse);
+        QCOMPARE(restored->selectionTransformSampling(), SamplingMode::Nearest);
 
         QAction *eraserAction =
             restoredWindow.findChild<QAction *>(QStringLiteral("eraserAction"));
@@ -410,6 +426,19 @@ private slots:
                 QStringLiteral("selectionShapeEllipseButton"));
         QCheckBox *antialiasingToggle = restoredWindow.findChild<QCheckBox *>(
             QStringLiteral("brushAntialiasingToggle"));
+        QCheckBox *brushPressureToggle = restoredWindow.findChild<QCheckBox *>(
+            QStringLiteral("brushTabletPressureToggle"));
+        QCheckBox *eraserPressureToggle = restoredWindow.findChild<QCheckBox *>(
+            QStringLiteral("eraserTabletPressureToggle"));
+        QComboBox *transformSamplingCombo =
+            restoredWindow.findChild<QComboBox *>(
+                QStringLiteral("selectionTransformSamplingCombo"));
+        QAction *smoothSamplingAction = restoredWindow.findChild<QAction *>(
+            QStringLiteral("smoothSelectionSamplingAction"));
+        QAction *pixelSamplingAction = restoredWindow.findChild<QAction *>(
+            QStringLiteral("pixelBasedSelectionSamplingAction"));
+        QMenu *transformSamplingMenu = restoredWindow.findChild<QMenu *>(
+            QStringLiteral("selectionTransformSamplingMenu"));
         QVERIFY(eraserAction);
         QVERIFY(brushSizeSpin);
         QVERIFY(eraserSizeSpin);
@@ -420,6 +449,13 @@ private slots:
         QVERIFY(!restoredWindow.findChild<QSpinBox *>(
             QStringLiteral("brushRoughnessSpin")));
         QVERIFY(antialiasingToggle);
+        QVERIFY(brushPressureToggle);
+        QVERIFY(eraserPressureToggle);
+        QVERIFY(transformSamplingCombo);
+        QVERIFY(smoothSamplingAction);
+        QVERIFY(pixelSamplingAction);
+        QVERIFY(transformSamplingMenu);
+        QVERIFY(transformSamplingMenu->toolTipsVisible());
         QVERIFY(eraserAction->isChecked());
         QCOMPARE(brushSizeSpin->value(), 47);
         QCOMPARE(eraserSizeSpin->value(), 49);
@@ -432,6 +468,31 @@ private slots:
             CanvasWidget::SelectionShape::Ellipse);
         QVERIFY(selectionShapeButton->isChecked());
         QVERIFY(antialiasingToggle->isChecked());
+        QVERIFY(!brushPressureToggle->isChecked());
+        QVERIFY(!eraserPressureToggle->isChecked());
+        QCOMPARE(transformSamplingCombo->currentData().toInt(),
+            static_cast<int>(SamplingMode::Nearest));
+        QVERIFY(!smoothSamplingAction->isChecked());
+        QVERIFY(pixelSamplingAction->isChecked());
+
+        smoothSamplingAction->trigger();
+        QCOMPARE(restored->selectionTransformSampling(), SamplingMode::Smooth);
+        QCOMPARE(transformSamplingCombo->currentData().toInt(),
+            static_cast<int>(SamplingMode::Smooth));
+        QVERIFY(smoothSamplingAction->isChecked());
+        QVERIFY(!pixelSamplingAction->isChecked());
+
+        transformSamplingCombo->setCurrentIndex(
+            transformSamplingCombo->findData(
+                static_cast<int>(SamplingMode::Nearest)));
+        QCOMPARE(restored->selectionTransformSampling(), SamplingMode::Nearest);
+        QVERIFY(!smoothSamplingAction->isChecked());
+        QVERIFY(pixelSamplingAction->isChecked());
+
+        brushPressureToggle->click();
+        QVERIFY(restored->tabletPressureEnabled());
+        QVERIFY(brushPressureToggle->isChecked());
+        QVERIFY(eraserPressureToggle->isChecked());
 
         restored->setBrushPreset(QStringLiteral("monoline"));
         QCOMPARE(restored->brushWidth(), 23.0);
@@ -519,6 +580,8 @@ private slots:
             std::numeric_limits<double>::infinity());
         settings.setValue(QStringLiteral("drawingTools/brush/antialiasing"),
             QStringLiteral("sometimes"));
+        settings.setValue(QStringLiteral("drawingTools/tablet/pressureEnabled"),
+            QStringLiteral("sometimes"));
         settings.setValue(
             QStringLiteral("drawingTools/brush/presetWidths/ink-pen"), 9999.0);
         settings.setValue(
@@ -534,6 +597,9 @@ private slots:
             QStringLiteral("selection-set"));
         settings.setValue(QStringLiteral("drawingTools/selection/shape"),
             QStringLiteral("polygon"));
+        settings.setValue(
+            QStringLiteral("drawingTools/selection/transformSampling"),
+            QStringLiteral("sharpen"));
         settings.sync();
 
         MainWindow window;
@@ -549,11 +615,13 @@ private slots:
         QCOMPARE(canvas->brushStabilization(), 1.0);
         QCOMPARE(canvas->eraserStabilization(), 0.0);
         QVERIFY(!canvas->brushAntialiasing());
+        QVERIFY(canvas->tabletPressureEnabled());
         QCOMPARE(canvas->brushColor(), QColor(Qt::black));
         QCOMPARE(
             canvas->wandReference(), CanvasWidget::WandReference::ActiveLayer);
         QCOMPARE(
             canvas->selectionShape(), CanvasWidget::SelectionShape::Freehand);
+        QCOMPARE(canvas->selectionTransformSampling(), SamplingMode::Smooth);
 
         canvas->setBrushPreset(QStringLiteral("g-pen"));
         QCOMPARE(canvas->brushWidth(),
@@ -671,6 +739,7 @@ private slots:
         canvas.setAnimating(false);
         canvas.setCanvasRotation(37.0);
         canvas.setCanvasMirrored(true);
+        QVERIFY(canvas.tabletPressureEnabled());
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
@@ -756,6 +825,124 @@ private slots:
         QVERIFY(qAbs(points.last().position.x() - documentEnd.x()) < 0.0001);
         QVERIFY(qAbs(points.last().position.y() - documentEnd.y()) < 0.0001);
         QCOMPARE(points.last().pressure, 0.72);
+    }
+
+    void disablesTabletPressureForBrushAndEraserStrokes()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        QPointingDevice stylus(QStringLiteral("Pressure toggle stylus"),
+            5,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const auto sendTabletEvent = [&canvas, &stylus](QEvent::Type type,
+                                         const QPointF &position,
+                                         qreal pressure,
+                                         Qt::MouseButton button,
+                                         Qt::MouseButtons buttons,
+                                         quint64 timestamp)
+        {
+            QTabletEvent event(type,
+                &stylus,
+                position,
+                canvas.mapToGlobal(position.toPoint()),
+                pressure,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                Qt::NoModifier,
+                button,
+                buttons);
+            event.setTimestamp(timestamp);
+            QApplication::sendEvent(&canvas, &event);
+        };
+        const auto drawTabletStroke = [&sendTabletEvent](const QPointF &start,
+                                          const QPointF &end,
+                                          quint64 timestamp)
+        {
+            sendTabletEvent(QEvent::TabletPress,
+                start,
+                0.2,
+                Qt::LeftButton,
+                Qt::LeftButton,
+                timestamp);
+            sendTabletEvent(QEvent::TabletMove,
+                end,
+                0.7,
+                Qt::NoButton,
+                Qt::LeftButton,
+                timestamp + 8);
+            sendTabletEvent(QEvent::TabletRelease,
+                end,
+                0.0,
+                Qt::LeftButton,
+                Qt::NoButton,
+                timestamp + 16);
+        };
+
+        canvas.setTabletPressureEnabled(false);
+        const QPointF brushStart = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(20.0, 30.0));
+        const QPointF brushEnd = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(80.0, 30.0));
+        sendTabletEvent(QEvent::TabletPress,
+            brushStart,
+            0.2,
+            Qt::LeftButton,
+            Qt::LeftButton,
+            100);
+        canvas.setTabletPressureEnabled(true);
+        sendTabletEvent(QEvent::TabletMove,
+            brushEnd,
+            0.7,
+            Qt::NoButton,
+            Qt::LeftButton,
+            108);
+        sendTabletEvent(QEvent::TabletRelease,
+            brushEnd,
+            0.0,
+            Qt::LeftButton,
+            Qt::NoButton,
+            116);
+
+        const QVector<Stroke> &brushStrokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(brushStrokes.size(), 1);
+        QCOMPARE(brushStrokes.first().mode, StrokeMode::Paint);
+        for (const StrokePoint &point : brushStrokes.first().points)
+        {
+            QCOMPARE(point.pressure, 1.0);
+        }
+
+        canvas.setTabletPressureEnabled(false);
+        canvas.setTool(CanvasWidget::Tool::Eraser);
+        const QPointF eraserStart = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(20.0, 70.0));
+        const QPointF eraserEnd = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(80.0, 70.0));
+        drawTabletStroke(eraserStart, eraserEnd, 200);
+
+        const QVector<Stroke> &allStrokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(allStrokes.size(), 2);
+        QCOMPARE(allStrokes.last().mode, StrokeMode::Erase);
+        for (const StrokePoint &point : allStrokes.last().points)
+        {
+            QCOMPARE(point.pressure, 1.0);
+        }
     }
 
     void clipsDrawingToolsToPersistentLasso()

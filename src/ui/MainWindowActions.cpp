@@ -451,6 +451,57 @@ void MainWindow::createActions()
         m_canvas,
         &CanvasWidget::cancelSelectionTransform);
 
+    auto *selectionSamplingGroup = new QActionGroup(this);
+    selectionSamplingGroup->setExclusive(true);
+    auto *smoothSelectionSamplingAction = new QAction(tr("Smooth"), this);
+    smoothSelectionSamplingAction->setObjectName(
+        QStringLiteral("smoothSelectionSamplingAction"));
+    smoothSelectionSamplingAction->setCheckable(true);
+    const QString smoothSamplingDescription =
+        tr("Interpolate neighboring pixels during selection transforms");
+    smoothSelectionSamplingAction->setToolTip(smoothSamplingDescription);
+    smoothSelectionSamplingAction->setStatusTip(smoothSamplingDescription);
+    smoothSelectionSamplingAction->setData(
+        static_cast<int>(SamplingMode::Smooth));
+    selectionSamplingGroup->addAction(smoothSelectionSamplingAction);
+    auto *pixelBasedSelectionSamplingAction =
+        new QAction(tr("Pixel-based"), this);
+    pixelBasedSelectionSamplingAction->setObjectName(
+        QStringLiteral("pixelBasedSelectionSamplingAction"));
+    pixelBasedSelectionSamplingAction->setCheckable(true);
+    const QString pixelBasedSamplingDescription =
+        tr("Skip interpolation without removing existing transparency; edges "
+           "may look stepped");
+    pixelBasedSelectionSamplingAction->setToolTip(
+        pixelBasedSamplingDescription);
+    pixelBasedSelectionSamplingAction->setStatusTip(
+        pixelBasedSamplingDescription);
+    pixelBasedSelectionSamplingAction->setData(
+        static_cast<int>(SamplingMode::Nearest));
+    selectionSamplingGroup->addAction(pixelBasedSelectionSamplingAction);
+    connect(selectionSamplingGroup,
+        &QActionGroup::triggered,
+        m_canvas,
+        [this](QAction *action)
+        {
+            m_canvas->setSelectionTransformSampling(
+                static_cast<SamplingMode>(action->data().toInt()));
+        });
+    const auto syncSelectionSamplingActions =
+        [smoothSelectionSamplingAction, pixelBasedSelectionSamplingAction](
+            SamplingMode sampling)
+    {
+        smoothSelectionSamplingAction->setChecked(
+            sampling == SamplingMode::Smooth);
+        pixelBasedSelectionSamplingAction->setChecked(
+            sampling == SamplingMode::Nearest);
+    };
+    connect(m_canvas,
+        &CanvasWidget::selectionTransformSamplingChanged,
+        this,
+        syncSelectionSamplingActions);
+    syncSelectionSamplingActions(m_canvas->selectionTransformSampling());
+
     m_deleteSelectionAction = new QAction(tr("Delete selected content"), this);
     m_deleteSelectionAction->setObjectName(
         QStringLiteral("deleteSelectionAction"));
@@ -937,6 +988,15 @@ void MainWindow::createMenus()
     selectionMenu->addAction(m_moveSelectionAction);
     selectionMenu->addAction(m_scaleSelectionAction);
     selectionMenu->addAction(m_rotateSelectionAction);
+    QMenu *selectionSamplingMenu =
+        selectionMenu->addMenu(tr("Transform method"));
+    selectionSamplingMenu->setObjectName(
+        QStringLiteral("selectionTransformSamplingMenu"));
+    selectionSamplingMenu->setToolTipsVisible(true);
+    selectionSamplingMenu->addAction(
+        findChild<QAction *>(QStringLiteral("smoothSelectionSamplingAction")));
+    selectionSamplingMenu->addAction(findChild<QAction *>(
+        QStringLiteral("pixelBasedSelectionSamplingAction")));
     selectionMenu->addSeparator();
     selectionMenu->addAction(m_flipSelectionHorizontalAction);
     selectionMenu->addAction(m_flipSelectionVerticalAction);

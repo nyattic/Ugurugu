@@ -24,11 +24,11 @@ namespace
 
 constexpr int cardWidth = 132;
 constexpr int previewWidth = 116;
-constexpr int previewHeight = 36;
-constexpr int previewTop = 5;
-constexpr int previewGap = 3;
+constexpr int previewHeight = 28;
+constexpr int previewTop = 3;
+constexpr int previewGap = 2;
 constexpr int nameBandFloor = 16;
-constexpr int cardBottomPadding = 4;
+constexpr int cardBottomPadding = 3;
 constexpr qreal previewWobbleAmount = 2.2;
 
 QFont nameFont(const QFont &base)
@@ -50,12 +50,13 @@ int cardHeight(const QFont &base)
 // The preview is rendered straight into the pixels the screen has, so the
 // stroke geometry is built at that same scale rather than at a fixed factor
 // that only lines up on a doubled display.
-Stroke previewStroke(const BrushPreset &preset, qreal scale)
+Stroke previewStroke(
+    const BrushPreset &preset, qreal scale, bool tabletPressureEnabled)
 {
     Stroke stroke;
     stroke.seed = qHash(preset.id);
     stroke.color = Theme::textPrimary();
-    stroke.width = std::min(preset.defaultSize, 16.0) * scale;
+    stroke.width = std::min(preset.defaultSize, 14.0) * scale;
     stroke.brush = preset.settings;
 
     constexpr int sampleCount = 26;
@@ -65,9 +66,11 @@ Stroke previewStroke(const BrushPreset &preset, qreal scale)
         const qreal t = static_cast<qreal>(index) / (sampleCount - 1);
         StrokePoint point;
         point.position = QPointF((10.0 + t * (previewWidth - 20.0)) * scale,
-            (previewHeight * 0.5 - std::sin(t * std::numbers::pi * 1.5) * 5.0)
+            (previewHeight * 0.5 - std::sin(t * std::numbers::pi * 1.5) * 4.0)
                 * scale);
-        point.pressure = 0.2 + 0.8 * std::sin(t * std::numbers::pi);
+        point.pressure = tabletPressureEnabled
+                             ? 0.2 + 0.8 * std::sin(t * std::numbers::pi)
+                             : 1.0;
         stroke.points.append(point);
     }
     return stroke;
@@ -101,6 +104,17 @@ void BrushPresetButton::setPreviewFrame(int frame)
         return;
     }
     m_frame = normalized;
+    update();
+}
+
+void BrushPresetButton::setTabletPressureEnabled(bool enabled)
+{
+    if (m_tabletPressureEnabled == enabled)
+    {
+        return;
+    }
+    m_tabletPressureEnabled = enabled;
+    m_frames.fill(QImage());
     update();
 }
 
@@ -142,7 +156,14 @@ void BrushPresetButton::paintEvent(QPaintEvent *event)
         isChecked() ? QPen(Theme::accent(), 1.5) : QPen(Theme::border(), 1.0));
     painter.drawPath(card);
 
-    painter.drawImage(QPointF((width() - previewWidth) * 0.5, previewTop),
+    const int paintedPreviewWidth =
+        std::min(previewWidth, std::max(1, width() - 16));
+    painter.setRenderHint(
+        QPainter::SmoothPixmapTransform, paintedPreviewWidth != previewWidth);
+    painter.drawImage(QRectF((width() - paintedPreviewWidth) * 0.5,
+                          previewTop,
+                          paintedPreviewWidth,
+                          previewHeight),
         frameImage(m_frame));
 
     const int nameHeight = nameBandHeight(font());
@@ -177,7 +198,8 @@ const QImage &BrushPresetButton::frameImage(int frame)
     document.wobbleAmount = previewWobbleAmount;
 
     Layer layer;
-    layer.strokes.append(previewStroke(*m_preset, scale));
+    layer.strokes.append(
+        previewStroke(*m_preset, scale, m_tabletPressureEnabled));
     document.layers.append(layer);
 
     cached = RenderEngine::render(document, frame);

@@ -160,6 +160,26 @@ std::optional<CanvasWidget::SelectionShape> selectionShapeFromSettingsId(
     return std::nullopt;
 }
 
+QString selectionTransformSamplingSettingsId(SamplingMode sampling)
+{
+    return sampling == SamplingMode::Nearest ? QStringLiteral("nearest")
+                                             : QStringLiteral("smooth");
+}
+
+std::optional<SamplingMode> selectionTransformSamplingFromSettingsId(
+    const QString &id)
+{
+    if (id == QStringLiteral("smooth"))
+    {
+        return SamplingMode::Smooth;
+    }
+    if (id == QStringLiteral("nearest"))
+    {
+        return SamplingMode::Nearest;
+    }
+    return std::nullopt;
+}
+
 QString lassoModeSettingsId(CanvasWidget::LassoMode mode)
 {
     return mode == CanvasWidget::LassoMode::Paint ? QStringLiteral("paint")

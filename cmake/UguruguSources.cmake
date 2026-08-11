@@ -236,6 +236,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/StrokePropertiesDialog.hpp
     src/ui/StrokeStabilizationRow.cpp
     src/ui/StrokeStabilizationRow.hpp
+    src/ui/TabletPressureRow.cpp
+    src/ui/TabletPressureRow.hpp
     src/ui/TextPopoverPanel.cpp
     src/ui/TextPopoverPanel.hpp
     src/ui/SettingsDialog.cpp

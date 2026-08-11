@@ -50,6 +50,7 @@ ToolDock::ToolDock(CanvasWidget *canvas, QWidget *parent)
 void ToolDock::buildPanels()
 {
     m_toolPanels = new QStackedWidget(this);
+    m_toolPanels->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     const auto addToolPanel = [this](CanvasTool tool, QWidget *panel)
     {
         auto *page = new QWidget(m_toolPanels);

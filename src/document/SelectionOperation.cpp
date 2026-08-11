@@ -596,6 +596,20 @@ std::optional<PixelSelectionOp> makePixelSelectionOp(
     bool clearSource,
     bool drawDestination)
 {
+    return makePixelSelectionOp(selectionMask,
+        transform,
+        clearSource,
+        drawDestination,
+        samplingForSelectionTransform(transform));
+}
+
+std::optional<PixelSelectionOp> makePixelSelectionOp(
+    const QImage &selectionMask,
+    const QTransform &transform,
+    bool clearSource,
+    bool drawDestination,
+    SamplingMode sampling)
+{
     if (selectionMask.isNull()
         || selectionMask.format() != QImage::Format_Grayscale8
         || !finiteTransform(transform) || (!clearSource && !drawDestination))
@@ -613,7 +627,7 @@ std::optional<PixelSelectionOp> makePixelSelectionOp(
     operation.canvasSize = selectionMask.size();
     operation.sourceBounds = packed->bounds;
     operation.transform = transform;
-    operation.sampling = samplingForSelectionTransform(transform);
+    operation.sampling = sampling;
     operation.clearSource = clearSource;
     operation.drawDestination = drawDestination;
     operation.packedMask = packed->packedMask;

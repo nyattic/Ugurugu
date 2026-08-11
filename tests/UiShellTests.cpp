@@ -9,6 +9,7 @@
 #include <QFutureWatcher>
 #include <QImageReader>
 #include <QScopeGuard>
+#include <QScrollArea>
 #include <QSemaphore>
 #include <QStyleOptionViewItem>
 #include <QTabBar>
@@ -1556,9 +1557,10 @@ private slots:
         brush.setFont(small);
         eraser.setFont(small);
         option.font = small;
-        // Floors hold these at the sizes they were drawn against, so a small
-        // system font can never squeeze the layout below what it used to be.
-        QVERIFY(brush.sizeHint().height() >= 64);
+        // Floors keep the compact brush card readable and preserve the
+        // original eraser and layer layouts.
+        QVERIFY(brush.sizeHint().height() >= 52);
+        QVERIFY(brush.sizeHint().height() < 64);
         QVERIFY(eraser.sizeHint().height() >= 64);
         QVERIFY(delegate.sizeHint(option, QModelIndex()).height() >= 56);
 
@@ -1567,9 +1569,101 @@ private slots:
         brush.setFont(large);
         eraser.setFont(large);
         option.font = large;
-        QVERIFY(brush.sizeHint().height() > 64);
+        QVERIFY(brush.sizeHint().height() > 52);
         QVERIFY(eraser.sizeHint().height() > 64);
         QVERIFY(delegate.sizeHint(option, QModelIndex()).height() > 56);
+    }
+
+    void keepsBrushPresetsInsideANarrowToolDock()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        QMainWindow window;
+        auto *toolDock = new ToolDock(&canvas, &window);
+        window.addDockWidget(Qt::LeftDockWidgetArea, toolDock);
+        window.setCentralWidget(new QWidget(&window));
+        toolDock->setMaximumWidth(declaredPaletteDockWidth);
+
+        QScrollArea *scroll = toolDock->findChild<QScrollArea *>(
+            QStringLiteral("toolSettingsScrollArea"));
+        QVERIFY(scroll);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+
+        window.resize(600, 360);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.resizeDocks(
+            {toolDock}, {declaredPaletteDockWidth}, Qt::Horizontal);
+        QCoreApplication::processEvents();
+
+        QWidget *presetGrid = nullptr;
+        for (QWidget *candidate : toolDock->findChildren<QWidget *>(
+                 QStringLiteral("brushPresetGrid")))
+        {
+            if (candidate->isVisible())
+            {
+                presetGrid = candidate;
+                break;
+            }
+        }
+        QVERIFY(presetGrid);
+
+        QWidget *viewport = scroll->viewport();
+        const QRect gridRect(
+            presetGrid->mapTo(viewport, QPoint()), presetGrid->size());
+        QVERIFY2(viewport->contentsRect().left() <= gridRect.left()
+                     && gridRect.right() <= viewport->contentsRect().right(),
+            qPrintable(QStringLiteral("brush preset grid [%1, %2], viewport "
+                                      "[%3, %4]")
+                    .arg(gridRect.left())
+                    .arg(gridRect.right())
+                    .arg(viewport->contentsRect().left())
+                    .arg(viewport->contentsRect().right())));
+    }
+
+    void keepsSelectionSamplingInsideANarrowToolDock()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.setTool(CanvasWidget::Tool::Lasso);
+        QMainWindow window;
+        auto *toolDock = new ToolDock(&canvas, &window);
+        window.addDockWidget(Qt::LeftDockWidgetArea, toolDock);
+        window.setCentralWidget(new QWidget(&window));
+        toolDock->setMaximumWidth(declaredPaletteDockWidth);
+
+        QScrollArea *scroll = toolDock->findChild<QScrollArea *>(
+            QStringLiteral("toolSettingsScrollArea"));
+        QComboBox *sampling = toolDock->findChild<QComboBox *>(
+            QStringLiteral("selectionTransformSamplingCombo"));
+        QVERIFY(scroll);
+        QVERIFY(sampling);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+        QFont large = sampling->font();
+        large.setPointSizeF(28.0);
+        sampling->setFont(large);
+
+        window.resize(600, 360);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.resizeDocks(
+            {toolDock}, {declaredPaletteDockWidth}, Qt::Horizontal);
+        QCoreApplication::processEvents();
+
+        QWidget *viewport = scroll->viewport();
+        const QRect samplingRect(
+            sampling->mapTo(viewport, QPoint()), sampling->size());
+        QVERIFY2(
+            viewport->contentsRect().left() <= samplingRect.left()
+                && samplingRect.right() <= viewport->contentsRect().right(),
+            qPrintable(QStringLiteral("selection sampling [%1, %2], viewport "
+                                      "[%3, %4]")
+                    .arg(samplingRect.left())
+                    .arg(samplingRect.right())
+                    .arg(viewport->contentsRect().left())
+                    .arg(viewport->contentsRect().right())));
     }
 
     // The About dialog is where the program states its copyright, the license

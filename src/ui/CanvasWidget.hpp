@@ -69,6 +69,7 @@ public:
     qreal eraserStabilization() const;
     qreal eraserPresetStabilization(const QString &presetId) const;
     bool brushAntialiasing() const;
+    bool tabletPressureEnabled() const;
     QString brushPresetId() const;
     QString eraserPresetId() const;
     WandReference wandReference() const;
@@ -77,6 +78,7 @@ public:
     bool bucketAntialiasing() const;
     SelectionShape selectionShape() const;
     LassoMode lassoMode() const;
+    SamplingMode selectionTransformSampling() const;
     QString textContent() const;
     QString textFontFamily() const;
     qreal textFontSize() const;
@@ -136,6 +138,7 @@ public slots:
     void setEraserStabilization(qreal strength);
     void setEraserPresetStabilization(const QString &presetId, qreal strength);
     void setBrushAntialiasing(bool antialiasing);
+    void setTabletPressureEnabled(bool enabled);
     void setWobbleAnimationEnabled(bool enabled);
     void setBrushPreset(const QString &presetId);
     void setEraserPreset(const QString &presetId);
@@ -145,6 +148,7 @@ public slots:
     void setBucketAntialiasing(bool antialiasing);
     void setSelectionShape(SelectionShape shape);
     void setLassoMode(LassoMode mode);
+    void setSelectionTransformSampling(SamplingMode sampling);
     void setTextContent(const QString &text);
     void setTextFontFamily(const QString &family);
     void setTextFontSize(qreal size);
@@ -179,6 +183,7 @@ signals:
     void brushStabilizationChanged(qreal strength);
     void eraserStabilizationChanged(qreal strength);
     void brushAntialiasingChanged(bool antialiasing);
+    void tabletPressureEnabledChanged(bool enabled);
     void brushPresetChanged(const QString &presetId);
     void eraserPresetChanged(const QString &presetId);
     void wandReferenceChanged(WandReference reference);
@@ -187,6 +192,7 @@ signals:
     void bucketAntialiasingChanged(bool antialiasing);
     void selectionShapeChanged(SelectionShape shape);
     void lassoModeChanged(LassoMode mode);
+    void selectionTransformSamplingChanged(SamplingMode sampling);
     void textContentChanged(const QString &text);
     void textFontFamilyChanged(const QString &family);
     void textFontSizeChanged(qreal size);
@@ -383,6 +389,8 @@ private:
     bool beginSelectionTransformSession();
     bool setPendingSelectionTransform(const QTransform &transform);
     bool isValidSelectionTransform(const QTransform &transform) const;
+    SamplingMode selectionSamplingForTransform(
+        const QTransform &transform) const;
     void resetSelectionTransformSession();
     void cancelSelectionTransformForBoundary(const QString &message = {});
     QPainterPath displayedSelectionOutline() const;
@@ -425,6 +433,7 @@ private:
     qreal m_eraserWidth = 6.0;
     StrokeStabilizer m_strokeStabilizer;
     bool m_brushAntialiasing = false;
+    bool m_tabletPressureEnabled = true;
     bool m_wobbleAnimationEnabled = true;
     QString m_brushPresetId;
     QString m_eraserPresetId;
@@ -440,6 +449,7 @@ private:
     bool m_bucketAntialiasing = true;
     SelectionShape m_selectionShape = SelectionShape::Freehand;
     LassoMode m_lassoMode = LassoMode::Select;
+    SamplingMode m_selectionTransformSampling = SamplingMode::Smooth;
     QString m_textContent;
     QString m_textFontFamily;
     qreal m_textFontSize = 48.0;
@@ -515,6 +525,7 @@ private:
     QTimer m_zoomRenderTimer;
     Stroke m_activeStroke;
     QUuid m_activeStrokeLayer;
+    bool m_activeStrokeUsesTabletPressure = true;
     bool m_drawing = false;
     bool m_panning = false;
     bool m_spacePressed = false;

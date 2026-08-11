@@ -207,6 +207,11 @@ public:
         const QVector<QUuid> &strokeIds,
         const QTransform &transform,
         const QImage &selectionMask = {});
+    bool transformSelection(const QUuid &layerId,
+        const QVector<QUuid> &strokeIds,
+        const QTransform &transform,
+        const QImage &selectionMask,
+        SamplingMode sampling);
     bool duplicateStrokes(const QUuid &layerId,
         const QVector<QUuid> &strokeIds,
         const QPointF &delta,
@@ -344,7 +349,8 @@ private:
         const QTransform &transform,
         qreal widthScale,
         const QString &text,
-        const QImage &selectionMask);
+        const QImage &selectionMask,
+        std::optional<SamplingMode> sampling = std::nullopt);
     bool tryCommitCandidate(QString text,
         Document candidate,
         std::shared_ptr<const HistoryEffects> effects = {},
