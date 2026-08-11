@@ -4,11 +4,15 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QMouseEvent>
 #include <QPolygonF>
+#include <QTouchEvent>
 #include <QWheelEvent>
+#include <QtTest/qtesttouch.h>
 
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <numbers>
 
 namespace ugurugu
@@ -297,6 +301,555 @@ private slots:
         QVERIFY(pointsAreClose(
             strokes.first().points.last().position, documentEnd, 0.75));
         QCOMPARE(strokes.first().points.last().pressure, 0.8);
+    }
+
+    void appliesTwoFingerPanZoomAndRotationTogether()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.setCanvasRotation(37.0);
+        canvas.setCanvasMirrored(true);
+
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        auto touch = QTest::touchEvent(&canvas, touchScreen.get(), false);
+        const QPoint startFirst(150, 200);
+        const QPoint startSecond(250, 200);
+        const QPointF startCenter =
+            (QPointF(startFirst) + QPointF(startSecond)) / 2.0;
+        const QPointF documentAnchor =
+            CanvasWidgetTestAccess::mapToDocument(canvas, startCenter);
+        const qreal initialZoom = canvas.zoom();
+        const qreal initialRotation = canvas.canvasRotation();
+
+        touch.press(0, startFirst, &canvas).press(1, startSecond, &canvas);
+        QVERIFY(touch.commit());
+
+        const QPoint updatedFirst(190, 220);
+        const QPoint updatedSecond(350, 300);
+        const QPointF updatedCenter =
+            (QPointF(updatedFirst) + QPointF(updatedSecond)) / 2.0;
+        touch.move(0, updatedFirst, &canvas).move(1, updatedSecond, &canvas);
+        QVERIFY(touch.commit());
+
+        const QPointF startVector = QPointF(startSecond - startFirst);
+        const QPointF updatedVector = QPointF(updatedSecond - updatedFirst);
+        const qreal expectedScale =
+            std::hypot(updatedVector.x(), updatedVector.y())
+            / std::hypot(startVector.x(), startVector.y());
+        const qreal expectedRotation =
+            initialRotation
+            + std::atan2(updatedVector.y(), updatedVector.x()) * 180.0
+                  / std::numbers::pi_v<qreal>;
+        QVERIFY(qAbs(canvas.zoom() - initialZoom * expectedScale) < 0.000001);
+        QVERIFY(qAbs(canvas.canvasRotation() - expectedRotation) < 0.000001);
+        QVERIFY(pointsAreClose(
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentAnchor),
+            updatedCenter));
+
+        touch.release(0, updatedFirst, &canvas)
+            .release(1, updatedSecond, &canvas);
+        QVERIFY(touch.commit());
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+    }
+
+#if defined(Q_OS_WIN)
+    void appliesRawTouchPadGesturesOnlyWithTwoFingers()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        std::unique_ptr<QPointingDevice> touchPad(
+            QTest::createTouchDevice(QInputDevice::DeviceType::TouchPad,
+                QInputDevice::Capability::Position));
+        QVERIFY(touchPad);
+        auto touch = QTest::touchEvent(&canvas, touchPad.get(), false);
+        const qreal initialZoom = canvas.zoom();
+        const qreal initialRotation = canvas.canvasRotation();
+        const QPointF initialCenter = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(50.0, 50.0));
+
+        touch.press(0, QPoint(150, 200), &canvas);
+        QVERIFY(touch.commit());
+        touch.move(0, QPoint(170, 220), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), initialZoom);
+        QCOMPARE(canvas.canvasRotation(), initialRotation);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            initialCenter));
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+        touch.release(0, QPoint(170, 220), &canvas);
+        QVERIFY(touch.commit());
+
+        const QPoint baselineFirst(170, 220);
+        const QPoint baselineSecond(270, 220);
+        const QPointF baselineCenter =
+            (QPointF(baselineFirst) + QPointF(baselineSecond)) * 0.5;
+        const QPointF documentAnchor =
+            CanvasWidgetTestAccess::mapToDocument(canvas, baselineCenter);
+        auto gesture = QTest::touchEvent(&canvas, touchPad.get(), false);
+        gesture.press(0, baselineFirst, &canvas)
+            .press(1, baselineSecond, &canvas);
+        QVERIFY(gesture.commit());
+
+        const QPoint updatedFirst(200, 240);
+        const QPoint updatedSecond(360, 320);
+        const QPointF updatedCenter =
+            (QPointF(updatedFirst) + QPointF(updatedSecond)) * 0.5;
+        gesture.move(0, updatedFirst, &canvas).move(1, updatedSecond, &canvas);
+        QVERIFY(gesture.commit());
+        const QPointF updatedVector = QPointF(updatedSecond - updatedFirst);
+        const qreal expectedScale =
+            std::hypot(updatedVector.x(), updatedVector.y()) / 100.0;
+        const qreal expectedRotation =
+            std::atan2(updatedVector.y(), updatedVector.x()) * 180.0
+            / std::numbers::pi_v<qreal>;
+        QVERIFY(qAbs(canvas.zoom() - initialZoom * expectedScale) < 0.000001);
+        QVERIFY(qAbs(canvas.canvasRotation() - expectedRotation) < 0.000001);
+        QVERIFY(pointsAreClose(
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentAnchor),
+            updatedCenter));
+
+        gesture.stationary(0).release(1, updatedSecond, &canvas);
+        QVERIFY(gesture.commit());
+        const qreal zoomAfterRelease = canvas.zoom();
+        const qreal rotationAfterRelease = canvas.canvasRotation();
+        gesture.move(0, QPoint(250, 300), &canvas);
+        QVERIFY(gesture.commit());
+        QCOMPARE(canvas.zoom(), zoomAfterRelease);
+        QCOMPARE(canvas.canvasRotation(), rotationAfterRelease);
+        gesture.release(0, QPoint(250, 300), &canvas);
+        QVERIFY(gesture.commit());
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+    }
+#endif
+
+    void rebaselinesWhenTouchPointCountChangesWithoutDrawing()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        auto touch = QTest::touchEvent(&canvas, touchScreen.get(), false);
+        const qreal initialZoom = canvas.zoom();
+        const qreal initialRotation = canvas.canvasRotation();
+        const QPointF initialMappedCenter =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(50.0, 50.0));
+
+        touch.press(0, QPoint(120, 160), &canvas);
+        QVERIFY(touch.commit());
+        touch.move(0, QPoint(140, 180), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), initialZoom);
+        QCOMPARE(canvas.canvasRotation(), initialRotation);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            initialMappedCenter));
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+
+        const QPoint baselineFirst(140, 180);
+        const QPoint baselineSecond(240, 180);
+        const QPointF baselineCenter =
+            (QPointF(baselineFirst) + QPointF(baselineSecond)) / 2.0;
+        const QPointF documentAnchor =
+            CanvasWidgetTestAccess::mapToDocument(canvas, baselineCenter);
+        touch.stationary(0).press(1, baselineSecond, &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), initialZoom);
+        QCOMPARE(canvas.canvasRotation(), initialRotation);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            initialMappedCenter));
+
+        const QPoint updatedFirst(180, 220);
+        const QPoint updatedSecond(300, 280);
+        const QPointF updatedVector = QPointF(updatedSecond - updatedFirst);
+        const QPointF updatedCenter =
+            (QPointF(updatedFirst) + QPointF(updatedSecond)) / 2.0;
+        touch.move(0, updatedFirst, &canvas).move(1, updatedSecond, &canvas);
+        QVERIFY(touch.commit());
+
+        const qreal expectedScale =
+            std::hypot(updatedVector.x(), updatedVector.y()) / 100.0;
+        const qreal expectedRotation =
+            initialRotation
+            + std::atan2(updatedVector.y(), updatedVector.x()) * 180.0
+                  / std::numbers::pi_v<qreal>;
+        QVERIFY(qAbs(canvas.zoom() - initialZoom * expectedScale) < 0.000001);
+        QVERIFY(qAbs(canvas.canvasRotation() - expectedRotation) < 0.000001);
+        QVERIFY(pointsAreClose(
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentAnchor),
+            updatedCenter));
+
+        touch.stationary(0).release(1, updatedSecond, &canvas);
+        QVERIFY(touch.commit());
+        const qreal zoomAfterRemoval = canvas.zoom();
+        const qreal rotationAfterRemoval = canvas.canvasRotation();
+        const QPointF mappedCenterAfterRemoval =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(50.0, 50.0));
+        touch.move(0, QPoint(220, 300), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), zoomAfterRemoval);
+        QCOMPARE(canvas.canvasRotation(), rotationAfterRemoval);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            mappedCenterAfterRemoval));
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+
+        touch.release(0, QPoint(220, 300), &canvas);
+        QVERIFY(touch.commit());
+    }
+
+    void ignoresTwoFingerGesturesDuringAPenStroke()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        QPointingDevice stylus(QStringLiteral("Touch isolation stylus"),
+            52,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        auto touch = QTest::touchEvent(&canvas, touchScreen.get(), false);
+        const auto sendTabletEvent = [&canvas, &stylus](QEvent::Type type,
+                                         const QPointF &position,
+                                         qreal pressure,
+                                         Qt::MouseButton button,
+                                         Qt::MouseButtons buttons)
+        {
+            QTabletEvent event(type,
+                &stylus,
+                position,
+                canvas.mapToGlobal(position),
+                pressure,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                Qt::NoModifier,
+                button,
+                buttons);
+            QApplication::sendEvent(&canvas, &event);
+        };
+
+        const QPointF documentStart(20.0, 50.0);
+        const QPointF documentMiddle(35.0, 50.0);
+        const QPointF documentEnd(75.0, 50.0);
+        const QPointF drawingStart =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentStart);
+        const QPointF drawingMiddle =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentMiddle);
+        const QPointF drawingEnd =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentEnd);
+        sendTabletEvent(QEvent::TabletPress,
+            drawingStart,
+            0.6,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletMove,
+            drawingMiddle,
+            0.7,
+            Qt::NoButton,
+            Qt::LeftButton);
+
+        const qreal zoomDuringStroke = canvas.zoom();
+        const qreal rotationDuringStroke = canvas.canvasRotation();
+        const QPointF mappedCenterDuringStroke =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(50.0, 50.0));
+        touch.press(0, QPoint(150, 180), &canvas)
+            .press(1, QPoint(250, 180), &canvas);
+        QVERIFY(touch.commit());
+        touch.move(0, QPoint(100, 260), &canvas)
+            .move(1, QPoint(320, 340), &canvas);
+        QVERIFY(touch.commit());
+        touch.release(0, QPoint(100, 260), &canvas)
+            .release(1, QPoint(320, 340), &canvas);
+        QVERIFY(touch.commit());
+
+        QCOMPARE(canvas.zoom(), zoomDuringStroke);
+        QCOMPARE(canvas.canvasRotation(), rotationDuringStroke);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            mappedCenterDuringStroke));
+
+        sendTabletEvent(
+            QEvent::TabletMove, drawingEnd, 0.8, Qt::NoButton, Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletRelease,
+            drawingEnd,
+            0.0,
+            Qt::LeftButton,
+            Qt::NoButton);
+
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        QVERIFY(pointsAreClose(
+            strokes.first().points.first().position, documentStart, 0.75));
+        QVERIFY(pointsAreClose(
+            strokes.first().points.last().position, documentEnd, 0.75));
+        QCOMPARE(strokes.first().points.last().pressure, 0.8);
+    }
+
+    void givesPenPressPriorityOverAnActiveTouchGesture()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        auto touch = QTest::touchEvent(&canvas, touchScreen.get(), false);
+        touch.press(0, QPoint(150, 180), &canvas)
+            .press(1, QPoint(250, 180), &canvas);
+        QVERIFY(touch.commit());
+        touch.move(0, QPoint(170, 200), &canvas)
+            .move(1, QPoint(290, 240), &canvas);
+        QVERIFY(touch.commit());
+
+        QPointingDevice stylus(QStringLiteral("Touch priority stylus"),
+            55,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const auto sendTabletEvent = [&canvas, &stylus](QEvent::Type type,
+                                         const QPointF &position,
+                                         qreal pressure,
+                                         Qt::MouseButton button,
+                                         Qt::MouseButtons buttons)
+        {
+            QTabletEvent event(type,
+                &stylus,
+                position,
+                canvas.mapToGlobal(position),
+                pressure,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                Qt::NoModifier,
+                button,
+                buttons);
+            QApplication::sendEvent(&canvas, &event);
+        };
+        const QPointF documentStart(30.0, 50.0);
+        const QPointF documentEnd(70.0, 50.0);
+        const QPointF drawingStart =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentStart);
+        const QPointF drawingEnd =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentEnd);
+        sendTabletEvent(QEvent::TabletPress,
+            drawingStart,
+            0.55,
+            Qt::LeftButton,
+            Qt::LeftButton);
+
+        const qreal zoomAfterPenPress = canvas.zoom();
+        const qreal rotationAfterPenPress = canvas.canvasRotation();
+        const QPointF mappedCenterAfterPenPress =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(50.0, 50.0));
+        touch.move(0, QPoint(30, 350), &canvas)
+            .move(1, QPoint(380, 30), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), zoomAfterPenPress);
+        QCOMPARE(canvas.canvasRotation(), rotationAfterPenPress);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            mappedCenterAfterPenPress));
+
+        sendTabletEvent(
+            QEvent::TabletMove, drawingEnd, 0.85, Qt::NoButton, Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletRelease,
+            drawingEnd,
+            0.0,
+            Qt::LeftButton,
+            Qt::NoButton);
+        touch.move(0, QPoint(20, 380), &canvas)
+            .move(1, QPoint(390, 20), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), zoomAfterPenPress);
+        QCOMPARE(canvas.canvasRotation(), rotationAfterPenPress);
+
+        touch.release(0, QPoint(20, 380), &canvas)
+            .release(1, QPoint(390, 20), &canvas);
+        QVERIFY(touch.commit());
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        QVERIFY(pointsAreClose(
+            strokes.first().points.first().position, documentStart, 0.75));
+        QVERIFY(pointsAreClose(
+            strokes.first().points.last().position, documentEnd, 0.75));
+        QCOMPARE(strokes.first().points.last().pressure, 0.85);
+    }
+
+    void keepsMouseInputFromATouchPadDeviceWorking()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        QPointingDevice touchPad(QStringLiteral("Test touch pad"),
+            56,
+            QInputDevice::DeviceType::TouchPad,
+            QPointingDevice::PointerType::Finger,
+            QInputDevice::Capability::Position,
+            5,
+            3);
+        const auto sendMouseEvent = [&canvas, &touchPad](QEvent::Type type,
+                                        const QPointF &position,
+                                        Qt::MouseButton button,
+                                        Qt::MouseButtons buttons)
+        {
+            QMouseEvent event(type,
+                position,
+                canvas.mapToGlobal(position),
+                button,
+                buttons,
+                Qt::NoModifier,
+                &touchPad);
+            QApplication::sendEvent(&canvas, &event);
+        };
+        const QPointF documentStart(25.0, 50.0);
+        const QPointF documentEnd(75.0, 50.0);
+        const QPointF start =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentStart);
+        const QPointF end =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentEnd);
+
+        sendMouseEvent(
+            QEvent::MouseButtonPress, start, Qt::LeftButton, Qt::LeftButton);
+        sendMouseEvent(QEvent::MouseMove, end, Qt::NoButton, Qt::LeftButton);
+        sendMouseEvent(
+            QEvent::MouseButtonRelease, end, Qt::LeftButton, Qt::NoButton);
+
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        QVERIFY(pointsAreClose(
+            strokes.first().points.first().position, documentStart, 0.75));
+        QVERIFY(pointsAreClose(
+            strokes.first().points.last().position, documentEnd, 0.75));
+    }
+
+    void recoversTwoFingerGestureStateAfterTouchCancel()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        auto touch = QTest::touchEvent(&canvas, touchScreen.get(), false);
+        touch.press(0, QPoint(160, 200), &canvas)
+            .press(1, QPoint(240, 200), &canvas);
+        QVERIFY(touch.commit());
+        touch.move(0, QPoint(140, 180), &canvas)
+            .move(1, QPoint(260, 220), &canvas);
+        QVERIFY(touch.commit());
+        QTouchEvent cancelEvent(QEvent::TouchCancel, touchScreen.get());
+        QApplication::sendEvent(&canvas, &cancelEvent);
+
+        const qreal zoomAfterCancel = canvas.zoom();
+        const qreal rotationAfterCancel = canvas.canvasRotation();
+        const QPointF mappedCenterAfterCancel =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, QPointF(50.0, 50.0));
+        touch.move(0, QPoint(10, 10), &canvas)
+            .move(1, QPoint(390, 390), &canvas);
+        QVERIFY(touch.commit());
+        QCOMPARE(canvas.zoom(), zoomAfterCancel);
+        QCOMPARE(canvas.canvasRotation(), rotationAfterCancel);
+        QVERIFY(pointsAreClose(CanvasWidgetTestAccess::mapFromDocument(
+                                   canvas, QPointF(50.0, 50.0)),
+            mappedCenterAfterCancel));
+        touch.release(0, QPoint(10, 10), &canvas)
+            .release(1, QPoint(390, 390), &canvas);
+        QVERIFY(touch.commit());
+
+        auto restartedTouch =
+            QTest::touchEvent(&canvas, touchScreen.get(), false);
+        const QPoint restartFirst(100, 150);
+        const QPoint restartSecond(200, 150);
+        const QPointF restartCenter =
+            (QPointF(restartFirst) + QPointF(restartSecond)) / 2.0;
+        const QPointF documentAnchor =
+            CanvasWidgetTestAccess::mapToDocument(canvas, restartCenter);
+        restartedTouch.press(0, restartFirst, &canvas)
+            .press(1, restartSecond, &canvas);
+        QVERIFY(restartedTouch.commit());
+
+        const QPoint updatedFirst(170, 190);
+        const QPoint updatedSecond(270, 290);
+        const QPointF updatedCenter =
+            (QPointF(updatedFirst) + QPointF(updatedSecond)) / 2.0;
+        restartedTouch.move(0, updatedFirst, &canvas)
+            .move(1, updatedSecond, &canvas);
+        QVERIFY(restartedTouch.commit());
+
+        QVERIFY(
+            qAbs(canvas.zoom() - zoomAfterCancel * std::sqrt(2.0)) < 0.000001);
+        QVERIFY(qAbs(canvas.canvasRotation() - (rotationAfterCancel + 45.0))
+                < 0.000001);
+        QVERIFY(pointsAreClose(
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentAnchor),
+            updatedCenter));
+
+        restartedTouch.release(0, updatedFirst, &canvas)
+            .release(1, updatedSecond, &canvas);
+        QVERIFY(restartedTouch.commit());
     }
 
     void syncsCanvasRotationControlsWithoutEditingDocument()

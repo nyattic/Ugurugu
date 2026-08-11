@@ -54,7 +54,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     , m_controller(controller)
 {
     setAttribute(Qt::WA_OpaquePaintEvent);
-    setAttribute(Qt::WA_AcceptTouchEvents, false);
+    setAttribute(Qt::WA_AcceptTouchEvents);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setTabletTracking(true);
@@ -953,12 +953,13 @@ void CanvasWidget::handleEscape()
         cancelTextPlacement();
     }
     else if (m_drawing || m_panning || m_zoomDragging || m_rotatingCanvas
-             || m_pickingColor)
+             || m_touchSequence || m_pickingColor)
     {
         cancelStroke();
         endPan();
         endZoomDrag();
         endCanvasRotation();
+        cancelTouchSequence();
         endColorPick();
         m_tabletSequence = false;
     }
@@ -1352,6 +1353,7 @@ void CanvasWidget::setGroupSelectionActive(bool active)
 
 void CanvasWidget::fitToWindow()
 {
+    cancelTouchSequence();
     m_zoom = fitZoom();
     m_pan = QPointF();
     notifyZoomChanged();
@@ -1390,6 +1392,7 @@ void CanvasWidget::setCanvasRotation(qreal degrees)
     {
         return;
     }
+    cancelTouchSequence();
     cancelStroke();
     endPan();
     endZoomDrag();
@@ -1419,6 +1422,7 @@ void CanvasWidget::setCanvasMirrored(bool mirrored)
     {
         return;
     }
+    cancelTouchSequence();
     cancelStroke();
     endPan();
     endZoomDrag();
@@ -1487,6 +1491,7 @@ void CanvasWidget::cancelActiveInteraction()
     endPan();
     endZoomDrag();
     endCanvasRotation();
+    cancelTouchSequence();
     endColorPick();
     m_tabletSequence = false;
     m_tabletPointerEraser = false;

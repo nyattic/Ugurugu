@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace ugurugu
 {
@@ -363,6 +364,7 @@ void CanvasWidget::zoomToward(qreal targetZoom, const QPointF &widgetPosition)
     {
         return;
     }
+    cancelTouchSequence();
     bool inside = false;
     const QPointF anchor = mapToDocument(widgetPosition, &inside);
     m_zoom = nextZoom;
@@ -523,6 +525,144 @@ void CanvasWidget::endCanvasRotation()
     requestDisplayUpdate();
 }
 
+bool CanvasWidget::touchGestureConflictsWithActiveInteraction() const
+{
+    return m_drawing || m_tabletSequence || m_panning || m_zoomDragging
+           || m_rotatingCanvas || m_pickingColor || m_movingSelection
+           || m_areaSelectionActive || m_textDragging;
+}
+
+void CanvasWidget::beginTouchGesture(int firstPointId,
+    const QPointF &firstPosition,
+    int secondPointId,
+    const QPointF &secondPosition)
+{
+    endTouchGesture();
+    const QPointF vector = secondPosition - firstPosition;
+    const qreal distance = std::hypot(vector.x(), vector.y());
+    if (firstPointId == secondPointId || !std::isfinite(firstPosition.x())
+        || !std::isfinite(firstPosition.y())
+        || !std::isfinite(secondPosition.x())
+        || !std::isfinite(secondPosition.y()) || distance <= 0.01)
+    {
+        return;
+    }
+
+    m_touchFirstPointId = firstPointId;
+    m_touchSecondPointId = secondPointId;
+    m_touchGestureLastCenter = (firstPosition + secondPosition) * 0.5;
+    m_touchGestureLastDistance = distance;
+    m_touchGestureLastAngle =
+        std::atan2(vector.y(), vector.x()) * 180.0 / std::numbers::pi_v<qreal>;
+    m_touchGestureActive = true;
+    updateCursor();
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::continueTouchGesture(
+    const QPointF &firstPosition, const QPointF &secondPosition)
+{
+    if (!m_touchGestureActive || !std::isfinite(firstPosition.x())
+        || !std::isfinite(firstPosition.y())
+        || !std::isfinite(secondPosition.x())
+        || !std::isfinite(secondPosition.y()))
+    {
+        return;
+    }
+
+    const QPointF vector = secondPosition - firstPosition;
+    const qreal distance = std::hypot(vector.x(), vector.y());
+    if (distance <= 0.01)
+    {
+        endTouchGesture();
+        return;
+    }
+    const QPointF center = (firstPosition + secondPosition) * 0.5;
+    const qreal angle =
+        std::atan2(vector.y(), vector.x()) * 180.0 / std::numbers::pi_v<qreal>;
+    const qreal angleDelta =
+        std::remainder(angle - m_touchGestureLastAngle, 360.0);
+    const qreal nextZoom =
+        std::clamp(m_zoom * distance / m_touchGestureLastDistance,
+            minimumZoom,
+            maximumZoom);
+    const qreal nextRotation =
+        normalizedRotation(m_canvasRotation + angleDelta);
+    const bool zoomChanged = !qFuzzyCompare(m_zoom, nextZoom);
+    const bool rotationChanged = !qFuzzyIsNull(m_canvasRotation - nextRotation);
+    const QPointF anchor = mapToDocument(m_touchGestureLastCenter);
+
+    m_zoom = nextZoom;
+    m_canvasRotation = nextRotation;
+    const QPointF panDelta = center - documentTransform().map(anchor);
+    m_pan += panDelta;
+    m_touchGestureLastCenter = center;
+    m_touchGestureLastDistance = distance;
+    m_touchGestureLastAngle = angle;
+
+    if (zoomChanged)
+    {
+        m_zoomRenderTimer.start();
+        notifyZoomChanged();
+    }
+    if (rotationChanged)
+    {
+        emit canvasRotationChanged(nextRotation);
+    }
+    if (!zoomChanged && !rotationChanged && panDelta.isNull())
+    {
+        return;
+    }
+    if (m_pointerOverWidget)
+    {
+        updatePointerPosition(m_pointerWidgetPosition);
+    }
+    updateSelectionActionBar();
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::endTouchGesture()
+{
+    if (!m_touchGestureActive)
+    {
+        m_touchFirstPointId = -1;
+        m_touchSecondPointId = -1;
+        return;
+    }
+    m_touchGestureActive = false;
+    m_touchFirstPointId = -1;
+    m_touchSecondPointId = -1;
+    m_zoomRenderTimer.stop();
+    updateCursor();
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::suppressTouchSequence()
+{
+    if (!m_touchSequence)
+    {
+        return;
+    }
+    endTouchGesture();
+    m_touchGestureSuppressed = true;
+    updateCursor();
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::cancelTouchSequence()
+{
+    const bool hadSequence = m_touchSequence;
+    endTouchGesture();
+    m_touchSequence = false;
+    m_touchGestureSuppressed = false;
+    m_touchDevice = nullptr;
+    if (hadSequence)
+    {
+        updateCursor();
+        requestDisplayUpdate();
+    }
+}
+
 bool CanvasWidget::isColorPickableTool() const
 {
     return m_tool == Tool::Brush || m_tool == Tool::Eraser
@@ -611,8 +751,8 @@ void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
 
 QRect CanvasWidget::pointerUpdateRect() const
 {
-    if (!m_pointerOverWidget || m_panning || m_rotatingCanvas || m_spacePressed
-        || m_pickingColor
+    if (!m_pointerOverWidget || m_panning || m_rotatingCanvas || m_touchSequence
+        || m_spacePressed || m_pickingColor
         || (m_tool != Tool::Brush && m_tool != Tool::Eraser
             && !m_tabletPointerEraser))
     {
@@ -634,9 +774,14 @@ QRect CanvasWidget::pointerUpdateRect() const
 
 void CanvasWidget::updateCursor()
 {
-    if (m_rotatingCanvas)
+    if (m_rotatingCanvas || m_touchGestureActive)
     {
         setCursor(Qt::ClosedHandCursor);
+        return;
+    }
+    if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        setCursor(Qt::OpenHandCursor);
         return;
     }
     if (m_zoomDragging)

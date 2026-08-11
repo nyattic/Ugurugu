@@ -29,7 +29,9 @@
 #include <memory>
 
 class QMouseEvent;
+class QPointingDevice;
 class QTabletEvent;
+class QTouchEvent;
 class QWheelEvent;
 
 namespace ugurugu
@@ -323,6 +325,17 @@ private:
     void beginCanvasRotation(const QPointF &widgetPosition);
     void continueCanvasRotation(const QPointF &widgetPosition);
     void endCanvasRotation();
+    bool handleTouchEvent(QTouchEvent *event);
+    bool touchGestureConflictsWithActiveInteraction() const;
+    void beginTouchGesture(int firstPointId,
+        const QPointF &firstPosition,
+        int secondPointId,
+        const QPointF &secondPosition);
+    void continueTouchGesture(
+        const QPointF &firstPosition, const QPointF &secondPosition);
+    void endTouchGesture();
+    void suppressTouchSequence();
+    void cancelTouchSequence();
     bool isColorPickableTool() const;
     void beginColorPick(const QPointF &widgetPosition);
     void endColorPick();
@@ -510,6 +523,10 @@ private:
     bool m_tabletPointerEraser = false;
     bool m_zoomDragging = false;
     bool m_rotatingCanvas = false;
+    bool m_touchSequence = false;
+    bool m_touchGestureSuppressed = false;
+    bool m_touchGestureActive = false;
+    const QPointingDevice *m_touchDevice = nullptr;
     bool m_pickingColor = false;
     QPointF m_zoomDragStart;
     QPointF m_zoomDragAnchor;
@@ -517,6 +534,11 @@ private:
     qreal m_zoomDragStartZoom = 1.0;
     QPointF m_rotationDragStart;
     qreal m_rotationDragStartAngle = 0.0;
+    int m_touchFirstPointId = -1;
+    int m_touchSecondPointId = -1;
+    QPointF m_touchGestureLastCenter;
+    qreal m_touchGestureLastDistance = 0.0;
+    qreal m_touchGestureLastAngle = 0.0;
     QPointF m_lastPanPosition;
     QPointF m_pointerWidgetPosition;
     bool m_pointerInside = false;

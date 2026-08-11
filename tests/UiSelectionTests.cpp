@@ -8,6 +8,7 @@
 #include <QClipboard>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QtTest/qtesttouch.h>
 
 #include <atomic>
 #include <cmath>
@@ -1857,6 +1858,42 @@ private slots:
             applyButton->mapTo(&canvas, applyButton->rect().center())));
         QVERIFY(canvas.rect().contains(
             cancelButton->mapTo(&canvas, cancelButton->rect().center())));
+    }
+
+    void activatesSelectionActionBarButtonsWithTouch()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+
+        QAction action(QStringLiteral("Touch action"), &canvas);
+        action.setObjectName(QStringLiteral("touchSelectionAction"));
+        QSignalSpy triggers(&action, &QAction::triggered);
+        auto *bar = new SelectionActionBar(&canvas);
+        QToolButton *button = bar->addActionButton(&action);
+        canvas.setSelectionActionBar(bar);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.selectAll();
+        QTRY_VERIFY(bar->isVisible());
+        QVERIFY(button);
+
+        std::unique_ptr<QPointingDevice> touchScreen(
+            QTest::createTouchDevice());
+        QVERIFY(touchScreen);
+        const QPoint buttonCenter =
+            button->mapTo(&canvas, button->rect().center());
+        auto touch =
+            QTest::touchEvent(canvas.windowHandle(), touchScreen.get(), false);
+        touch.press(0, buttonCenter, canvas.windowHandle());
+        QVERIFY(touch.commit());
+        touch.release(0, buttonCenter, canvas.windowHandle());
+        QVERIFY(touch.commit());
+
+        QTRY_COMPARE(triggers.size(), 1);
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
     }
 
     void restoresSelectionTogetherWithDeletedContent()

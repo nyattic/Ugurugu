@@ -28,7 +28,7 @@
 1. 빌드가 이미 `ugurugu_core`와 `ugurugu_ui`로 나뉘며, 코어는 의도적으로 Qt Widgets에 연결되지 않는다(`cmake/UguruguTargets.cmake:9-39`).
 2. 실제 그림 생성은 GPU 셰이더가 아니라 `QImage`/`QPainter` 기반 CPU 렌더러가 담당한다(`src/render/RenderEngine.cpp:127-249,487-508`, `src/render/engine/LayerHierarchyCompositor.cpp:45-145`, `src/render/StrokeRenderer.cpp:789-869`). 따라서 WebGPU로 전체 렌더러를 다시 만들 필요가 없다.
 3. 프로젝트 직렬화기에 파일 경로 API와 별도로 `QByteArray` 입출력 API가 이미 있다(`src/io/DocumentSerializer.hpp:162-182`). 브라우저 `File`/`Blob`과 연결하기 좋은 경계다.
-4. 반대로 UI는 `QMainWindow`, 도킹 패널, 동기식 모달 대화상자와 파일 경로를 중심으로 설계되었다. 메인 창 최소 크기도 900×640이고 터치 이벤트는 명시적으로 꺼져 있다(`src/ui/MainWindow.cpp:163-190`, `src/ui/CanvasWidget.cpp:51-60`).
+4. 반대로 UI는 `QMainWindow`, 도킹 패널, 동기식 모달 대화상자와 파일 경로를 중심으로 설계되었다. 메인 창 최소 크기도 900×640이고 캔버스 입력은 QWidget의 마우스·펜·터치 이벤트 상태기에 결합되어 있다(`src/ui/MainWindow.cpp:163-190`, `src/ui/CanvasWidget.cpp:51-60`, `src/ui/CanvasWidgetEvents.cpp`).
 5. 현재 메모리 정책은 4 GiB 프로세스 예산과 최대 2 GiB 미리보기 캐시를 전제로 한다(`src/app/MemoryBudget.hpp:15-39`). 브라우저, 특히 모바일 탭에 그대로 적용할 수 없다.
 
 ## 2. 조사 방법과 신뢰 범위
@@ -64,9 +64,9 @@ Qt for WebAssembly는 Widgets 모듈 자체를 지원하지만, **기본 Qt Wasm
 
 현재 캔버스 입력은 데스크톱 중심이다.
 
-- `src/ui/CanvasWidget.cpp:51-60`은 마우스와 태블릿 추적을 켜지만 `Qt::WA_AcceptTouchEvents`는 `false`로 설정한다.
-- `src/ui/CanvasWidgetEvents.cpp:213-434`은 마우스와 휠을, `436-599`는 태블릿 압력과 지우개 포인터를 처리한다. 마우스 압력은 1.0으로 취급한다.
-- `src/ui/CanvasWidgetEvents.cpp:601-634`은 Space, Escape, Delete/Backspace를 직접 처리한다.
+- `src/ui/CanvasWidget.cpp:51-60`은 마우스·태블릿 추적과 `Qt::WA_AcceptTouchEvents`를 켠다.
+- `src/ui/CanvasWidgetEvents.cpp`는 마우스와 휠, 태블릿 압력과 지우개 포인터, 두 손가락 이동·확대·회전을 처리한다. 마우스 압력은 1.0으로 취급한다.
+- `src/ui/CanvasWidgetEvents.cpp:882-936`은 Space, Escape, Delete/Backspace를 직접 처리한다.
 - `src/ui/MainWindowActions.cpp:74-129,680-691` 및 `src/ui/ShortcutBinding.cpp`에는 새 문서, 열기, 저장, 종료, 실행 취소, 잘라내기/복사/붙여넣기 등에 대한 Ctrl/Cmd 단축키가 있다.
 
 웹에서는 이 계층을 Pointer Events로 다시 작성해야 한다. `pointerType`, `pressure`, tilt를 읽고, 드로잉 중 `setPointerCapture()`를 사용하며, 캔버스에만 `touch-action: none`을 적용해야 한다. 그렇지 않으면 모바일 브라우저의 스크롤/확대가 포인터 시퀀스를 `pointercancel`로 끝낼 수 있다([B3](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events), [B4](https://developer.mozilla.org/en-US/docs/Web/CSS/touch-action)).
@@ -396,7 +396,7 @@ itch.io는 HTTPS로 서비스되므로 외부 요청도 HTTPS여야 하고 HTTP 
 
 문제:
 
-- 최소 900×640의 도킹 UI와 touch disabled 캔버스는 모바일에 맞지 않는다.
+- 최소 900×640의 도킹 UI와 데스크톱 중심 캔버스 제스처는 모바일에 맞지 않는다.
 - 10개 모달 `exec()`와 13개 동기식 선택 API를 비동기 상태 머신으로 바꿔야 한다. Asyncify는 bundle/CPU overhead가 있고 JSPI는 Qt 소스 build와 브라우저 범위 제약이 있어 전체 UI의 영구 우회책으로 권장하지 않는다.
 - 항상 시작되는 Export/Recovery QThread와 QtConcurrent 경로를 단일 스레드화하거나 itch.io Experimental SAB에 의존해야 한다.
 - `CanvasFrameView`의 QRhi/GuiPrivate 웹 지원이 불명확하다.
@@ -581,7 +581,7 @@ Wasm linear memory 자체는 일반 Worker에서 UI로 transfer할 수 없으므
 | 영역 | 현재 문제 | 웹 설계 |
 |---|---|---|
 | MainWindow/도크/대화상자 | Widgets, 고정 최소 크기, 모달 | 반응형 Svelte panel/sheet/dialog |
-| CanvasWidget input | QWidget event, touch disabled | Pointer Events와 gesture state machine |
+| CanvasWidget input | QWidget의 mouse/tablet/touch event 상태기 | Pointer Events와 gesture state machine |
 | CanvasFrameView | QRhiWidget/GuiPrivate | WebGL 2/Canvas 2D presenter |
 | path load/save | QFileDialog/QFile/QSaveFile | File/ArrayBuffer/Blob 비동기 adapter |
 | recovery | QStandardPaths, writer QThread | IndexedDB snapshot queue |

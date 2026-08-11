@@ -19,6 +19,7 @@
 #include <QPolygonF>
 #include <QResizeEvent>
 #include <QTabletEvent>
+#include <QTouchEvent>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -47,17 +48,147 @@ CanvasSelectionCombine selectionCombineForModifiers(
     return add ? CanvasSelectionCombine::Add : CanvasSelectionCombine::Subtract;
 }
 
+bool acceptsRawCanvasTouch(const QTouchEvent *event)
+{
+    const QPointingDevice *device = event->pointingDevice();
+    if (!device)
+    {
+        return false;
+    }
+    if (device->type() == QInputDevice::DeviceType::TouchScreen)
+    {
+        return true;
+    }
+#if defined(Q_OS_WIN)
+    // Windows reports some external touch displays as TouchPad devices, while
+    // desktop touchpads on other platforms stay on their native gesture path.
+    return device->type() == QInputDevice::DeviceType::TouchPad;
+#else
+    return false;
+#endif
+}
+
+}
+
+bool CanvasWidget::handleTouchEvent(QTouchEvent *event)
+{
+    event->accept();
+    if (m_touchSequence && event->pointingDevice() != m_touchDevice)
+    {
+        return true;
+    }
+    if (event->type() == QEvent::TouchCancel)
+    {
+        cancelTouchSequence();
+        return true;
+    }
+
+    QVector<const QEventPoint *> activePoints;
+    activePoints.reserve(event->points().size());
+    for (const QEventPoint &point : event->points())
+    {
+        if (point.state() != QEventPoint::State::Released)
+        {
+            activePoints.append(&point);
+        }
+    }
+
+    if (event->type() == QEvent::TouchBegin)
+    {
+        cancelTouchSequence();
+        m_touchSequence = true;
+        m_touchDevice = event->pointingDevice();
+        m_touchGestureSuppressed = touchGestureConflictsWithActiveInteraction();
+        updateCursor();
+        requestDisplayUpdate();
+    }
+    else if (!m_touchSequence)
+    {
+        return true;
+    }
+
+    if (event->type() == QEvent::TouchEnd || activePoints.isEmpty())
+    {
+        cancelTouchSequence();
+        return true;
+    }
+    if (activePoints.size() != 2)
+    {
+        endTouchGesture();
+        return true;
+    }
+    if (m_touchGestureSuppressed)
+    {
+        return true;
+    }
+    if (touchGestureConflictsWithActiveInteraction())
+    {
+        suppressTouchSequence();
+        return true;
+    }
+
+    const QEventPoint *firstPoint = activePoints.at(0);
+    const QEventPoint *secondPoint = activePoints.at(1);
+    if (firstPoint->id() > secondPoint->id())
+    {
+        std::swap(firstPoint, secondPoint);
+    }
+    if (!m_touchGestureActive || firstPoint->id() != m_touchFirstPointId
+        || secondPoint->id() != m_touchSecondPointId)
+    {
+        beginTouchGesture(firstPoint->id(),
+            firstPoint->position(),
+            secondPoint->id(),
+            secondPoint->position());
+        return true;
+    }
+
+    continueTouchGesture(firstPoint->position(), secondPoint->position());
+    return true;
 }
 
 bool CanvasWidget::event(QEvent *event)
 {
+    if (event->type() == QEvent::TouchBegin
+        || event->type() == QEvent::TouchUpdate
+        || event->type() == QEvent::TouchEnd
+        || event->type() == QEvent::TouchCancel)
+    {
+        auto *touchEvent = static_cast<QTouchEvent *>(event);
+        if (!m_touchSequence && !acceptsRawCanvasTouch(touchEvent))
+        {
+            return QWidget::event(event);
+        }
+        if (!m_touchSequence && m_selectionActionBar
+            && m_selectionActionBar->isVisible())
+        {
+            const auto isActionBarTarget = [this](const QWidget *widget)
+            {
+                return widget
+                       && (widget == m_selectionActionBar
+                           || m_selectionActionBar->isAncestorOf(widget));
+            };
+            QWidget *target = qobject_cast<QWidget *>(touchEvent->target());
+            if (!isActionBarTarget(target) && !touchEvent->points().isEmpty())
+            {
+                target =
+                    childAt(touchEvent->points().first().position().toPoint());
+            }
+            if (isActionBarTarget(target))
+            {
+                return QWidget::event(event);
+            }
+        }
+        return handleTouchEvent(touchEvent);
+    }
     if (event->type() == QEvent::NativeGesture)
     {
         auto *gesture = static_cast<QNativeGestureEvent *>(event);
         if (gesture->gestureType() == Qt::ZoomNativeGesture)
         {
-            if (!m_drawing && !m_tabletSequence && !m_movingSelection
-                && !m_areaSelectionActive && !m_textDragging)
+            if (!m_touchSequence && !m_drawing && !m_tabletSequence
+                && !m_movingSelection && !m_areaSelectionActive
+                && !m_textDragging)
             {
                 zoomToward(m_zoom * std::pow(2.0, gesture->value()),
                     gesture->position());
@@ -67,8 +198,9 @@ bool CanvasWidget::event(QEvent *event)
         }
         if (gesture->gestureType() == Qt::RotateNativeGesture)
         {
-            if (!m_drawing && !m_tabletSequence && !m_movingSelection
-                && !m_areaSelectionActive && !m_textDragging)
+            if (!m_touchSequence && !m_drawing && !m_tabletSequence
+                && !m_movingSelection && !m_areaSelectionActive
+                && !m_textDragging)
             {
                 rotateCanvasAround(
                     m_canvasRotation + gesture->value(), gesture->position());
@@ -199,7 +331,8 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
     const bool pointerUsesEraser =
         m_tabletPointerEraser || m_tool == Tool::Eraser;
     if (m_pointerOverWidget && !m_panning && !m_rotatingCanvas
-        && !m_spacePressed && !m_pickingColor && !m_groupSelectionActive
+        && !m_touchSequence && !m_spacePressed && !m_pickingColor
+        && !m_groupSelectionActive
         && (m_tabletPointerEraser || m_tool == Tool::Brush
             || m_tool == Tool::Eraser))
     {
@@ -244,6 +377,11 @@ void CanvasWidget::enterEvent(QEnterEvent *event)
 
 void CanvasWidget::mousePressEvent(QMouseEvent *event)
 {
+    if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        event->accept();
+        return;
+    }
     if (!m_tabletSequence && m_tabletPointerEraser)
     {
         const QRect pointerRect = pointerUpdateRect();
@@ -350,6 +488,11 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
 
 void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        event->accept();
+        return;
+    }
     if (!m_tabletSequence && m_tabletPointerEraser)
     {
         const QRect pointerRect = pointerUpdateRect();
@@ -414,6 +557,11 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
 
 void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        event->accept();
+        return;
+    }
     if (!m_tabletSequence && m_tabletPointerEraser)
     {
         const QRect pointerRect = pointerUpdateRect();
@@ -486,6 +634,11 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
 
 void CanvasWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
+    if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton)
     {
         fitToWindow();
@@ -499,7 +652,7 @@ void CanvasWidget::wheelEvent(QWheelEvent *event)
 {
     const QPointF cursor = event->position();
     updatePointerPosition(cursor);
-    if (m_drawing || m_tabletSequence || m_movingSelection
+    if (m_touchSequence || m_drawing || m_tabletSequence || m_movingSelection
         || m_areaSelectionActive || m_textDragging)
     {
         event->accept();
@@ -525,6 +678,16 @@ void CanvasWidget::wheelEvent(QWheelEvent *event)
 
 void CanvasWidget::tabletEvent(QTabletEvent *event)
 {
+    if (event->type() == QEvent::TabletPress && m_touchSequence
+        && !m_touchGestureSuppressed)
+    {
+        suppressTouchSequence();
+    }
+    else if (m_touchSequence && !m_touchGestureSuppressed)
+    {
+        event->accept();
+        return;
+    }
     const QRect previousPointerRect = pointerUpdateRect();
     const bool eraser =
         event->pointerType() == QPointingDevice::PointerType::Eraser;

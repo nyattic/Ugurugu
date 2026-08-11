@@ -994,8 +994,8 @@ void CanvasWidget::updateTimerInterval()
 void CanvasWidget::advanceFrame()
 {
     if (!m_animating || (m_drawing && !m_animateWhileDrawing) || m_panning
-        || m_zoomDragging || m_rotatingCanvas || m_pickingColor
-        || m_movingSelection || m_areaSelectionActive)
+        || m_zoomDragging || m_rotatingCanvas || m_touchGestureActive
+        || m_pickingColor || m_movingSelection || m_areaSelectionActive)
     {
         return;
     }
