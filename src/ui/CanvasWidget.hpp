@@ -87,6 +87,7 @@ public:
     bool isWobbleAnimationEnabled() const;
     int currentFrame() const;
     qreal zoom() const;
+    qreal canvasRotation() const;
     bool isCanvasMirrored() const;
     bool hasSelection() const;
     bool hasTransformableSelection() const;
@@ -155,6 +156,10 @@ public slots:
     void setZoomPercent(int percent);
     void zoomIn();
     void zoomOut();
+    void setCanvasRotation(qreal degrees);
+    void rotateCanvasLeft();
+    void rotateCanvasRight();
+    void resetCanvasRotation();
     void setCanvasMirrored(bool mirrored);
     void toggleCanvasMirrored();
     void setCurrentFrame(int frame);
@@ -188,6 +193,7 @@ signals:
     void animatingChanged(bool animating);
     void currentFrameChanged(int frame);
     void zoomChanged(int percent);
+    void canvasRotationChanged(qreal degrees);
     void canvasMirroredChanged(bool mirrored);
     void pointerPositionChanged(const QPointF &position, bool inside);
     void interactionMessage(const QString &message);
@@ -312,6 +318,11 @@ private:
     void beginZoomDrag(const QPointF &widgetPosition);
     void continueZoomDrag(const QPointF &widgetPosition);
     void endZoomDrag();
+    void applyCanvasRotation(qreal degrees);
+    void rotateCanvasAround(qreal degrees, const QPointF &widgetPosition);
+    void beginCanvasRotation(const QPointF &widgetPosition);
+    void continueCanvasRotation(const QPointF &widgetPosition);
+    void endCanvasRotation();
     bool isColorPickableTool() const;
     void beginColorPick(const QPointF &widgetPosition);
     void endColorPick();
@@ -431,6 +442,7 @@ private:
     int m_currentFrame = 0;
     qreal m_zoom = 1.0;
     QPointF m_pan;
+    qreal m_canvasRotation = 0.0;
     bool m_canvasMirrored = false;
     QCache<int, QImage> m_frameCache;
     QSize m_cachedRenderSize;
@@ -493,14 +505,18 @@ private:
     bool m_drawing = false;
     bool m_panning = false;
     bool m_spacePressed = false;
+    bool m_shiftPressed = false;
     bool m_tabletSequence = false;
     bool m_tabletPointerEraser = false;
     bool m_zoomDragging = false;
+    bool m_rotatingCanvas = false;
     bool m_pickingColor = false;
     QPointF m_zoomDragStart;
     QPointF m_zoomDragAnchor;
     bool m_zoomDragAnchorInside = false;
     qreal m_zoomDragStartZoom = 1.0;
+    QPointF m_rotationDragStart;
+    qreal m_rotationDragStartAngle = 0.0;
     QPointF m_lastPanPosition;
     QPointF m_pointerWidgetPosition;
     bool m_pointerInside = false;

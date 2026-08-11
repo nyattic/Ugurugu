@@ -1178,9 +1178,8 @@ void CanvasWidget::updateSelectionActionBar()
     }
 
     m_selectionActionBar->adjustSize();
-    const QRectF documentBounds = displayedSelectionBounds();
     const QRectF widgetBounds =
-        documentTransform().mapRect(documentBounds).normalized();
+        documentTransform().map(displayedSelectionOutline()).boundingRect();
     const QSize barSize = m_selectionActionBar->size();
     constexpr int edgeMargin = 8;
     constexpr int selectionGap = 4;

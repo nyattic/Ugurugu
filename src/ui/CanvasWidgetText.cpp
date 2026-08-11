@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Nyabi (nyattic)
 
 #include "document/TextStrokeBuilder.hpp"
+#include "ui/CanvasViewport.hpp"
 #include "ui/CanvasWidget.hpp"
 #include "ui/Theme.hpp"
 
@@ -287,7 +288,7 @@ void CanvasWidget::drawTextPlacementOverlay(
         return;
     }
     painter.save();
-    const qreal scale = std::abs(transform.m11());
+    const qreal scale = canvas_detail::uniformScale(transform);
     const QPainterPath path = transform.map(textPreviewPath());
     if (!path.isEmpty())
     {
@@ -303,13 +304,16 @@ void CanvasWidget::drawTextPlacementOverlay(
         painter.drawPath(path);
     }
 
-    const QRectF bounds =
-        transform.mapRect(textPlacementBounds()).adjusted(-6.0, -6.0, 6.0, 6.0);
+    QPainterPath documentPlacementPath;
+    documentPlacementPath.addRect(textPlacementBounds().adjusted(
+        -6.0 / scale, -6.0 / scale, 6.0 / scale, 6.0 / scale));
+    const QPainterPath placementPath = transform.map(documentPlacementPath);
+    const QRectF bounds = placementPath.boundingRect();
     QPen framePen(Theme::accent(), 1.0);
     framePen.setStyle(Qt::DashLine);
     painter.setPen(framePen);
     painter.setBrush(Qt::NoBrush);
-    painter.drawRect(bounds);
+    painter.drawPath(placementPath);
 
     painter.setPen(Theme::textMuted());
     const QString hint = m_textContent.trimmed().isEmpty()

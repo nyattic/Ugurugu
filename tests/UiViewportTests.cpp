@@ -4,10 +4,27 @@
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
+#include <QPolygonF>
+#include <QWheelEvent>
+
 #include <cmath>
+#include <limits>
+#include <numbers>
 
 namespace ugurugu
 {
+
+namespace
+{
+
+bool pointsAreClose(
+    const QPointF &actual, const QPointF &expected, qreal tolerance = 0.000001)
+{
+    return std::hypot(actual.x() - expected.x(), actual.y() - expected.y())
+           <= tolerance;
+}
+
+}
 
 class UiViewportTests final : public QObject
 {
@@ -21,6 +38,9 @@ private slots:
         settings.remove(QStringLiteral("brush/recentColors"));
         settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
+        settings.remove(QStringLiteral("shortcuts/rotateCanvasLeftAction"));
+        settings.remove(QStringLiteral("shortcuts/rotateCanvasRightAction"));
+        settings.remove(QStringLiteral("shortcuts/resetCanvasRotationAction"));
         settings.sync();
     }
 
@@ -31,6 +51,9 @@ private slots:
         settings.remove(QStringLiteral("brush/recentColors"));
         settings.remove(QStringLiteral("brush/colorHistory"));
         settings.remove(QStringLiteral("canvas/strokeStabilization"));
+        settings.remove(QStringLiteral("shortcuts/rotateCanvasLeftAction"));
+        settings.remove(QStringLiteral("shortcuts/rotateCanvasRightAction"));
+        settings.remove(QStringLiteral("shortcuts/resetCanvasRotationAction"));
         settings.sync();
     }
 
@@ -64,6 +87,392 @@ private slots:
         QVERIFY(!canvas->isCanvasMirrored());
         QVERIFY(!mirrorAction->isChecked());
         QVERIFY(!window.isWindowModified());
+    }
+
+    void mapsDocumentCoordinatesThroughRotationAndMirroring_data()
+    {
+        QTest::addColumn<qreal>("rotation");
+        QTest::addColumn<bool>("mirrored");
+
+        QTest::newRow("37-degrees") << 37.0 << false;
+        QTest::newRow("37-degrees-mirrored") << 37.0 << true;
+        QTest::newRow("90-degrees") << 90.0 << false;
+        QTest::newRow("90-degrees-mirrored") << 90.0 << true;
+    }
+
+    void mapsDocumentCoordinatesThroughRotationAndMirroring()
+    {
+        QFETCH(qreal, rotation);
+        QFETCH(bool, mirrored);
+
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(160, 80)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(500, 400);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(175);
+        canvas.setCanvasRotation(rotation);
+        canvas.setCanvasMirrored(mirrored);
+
+        const QPointF documentCenter(80.0, 40.0);
+        const QPointF widgetCenter(250.0, 200.0);
+        QVERIFY(pointsAreClose(
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentCenter),
+            widgetCenter));
+
+        const QVector<QPointF> documentPoints = {
+            QPointF(0.0, 0.0),
+            QPointF(13.25, 17.75),
+            documentCenter,
+            QPointF(149.5, 63.25),
+            QPointF(160.0, 80.0),
+        };
+        for (const QPointF &documentPoint : documentPoints)
+        {
+            const QPointF widgetPoint =
+                CanvasWidgetTestAccess::mapFromDocument(canvas, documentPoint);
+            QVERIFY(pointsAreClose(
+                CanvasWidgetTestAccess::mapToDocument(canvas, widgetPoint),
+                documentPoint));
+        }
+
+        const QPointF mappedAxis =
+            CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentCenter + QPointF(10.0, 0.0))
+            - widgetCenter;
+        const qreal radians = rotation * std::numbers::pi_v<qreal> / 180.0;
+        const qreal direction = mirrored ? -1.0 : 1.0;
+        const QPointF expectedAxis(direction * 17.5 * std::cos(radians),
+            direction * 17.5 * std::sin(radians));
+        QVERIFY(pointsAreClose(mappedAxis, expectedAxis));
+    }
+
+    void keepsPreviewRenderSizeAtRightAngleRotation()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(1024, 512)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(800, 600);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(150);
+
+        const QSize unrotatedSize =
+            CanvasWidgetTestAccess::previewRenderSize(canvas);
+        QVERIFY(unrotatedSize.isValid());
+        canvas.setCanvasRotation(90.0);
+        QCOMPARE(
+            CanvasWidgetTestAccess::previewRenderSize(canvas), unrotatedSize);
+        canvas.setCanvasMirrored(true);
+        QCOMPARE(
+            CanvasWidgetTestAccess::previewRenderSize(canvas), unrotatedSize);
+    }
+
+    void rotatesCanvasWithShiftSpaceMouseDragWithoutDrawing()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        canvas.setFocus(Qt::OtherFocusReason);
+        QTest::keyPress(&canvas, Qt::Key_Shift);
+        QTest::keyPress(&canvas, Qt::Key_Space, Qt::ShiftModifier);
+        const QPoint start = canvas.rect().center();
+        const QPoint end = start + QPoint(100, 0);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::ShiftModifier, start);
+        QTest::mouseMove(&canvas, end, 5);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::ShiftModifier, end);
+        QTest::keyRelease(&canvas, Qt::Key_Space, Qt::ShiftModifier);
+        QTest::keyRelease(&canvas, Qt::Key_Shift);
+
+        QVERIFY(std::abs(canvas.canvasRotation()) > 1.0);
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+    }
+
+    void rotatesCanvasWithShiftSpaceTabletDragAndResumesDrawing()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        QPointingDevice stylus(QStringLiteral("Rotation stylus"),
+            4,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const auto sendTabletEvent = [&canvas, &stylus](QEvent::Type type,
+                                         const QPointF &position,
+                                         qreal pressure,
+                                         Qt::KeyboardModifiers modifiers,
+                                         Qt::MouseButton button,
+                                         Qt::MouseButtons buttons)
+        {
+            const QPointF globalPosition =
+                canvas.mapToGlobal(position.toPoint());
+            QTabletEvent event(type,
+                &stylus,
+                position,
+                globalPosition,
+                pressure,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                modifiers,
+                button,
+                buttons);
+            QApplication::sendEvent(&canvas, &event);
+        };
+
+        canvas.setFocus(Qt::OtherFocusReason);
+        QTest::keyPress(&canvas, Qt::Key_Shift);
+        QTest::keyPress(&canvas, Qt::Key_Space, Qt::ShiftModifier);
+        const QPointF rotationStart = canvas.rect().center();
+        const QPointF rotationEnd = rotationStart + QPointF(90.0, 0.0);
+        sendTabletEvent(QEvent::TabletPress,
+            rotationStart,
+            0.7,
+            Qt::ShiftModifier,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletMove,
+            rotationEnd,
+            0.6,
+            Qt::ShiftModifier,
+            Qt::NoButton,
+            Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletRelease,
+            rotationEnd,
+            0.0,
+            Qt::ShiftModifier,
+            Qt::LeftButton,
+            Qt::NoButton);
+        QTest::keyRelease(&canvas, Qt::Key_Space, Qt::ShiftModifier);
+        QTest::keyRelease(&canvas, Qt::Key_Shift);
+
+        QVERIFY(std::abs(canvas.canvasRotation()) > 1.0);
+        QVERIFY(controller.document().layers.first().strokes.isEmpty());
+
+        const QPointF documentStart(30.0, 50.0);
+        const QPointF documentEnd(70.0, 50.0);
+        const QPointF drawingStart =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentStart);
+        const QPointF drawingEnd =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentEnd);
+        sendTabletEvent(QEvent::TabletPress,
+            drawingStart,
+            0.8,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletMove,
+            drawingEnd,
+            0.8,
+            Qt::NoModifier,
+            Qt::NoButton,
+            Qt::LeftButton);
+        sendTabletEvent(QEvent::TabletRelease,
+            drawingEnd,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::NoButton);
+
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        QVERIFY(pointsAreClose(
+            strokes.first().points.first().position, documentStart, 0.75));
+        QVERIFY(pointsAreClose(
+            strokes.first().points.last().position, documentEnd, 0.75));
+        QCOMPARE(strokes.first().points.last().pressure, 0.8);
+    }
+
+    void syncsCanvasRotationControlsWithoutEditingDocument()
+    {
+        MainWindow window;
+        window.resize(1000, 680);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QAction *rotateLeftAction = window.findChild<QAction *>(
+            QStringLiteral("rotateCanvasLeftAction"));
+        QAction *rotateRightAction = window.findChild<QAction *>(
+            QStringLiteral("rotateCanvasRightAction"));
+        QAction *resetRotationAction = window.findChild<QAction *>(
+            QStringLiteral("resetCanvasRotationAction"));
+        QDoubleSpinBox *rotationSpin = window.findChild<QDoubleSpinBox *>(
+            QStringLiteral("canvasRotationSpin"));
+        QVERIFY(canvas);
+        QVERIFY(rotateLeftAction);
+        QVERIFY(rotateRightAction);
+        QVERIFY(resetRotationAction);
+        QVERIFY(rotationSpin);
+        QCOMPARE(
+            rotateLeftAction->shortcut(), QKeySequence(QStringLiteral("-")));
+        QCOMPARE(
+            rotateRightAction->shortcut(), QKeySequence(QStringLiteral("^")));
+
+        QSignalSpy documentChanges(&MainWindowTestAccess::controller(window),
+            &DocumentController::documentChanged);
+        QCOMPARE(canvas->canvasRotation(), 0.0);
+        QCOMPARE(rotationSpin->value(), 0.0);
+
+        rotateLeftAction->trigger();
+        QCOMPARE(canvas->canvasRotation(), -5.0);
+        QCOMPARE(rotationSpin->value(), -5.0);
+        rotateRightAction->trigger();
+        QCOMPARE(canvas->canvasRotation(), 0.0);
+        QCOMPARE(rotationSpin->value(), 0.0);
+
+        rotationSpin->setValue(37.0);
+        QCOMPARE(canvas->canvasRotation(), 37.0);
+        resetRotationAction->trigger();
+        QCOMPARE(canvas->canvasRotation(), 0.0);
+        QCOMPARE(rotationSpin->value(), 0.0);
+        QCOMPARE(documentChanges.size(), 0);
+        QVERIFY(!window.isWindowModified());
+    }
+
+    void normalizesCanvasRotationAndRejectsNonfiniteAngles()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        QSignalSpy rotations(&canvas, &CanvasWidget::canvasRotationChanged);
+
+        canvas.setCanvasRotation(725.0);
+        QCOMPARE(canvas.canvasRotation(), 5.0);
+        canvas.setCanvasRotation(-725.0);
+        QCOMPARE(canvas.canvasRotation(), -5.0);
+        canvas.setCanvasRotation(std::numeric_limits<qreal>::infinity());
+        QCOMPARE(canvas.canvasRotation(), -5.0);
+        canvas.setCanvasRotation(std::numeric_limits<qreal>::quiet_NaN());
+        QCOMPARE(canvas.canvasRotation(), -5.0);
+        QCOMPARE(rotations.size(), 2);
+    }
+
+    void fitsTheRotatedCanvasWithoutResettingItsViewState()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(320, 120)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(500, 400);
+        canvas.setCanvasRotation(45.0);
+        canvas.setCanvasMirrored(true);
+        canvas.fitToWindow();
+
+        QPolygonF corners;
+        for (const QPointF &point : {QPointF(0.0, 0.0),
+                 QPointF(320.0, 0.0),
+                 QPointF(320.0, 120.0),
+                 QPointF(0.0, 120.0)})
+        {
+            corners.append(
+                CanvasWidgetTestAccess::mapFromDocument(canvas, point));
+        }
+        const QRectF bounds = corners.boundingRect();
+        QVERIFY(bounds.left() >= 31.0);
+        QVERIFY(bounds.top() >= 31.0);
+        QVERIFY(bounds.right() <= canvas.width() - 31.0);
+        QVERIFY(bounds.bottom() <= canvas.height() - 31.0);
+        QVERIFY(qAbs(bounds.height() - (canvas.height() - 64.0)) < 0.0001);
+        QCOMPARE(canvas.canvasRotation(), 45.0);
+        QVERIFY(canvas.isCanvasMirrored());
+    }
+
+    void rotatesWithShiftWheelAndIgnoresWheelDuringAStroke()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const QPointF center = canvas.rect().center();
+        const QPointF globalCenter = canvas.mapToGlobal(center.toPoint());
+        QWheelEvent rotateWheel(center,
+            globalCenter,
+            QPoint(),
+            QPoint(0, 120),
+            Qt::NoButton,
+            Qt::ShiftModifier,
+            Qt::NoScrollPhase,
+            false);
+        QApplication::sendEvent(&canvas, &rotateWheel);
+        QCOMPARE(canvas.canvasRotation(), 5.0);
+
+        const qreal zoomBeforeStroke = canvas.zoom();
+        QTest::mousePress(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+        QWheelEvent ignoredWheel(center,
+            globalCenter,
+            QPoint(),
+            QPoint(0, 120),
+            Qt::NoButton,
+            Qt::ShiftModifier,
+            Qt::NoScrollPhase,
+            false);
+        QApplication::sendEvent(&canvas, &ignoredWheel);
+        QCOMPARE(canvas.canvasRotation(), 5.0);
+        QCOMPARE(canvas.zoom(), zoomBeforeStroke);
+        QTest::mouseRelease(
+            &canvas, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+    }
+
+    void clipsTheSoftwareCheckerToTheRotatedCanvas()
+    {
+        Document document = Document::createDefault(QSize(160, 80));
+        document.background = Qt::transparent;
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setZoomPercent(100);
+        canvas.setCanvasRotation(45.0);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QVERIFY(!CanvasWidgetTestAccess::usingGpuDisplay(canvas));
+
+        QPolygonF canvasPolygon;
+        for (const QPointF &point : {QPointF(0.0, 0.0),
+                 QPointF(160.0, 0.0),
+                 QPointF(160.0, 80.0),
+                 QPointF(0.0, 80.0)})
+        {
+            canvasPolygon.append(
+                CanvasWidgetTestAccess::mapFromDocument(canvas, point));
+        }
+        const QRectF bounds = canvasPolygon.boundingRect();
+        const QPointF outside = bounds.topLeft() + QPointF(5.0, 5.0);
+        QVERIFY(!canvasPolygon.containsPoint(outside, Qt::OddEvenFill));
+
+        const QImage image = canvas.grab().toImage();
+        const qreal ratio = image.devicePixelRatio();
+        const auto pixelColorAt = [&image, ratio](const QPointF &position)
+        {
+            return image.pixelColor(
+                qRound(position.x() * ratio), qRound(position.y() * ratio));
+        };
+        QCOMPARE(pixelColorAt(outside), Theme::canvasBackground());
+        QVERIFY(pixelColorAt(canvasPolygon.boundingRect().center())
+                != Theme::canvasBackground());
     }
 
     void disablesDocumentAndLayerWobbleForTheCanvasView()

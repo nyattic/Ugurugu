@@ -171,6 +171,10 @@ These are the defaults. You can change all of them in **Settings → Shortcuts**
 | `I` | Eyedropper |
 | `P` | Play or pause movement |
 | `Space` + drag | Move around the canvas |
+| `Shift+Space` + mouse/pen drag | Rotate the canvas freely |
+| `Shift` + scroll | Rotate the canvas in 5° steps |
+| `-` / `^` | Rotate the canvas left / right by 5° |
+| **View → Rotate canvas → Reset canvas rotation** | Reset the canvas rotation to 0° |
 | Scroll | Zoom in or out |
 | `Alt` + click | Pick a color from the drawing |
 | `Alt+Delete` | Fill the selected area with the brush color |

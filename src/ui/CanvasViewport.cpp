@@ -49,6 +49,22 @@ qreal pointDistance(const QPointF &a, const QPointF &b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+qreal normalizedRotation(qreal degrees)
+{
+    qreal normalized = std::fmod(degrees + 180.0, 360.0);
+    if (normalized < 0.0)
+    {
+        normalized += 360.0;
+    }
+    normalized -= 180.0;
+    return qFuzzyIsNull(normalized) ? 0.0 : normalized;
+}
+
+qreal uniformScale(const QTransform &transform)
+{
+    return std::hypot(transform.m11(), transform.m12());
+}
+
 bool documentHasStrokes(const Document &document)
 {
     for (const Layer &layer : document.layers)

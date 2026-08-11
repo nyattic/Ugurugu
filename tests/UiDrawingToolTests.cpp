@@ -662,6 +662,102 @@ private slots:
         QVERIFY(layer.strokes.first().points.first().position.x() > 70.0);
     }
 
+    void mapsTabletInputThroughTheRotatedMirroredCanvas()
+    {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(100, 100)));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 400);
+        canvas.setAnimating(false);
+        canvas.setCanvasRotation(37.0);
+        canvas.setCanvasMirrored(true);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+
+        QPointingDevice stylus(QStringLiteral("Rotated canvas stylus"),
+            4,
+            QInputDevice::DeviceType::Stylus,
+            QPointingDevice::PointerType::Pen,
+            QInputDevice::Capability::Position
+                | QInputDevice::Capability::Pressure,
+            1,
+            1);
+        const QPointF documentStart(18.0, 24.0);
+        const QPointF documentMiddle(52.0, 45.0);
+        const QPointF documentEnd(82.0, 74.0);
+        const QPointF widgetStart =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentStart);
+        const QPointF widgetMiddle =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentMiddle);
+        const QPointF widgetEnd =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, documentEnd);
+        const QPointF globalStart = canvas.mapToGlobal(widgetStart.toPoint());
+        const QPointF globalMiddle = canvas.mapToGlobal(widgetMiddle.toPoint());
+        const QPointF globalEnd = canvas.mapToGlobal(widgetEnd.toPoint());
+
+        QTabletEvent tabletPress(QEvent::TabletPress,
+            &stylus,
+            widgetStart,
+            globalStart,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::LeftButton);
+        tabletPress.setTimestamp(100);
+        QApplication::sendEvent(&canvas, &tabletPress);
+        QTabletEvent tabletMove(QEvent::TabletMove,
+            &stylus,
+            widgetMiddle,
+            globalMiddle,
+            0.72,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::NoButton,
+            Qt::LeftButton);
+        tabletMove.setTimestamp(108);
+        QApplication::sendEvent(&canvas, &tabletMove);
+        QTabletEvent tabletRelease(QEvent::TabletRelease,
+            &stylus,
+            widgetEnd,
+            globalEnd,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Qt::NoModifier,
+            Qt::LeftButton,
+            Qt::NoButton);
+        tabletRelease.setTimestamp(116);
+        QApplication::sendEvent(&canvas, &tabletRelease);
+
+        const QVector<Stroke> &strokes =
+            controller.document().layers.first().strokes;
+        QCOMPARE(strokes.size(), 1);
+        const QVector<StrokePoint> &points = strokes.first().points;
+        QVERIFY(points.size() >= 3);
+        QVERIFY(qAbs(points.first().position.x() - documentStart.x()) < 0.0001);
+        QVERIFY(qAbs(points.first().position.y() - documentStart.y()) < 0.0001);
+        QCOMPARE(points.first().pressure, 0.25);
+        QVERIFY(qAbs(points.at(1).position.x() - documentMiddle.x()) < 0.0001);
+        QVERIFY(qAbs(points.at(1).position.y() - documentMiddle.y()) < 0.0001);
+        QCOMPARE(points.at(1).pressure, 0.72);
+        QVERIFY(qAbs(points.last().position.x() - documentEnd.x()) < 0.0001);
+        QVERIFY(qAbs(points.last().position.y() - documentEnd.y()) < 0.0001);
+        QCOMPARE(points.last().pressure, 0.72);
+    }
+
     void clipsDrawingToolsToPersistentLasso()
     {
         Document document = Document::createDefault(QSize(100, 100));

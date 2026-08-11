@@ -34,6 +34,7 @@ QTransform CanvasWidget::documentTransform() const
 
     QTransform transform;
     transform.translate(center.x() + m_pan.x(), center.y() + m_pan.y());
+    transform.rotate(m_canvasRotation);
     transform.scale(m_canvasMirrored ? -m_zoom : m_zoom, m_zoom);
     transform.translate(-canvasCenter.x(), -canvasCenter.y());
     return transform;
@@ -48,8 +49,14 @@ qreal CanvasWidget::fitZoom() const
     }
     const qreal availableWidth = std::max(1.0, width() - canvasMargin * 2.0);
     const qreal availableHeight = std::max(1.0, height() - canvasMargin * 2.0);
-    return std::clamp(std::min(availableWidth / canvasSize.width(),
-                          availableHeight / canvasSize.height()),
+    QTransform rotation;
+    rotation.rotate(m_canvasRotation);
+    const QSizeF rotatedSize =
+        rotation.mapRect(QRectF(QPointF(), QSizeF(canvasSize)))
+            .normalized()
+            .size();
+    return std::clamp(std::min(availableWidth / rotatedSize.width(),
+                          availableHeight / rotatedSize.height()),
         minimumZoom,
         maximumZoom);
 }
@@ -539,7 +546,7 @@ QSize CanvasWidget::previewRenderSize() const
     }
     const Document &document = m_controller->document();
     const qreal displayScale =
-        std::abs(documentTransform().m11()) * devicePixelRatioF();
+        uniformScale(documentTransform()) * devicePixelRatioF();
     // Sized for the whole frame cache whether or not playback is running, for
     // the same reason the active stroke below is always reserved for: sizing
     // off m_animating changed the render size on every play and pause, and
@@ -987,8 +994,8 @@ void CanvasWidget::updateTimerInterval()
 void CanvasWidget::advanceFrame()
 {
     if (!m_animating || (m_drawing && !m_animateWhileDrawing) || m_panning
-        || m_zoomDragging || m_pickingColor || m_movingSelection
-        || m_areaSelectionActive)
+        || m_zoomDragging || m_rotatingCanvas || m_pickingColor
+        || m_movingSelection || m_areaSelectionActive)
     {
         return;
     }

@@ -362,6 +362,11 @@ qreal CanvasWidget::zoom() const
     return m_zoom;
 }
 
+qreal CanvasWidget::canvasRotation() const
+{
+    return m_canvasRotation;
+}
+
 bool CanvasWidget::isCanvasMirrored() const
 {
     return m_canvasMirrored;
@@ -947,11 +952,13 @@ void CanvasWidget::handleEscape()
     {
         cancelTextPlacement();
     }
-    else if (m_drawing || m_panning || m_zoomDragging || m_pickingColor)
+    else if (m_drawing || m_panning || m_zoomDragging || m_rotatingCanvas
+             || m_pickingColor)
     {
         cancelStroke();
         endPan();
         endZoomDrag();
+        endCanvasRotation();
         endColorPick();
         m_tabletSequence = false;
     }
@@ -1372,6 +1379,40 @@ void CanvasWidget::zoomOut()
     zoomToward(m_zoom / keyboardZoomStep, zoomAnchorPosition());
 }
 
+void CanvasWidget::setCanvasRotation(qreal degrees)
+{
+    if (!std::isfinite(degrees))
+    {
+        return;
+    }
+    const qreal normalized = normalizedRotation(degrees);
+    if (qFuzzyIsNull(m_canvasRotation - normalized))
+    {
+        return;
+    }
+    cancelStroke();
+    endPan();
+    endZoomDrag();
+    endCanvasRotation();
+    endColorPick();
+    applyCanvasRotation(normalized);
+}
+
+void CanvasWidget::rotateCanvasLeft()
+{
+    setCanvasRotation(m_canvasRotation - canvasRotationStep);
+}
+
+void CanvasWidget::rotateCanvasRight()
+{
+    setCanvasRotation(m_canvasRotation + canvasRotationStep);
+}
+
+void CanvasWidget::resetCanvasRotation()
+{
+    setCanvasRotation(0.0);
+}
+
 void CanvasWidget::setCanvasMirrored(bool mirrored)
 {
     if (m_canvasMirrored == mirrored)
@@ -1381,6 +1422,7 @@ void CanvasWidget::setCanvasMirrored(bool mirrored)
     cancelStroke();
     endPan();
     endZoomDrag();
+    endCanvasRotation();
     endColorPick();
     m_canvasMirrored = mirrored;
     updatePointerPosition(m_pointerWidgetPosition);
@@ -1444,9 +1486,11 @@ void CanvasWidget::cancelActiveInteraction()
     }
     endPan();
     endZoomDrag();
+    endCanvasRotation();
     endColorPick();
     m_tabletSequence = false;
     m_tabletPointerEraser = false;
+    m_shiftPressed = false;
     setPanModifierActive(false);
     updateCursor();
     requestDisplayUpdate();

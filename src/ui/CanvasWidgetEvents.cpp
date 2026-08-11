@@ -15,6 +15,8 @@
 #include <QNativeGestureEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPolygonF>
 #include <QResizeEvent>
 #include <QTabletEvent>
 #include <QWheelEvent>
@@ -54,8 +56,23 @@ bool CanvasWidget::event(QEvent *event)
         auto *gesture = static_cast<QNativeGestureEvent *>(event);
         if (gesture->gestureType() == Qt::ZoomNativeGesture)
         {
-            zoomToward(
-                m_zoom * std::pow(2.0, gesture->value()), gesture->position());
+            if (!m_drawing && !m_tabletSequence && !m_movingSelection
+                && !m_areaSelectionActive && !m_textDragging)
+            {
+                zoomToward(m_zoom * std::pow(2.0, gesture->value()),
+                    gesture->position());
+            }
+            event->accept();
+            return true;
+        }
+        if (gesture->gestureType() == Qt::RotateNativeGesture)
+        {
+            if (!m_drawing && !m_tabletSequence && !m_movingSelection
+                && !m_areaSelectionActive && !m_textDragging)
+            {
+                rotateCanvasAround(
+                    m_canvasRotation + gesture->value(), gesture->position());
+            }
             event->accept();
             return true;
         }
@@ -89,23 +106,28 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
 
     const Document document = displayDocument();
     const QTransform transform = documentTransform();
-    const QRectF canvasRect =
-        transform.mapRect(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)));
+    const QRectF documentRect(QPointF(0.0, 0.0), QSizeF(document.size));
+    const QPolygonF canvasPolygon = transform.map(QPolygonF(documentRect));
+    QPainterPath canvasPath;
+    canvasPath.addPolygon(canvasPolygon);
+    canvasPath.closeSubpath();
+    const QRectF canvasBounds = canvasPath.boundingRect();
 
-    const QRectF visibleCanvasRect = canvasRect.intersected(QRectF(rect()));
+    const QRectF visibleCanvasRect = canvasBounds.intersected(QRectF(rect()));
     const QRectF checkerRect =
         visibleCanvasRect.intersected(QRectF(event->rect()));
     if (!checkerRect.isEmpty())
     {
-        painter.setBrushOrigin(canvasRect.topLeft());
+        painter.save();
+        painter.setClipPath(canvasPath);
+        painter.setBrushOrigin(canvasBounds.topLeft());
         painter.fillRect(checkerRect, checkerBrush());
-        painter.setBrushOrigin(QPointF());
+        painter.restore();
     }
 
     painter.save();
     painter.setTransform(transform);
-    painter.drawImage(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)),
-        resolveDisplayedFrame().image);
+    painter.drawImage(documentRect, resolveDisplayedFrame().image);
     painter.restore();
 
     paintOverlay(painter, event->region());
@@ -123,32 +145,38 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
 
     const Document document = displayDocument();
     const QTransform transform = documentTransform();
-    const QRectF canvasRect =
-        transform.mapRect(QRectF(QPointF(0.0, 0.0), QSizeF(document.size)));
+    const QRectF documentRect(QPointF(0.0, 0.0), QSizeF(document.size));
+    const QPolygonF canvasPolygon = transform.map(QPolygonF(documentRect));
+    QPainterPath canvasPath;
+    canvasPath.addPolygon(canvasPolygon);
+    canvasPath.closeSubpath();
+    const QRectF canvasBounds = canvasPath.boundingRect();
 
     const QRegion shadowRegion = exposedRegion.subtracted(
-        QRegion(canvasRect.toAlignedRect().intersected(rect())));
+        QRegion(canvasPolygon.toPolygon()).intersected(rect()));
     if (!shadowRegion.isEmpty())
     {
         painter.save();
         painter.setClipRegion(shadowRegion);
-        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::NoBrush);
+        const QPainterPath shadowPath = canvasPath.translated(0.0, 2.0);
         for (int step = 14; step > 0; --step)
         {
             QColor shadow(Qt::black);
             shadow.setAlphaF(static_cast<float>(0.020 * (1.0 - step / 14.0)));
-            painter.setBrush(shadow);
-            painter.drawRoundedRect(
-                canvasRect.adjusted(-step, -step + 2.0, step, step + 2.0),
-                step * 0.9,
-                step * 0.9);
+            painter.setPen(QPen(shadow,
+                step * 2.0,
+                Qt::SolidLine,
+                Qt::RoundCap,
+                Qt::RoundJoin));
+            painter.drawPath(shadowPath);
         }
         painter.restore();
     }
 
     painter.setPen(QPen(Theme::canvasBorder(), 1.0));
     painter.setBrush(Qt::NoBrush);
-    painter.drawRect(canvasRect);
+    painter.drawPath(canvasPath);
 
     if (!m_drawing && !documentHasStrokes(document))
     {
@@ -156,10 +184,13 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
         QFont hintFont = painter.font();
         hintFont.setPointSizeF(hintFont.pointSizeF() * 0.95);
         painter.setFont(hintFont);
-        painter.drawText(canvasRect.adjusted(0.0, 0.0, 0.0, -14.0),
+        painter.save();
+        painter.setClipPath(canvasPath);
+        painter.drawText(canvasBounds.adjusted(0.0, 0.0, 0.0, -14.0),
             Qt::AlignHCenter | Qt::AlignBottom,
             tr("B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space "
-               "Zoom · P Play"));
+               "Zoom · Shift+Space Rotate · P Play"));
+        painter.restore();
     }
 
     drawSelectionOverlay(painter, transform);
@@ -167,15 +198,15 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
 
     const bool pointerUsesEraser =
         m_tabletPointerEraser || m_tool == Tool::Eraser;
-    if (m_pointerOverWidget && !m_panning && !m_spacePressed && !m_pickingColor
-        && !m_groupSelectionActive
+    if (m_pointerOverWidget && !m_panning && !m_rotatingCanvas
+        && !m_spacePressed && !m_pickingColor && !m_groupSelectionActive
         && (m_tabletPointerEraser || m_tool == Tool::Brush
             || m_tool == Tool::Eraser))
     {
         const qreal toolWidth =
             pointerUsesEraser ? m_eraserWidth : m_brushWidth;
         const qreal radius =
-            std::max(1.0, toolWidth * std::abs(transform.m11()) * 0.5);
+            std::max(1.0, toolWidth * uniformScale(transform) * 0.5);
         const QRectF footprint(m_pointerWidgetPosition.x() - radius,
             m_pointerWidgetPosition.y() - radius,
             radius * 2.0,
@@ -225,15 +256,24 @@ void CanvasWidget::mousePressEvent(QMouseEvent *event)
     }
     updatePointerPosition(event->position());
     setFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::LeftButton && m_spacePressed
-        && event->modifiers().testFlag(Qt::ControlModifier))
+    if (event->button() == Qt::LeftButton && m_spacePressed)
     {
-        beginZoomDrag(event->position());
+        if (event->modifiers().testFlag(Qt::ControlModifier))
+        {
+            beginZoomDrag(event->position());
+        }
+        else if (event->modifiers().testFlag(Qt::ShiftModifier))
+        {
+            beginCanvasRotation(event->position());
+        }
+        else
+        {
+            beginPan(event->position());
+        }
         event->accept();
         return;
     }
-    if (event->button() == Qt::MiddleButton
-        || (event->button() == Qt::LeftButton && m_spacePressed))
+    if (event->button() == Qt::MiddleButton)
     {
         beginPan(event->position());
         event->accept();
@@ -321,6 +361,12 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent *event)
         }
     }
     updatePointerPosition(event->position());
+    if (m_rotatingCanvas)
+    {
+        continueCanvasRotation(event->position());
+        event->accept();
+        return;
+    }
     if (m_zoomDragging)
     {
         continueZoomDrag(event->position());
@@ -379,6 +425,13 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent *event)
         }
     }
     updatePointerPosition(event->position());
+    if (m_rotatingCanvas && event->button() == Qt::LeftButton)
+    {
+        continueCanvasRotation(event->position());
+        endCanvasRotation();
+        event->accept();
+        return;
+    }
     if (m_zoomDragging && event->button() == Qt::LeftButton)
     {
         endZoomDrag();
@@ -446,6 +499,25 @@ void CanvasWidget::wheelEvent(QWheelEvent *event)
 {
     const QPointF cursor = event->position();
     updatePointerPosition(cursor);
+    if (m_drawing || m_tabletSequence || m_movingSelection
+        || m_areaSelectionActive || m_textDragging)
+    {
+        event->accept();
+        return;
+    }
+    if (event->modifiers().testFlag(Qt::ShiftModifier))
+    {
+        const QPoint angleDelta = event->angleDelta();
+        const int wheelDelta =
+            angleDelta.y() != 0 ? angleDelta.y() : angleDelta.x();
+        if (wheelDelta != 0)
+        {
+            setCanvasRotation(
+                m_canvasRotation + canvasRotationStep * wheelDelta / 120.0);
+        }
+        event->accept();
+        return;
+    }
     const qreal factor = std::pow(1.0015, event->angleDelta().y());
     zoomToward(m_zoom * factor, cursor);
     event->accept();
@@ -482,6 +554,10 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             if (event->modifiers().testFlag(Qt::ControlModifier))
             {
                 beginZoomDrag(event->position());
+            }
+            else if (event->modifiers().testFlag(Qt::ShiftModifier))
+            {
+                beginCanvasRotation(event->position());
             }
             else
             {
@@ -559,7 +635,11 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
             event->accept();
             return;
         }
-        if (m_zoomDragging)
+        if (m_rotatingCanvas)
+        {
+            continueCanvasRotation(event->position());
+        }
+        else if (m_zoomDragging)
         {
             continueZoomDrag(event->position());
         }
@@ -593,7 +673,12 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
     }
     if (event->type() == QEvent::TabletRelease && m_tabletSequence)
     {
-        if (m_zoomDragging)
+        if (m_rotatingCanvas)
+        {
+            continueCanvasRotation(event->position());
+            endCanvasRotation();
+        }
+        else if (m_zoomDragging)
         {
             endZoomDrag();
         }
@@ -633,6 +718,13 @@ void CanvasWidget::tabletEvent(QTabletEvent *event)
 
 void CanvasWidget::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Shift && !event->isAutoRepeat())
+    {
+        m_shiftPressed = true;
+        updateCursor();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat())
     {
         setPanModifierActive(true);
@@ -664,6 +756,13 @@ void CanvasWidget::keyPressEvent(QKeyEvent *event)
 
 void CanvasWidget::keyReleaseEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Shift && !event->isAutoRepeat())
+    {
+        m_shiftPressed = false;
+        updateCursor();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Space && !event->isAutoRepeat())
     {
         setPanModifierActive(false);

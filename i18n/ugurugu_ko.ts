@@ -509,9 +509,9 @@
         <translation>활성 레이어가 속한 그룹이 숨겨져 있습니다. 표시한 후 그릴 수 있습니다.</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="161"/>
-        <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
-        <translation>B 브러시 · E 지우개 · Space 이동 · 스크롤/Ctrl+Space 확대·축소 · P 재생</translation>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="187"/>
+        <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · Shift+Space Rotate · P Play</source>
+        <translation>B 브러시 · E 지우개 · Space 이동 · 스크롤/Ctrl+Space 확대·축소 · Shift+Space 회전 · P 재생</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="566"/>
@@ -2689,7 +2689,37 @@ The recovery file was not deleted. You can find it at:
         <translation>전체 캔버스를 창에 맞추기</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="609"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="612"/>
+        <source>Rotate canvas &amp;left</source>
+        <translation>캔버스 왼쪽 회전(&amp;L)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="617"/>
+        <source>Rotate the canvas view 5° counterclockwise</source>
+        <translation>캔버스 보기를 반시계 방향으로 5° 회전</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="626"/>
+        <source>Rotate canvas &amp;right</source>
+        <translation>캔버스 오른쪽 회전(&amp;R)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="631"/>
+        <source>Rotate the canvas view 5° clockwise</source>
+        <translation>캔버스 보기를 시계 방향으로 5° 회전</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="640"/>
+        <source>Rese&amp;t canvas rotation</source>
+        <translation>캔버스 회전 초기화(&amp;T)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="645"/>
+        <source>Reset the canvas view to 0° without changing zoom or mirroring</source>
+        <translation>확대/축소나 좌우 반전을 바꾸지 않고 캔버스 보기를 0°로 초기화</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="652"/>
         <source>Flip canvas horizontally</source>
         <translation>캔버스 좌우반전</translation>
     </message>
@@ -2779,6 +2809,11 @@ The recovery file was not deleted. You can find it at:
         <translation>보기(&amp;V)</translation>
     </message>
     <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="965"/>
+        <source>&amp;Rotate canvas</source>
+        <translation>캔버스 회전(&amp;R)</translation>
+    </message>
+    <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="921"/>
         <source>&amp;Tools</source>
         <translation>도구(&amp;T)</translation>
@@ -2849,6 +2884,17 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/MainWindowActions.cpp" line="1097"/>
         <source>Canvas zoom percentage</source>
         <translation>캔버스 확대/축소 배율</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1177"/>
+        <source>°</source>
+        <translation>°</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1180"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1181"/>
+        <source>Canvas rotation angle</source>
+        <translation>캔버스 회전 각도</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="937"/>

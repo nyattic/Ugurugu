@@ -28,9 +28,11 @@
 #include "ui/WobblePopoverPanel.hpp"
 
 #include <QActionGroup>
+#include <QDoubleSpinBox>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
@@ -606,6 +608,45 @@ void MainWindow::createActions()
     connect(
         fitAction, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
 
+    auto *rotateCanvasLeftAction = new QAction(tr("Rotate canvas &left"), this);
+    rotateCanvasLeftAction->setObjectName(
+        QStringLiteral("rotateCanvasLeftAction"));
+    rotateCanvasLeftAction->setIcon(Icons::icon(IconGlyph::Undo));
+    rotateCanvasLeftAction->setToolTip(
+        tr("Rotate the canvas view 5° counterclockwise"));
+    registerShortcut(rotateCanvasLeftAction, QKeySequence(QStringLiteral("-")));
+    connect(rotateCanvasLeftAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::rotateCanvasLeft);
+
+    auto *rotateCanvasRightAction =
+        new QAction(tr("Rotate canvas &right"), this);
+    rotateCanvasRightAction->setObjectName(
+        QStringLiteral("rotateCanvasRightAction"));
+    rotateCanvasRightAction->setIcon(Icons::icon(IconGlyph::Redo));
+    rotateCanvasRightAction->setToolTip(
+        tr("Rotate the canvas view 5° clockwise"));
+    registerShortcut(
+        rotateCanvasRightAction, QKeySequence(QStringLiteral("^")));
+    connect(rotateCanvasRightAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::rotateCanvasRight);
+
+    auto *resetCanvasRotationAction =
+        new QAction(tr("Rese&t canvas rotation"), this);
+    resetCanvasRotationAction->setObjectName(
+        QStringLiteral("resetCanvasRotationAction"));
+    resetCanvasRotationAction->setIcon(Icons::icon(IconGlyph::Rotate));
+    resetCanvasRotationAction->setToolTip(
+        tr("Reset the canvas view to 0° without changing zoom or mirroring"));
+    registerShortcut(resetCanvasRotationAction, {});
+    connect(resetCanvasRotationAction,
+        &QAction::triggered,
+        m_canvas,
+        &CanvasWidget::resetCanvasRotation);
+
     m_mirrorCanvasAction = new QAction(tr("Flip canvas horizontally"), this);
     m_mirrorCanvasAction->setObjectName(QStringLiteral("mirrorCanvasAction"));
     m_mirrorCanvasAction->setCheckable(true);
@@ -841,6 +882,9 @@ void MainWindow::createActions()
     addAction(zoomOutAction);
     addAction(actualSizeAction);
     addAction(fitAction);
+    addAction(rotateCanvasLeftAction);
+    addAction(rotateCanvasRightAction);
+    addAction(resetCanvasRotationAction);
     addAction(m_mirrorCanvasAction);
     addAction(m_playAction);
     addAction(checkForUpdatesAction);
@@ -915,7 +959,16 @@ void MainWindow::createMenus()
     viewMenu->addAction(
         findChild<QAction *>(QStringLiteral("actualSizeAction")));
     viewMenu->addAction(findChild<QAction *>(QStringLiteral("fitAction")));
+    viewMenu->addSeparator();
+    QMenu *rotationMenu = viewMenu->addMenu(tr("&Rotate canvas"));
+    rotationMenu->addAction(
+        findChild<QAction *>(QStringLiteral("rotateCanvasLeftAction")));
+    rotationMenu->addAction(
+        findChild<QAction *>(QStringLiteral("rotateCanvasRightAction")));
+    rotationMenu->addAction(
+        findChild<QAction *>(QStringLiteral("resetCanvasRotationAction")));
     viewMenu->addAction(m_mirrorCanvasAction);
+    viewMenu->addSeparator();
     viewMenu->addAction(m_playAction);
 
     QMenu *toolMenu = menuBar()->addMenu(tr("&Tools"));
@@ -1107,6 +1160,40 @@ void MainWindow::createStatusBar()
     m_zoomSpin->setAccessibleName(tr("Canvas zoom percentage"));
     statusBar()->addPermanentWidget(m_zoomSpin);
 
+    auto *rotateLeftButton = new QToolButton(this);
+    rotateLeftButton->setObjectName(QStringLiteral("rotateCanvasLeftButton"));
+    rotateLeftButton->setDefaultAction(
+        findChild<QAction *>(QStringLiteral("rotateCanvasLeftAction")));
+    rotateLeftButton->setIconSize(QSize(18, 18));
+    statusBar()->addPermanentWidget(rotateLeftButton);
+
+    auto *rotationSpin = new QDoubleSpinBox(this);
+    rotationSpin->setObjectName(QStringLiteral("canvasRotationSpin"));
+    rotationSpin->setRange(-180.0, 180.0);
+    rotationSpin->setDecimals(1);
+    rotationSpin->setSingleStep(5.0);
+    rotationSpin->setSuffix(tr("°"));
+    rotationSpin->setWrapping(true);
+    rotationSpin->setFixedWidth(76);
+    rotationSpin->setToolTip(tr("Canvas rotation angle"));
+    rotationSpin->setAccessibleName(tr("Canvas rotation angle"));
+    statusBar()->addPermanentWidget(rotationSpin);
+
+    auto *rotateRightButton = new QToolButton(this);
+    rotateRightButton->setObjectName(QStringLiteral("rotateCanvasRightButton"));
+    rotateRightButton->setDefaultAction(
+        findChild<QAction *>(QStringLiteral("rotateCanvasRightAction")));
+    rotateRightButton->setIconSize(QSize(18, 18));
+    statusBar()->addPermanentWidget(rotateRightButton);
+
+    auto *resetRotationButton = new QToolButton(this);
+    resetRotationButton->setObjectName(
+        QStringLiteral("resetCanvasRotationButton"));
+    resetRotationButton->setDefaultAction(
+        findChild<QAction *>(QStringLiteral("resetCanvasRotationAction")));
+    resetRotationButton->setIconSize(QSize(18, 18));
+    statusBar()->addPermanentWidget(resetRotationButton);
+
     auto *mirrorButton = new QToolButton(this);
     mirrorButton->setObjectName(QStringLiteral("mirrorCanvasButton"));
     mirrorButton->setDefaultAction(m_mirrorCanvasAction);
@@ -1154,6 +1241,18 @@ void MainWindow::createStatusBar()
             const QSignalBlocker spinBlocker(m_zoomSpin);
             m_zoomSlider->setValue(sliderFromZoomPercent(percent));
             m_zoomSpin->setValue(percent);
+        });
+    connect(rotationSpin,
+        &QDoubleSpinBox::valueChanged,
+        m_canvas,
+        &CanvasWidget::setCanvasRotation);
+    connect(m_canvas,
+        &CanvasWidget::canvasRotationChanged,
+        this,
+        [rotationSpin](qreal degrees)
+        {
+            const QSignalBlocker blocker(rotationSpin);
+            rotationSpin->setValue(degrees);
         });
     connect(m_canvas,
         &CanvasWidget::interactionMessage,

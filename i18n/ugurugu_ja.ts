@@ -509,9 +509,9 @@
         <translation>アクティブレイヤーが入っているグループが非表示です。表示してから描画してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="161"/>
-        <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · P Play</source>
-        <translation>B ブラシ · E 消しゴム · Space 移動 · スクロール / Ctrl+Space ズーム · P 再生</translation>
+        <location filename="../src/ui/CanvasWidgetEvents.cpp" line="187"/>
+        <source>B Brush · E Eraser · Space Pan · Scroll or Ctrl+Space Zoom · Shift+Space Rotate · P Play</source>
+        <translation>B ブラシ · E 消しゴム · Space 移動 · スクロール / Ctrl+Space ズーム · Shift+Space 回転 · P 再生</translation>
     </message>
     <message>
         <location filename="../src/ui/CanvasWidgetSelection.cpp" line="566"/>
@@ -2689,7 +2689,37 @@ The recovery file was not deleted. You can find it at:
         <translation>キャンバス全体をウィンドウに合わせる</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindowActions.cpp" line="609"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="612"/>
+        <source>Rotate canvas &amp;left</source>
+        <translation>キャンバスを左に回転(&amp;L)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="617"/>
+        <source>Rotate the canvas view 5° counterclockwise</source>
+        <translation>キャンバス表示を反時計回りに5°回転</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="626"/>
+        <source>Rotate canvas &amp;right</source>
+        <translation>キャンバスを右に回転(&amp;R)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="631"/>
+        <source>Rotate the canvas view 5° clockwise</source>
+        <translation>キャンバス表示を時計回りに5°回転</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="640"/>
+        <source>Rese&amp;t canvas rotation</source>
+        <translation>キャンバスの回転をリセット(&amp;T)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="645"/>
+        <source>Reset the canvas view to 0° without changing zoom or mirroring</source>
+        <translation>ズームや左右反転を変えずにキャンバス表示を0°にリセット</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="652"/>
         <source>Flip canvas horizontally</source>
         <translation>キャンバスを左右反転</translation>
     </message>
@@ -2779,6 +2809,11 @@ The recovery file was not deleted. You can find it at:
         <translation>表示(&amp;V)</translation>
     </message>
     <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="965"/>
+        <source>&amp;Rotate canvas</source>
+        <translation>キャンバスを回転(&amp;R)</translation>
+    </message>
+    <message>
         <location filename="../src/ui/MainWindowActions.cpp" line="921"/>
         <source>&amp;Tools</source>
         <translation>ツール(&amp;T)</translation>
@@ -2849,6 +2884,17 @@ The recovery file was not deleted. You can find it at:
         <location filename="../src/ui/MainWindowActions.cpp" line="1097"/>
         <source>Canvas zoom percentage</source>
         <translation>キャンバスのズーム倍率</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1177"/>
+        <source>°</source>
+        <translation>°</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1180"/>
+        <location filename="../src/ui/MainWindowActions.cpp" line="1181"/>
+        <source>Canvas rotation angle</source>
+        <translation>キャンバスの回転角度</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="937"/>

@@ -429,6 +429,100 @@ void CanvasWidget::endZoomDrag()
     requestDisplayUpdate();
 }
 
+void CanvasWidget::applyCanvasRotation(qreal degrees)
+{
+    if (!std::isfinite(degrees))
+    {
+        return;
+    }
+    const qreal normalized = normalizedRotation(degrees);
+    if (qFuzzyIsNull(m_canvasRotation - normalized))
+    {
+        return;
+    }
+    m_canvasRotation = normalized;
+    emit canvasRotationChanged(normalized);
+    if (m_pointerOverWidget)
+    {
+        updatePointerPosition(m_pointerWidgetPosition);
+    }
+    else
+    {
+        updateSelectionActionBar();
+    }
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::rotateCanvasAround(
+    qreal degrees, const QPointF &widgetPosition)
+{
+    if (!std::isfinite(degrees))
+    {
+        return;
+    }
+    const qreal normalized = normalizedRotation(degrees);
+    if (qFuzzyIsNull(m_canvasRotation - normalized))
+    {
+        return;
+    }
+    bool inside = false;
+    const QPointF anchor = mapToDocument(widgetPosition, &inside);
+    m_canvasRotation = normalized;
+    if (inside)
+    {
+        m_pan += widgetPosition - documentTransform().map(anchor);
+    }
+    emit canvasRotationChanged(normalized);
+    if (m_pointerOverWidget)
+    {
+        updatePointerPosition(m_pointerWidgetPosition);
+    }
+    else
+    {
+        updateSelectionActionBar();
+    }
+    requestDisplayUpdate();
+}
+
+void CanvasWidget::beginCanvasRotation(const QPointF &widgetPosition)
+{
+    cancelStroke();
+    endPan();
+    endZoomDrag();
+    endColorPick();
+    m_rotatingCanvas = true;
+    m_rotationDragStart = widgetPosition;
+    m_rotationDragStartAngle = m_canvasRotation;
+    updateCursor();
+}
+
+void CanvasWidget::continueCanvasRotation(const QPointF &widgetPosition)
+{
+    if (!m_rotatingCanvas)
+    {
+        return;
+    }
+    const qreal delta = (widgetPosition.x() - m_rotationDragStart.x())
+                        * dragRotationDegreesPerPixel;
+    applyCanvasRotation(m_rotationDragStartAngle + delta);
+}
+
+void CanvasWidget::endCanvasRotation()
+{
+    if (!m_rotatingCanvas)
+    {
+        return;
+    }
+    m_rotatingCanvas = false;
+    updateCursor();
+    const QRect pointerRect = pointerUpdateRect();
+    if (!pointerRect.isEmpty())
+    {
+        requestDisplayUpdate(pointerRect);
+    }
+    requestDisplayUpdate();
+}
+
 bool CanvasWidget::isColorPickableTool() const
 {
     return m_tool == Tool::Brush || m_tool == Tool::Eraser
@@ -517,7 +611,8 @@ void CanvasWidget::updatePointerPosition(const QPointF &widgetPosition)
 
 QRect CanvasWidget::pointerUpdateRect() const
 {
-    if (!m_pointerOverWidget || m_panning || m_spacePressed || m_pickingColor
+    if (!m_pointerOverWidget || m_panning || m_rotatingCanvas || m_spacePressed
+        || m_pickingColor
         || (m_tool != Tool::Brush && m_tool != Tool::Eraser
             && !m_tabletPointerEraser))
     {
@@ -527,7 +622,7 @@ QRect CanvasWidget::pointerUpdateRect() const
                                 ? m_eraserWidth
                                 : m_brushWidth;
     const qreal radius =
-        std::max(1.0, toolWidth * std::abs(documentTransform().m11()) * 0.5);
+        std::max(1.0, toolWidth * uniformScale(documentTransform()) * 0.5);
     return QRectF(m_pointerWidgetPosition.x() - radius,
         m_pointerWidgetPosition.y() - radius,
         radius * 2.0,
@@ -539,6 +634,11 @@ QRect CanvasWidget::pointerUpdateRect() const
 
 void CanvasWidget::updateCursor()
 {
+    if (m_rotatingCanvas)
+    {
+        setCursor(Qt::ClosedHandCursor);
+        return;
+    }
     if (m_zoomDragging)
     {
         setCursor(Qt::SizeHorCursor);
@@ -556,7 +656,7 @@ void CanvasWidget::updateCursor()
     }
     if (m_spacePressed)
     {
-        setCursor(Qt::OpenHandCursor);
+        setCursor(m_shiftPressed ? Qt::CrossCursor : Qt::OpenHandCursor);
         return;
     }
     if (m_selectionMoveMode

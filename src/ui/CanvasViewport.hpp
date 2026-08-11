@@ -28,6 +28,8 @@ constexpr qreal minimumZoom = 0.01;
 constexpr qreal maximumZoom = 16.0;
 constexpr qreal keyboardZoomStep = 1.25;
 constexpr qreal dragZoomDoublingDistance = 120.0;
+constexpr qreal canvasRotationStep = 5.0;
+constexpr qreal dragRotationDegreesPerPixel = 0.5;
 constexpr int zoomRenderDelayMilliseconds = 80;
 
 const QBrush &checkerBrush();
@@ -37,6 +39,10 @@ const QBrush &checkerBrush();
 bool fuzzyIdentity(const QTransform &transform);
 
 qreal pointDistance(const QPointF &a, const QPointF &b);
+
+qreal normalizedRotation(qreal degrees);
+
+qreal uniformScale(const QTransform &transform);
 
 bool documentHasStrokes(const Document &document);
 
