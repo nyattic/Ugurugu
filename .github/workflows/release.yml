@@ -19,13 +19,138 @@ env:
   VELOPACK_VERSION: 1.2.0
 
 jobs:
-  quality:
-    name: Full CI quality gate
-    uses: ./.github/workflows/ci.yml
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Verify release metadata and source
+        id: source
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          version=$(sed -nE 's/project\(Ugurugu VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid project version: $version"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match project version $version"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+            echo "Manual release builds must run from $DEFAULT_BRANCH or a release tag"
+            exit 1
+          fi
+          for language in ko en ja; do
+            notes="release-notes/$version.$language.md"
+            if [[ ! -s "$notes" ]] || ! grep -q '[^[:space:]]' "$notes"; then
+              echo "Missing or empty release notes: $notes"
+              exit 1
+            fi
+          done
+          shopt -s nullglob
+          notes=(release-notes/"$version".*.md)
+          if [[ ${#notes[@]} -ne 3 ]]; then
+            echo "Expected exactly ko, en, and ja release notes for version $version"
+            printf 'Found: %s\n' "${notes[@]}"
+            exit 1
+          fi
+
+          source_commit=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          default_branch_ref="refs/remotes/origin/$DEFAULT_BRANCH"
+          if ! git rev-parse --verify "$default_branch_ref" >/dev/null; then
+            echo "Could not resolve the default branch: $default_branch_ref"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$source_commit" "$default_branch_ref"; then
+            echo "Release commit $source_commit is not part of $DEFAULT_BRANCH"
+            exit 1
+          fi
+          echo "commit=$source_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Require successful main CI for this commit
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          maximum_attempts=160
+          api_failure_attempts=0
+          missing_attempts=0
+          for ((attempt = 1; attempt <= maximum_attempts; ++attempt)); do
+            if ! response=$(gh api \
+                --method GET \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+                -f branch="$DEFAULT_BRANCH" \
+                -f event=push \
+                -f head_sha="$SOURCE_COMMIT" \
+                -f per_page=100); then
+              ((api_failure_attempts += 1))
+              if [[ "$api_failure_attempts" -ge 6 ]]; then
+                echo "Could not query main CI after $api_failure_attempts attempts"
+                exit 1
+              fi
+              echo "GitHub API request failed ($attempt/$maximum_attempts)"
+              sleep 30
+              continue
+            fi
+            api_failure_attempts=0
+            run=$(jq -c \
+              --arg branch "$DEFAULT_BRANCH" \
+              --arg commit "$SOURCE_COMMIT" \
+              '.workflow_runs
+                | map(select(
+                    .path == ".github/workflows/ci.yml"
+                    and .event == "push"
+                    and .head_branch == $branch
+                    and .head_sha == $commit
+                  ))
+                | sort_by(.created_at)
+                | reverse
+                | .[0] // empty' \
+              <<< "$response")
+            if [[ -z "$run" ]]; then
+              ((missing_attempts += 1))
+              if [[ "$missing_attempts" -ge 6 ]]; then
+                echo "No main CI run exists for $SOURCE_COMMIT"
+                exit 1
+              fi
+              echo "Waiting for CI on $SOURCE_COMMIT ($attempt/$maximum_attempts)"
+            else
+              missing_attempts=0
+              status=$(jq -r '.status' <<< "$run")
+              conclusion=$(jq -r '.conclusion // ""' <<< "$run")
+              run_url=$(jq -r '.html_url' <<< "$run")
+              if [[ "$status" == "completed" ]]; then
+                if [[ "$conclusion" == "success" ]]; then
+                  echo "Using successful main CI run: $run_url"
+                  printf 'Main CI: [%s](%s)\n' "$run_url" "$run_url" \
+                    >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+                fi
+                echo "Main CI concluded $conclusion: $run_url"
+                exit 1
+              fi
+              echo "Waiting for main CI ($status): $run_url"
+            fi
+            sleep 30
+          done
+          echo "Timed out waiting for main CI on $SOURCE_COMMIT"
+          exit 1
 
   macos:
     name: Build macOS release
-    needs: quality
+    needs: verify
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -439,7 +564,7 @@ jobs:
 
   windows:
     name: Build Windows release
-    needs: quality
+    needs: verify
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
@@ -629,8 +754,8 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: [quality, macos, windows]
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [verify, macos, windows]
+    if: success() && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
