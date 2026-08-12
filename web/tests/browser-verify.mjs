@@ -789,12 +789,17 @@ const browser = await chromium.launch({
     const brushCountBeforeWobbleDraw = await page.evaluate(() =>
         window.__uguruguBrushCount?.(),
     );
-    await drawStroke(page);
-    check(
-        (await page.evaluate(() => window.__uguruguBrushCount?.())) >
-            brushCountBeforeWobbleDraw,
-        "a stroke drawn while wobbling commits",
+    // Clear of the stroke above, so the commit adds a whole line rather than
+    // the sliver two wobbles of the same path happen to disagree on. Playback
+    // shares the request queue, so the commit can land several frames after
+    // the pointer went up and has to be waited for rather than sampled.
+    await drawOffsetStroke(-40);
+    await page.waitForFunction(
+        (before) => window.__uguruguBrushCount?.() > before,
+        brushCountBeforeWobbleDraw,
+        { timeout: 20000 },
     );
+    check(true, "a stroke drawn while wobbling commits");
     check(
         !(await page.locator("#status").textContent())?.includes("Error"),
         "wobble-while-drawing reports no error",
