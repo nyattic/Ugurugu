@@ -141,7 +141,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
             {
                 cancelInteractionFrameWarmup();
                 m_previewSplit = {};
-                m_previewSplitLayer = {};
+                m_previewSplitLayer = QUuid();
                 m_previewSplitFrame = -1;
                 m_previewLayerRasters = {};
                 m_previewLayerRasterFrame = -1;

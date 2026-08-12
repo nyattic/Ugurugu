@@ -554,7 +554,7 @@ const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
         || m_previewSplit.below.size() != renderSize)
     {
         m_previewSplit = {};
-        m_previewSplitLayer = {};
+        m_previewSplitLayer = QUuid();
         m_previewSplitFrame = -1;
         if (usesPreparedInteractionFrames())
         {
@@ -646,7 +646,7 @@ bool CanvasWidget::adoptPreparedInteractionFrame(
     }
     else
     {
-        m_previewSplitLayer = {};
+        m_previewSplitLayer = QUuid();
         m_previewSplitFrame = -1;
         m_previewLayerRasters = std::move(m_preparedInteractionFrame.rasters);
         m_previewLayerRasterFrame = frame;
@@ -821,7 +821,7 @@ void CanvasWidget::finishInteractionFrameWarmup()
     m_interactionFrameWarmupActive = false;
     m_interactionFrameWorkerFrame = -1;
     m_interactionFrameWorkerSize = {};
-    m_interactionFrameWorkerLayer = {};
+    m_interactionFrameWorkerLayer = QUuid();
     m_interactionFrameWorkerGeneration = 0;
     m_interactionFrameCancellation.reset();
     if (!cancellation)
@@ -840,7 +840,7 @@ void CanvasWidget::finishInteractionFrameWarmup()
     {
         m_interactionFrameDesiredFrame = -1;
         m_interactionFrameDesiredSize = {};
-        m_interactionFrameDesiredLayer = {};
+        m_interactionFrameDesiredLayer = QUuid();
         if (result.matches(frame, renderSize, layerId)
             && !result.baseFrame.isNull())
         {
@@ -871,7 +871,7 @@ void CanvasWidget::finishInteractionFrameWarmup()
     {
         m_interactionFrameDesiredFrame = -1;
         m_interactionFrameDesiredSize = {};
-        m_interactionFrameDesiredLayer = {};
+        m_interactionFrameDesiredLayer = QUuid();
         const int frameCount =
             std::max(1, m_controller->document().animationFrames);
         const int desiredFrame = usesPreparedInteractionFrames()
@@ -912,14 +912,14 @@ void CanvasWidget::cancelInteractionFrameWarmup()
     ++m_interactionFrameGeneration;
     m_interactionFrameDesiredFrame = -1;
     m_interactionFrameDesiredSize = {};
-    m_interactionFrameDesiredLayer = {};
+    m_interactionFrameDesiredLayer = QUuid();
     m_preparedInteractionFrame = {};
     if (!m_interactionFrameWarmupActive)
     {
         m_interactionFrameCancellation.reset();
         m_interactionFrameWorkerFrame = -1;
         m_interactionFrameWorkerSize = {};
-        m_interactionFrameWorkerLayer = {};
+        m_interactionFrameWorkerLayer = QUuid();
         m_interactionFrameWorkerGeneration = 0;
     }
     updateFrameCacheBudget();
