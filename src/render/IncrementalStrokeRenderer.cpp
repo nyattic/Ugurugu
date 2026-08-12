@@ -7,6 +7,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <numeric>
 #include <utility>
 
 namespace ugurugu
@@ -47,46 +48,8 @@ QPainterPath maskPath(const QImage &mask)
 }
 
 // StrokeRenderer::paintPrimitives draws a Line primitive together with up to
-// two neighbours on either side, and merges two of those runs when they come
-// within one primitive of each other. Six is therefore the smallest index gap
-// that keeps the two sides in separate paths however they are grouped.
+// two neighbours on either side.
 constexpr int lineRangeReach = 2;
-constexpr int lineSafeGap = lineRangeReach * 2 + 2;
-
-// The position a Line stroke's tile prefix can be flattened at. Splitting a
-// connected path changes its joins and the coverage of its antialiased edges,
-// so the cut has to land where the tile's primitives are already drawn as
-// separate paths: on a gap wide enough that neither side reaches the other.
-// A pointer shaken over one tile leaves exactly those gaps, because the tile
-// is re-entered a whole sweep later. Returns first when there is none.
-QVector<int>::const_iterator lineCheckpointEnd(
-    QVector<int>::const_iterator first,
-    QVector<int>::const_iterator last,
-    QVector<int>::const_iterator end,
-    qsizetype stablePrimitiveExclusive)
-{
-    for (auto candidate = last; candidate != first; --candidate)
-    {
-        // Nothing follows yet, so the next appended primitive could continue
-        // the run this cut would end.
-        if (candidate == end)
-        {
-            continue;
-        }
-        if (*candidate - *(candidate - 1) < lineSafeGap)
-        {
-            continue;
-        }
-        // The flattened side draws its own trailing neighbours, which have to
-        // be settled too.
-        if (*(candidate - 1) + lineRangeReach >= stablePrimitiveExclusive)
-        {
-            continue;
-        }
-        return candidate;
-    }
-    return first;
-}
 
 }
 
@@ -394,15 +357,19 @@ void IncrementalStrokeRenderer::advanceTileCheckpoint(const QImage &baseLayer,
         static_cast<int>(stablePrimitiveExclusive));
     if (stroke.brush.engine == BrushEngine::Line)
     {
-        last = StrokeRenderer::repaintIsIdempotent(stroke, prepared)
-                   ? std::lower_bound(primitives->cbegin(),
-                         primitives->cend(),
-                         static_cast<int>(stablePrimitiveExclusive)
-                             - lineRangeReach)
-                   : lineCheckpointEnd(first,
-                         last,
-                         primitives->cend(),
-                         stablePrimitiveExclusive);
+        // renderTile draws such a stroke as one path spanning the tile's whole
+        // reach, so there is no prefix to keep: a flattened one would split
+        // that path and blend its crossings twice.
+        if (!StrokeRenderer::repaintIsIdempotent(stroke, prepared))
+        {
+            return;
+        }
+        // Ink that survives being painted over lets the remainder redraw the
+        // neighbours the flattened side already carries, so the cut can fall
+        // anywhere settled.
+        last = std::lower_bound(primitives->cbegin(),
+            primitives->cend(),
+            static_cast<int>(stablePrimitiveExclusive) - lineRangeReach);
     }
     if (last - first < checkpointPrimitiveInterval)
     {
@@ -495,7 +462,25 @@ QImage IncrementalStrokeRenderer::renderTile(const QImage &baseLayer,
                        : checkpoint->image;
     const auto first = std::lower_bound(
         primitives->cbegin(), primitives->cend(), checkpointExclusive);
-    const QVector<int> remainingPrimitives(first, primitives->cend());
+    QVector<int> remainingPrimitives(first, primitives->cend());
+    if (stroke.brush.engine == BrushEngine::Line
+        && !StrokeRenderer::repaintIsIdempotent(stroke, prepared)
+        && !remainingPrimitives.isEmpty())
+    {
+        // A full render strokes the line as one path, so ink that crosses
+        // itself blends once. Asking only for the primitives that reach this
+        // tile would leave gaps where the line went outside it and paint the
+        // pieces separately, blending the crossings twice. Fill the span so
+        // paintPrimitives sees one run: the detour is clipped away, and the
+        // pixels that stay match the full render. Ink that survives being
+        // painted over does not care, and keeps the cheaper subset.
+        const int firstPrimitive = remainingPrimitives.first();
+        const int lastPrimitive = remainingPrimitives.last();
+        remainingPrimitives.resize(lastPrimitive - firstPrimitive + 1);
+        std::iota(remainingPrimitives.begin(),
+            remainingPrimitives.end(),
+            firstPrimitive);
+    }
     if (!paintTilePrimitives(
             image, bounds, document, stroke, prepared, remainingPrimitives))
     {

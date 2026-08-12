@@ -262,62 +262,55 @@ private slots:
                           << " ms / " << regionalBytes << " bytes";
     }
 
-    void flattensARevisitedTileForConnectedLineStrokes()
+    void blendsSelfCrossingLineStrokesOncePerTile()
     {
         Document document = Document::createDefault(QSize(512, 512));
         document.background = Qt::transparent;
         document.animationFrames = 12;
         document.wobbleAmount = 2.5;
         QImage base(document.size, QImage::Format_ARGB32_Premultiplied);
-        base.fill(QColor(60, 90, 140, 200));
+        base.fill(QColor(60, 90, 140, 255));
 
-        for (const StrokeMode mode : {StrokeMode::Paint, StrokeMode::Erase})
+        // Ink that does not survive being painted over: a full render strokes
+        // the line once, so a crossing has to blend once here too however the
+        // line is spread over the tiles.
+        for (const bool antialiasing : {false, true})
         {
-            Stroke stroke;
-            stroke.mode = mode;
-            stroke.color = QColor(240, 210, 60, 185);
-            stroke.width = 9.0;
-            stroke.seed = 0x2b71c0deULL;
-            stroke.brush.antialiasing = true;
-
-            IncrementalStrokeRenderer streaming;
-            quint64 peakInstances = 0;
-            quint64 lastInstances = 0;
-            // Sweeps back and forth across one tile boundary, which is what a
-            // shaken pointer does: the tile is re-entered a whole sweep later,
-            // so its primitives arrive in runs with wide index gaps between
-            // them. Those gaps are the only place a connected path may be
-            // flattened.
-            for (int index = 0; index < 40; ++index)
+            for (const int alpha : {255, 185})
             {
-                const qreal phase = static_cast<qreal>(index) * 2.7;
-                stroke.points.append(
-                    {QPointF(270.0 + std::sin(phase) * 62.0,
-                         120.0 + static_cast<qreal>(index) * 3.0),
-                        1.0});
-                const IncrementalStrokeRenderer::Update update =
-                    streaming.update(base, document, stroke, 7, document.size);
-                QVERIFY(update.valid);
-                peakInstances =
-                    std::max(peakInstances, update.primitiveInstancesRendered);
-                lastInstances = update.primitiveInstancesRendered;
+                for (const StrokeMode mode :
+                    {StrokeMode::Paint, StrokeMode::Erase})
+                {
+                    Stroke stroke;
+                    stroke.mode = mode;
+                    stroke.color = QColor(240, 210, 60, alpha);
+                    stroke.width = 9.0;
+                    stroke.seed = 0x2b71c0deULL;
+                    stroke.brush.antialiasing = antialiasing;
 
-                // A renderer that sees the stroke for the first time has no
-                // prefix to flatten, so it draws every tile the long way.
-                // Flattening may not change one pixel of that.
-                IncrementalStrokeRenderer fromScratch;
-                QVERIFY(
-                    fromScratch.update(base, document, stroke, 7, document.size)
-                        .valid);
-                QImage flattened = base;
-                QVERIFY(streaming.applyTo(flattened));
-                QImage replayed = base;
-                QVERIFY(fromScratch.applyTo(replayed));
-                QCOMPARE(flattened, replayed);
+                    IncrementalStrokeRenderer renderer;
+                    // Sweeps back and forth across a tile boundary and over
+                    // its own ink, which is what a shaken pointer does.
+                    for (int index = 0; index < 24; ++index)
+                    {
+                        const qreal phase = static_cast<qreal>(index) * 3.9;
+                        stroke.points.append(
+                            {QPointF(270.0 + std::sin(phase) * 62.0,
+                                 120.0 + static_cast<qreal>(index) * 3.0),
+                                1.0});
+                        QVERIFY(renderer
+                                .update(
+                                    base, document, stroke, 7, document.size)
+                                .valid);
+                        QImage actual = base;
+                        QVERIFY(renderer.applyTo(actual));
+                        QImage expected = base;
+                        QVERIFY(RenderEngine::renderStrokesOnLayer(
+                            expected, document, {stroke}, 7, document.size));
+                        QCOMPARE(actual, expected);
+                    }
+                }
             }
-            // Without a checkpoint every update replays the whole tile, so the
-            // count would only ever grow.
-            QVERIFY(lastInstances < peakInstances);
         }
     }
 
