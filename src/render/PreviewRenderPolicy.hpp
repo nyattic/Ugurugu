@@ -24,6 +24,8 @@ public:
     // patches are drawn into, and bounded stable-prefix tile checkpoints. The
     // frame itself is counted by the caller as a retained surface.
     static constexpr int activeStrokeSurfaceCount = 5;
+    // A prepared split retains its three inputs and their composed base.
+    static constexpr int preparedInteractionSurfaceCount = 4;
 
     static QSize renderSize(const QSize &documentSize,
         qreal physicalDisplayScale,

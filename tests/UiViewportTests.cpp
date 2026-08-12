@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Nyabi (nyattic)
 
+#include "support/RenderTestHelpers.hpp"
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
 
@@ -26,6 +27,80 @@ bool pointsAreClose(
 {
     return std::hypot(actual.x() - expected.x(), actual.y() - expected.y())
            <= tolerance;
+}
+
+std::optional<Document> animatedFramebufferHistoryDocument()
+{
+    const QSize initialSize(96, 64);
+    const QSize finalSize(96, 72);
+    Document document = Document::createDefault(finalSize);
+    document.background = QColor(244, 241, 232);
+    document.animationFrames = 4;
+    document.wobbleAmount = 3.0;
+    document.layers.clear();
+
+    for (int layerIndex = 0; layerIndex < 3; ++layerIndex)
+    {
+        Layer layer;
+        layer.name = QStringLiteral("History %1").arg(layerIndex + 1);
+        layer.initialCanvasSize = initialSize;
+
+        for (int strokeIndex = 0; strokeIndex < 24; ++strokeIndex)
+        {
+            const qreal x = 6.0 + (strokeIndex * 17 + layerIndex * 9) % 84;
+            const qreal y = 6.0 + (strokeIndex * 11 + layerIndex * 7) % 52;
+            const QPointF end(std::min(94.0, x + 8.0), std::min(62.0, y + 5.0));
+            layer.strokes.append(makeStroke(
+                strokeIndex % 7 == 0 ? StrokeMode::Erase : StrokeMode::Paint,
+                QColor::fromHsv(
+                    (layerIndex * 100 + strokeIndex * 13) % 360, 170, 210),
+                4.0 + strokeIndex % 4,
+                static_cast<quint64>(layerIndex) * 1000ULL
+                    + static_cast<quint64>(strokeIndex) + 1ULL,
+                {QPointF(x, y), end}));
+        }
+
+        Stroke reframe;
+        reframe.mode = StrokeMode::Reframe;
+        reframe.reframeOp = ReframeOp{ReframeMode::Canvas,
+            SamplingMode::Nearest,
+            initialSize,
+            finalSize,
+            QPoint(0, 4)};
+        layer.strokes.append(reframe);
+
+        for (int strokeIndex = 0; strokeIndex < 8; ++strokeIndex)
+        {
+            const qreal x = 10.0 + strokeIndex * 10.0;
+            const qreal y = 10.0 + (strokeIndex * 9 + layerIndex * 5) % 54;
+            layer.strokes.append(makeStroke(StrokeMode::Paint,
+                QColor::fromHsv(
+                    (layerIndex * 110 + strokeIndex * 23) % 360, 190, 220),
+                5.0,
+                static_cast<quint64>(layerIndex) * 1000ULL + 100ULL
+                    + static_cast<quint64>(strokeIndex),
+                {QPointF(x, y), QPointF(x + 7.0, std::min(70.0, y + 4.0))}));
+        }
+
+        const QImage selection =
+            rectangularMask(finalSize, QRect(4, 4, 88, 64));
+        QTransform shift;
+        shift.translate(2.0, 1.0);
+        const std::optional<PixelSelectionOp> operation = makePixelSelectionOp(
+            selection, shift, true, true, SamplingMode::Nearest);
+        if (!operation)
+        {
+            return std::nullopt;
+        }
+        Stroke selectionStroke;
+        selectionStroke.mode = StrokeMode::PixelSelection;
+        selectionStroke.pixelSelectionOp = *operation;
+        layer.strokes.append(selectionStroke);
+        document.layers.append(std::move(layer));
+    }
+
+    document.activeLayerId = document.layers[1].id;
+    return document;
 }
 
 }
@@ -1105,6 +1180,176 @@ private slots:
             &canvas, Qt::LeftButton, Qt::NoModifier, center + QPoint(30, 0));
     }
 
+    void avoidsSynchronousPreviewReplayWhileAnimatingADrawnStroke_data()
+    {
+        QTest::addColumn<bool>("useLayerRasterFallback");
+
+        QTest::newRow("layer-split") << false;
+        QTest::newRow("layer-raster-fallback") << true;
+    }
+
+    void avoidsSynchronousPreviewReplayWhileAnimatingADrawnStroke()
+    {
+        QFETCH(bool, useLayerRasterFallback);
+        const std::optional<Document> fixture =
+            animatedFramebufferHistoryDocument();
+        QVERIFY(fixture.has_value());
+        Document document = *fixture;
+        if (useLayerRasterFallback)
+        {
+            document.layers.last().blendMode = LayerBlendMode::Multiply;
+        }
+        QCOMPARE(
+            RenderEngine::supportsLayerSplit(document, document.activeLayerId),
+            !useLayerRasterFallback);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(384, 288);
+        canvas.setAnimating(false);
+        canvas.setAnimateWhileDrawing(true);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
+
+        const QPoint start =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, QPointF(18.0, 34.0))
+                .toPoint();
+        const QPoint end =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, QPointF(78.0, 44.0))
+                .toPoint();
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(&canvas, end, 1);
+        QVERIFY(CanvasWidgetTestAccess::drawing(canvas));
+
+        const auto initial =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!initial.image.isNull());
+        const quint64 synchronousRenderBaseline =
+            CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas);
+
+        canvas.setAnimating(true);
+        CanvasWidgetTestAccess::stopAnimationTimer(canvas);
+        const int heldFrame = canvas.currentFrame();
+        const int nextFrame =
+            (heldFrame + 1) % controller.document().animationFrames;
+        CanvasWidgetTestAccess::discardPreparedInteractionFrame(canvas);
+
+        CanvasWidgetTestAccess::advanceFrame(canvas);
+        QCOMPARE(canvas.currentFrame(), heldFrame);
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        const qsizetype pointsBeforeMissMove =
+            CanvasWidgetTestAccess::activeStroke(canvas).points.size();
+        const QPoint missMove =
+            CanvasWidgetTestAccess::mapFromDocument(canvas, QPointF(76.0, 58.0))
+                .toPoint();
+        QTest::mouseMove(&canvas, missMove, 1);
+        QCOMPARE(canvas.currentFrame(), heldFrame);
+        QVERIFY(CanvasWidgetTestAccess::activeStroke(canvas).points.size()
+                > pointsBeforeMissMove);
+        QVERIFY(
+            CanvasWidgetTestAccess::activeStrokePreviewIncludesStroke(canvas));
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        QTRY_VERIFY_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::hasPreparedInteractionFrame(
+                canvas, nextFrame),
+            5000);
+        QCOMPARE(
+            CanvasWidgetTestAccess::preparedInteractionUsesLayerRasters(canvas),
+            useLayerRasterFallback);
+        CanvasWidgetTestAccess::advanceFrame(canvas);
+        QCOMPARE(canvas.currentFrame(), nextFrame);
+
+        const auto actual =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!actual.image.isNull());
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        const Stroke activeStroke =
+            CanvasWidgetTestAccess::activeStroke(canvas);
+        QVERIFY(activeStroke.points.size() >= 2);
+        Document expectedDocument =
+            CanvasWidgetTestAccess::displayDocument(canvas);
+        Layer *activeLayer =
+            expectedDocument.layer(expectedDocument.activeLayerId);
+        QVERIFY(activeLayer);
+        activeLayer->strokes.append(activeStroke);
+        const QImage expected = RenderEngine::renderScaled(
+            expectedDocument, nextFrame, actual.image.size());
+        QCOMPARE(actual.image, expected);
+
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, missMove);
+    }
+
+    void doesNotPromoteAStrokeFreeFrameWhenReleasedBeforePreparation()
+    {
+        const std::optional<Document> fixture =
+            animatedFramebufferHistoryDocument();
+        QVERIFY(fixture.has_value());
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(*fixture));
+        const qsizetype initialStrokeCount =
+            controller.document().layers[1].strokes.size();
+        CanvasWidget canvas(&controller);
+        canvas.resize(384, 288);
+        canvas.setAnimating(false);
+        canvas.setAnimateWhileDrawing(true);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 5000);
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
+            canvas, canvas.currentFrame()));
+
+        canvas.setAnimating(true);
+        CanvasWidgetTestAccess::stopAnimationTimer(canvas);
+        const int frame = canvas.currentFrame();
+        const QPointF start = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(20.0, 30.0));
+        const QPointF end = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(76.0, 48.0));
+        CanvasWidgetTestAccess::beginStroke(canvas, start, 100);
+        QVERIFY(CanvasWidgetTestAccess::drawing(canvas));
+
+        CanvasWidgetTestAccess::discardCurrentInteractionFrame(canvas);
+        const quint64 synchronousRenderBaseline =
+            CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas);
+        CanvasWidgetTestAccess::continueStroke(canvas, end, 200);
+        QVERIFY(
+            !CanvasWidgetTestAccess::activeStrokePreviewIncludesStroke(canvas));
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        CanvasWidgetTestAccess::endStroke(canvas, end, 300);
+        QVERIFY(!CanvasWidgetTestAccess::drawing(canvas));
+        QCOMPARE(controller.document().layers[1].strokes.size(),
+            initialStrokeCount + 1);
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        QTRY_VERIFY_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::hasCachedFrame(canvas, frame), 5000);
+        const QImage actual =
+            CanvasWidgetTestAccess::cachedFrame(canvas, frame);
+        QVERIFY(!actual.isNull());
+        const QImage expected = RenderEngine::renderScaled(
+            CanvasWidgetTestAccess::displayDocument(canvas),
+            frame,
+            actual.size());
+        QVERIFY(!expected.isNull());
+        QCOMPARE(actual, expected);
+    }
+
     void resumesPlaybackAfterChangingMotionLinkage()
     {
         DocumentController controller;
@@ -1538,22 +1783,20 @@ private slots:
         const qint64 budgetBytes =
             static_cast<qint64>(MemoryBudget::previewCacheKiB()) * 1024;
         constexpr qreal mib = 1024.0 * 1024.0;
-        qInfo().nospace() << "4K preview peak "
-                          << static_cast<qreal>(peak.totalBytes()) / mib
-                          << " MiB of " << static_cast<qreal>(budgetBytes) / mib
-                          << " MiB budget (frames "
-                          << static_cast<qreal>(peak.frameCacheBytes) / mib
-                          << ", split "
-                          << static_cast<qreal>(peak.layerSplitBytes) / mib
-                          << ", rasters "
-                          << static_cast<qreal>(peak.layerRasterBytes) / mib
-                          << ", composed "
-                          << static_cast<qreal>(peak.composedPreviewBytes) / mib
-                          << ", colour pick "
-                          << static_cast<qreal>(peak.colorPickBytes) / mib
-                          << ", tiles "
-                          << static_cast<qreal>(peak.strokeTileBytes) / mib
-                          << ")";
+        qInfo().nospace()
+            << "4K preview peak " << static_cast<qreal>(peak.totalBytes()) / mib
+            << " MiB of " << static_cast<qreal>(budgetBytes) / mib
+            << " MiB budget (frames "
+            << static_cast<qreal>(peak.frameCacheBytes) / mib << ", split "
+            << static_cast<qreal>(peak.layerSplitBytes) / mib << ", rasters "
+            << static_cast<qreal>(peak.layerRasterBytes) / mib
+            << ", prepared interaction "
+            << static_cast<qreal>(peak.preparedInteractionBytes) / mib
+            << ", composed "
+            << static_cast<qreal>(peak.composedPreviewBytes) / mib
+            << ", colour pick " << static_cast<qreal>(peak.colorPickBytes) / mib
+            << ", tiles " << static_cast<qreal>(peak.strokeTileBytes) / mib
+            << ")";
         QVERIFY(peak.totalBytes() <= budgetBytes);
     }
 

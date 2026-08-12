@@ -83,6 +83,91 @@ public:
         return canvas.m_drawing;
     }
 
+    static Stroke activeStroke(const CanvasWidget &canvas)
+    {
+        return canvas.m_activeStroke;
+    }
+
+    static bool activeStrokePreviewIncludesStroke(const CanvasWidget &canvas)
+    {
+        return canvas.m_activeStrokePreviewIncludesStroke;
+    }
+
+    static QImage cachedFrame(const CanvasWidget &canvas, int frame)
+    {
+        const QImage *cached = canvas.m_frameCache.object(frame);
+        return cached ? *cached : QImage();
+    }
+
+    static void beginStroke(
+        CanvasWidget &canvas, const QPointF &widgetPosition, quint64 timestamp)
+    {
+        canvas.beginStroke(widgetPosition, 1.0, false, timestamp);
+    }
+
+    static void continueStroke(
+        CanvasWidget &canvas, const QPointF &widgetPosition, quint64 timestamp)
+    {
+        canvas.continueStroke(widgetPosition, 1.0, timestamp);
+    }
+
+    static void endStroke(
+        CanvasWidget &canvas, const QPointF &widgetPosition, quint64 timestamp)
+    {
+        canvas.endStroke(widgetPosition, timestamp);
+    }
+
+    static void advanceFrame(CanvasWidget &canvas)
+    {
+        canvas.advanceFrame();
+    }
+
+    static void stopAnimationTimer(CanvasWidget &canvas)
+    {
+        canvas.m_animationTimer.stop();
+    }
+
+    static quint64 synchronousPreviewRenderCount(const CanvasWidget &canvas)
+    {
+        return canvas.m_synchronousPreviewRenderCount;
+    }
+
+    static bool hasPreparedInteractionFrame(
+        const CanvasWidget &canvas, int frame)
+    {
+        const QUuid layerId =
+            canvas.m_drawing ? canvas.m_activeStrokeLayer
+                             : canvas.m_controller->document().activeLayerId;
+        return canvas.m_preparedInteractionFrame.matches(
+            frame, canvas.previewRenderSize(), layerId);
+    }
+
+    static bool preparedInteractionUsesLayerRasters(const CanvasWidget &canvas)
+    {
+        return !canvas.m_preparedInteractionFrame.split.valid
+               && canvas.m_preparedInteractionFrame.rasters.valid;
+    }
+
+    static void discardPreparedInteractionFrame(CanvasWidget &canvas)
+    {
+        canvas.clearPreparedInteractionFrame();
+    }
+
+    static void discardCurrentInteractionFrame(CanvasWidget &canvas)
+    {
+        canvas.m_previewSplit = {};
+        canvas.m_previewSplitLayer = QUuid();
+        canvas.m_previewSplitFrame = -1;
+        canvas.m_previewLayerRasters = {};
+        canvas.m_previewLayerRasterFrame = -1;
+        canvas.clearPreparedInteractionFrame();
+        canvas.invalidateActiveStrokePreview();
+        canvas.m_incrementalStrokeRenderer.clear();
+        canvas.m_composedPreviewFrame = {};
+        canvas.m_composedSelectionPreviewRegion = {};
+        canvas.m_composedPreviewBaseKey = 0;
+    }
+
     static bool areaSelectionActive(const CanvasWidget &canvas)
     {
         return canvas.m_areaSelectionActive;

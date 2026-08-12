@@ -271,6 +271,21 @@ private:
         QRect dirtyBounds;
     };
 
+    struct PreparedInteractionFrame
+    {
+        int frame = -1;
+        QSize renderSize;
+        QUuid layerId;
+        RenderEngine::LayerSplitFrame split;
+        RenderEngine::LayerRasterFrame rasters;
+        QImage baseFrame;
+
+        bool isValid() const;
+        bool matches(int candidateFrame,
+            const QSize &candidateSize,
+            const QUuid &candidateLayerId) const;
+    };
+
     QTransform documentTransform() const;
     qreal fitZoom() const;
     Document displayDocument() const;
@@ -302,6 +317,16 @@ private:
         const QUuid &layerId, const QSize &renderSize);
     const RenderEngine::LayerRasterFrame &previewLayerRasters(
         const QSize &renderSize);
+    bool usesPreparedInteractionFrames() const;
+    bool hasInteractionFrame(
+        int frame, const QSize &renderSize, const QUuid &layerId) const;
+    bool adoptPreparedInteractionFrame(
+        int frame, const QSize &renderSize, const QUuid &layerId);
+    void requestInteractionFrameWarmup(int frame);
+    void startInteractionFrameWarmup();
+    void finishInteractionFrameWarmup();
+    void cancelInteractionFrameWarmup();
+    void clearPreparedInteractionFrame();
     void invalidateFrames();
     void cancelFrameCacheWarmup();
     void scheduleFrameCacheWarmup();
@@ -496,10 +521,25 @@ private:
     int m_previewSplitFrame = -1;
     RenderEngine::LayerRasterFrame m_previewLayerRasters;
     int m_previewLayerRasterFrame = -1;
+    PreparedInteractionFrame m_preparedInteractionFrame;
+    std::shared_ptr<std::atomic_bool> m_interactionFrameCancellation;
+    QSize m_interactionFrameDesiredSize;
+    QUuid m_interactionFrameDesiredLayer;
+    int m_interactionFrameDesiredFrame = -1;
+    QSize m_interactionFrameWorkerSize;
+    QUuid m_interactionFrameWorkerLayer;
+    int m_interactionFrameWorkerFrame = -1;
+    quint64 m_interactionFrameWorkerGeneration = 0;
+    quint64 m_interactionFrameGeneration = 0;
+    bool m_interactionFrameWarmupActive = false;
+    QFutureWatcher<PreparedInteractionFrame> m_interactionFrameWatcher;
+    QThreadPool m_interactionFramePool;
+    mutable quint64 m_synchronousPreviewRenderCount = 0;
     QImage m_activeStrokePreview;
     QSize m_activeStrokePreviewRenderSize;
     int m_activeStrokePreviewFrame = -1;
     bool m_activeStrokePreviewResolved = false;
+    bool m_activeStrokePreviewIncludesStroke = false;
     // Union of the preview pixels that changed in the last resolve, in output
     // coordinates. Only meaningful while the valid flag is set; an empty rect
     // then means nothing changed. Lets continueStroke repaint just the stroke

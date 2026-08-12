@@ -20,6 +20,7 @@ struct PreviewSurfaceUsage final
     qint64 frameCacheBytes = 0;
     qint64 layerSplitBytes = 0;
     qint64 layerRasterBytes = 0;
+    qint64 preparedInteractionBytes = 0;
     qint64 composedPreviewBytes = 0;
     qint64 colorPickBytes = 0;
     qint64 strokeTileBytes = 0;
@@ -27,7 +28,8 @@ struct PreviewSurfaceUsage final
     qint64 totalBytes() const
     {
         return frameCacheBytes + layerSplitBytes + layerRasterBytes
-               + composedPreviewBytes + colorPickBytes + strokeTileBytes;
+               + preparedInteractionBytes + composedPreviewBytes
+               + colorPickBytes + strokeTileBytes;
     }
 
     // Everything the canvas cannot drop on demand. The frame cache is the only

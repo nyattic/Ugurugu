@@ -137,6 +137,20 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
             {
                 clearSelection();
             }
+            if (!m_drawing)
+            {
+                cancelInteractionFrameWarmup();
+                m_previewSplit = {};
+                m_previewSplitLayer = {};
+                m_previewSplitFrame = -1;
+                m_previewLayerRasters = {};
+                m_previewLayerRasterFrame = -1;
+                updateFrameCacheBudget();
+                if (!m_animating)
+                {
+                    requestInteractionFrameWarmup(m_currentFrame);
+                }
+            }
         });
     // Windows delivers coarse timers as WM_TIMER, which the message queue only
     // generates once nothing else is pending. A stroke keeps pointer packets
@@ -176,6 +190,11 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
     // for the GUI thread and those workers.
     m_frameCacheWarmupPool.setMaxThreadCount(
         std::clamp(QThread::idealThreadCount() - 2, 1, 8));
+    m_interactionFramePool.setMaxThreadCount(1);
+    connect(&m_interactionFrameWatcher,
+        &QFutureWatcher<PreparedInteractionFrame>::finished,
+        this,
+        &CanvasWidget::finishInteractionFrameWarmup);
 
     updateTimerInterval();
     m_animationTimer.start();
@@ -186,6 +205,7 @@ CanvasWidget::CanvasWidget(DocumentController *controller, QWidget *parent)
 CanvasWidget::~CanvasWidget()
 {
     cancelFrameCacheWarmup();
+    cancelInteractionFrameWarmup();
     cancelSelectionVisibilityEvaluation();
 }
 
@@ -1367,6 +1387,37 @@ void CanvasWidget::setAnimating(bool animating)
     {
         scheduleFrameCacheWarmup();
     }
+    if (m_drawing && m_animateWhileDrawing)
+    {
+        if (m_animating)
+        {
+            const QSize renderSize = previewRenderSize();
+            if (hasInteractionFrame(
+                    m_currentFrame, renderSize, m_activeStrokeLayer))
+            {
+                const int frameCount =
+                    std::max(1, m_controller->document().animationFrames);
+                requestInteractionFrameWarmup(
+                    (m_currentFrame + 1) % frameCount);
+            }
+            else
+            {
+                requestInteractionFrameWarmup(m_currentFrame);
+            }
+        }
+        else
+        {
+            cancelInteractionFrameWarmup();
+        }
+    }
+    else if (!m_drawing && !m_animating)
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
+    }
+    else if (!m_drawing)
+    {
+        cancelInteractionFrameWarmup();
+    }
     emit animatingChanged(animating);
     requestDisplayUpdate();
 }
@@ -1378,7 +1429,32 @@ void CanvasWidget::toggleAnimating()
 
 void CanvasWidget::setAnimateWhileDrawing(bool animate)
 {
+    if (m_animateWhileDrawing == animate)
+    {
+        return;
+    }
     m_animateWhileDrawing = animate;
+    if (!m_drawing || !m_animating)
+    {
+        return;
+    }
+    if (!animate)
+    {
+        cancelInteractionFrameWarmup();
+        return;
+    }
+    cancelFrameCacheWarmup();
+    const QSize renderSize = previewRenderSize();
+    if (hasInteractionFrame(m_currentFrame, renderSize, m_activeStrokeLayer))
+    {
+        const int frameCount =
+            std::max(1, m_controller->document().animationFrames);
+        requestInteractionFrameWarmup((m_currentFrame + 1) % frameCount);
+    }
+    else
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
+    }
 }
 
 void CanvasWidget::setGroupSelectionActive(bool active)
@@ -1491,6 +1567,25 @@ void CanvasWidget::setCurrentFrame(int frame)
     }
     m_currentFrame = normalized;
     invalidateActiveStrokePreview();
+    if (usesPreparedInteractionFrames())
+    {
+        const QSize renderSize = previewRenderSize();
+        adoptPreparedInteractionFrame(
+            normalized, renderSize, m_activeStrokeLayer);
+        if (!hasInteractionFrame(normalized, renderSize, m_activeStrokeLayer))
+        {
+            requestInteractionFrameWarmup(normalized);
+        }
+        else if (m_previewSplitFrame == normalized
+                 || m_previewLayerRasterFrame == normalized)
+        {
+            requestInteractionFrameWarmup((normalized + 1) % frameCount);
+        }
+    }
+    else if (!m_animating)
+    {
+        requestInteractionFrameWarmup(normalized);
+    }
     emit currentFrameChanged(normalized);
     // Which strokes a selection can edit is resolved against the displayed
     // frame, so scrubbing changes the answer. Playback is excluded: it would

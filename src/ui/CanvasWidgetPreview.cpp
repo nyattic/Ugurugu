@@ -15,11 +15,25 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace ugurugu
 {
 
 using namespace canvas_detail;
+
+bool CanvasWidget::PreparedInteractionFrame::isValid() const
+{
+    return split.valid || rasters.valid;
+}
+
+bool CanvasWidget::PreparedInteractionFrame::matches(int candidateFrame,
+    const QSize &candidateSize,
+    const QUuid &candidateLayerId) const
+{
+    return isValid() && frame == candidateFrame && renderSize == candidateSize
+           && layerId == candidateLayerId;
+}
 
 QTransform CanvasWidget::documentTransform() const
 {
@@ -102,7 +116,25 @@ QImage CanvasWidget::frameImage(int frame)
         }
     }
     QImage image;
-    if (stale && m_frameCacheRefreshDocument
+    if (m_previewSplit.valid && m_previewSplitFrame == frame
+        && m_previewSplit.below.size() == renderSize)
+    {
+        image = RenderEngine::composeLayerSplit(
+            m_previewSplit, m_previewSplit.layerBase);
+    }
+    if (image.isNull() && m_previewLayerRasters.valid
+        && m_previewLayerRasterFrame == frame
+        && m_previewLayerRasters.outputSize == renderSize)
+    {
+        image = RenderEngine::composeLayerRasterFrame(
+            displayDocument(), m_previewLayerRasters, {}, {});
+    }
+    if (image.isNull() && usesPreparedInteractionFrames())
+    {
+        requestInteractionFrameWarmup(frame);
+        return {};
+    }
+    if (image.isNull() && stale && m_frameCacheRefreshDocument
         && !m_frameCacheRefreshOutputBounds.isEmpty())
     {
         // A stale frame only misrenders inside the pending refresh bounds, so
@@ -111,6 +143,7 @@ QImage CanvasWidget::frameImage(int frame)
         if (QImage *base = m_frameCache.object(frame);
             base && base->size() == renderSize)
         {
+            ++m_synchronousPreviewRenderCount;
             const QImage regional = RenderEngine::renderScaled(
                 *m_frameCacheRefreshDocument, frame, renderSize);
             if (regional.size() == base->size())
@@ -125,21 +158,9 @@ QImage CanvasWidget::frameImage(int frame)
             }
         }
     }
-    if (image.isNull() && m_previewSplit.valid && m_previewSplitFrame == frame
-        && m_previewSplit.below.size() == renderSize)
-    {
-        image = RenderEngine::composeLayerSplit(
-            m_previewSplit, m_previewSplit.layerBase);
-    }
-    if (image.isNull() && m_previewLayerRasters.valid
-        && m_previewLayerRasterFrame == frame
-        && m_previewLayerRasters.outputSize == renderSize)
-    {
-        image = RenderEngine::composeLayerRasterFrame(
-            displayDocument(), m_previewLayerRasters, {}, {});
-    }
     if (image.isNull())
     {
+        ++m_synchronousPreviewRenderCount;
         image =
             RenderEngine::renderScaled(displayDocument(), frame, renderSize);
     }
@@ -161,13 +182,14 @@ QImage CanvasWidget::activeStrokePreview(
         && m_activeStrokePreviewRenderSize == renderSize
         && m_activeStrokePreviewFrame == m_currentFrame)
     {
-        resolved = true;
+        resolved = m_activeStrokePreviewIncludesStroke;
         return m_activeStrokePreview;
     }
 
     QImage preview;
     QRect patchBounds;
     bool patchBoundsValid = false;
+    bool previewIncludesStroke = false;
     if (const Layer *strokeLayer = document.layer(m_activeStrokeLayer))
     {
         // The live stroke has to wobble the way its own layer does, not the
@@ -217,6 +239,7 @@ QImage CanvasWidget::activeStrokePreview(
                 if (composedAllPatches)
                 {
                     preview = m_composedPreviewFrame;
+                    previewIncludesStroke = true;
                     patchBounds = rebuiltComposedBase
                                       ? QRect(QPoint(), renderSize)
                                       : composedBounds;
@@ -281,6 +304,7 @@ QImage CanvasWidget::activeStrokePreview(
                     if (composedAllPatches)
                     {
                         preview = m_composedPreviewFrame;
+                        previewIncludesStroke = true;
                         patchBounds = rebuiltComposedBase
                                           ? QRect(QPoint(), renderSize)
                                           : composedBounds;
@@ -297,14 +321,33 @@ QImage CanvasWidget::activeStrokePreview(
     }
     if (preview.isNull())
     {
-        preview = interactionPreview(document, renderSize);
-        patchBounds = {};
-        patchBoundsValid = false;
+        if (usesPreparedInteractionFrames())
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+            if (!m_frameCacheStaleFrames.contains(m_currentFrame))
+            {
+                if (const QImage *cached = m_frameCache.object(m_currentFrame);
+                    cached && cached->size() == renderSize)
+                {
+                    preview = *cached;
+                    patchBounds = {};
+                    patchBoundsValid = true;
+                }
+            }
+        }
+        else
+        {
+            preview = interactionPreview(document, renderSize);
+            previewIncludesStroke = !preview.isNull();
+            patchBounds = {};
+            patchBoundsValid = false;
+        }
     }
     m_activeStrokePreview = preview;
     m_activeStrokePreviewRenderSize = renderSize;
     m_activeStrokePreviewFrame = m_currentFrame;
     m_activeStrokePreviewResolved = !preview.isNull();
+    m_activeStrokePreviewIncludesStroke = previewIncludesStroke;
     m_activeStrokePreviewPatchBounds = patchBounds;
     m_activeStrokePreviewPatchBoundsValid =
         patchBoundsValid && m_activeStrokePreviewResolved;
@@ -313,7 +356,7 @@ QImage CanvasWidget::activeStrokePreview(
         m_displayedFrameDirtyAccum |= patchBounds;
         m_displayedFramePatchedKey = preview.cacheKey();
     }
-    resolved = m_activeStrokePreviewResolved;
+    resolved = m_activeStrokePreviewIncludesStroke;
     updateFrameCacheBudget();
     return preview;
 }
@@ -324,6 +367,7 @@ void CanvasWidget::invalidateActiveStrokePreview()
     m_activeStrokePreviewRenderSize = {};
     m_activeStrokePreviewFrame = -1;
     m_activeStrokePreviewResolved = false;
+    m_activeStrokePreviewIncludesStroke = false;
     m_activeStrokePreviewPatchBounds = {};
     m_activeStrokePreviewPatchBoundsValid = false;
 }
@@ -356,6 +400,7 @@ QImage CanvasWidget::interactionPreview(
     {
         return {};
     }
+    ++m_synchronousPreviewRenderCount;
     return RenderEngine::renderScaled(document, m_currentFrame, renderSize);
 }
 
@@ -471,7 +516,8 @@ CanvasWidget::DisplayedFrame CanvasWidget::resolveDisplayedFrame()
     }
     if (displayedFrame.isNull() && !activeStrokePreviewResolved
         && ((m_drawing && !m_activeStroke.points.isEmpty())
-            || hasPendingSelectionTransform()))
+            || hasPendingSelectionTransform())
+        && !usesPreparedInteractionFrames())
     {
         displayedFrame = interactionPreview(document, renderSize);
     }
@@ -508,6 +554,15 @@ const RenderEngine::LayerSplitFrame &CanvasWidget::previewSplit(
         || m_previewSplit.below.size() != renderSize)
     {
         m_previewSplit = {};
+        m_previewSplitLayer = {};
+        m_previewSplitFrame = -1;
+        if (usesPreparedInteractionFrames())
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+            updateFrameCacheBudget();
+            return m_previewSplit;
+        }
+        ++m_synchronousPreviewRenderCount;
         m_previewSplit = RenderEngine::renderLayerSplit(
             displayDocument(), m_currentFrame, renderSize, layerId);
         m_previewSplitLayer = layerId;
@@ -523,10 +578,18 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
     if (m_previewLayerRasterFrame != m_currentFrame
         || m_previewLayerRasters.outputSize != renderSize)
     {
-        resetFrameCacheStorage();
         m_previewLayerRasters = {};
+        m_previewLayerRasterFrame = -1;
+        if (usesPreparedInteractionFrames())
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+            updateFrameCacheBudget();
+            return m_previewLayerRasters;
+        }
+        resetFrameCacheStorage();
         const qint64 budgetBytes =
             static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB()) * 1024;
+        ++m_synchronousPreviewRenderCount;
         m_previewLayerRasters =
             RenderEngine::renderLayerRasterFrame(displayDocument(),
                 m_currentFrame,
@@ -536,6 +599,336 @@ const RenderEngine::LayerRasterFrame &CanvasWidget::previewLayerRasters(
         updateFrameCacheBudget();
     }
     return m_previewLayerRasters;
+}
+
+bool CanvasWidget::usesPreparedInteractionFrames() const
+{
+    return m_drawing && m_animateWhileDrawing && m_animating
+           && m_wobbleAnimationEnabled
+           && m_controller->document().animationFrames > 1;
+}
+
+bool CanvasWidget::hasInteractionFrame(
+    int frame, const QSize &renderSize, const QUuid &layerId) const
+{
+    if (m_previewSplit.valid && m_previewSplitFrame == frame
+        && m_previewSplitLayer == layerId
+        && m_previewSplit.below.size() == renderSize)
+    {
+        return true;
+    }
+    if (m_previewLayerRasters.valid && m_previewLayerRasterFrame == frame
+        && m_previewLayerRasters.outputSize == renderSize
+        && m_previewLayerRasters.paintLayers.contains(layerId))
+    {
+        return true;
+    }
+    return m_preparedInteractionFrame.matches(frame, renderSize, layerId)
+           && !m_preparedInteractionFrame.baseFrame.isNull();
+}
+
+bool CanvasWidget::adoptPreparedInteractionFrame(
+    int frame, const QSize &renderSize, const QUuid &layerId)
+{
+    if (!m_preparedInteractionFrame.matches(frame, renderSize, layerId)
+        || m_preparedInteractionFrame.baseFrame.isNull())
+    {
+        return false;
+    }
+
+    m_previewSplit = std::move(m_preparedInteractionFrame.split);
+    if (m_previewSplit.valid)
+    {
+        m_previewSplitLayer = layerId;
+        m_previewSplitFrame = frame;
+        m_previewLayerRasters = {};
+        m_previewLayerRasterFrame = -1;
+    }
+    else
+    {
+        m_previewSplitLayer = {};
+        m_previewSplitFrame = -1;
+        m_previewLayerRasters = std::move(m_preparedInteractionFrame.rasters);
+        m_previewLayerRasterFrame = frame;
+    }
+    QImage baseFrame = std::move(m_preparedInteractionFrame.baseFrame);
+    m_preparedInteractionFrame = {};
+    if (m_cachedRenderSize != renderSize)
+    {
+        resetFrameCacheStorage();
+        m_cachedRenderSize = renderSize;
+    }
+    updateFrameCacheBudget();
+    const int cost = PreviewRenderPolicy::cacheCostKiB(baseFrame.sizeInBytes());
+    m_frameCache.insert(frame, new QImage(baseFrame), cost);
+    m_frameCacheStaleFrames.remove(frame);
+    clearCompletedFrameCacheRefresh();
+    invalidateActiveStrokePreview();
+    m_incrementalStrokeRenderer.clear();
+    m_composedPreviewFrame = {};
+    m_composedSelectionPreviewRegion = {};
+    m_composedPreviewBaseKey = 0;
+    updateFrameCacheBudget();
+    return true;
+}
+
+void CanvasWidget::requestInteractionFrameWarmup(int frame)
+{
+    const Document &document = m_controller->document();
+    const int frameCount = std::max(1, document.animationFrames);
+    if (!m_wobbleAnimationEnabled || frameCount <= 1)
+    {
+        return;
+    }
+    const QSize renderSize = previewRenderSize();
+    const QUuid layerId =
+        m_drawing ? m_activeStrokeLayer : document.activeLayerId;
+    const Layer *layer = document.layer(layerId);
+    if (renderSize.isEmpty() || !layer || layer->kind != LayerKind::Paint)
+    {
+        return;
+    }
+    const int normalized = ((frame % frameCount) + frameCount) % frameCount;
+
+    if (normalized == m_currentFrame
+        && adoptPreparedInteractionFrame(normalized, renderSize, layerId))
+    {
+        return;
+    }
+    if ((normalized == m_currentFrame
+            && hasInteractionFrame(normalized, renderSize, layerId))
+        || (m_preparedInteractionFrame.matches(normalized, renderSize, layerId)
+            && !m_preparedInteractionFrame.baseFrame.isNull()))
+    {
+        return;
+    }
+
+    if (m_preparedInteractionFrame.isValid())
+    {
+        m_preparedInteractionFrame = {};
+        updateFrameCacheBudget();
+    }
+    m_interactionFrameDesiredFrame = normalized;
+    m_interactionFrameDesiredSize = renderSize;
+    m_interactionFrameDesiredLayer = layerId;
+
+    if (m_interactionFrameWarmupActive)
+    {
+        const bool sameRequest = m_interactionFrameWorkerFrame == normalized
+                                 && m_interactionFrameWorkerSize == renderSize
+                                 && m_interactionFrameWorkerLayer == layerId;
+        if (!sameRequest && m_interactionFrameCancellation)
+        {
+            m_interactionFrameCancellation->store(
+                true, std::memory_order_relaxed);
+        }
+        return;
+    }
+    startInteractionFrameWarmup();
+}
+
+void CanvasWidget::startInteractionFrameWarmup()
+{
+    if (m_interactionFrameWarmupActive || m_interactionFrameDesiredFrame < 0
+        || m_interactionFrameDesiredSize.isEmpty()
+        || m_interactionFrameDesiredLayer.isNull())
+    {
+        return;
+    }
+
+    const int frame = m_interactionFrameDesiredFrame;
+    const QSize renderSize = m_interactionFrameDesiredSize;
+    const QUuid layerId = m_interactionFrameDesiredLayer;
+    const quint64 generation = m_interactionFrameGeneration;
+    const std::shared_ptr<const Document> document =
+        std::make_shared<const Document>(displayDocument());
+    const std::shared_ptr<std::atomic_bool> cancellation =
+        std::make_shared<std::atomic_bool>(false);
+    const qint64 rasterBudgetBytes = std::max<qint64>(0,
+        static_cast<qint64>(PreviewRenderPolicy::maximumCacheKiB()) * 1024
+            - previewSurfaceUsage().pinnedBytes()
+            - static_cast<qint64>(renderSize.width()) * renderSize.height()
+                  * 4);
+    m_interactionFrameCancellation = cancellation;
+    m_interactionFrameWorkerFrame = frame;
+    m_interactionFrameWorkerSize = renderSize;
+    m_interactionFrameWorkerLayer = layerId;
+    m_interactionFrameWorkerGeneration = generation;
+    m_interactionFrameWarmupActive = true;
+
+    m_interactionFrameWatcher.setFuture(QtConcurrent::run(
+        &m_interactionFramePool,
+        [document,
+            cancellation,
+            frame,
+            renderSize,
+            layerId,
+            rasterBudgetBytes]()
+        {
+            PreparedInteractionFrame result;
+            result.frame = frame;
+            result.renderSize = renderSize;
+            result.layerId = layerId;
+            if (cancellation->load(std::memory_order_relaxed))
+            {
+                return PreparedInteractionFrame();
+            }
+            if (RenderEngine::supportsLayerSplit(*document, layerId))
+            {
+                result.split = RenderEngine::renderLayerSplit(
+                    *document, frame, renderSize, layerId);
+                if (result.split.valid)
+                {
+                    result.baseFrame = RenderEngine::composeLayerSplit(
+                        result.split, result.split.layerBase);
+                }
+            }
+            if (!result.split.valid
+                && !cancellation->load(std::memory_order_relaxed))
+            {
+                result.rasters = RenderEngine::renderLayerRasterFrame(
+                    *document, frame, renderSize, rasterBudgetBytes);
+                if (result.rasters.valid)
+                {
+                    result.baseFrame = RenderEngine::composeLayerRasterFrame(
+                        *document, result.rasters, {}, {});
+                }
+            }
+            if (cancellation->load(std::memory_order_relaxed))
+            {
+                return PreparedInteractionFrame();
+            }
+            return result;
+        }));
+}
+
+void CanvasWidget::finishInteractionFrameWarmup()
+{
+    QFuture<PreparedInteractionFrame> future =
+        m_interactionFrameWatcher.future();
+    PreparedInteractionFrame result =
+        watchedFutureResult(m_interactionFrameWatcher);
+    if (future.resultCount() > 0)
+    {
+        result = future.takeResult();
+    }
+    const quint64 generation = m_interactionFrameWorkerGeneration;
+    const int frame = m_interactionFrameWorkerFrame;
+    const QSize renderSize = m_interactionFrameWorkerSize;
+    const QUuid layerId = m_interactionFrameWorkerLayer;
+    const std::shared_ptr<std::atomic_bool> cancellation =
+        m_interactionFrameCancellation;
+    m_interactionFrameWarmupActive = false;
+    m_interactionFrameWorkerFrame = -1;
+    m_interactionFrameWorkerSize = {};
+    m_interactionFrameWorkerLayer = {};
+    m_interactionFrameWorkerGeneration = 0;
+    m_interactionFrameCancellation.reset();
+    if (!cancellation)
+    {
+        return;
+    }
+
+    const bool currentRequest =
+        generation == m_interactionFrameGeneration
+        && !cancellation->load(std::memory_order_relaxed)
+        && m_interactionFrameDesiredFrame == frame
+        && m_interactionFrameDesiredSize == renderSize
+        && m_interactionFrameDesiredLayer == layerId
+        && previewRenderSize() == renderSize;
+    if (currentRequest)
+    {
+        m_interactionFrameDesiredFrame = -1;
+        m_interactionFrameDesiredSize = {};
+        m_interactionFrameDesiredLayer = {};
+        if (result.matches(frame, renderSize, layerId)
+            && !result.baseFrame.isNull())
+        {
+            m_preparedInteractionFrame = std::move(result);
+            updateFrameCacheBudget();
+            if (frame == m_currentFrame
+                && adoptPreparedInteractionFrame(frame, renderSize, layerId))
+            {
+                if (m_drawing)
+                {
+                    requestDisplayUpdate();
+                }
+                if (usesPreparedInteractionFrames())
+                {
+                    const int frameCount =
+                        std::max(1, m_controller->document().animationFrames);
+                    requestInteractionFrameWarmup(
+                        (m_currentFrame + 1) % frameCount);
+                }
+            }
+        }
+    }
+
+    if (generation == m_interactionFrameGeneration
+        && m_interactionFrameDesiredFrame == frame
+        && m_interactionFrameDesiredSize == renderSize
+        && m_interactionFrameDesiredLayer == layerId && !currentRequest)
+    {
+        m_interactionFrameDesiredFrame = -1;
+        m_interactionFrameDesiredSize = {};
+        m_interactionFrameDesiredLayer = {};
+        const int frameCount =
+            std::max(1, m_controller->document().animationFrames);
+        const int desiredFrame = usesPreparedInteractionFrames()
+                                         && hasInteractionFrame(m_currentFrame,
+                                             previewRenderSize(),
+                                             m_activeStrokeLayer)
+                                     ? (m_currentFrame + 1) % frameCount
+                                     : m_currentFrame;
+        const QUuid desiredLayer = m_drawing
+                                       ? m_activeStrokeLayer
+                                       : m_controller->document().activeLayerId;
+        const QSize desiredSize = previewRenderSize();
+        if (cancellation->load(std::memory_order_relaxed)
+            || desiredFrame != frame || desiredSize != renderSize
+            || desiredLayer != layerId)
+        {
+            QTimer::singleShot(0,
+                this,
+                [this, desiredFrame]()
+                {
+                    requestInteractionFrameWarmup(desiredFrame);
+                });
+        }
+    }
+
+    if (m_interactionFrameDesiredFrame >= 0 && !m_interactionFrameWarmupActive)
+    {
+        QTimer::singleShot(0, this, &CanvasWidget::startInteractionFrameWarmup);
+    }
+}
+
+void CanvasWidget::cancelInteractionFrameWarmup()
+{
+    if (m_interactionFrameCancellation)
+    {
+        m_interactionFrameCancellation->store(true, std::memory_order_relaxed);
+    }
+    ++m_interactionFrameGeneration;
+    m_interactionFrameDesiredFrame = -1;
+    m_interactionFrameDesiredSize = {};
+    m_interactionFrameDesiredLayer = {};
+    m_preparedInteractionFrame = {};
+    if (!m_interactionFrameWarmupActive)
+    {
+        m_interactionFrameCancellation.reset();
+        m_interactionFrameWorkerFrame = -1;
+        m_interactionFrameWorkerSize = {};
+        m_interactionFrameWorkerLayer = {};
+        m_interactionFrameWorkerGeneration = 0;
+    }
+    updateFrameCacheBudget();
+}
+
+void CanvasWidget::clearPreparedInteractionFrame()
+{
+    m_preparedInteractionFrame = {};
+    updateFrameCacheBudget();
 }
 
 QSize CanvasWidget::previewRenderSize() const
@@ -558,9 +951,16 @@ QSize CanvasWidget::previewRenderSize() const
     // starts, and that discards every preview cache mid-interaction.
     const QUuid strokeLayerId =
         m_drawing ? m_activeStrokeLayer : document.activeLayerId;
+    const bool reservesPreparedFrame =
+        m_wobbleAnimationEnabled && document.animationFrames > 1;
     if (RenderEngine::supportsLayerSplit(document, strokeLayerId))
     {
         retainedSurfaces += PreviewRenderPolicy::activeStrokeSurfaceCount;
+        if (reservesPreparedFrame)
+        {
+            retainedSurfaces +=
+                PreviewRenderPolicy::preparedInteractionSurfaceCount;
+        }
     }
     else
     {
@@ -581,9 +981,15 @@ QSize CanvasWidget::previewRenderSize() const
                 ++paintSurfaces;
             }
         }
-        retainedSurfaces =
-            std::max(retainedSurfaces, paintSurfaces + (hasEmptyLayer ? 1 : 0))
-            + 1;
+        const int rasterSurfaces = paintSurfaces + (hasEmptyLayer ? 1 : 0);
+        if (reservesPreparedFrame)
+        {
+            retainedSurfaces += rasterSurfaces * 2 + 3;
+        }
+        else
+        {
+            retainedSurfaces = std::max(retainedSurfaces, rasterSurfaces) + 1;
+        }
     }
     return PreviewRenderPolicy::renderSize(
         document, displayScale, retainedSurfaces);
@@ -605,6 +1011,21 @@ PreviewSurfaceUsage CanvasWidget::previewSurfaceUsage() const
         ++layer)
     {
         usage.layerRasterBytes += layer.value().sizeInBytes();
+    }
+    if (m_preparedInteractionFrame.split.valid)
+    {
+        usage.preparedInteractionBytes =
+            m_preparedInteractionFrame.split.below.sizeInBytes()
+            + m_preparedInteractionFrame.split.layerBase.sizeInBytes()
+            + m_preparedInteractionFrame.split.above.sizeInBytes();
+    }
+    usage.preparedInteractionBytes +=
+        m_preparedInteractionFrame.baseFrame.sizeInBytes();
+    for (auto layer = m_preparedInteractionFrame.rasters.paintLayers.cbegin();
+        layer != m_preparedInteractionFrame.rasters.paintLayers.cend();
+        ++layer)
+    {
+        usage.preparedInteractionBytes += layer.value().sizeInBytes();
     }
     usage.composedPreviewBytes = m_composedPreviewFrame.sizeInBytes();
     // The resolved stroke preview usually is the composed frame rather than a
@@ -685,6 +1106,7 @@ bool CanvasWidget::tryRegionalStrokeInvalidation(
     // Mirrors invalidateFrames() except that the frame cache itself survives
     // as the base the regional patches draw over.
     cancelFrameCacheWarmup();
+    cancelInteractionFrameWarmup();
     m_colorPickFrame = {};
     m_colorPickFrameIndex = -1;
     m_previewSplit = {};
@@ -715,12 +1137,17 @@ bool CanvasWidget::tryRegionalStrokeInvalidation(
     notifyZoomChanged();
     requestDisplayUpdate();
     scheduleFrameCacheWarmup();
+    if (!m_animating)
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
+    }
     return true;
 }
 
 void CanvasWidget::invalidateFrames()
 {
     cancelFrameCacheWarmup();
+    cancelInteractionFrameWarmup();
     resetFrameCacheStorage();
     m_cachedRenderSize = {};
     m_colorPickFrame = {};
@@ -755,6 +1182,10 @@ void CanvasWidget::invalidateFrames()
     notifyZoomChanged();
     requestDisplayUpdate();
     scheduleFrameCacheWarmup();
+    if (!m_animating)
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
+    }
 }
 
 void CanvasWidget::cancelFrameCacheWarmup()
@@ -785,8 +1216,7 @@ void CanvasWidget::scheduleFrameCacheWarmup()
             // user was drawing and made the next play re-render every frame on
             // the GUI thread as playback reached it.
             if (generation != m_frameCacheWarmupGeneration
-                || !m_wobbleAnimationEnabled
-                || (m_drawing && !m_animateWhileDrawing))
+                || !m_wobbleAnimationEnabled || m_drawing)
             {
                 return;
             }
@@ -943,7 +1373,7 @@ void CanvasWidget::renderNextFrameCacheWarmup()
                         m_frameCache.insert(frame, new QImage(patched), cost);
                         m_frameCacheStaleFrames.remove(frame);
                     }
-                    else
+                    else if (m_frameCacheStaleFrames.contains(frame))
                     {
                         // Without an intact base the patch cannot apply; drop
                         // the frame so the follow-up schedule renders it in
@@ -999,6 +1429,27 @@ void CanvasWidget::advanceFrame()
     {
         return;
     }
+    const int frameCount =
+        std::max(1, m_controller->document().animationFrames);
+    const int nextFrame = (m_currentFrame + 1) % frameCount;
+    if (usesPreparedInteractionFrames())
+    {
+        const QSize renderSize = previewRenderSize();
+        if (!hasInteractionFrame(
+                m_currentFrame, renderSize, m_activeStrokeLayer))
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+            return;
+        }
+        if (!adoptPreparedInteractionFrame(
+                nextFrame, renderSize, m_activeStrokeLayer))
+        {
+            requestInteractionFrameWarmup(nextFrame);
+            return;
+        }
+        setCurrentFrame(nextFrame);
+        return;
+    }
     // A warmup used to stop playback outright until every frame was ready,
     // which read as a freeze after anything that invalidated frames: a wobble
     // setting, a committed stroke, resuming playback. Stepping only onto
@@ -1006,15 +1457,12 @@ void CanvasWidget::advanceFrame()
     // fills in, and never renders a frame on the GUI thread to do it.
     if (m_frameCacheWarmupActive)
     {
-        const int frameCount =
-            std::max(1, m_controller->document().animationFrames);
-        const int nextFrame = (m_currentFrame + 1) % frameCount;
         if (!m_frameCache.object(nextFrame)
             || m_frameCacheStaleFrames.contains(nextFrame))
         {
             return;
         }
     }
-    setCurrentFrame(m_currentFrame + 1);
+    setCurrentFrame(nextFrame);
 }
 }

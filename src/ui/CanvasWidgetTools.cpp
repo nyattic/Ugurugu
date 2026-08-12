@@ -65,15 +65,10 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
         return;
     }
 
-    // Input latency takes priority over speculative animation frames. The
-    // completed stroke will schedule a fresh warmup for the new document.
-    // Wobbling while drawing is the exception: there every animation tick
-    // composes the stroke over a different frame, so an unwarmed cache means a
-    // full frame render per tick on the GUI thread.
-    if (!m_animateWhileDrawing)
-    {
-        cancelFrameCacheWarmup();
-    }
+    // Input latency takes priority over speculative animation frames. A live
+    // wobbling stroke uses its single-worker interaction-frame lookahead
+    // instead of competing with the multi-worker full-frame warmup.
+    cancelFrameCacheWarmup();
     m_activeStroke = Stroke();
     m_activeStroke.seed = QRandomGenerator::global()->generate64();
     m_activeStrokeUsesTabletPressure = m_tabletPressureEnabled;
@@ -103,6 +98,20 @@ void CanvasWidget::beginStroke(const QPointF &widgetPosition,
     m_composedPreviewFrame = {};
     m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
+    if (usesPreparedInteractionFrames())
+    {
+        const QSize renderSize = previewRenderSize();
+        if (hasInteractionFrame(
+                m_currentFrame, renderSize, m_activeStrokeLayer))
+        {
+            const int frameCount = std::max(1, document.animationFrames);
+            requestInteractionFrameWarmup((m_currentFrame + 1) % frameCount);
+        }
+        else
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+        }
+    }
     requestDisplayUpdate();
 }
 
@@ -214,6 +223,7 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
     const QUuid layerId = m_activeStrokeLayer;
     const int promotedFrameIndex = m_currentFrame;
     m_drawing = false;
+    cancelInteractionFrameWarmup();
     m_activeStroke = Stroke();
     m_activeStrokeLayer = QUuid();
     invalidateActiveStrokePreview();
@@ -250,6 +260,16 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
             m_previewLayerRasterFrame = promotedFrameIndex;
         }
         updateFrameCacheBudget();
+    }
+    if (result != DocumentController::AddStrokeResult::Added
+        && result
+               != DocumentController::AddStrokeResult::AddedWithResampledPoints)
+    {
+        scheduleFrameCacheWarmup();
+        if (!m_animating)
+        {
+            requestInteractionFrameWarmup(m_currentFrame);
+        }
     }
     requestDisplayUpdate();
 }
@@ -308,6 +328,7 @@ void CanvasWidget::cancelStroke()
         return;
     }
     m_drawing = false;
+    cancelInteractionFrameWarmup();
     m_activeStroke = Stroke();
     m_activeStrokeLayer = QUuid();
     invalidateActiveStrokePreview();
@@ -316,6 +337,11 @@ void CanvasWidget::cancelStroke()
     m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
     m_strokeStabilizer.reset();
+    scheduleFrameCacheWarmup();
+    if (!m_animating)
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
+    }
     requestDisplayUpdate();
 }
 
