@@ -130,6 +130,20 @@ void drawLineDot(QPainter &painter,
     }
 }
 
+// One place decides how the runs of a single line stroke become ink, so that
+// a caller holding only the runs that reach one tile cannot rasterize them
+// differently from a caller holding the whole stroke. At a constant pressure
+// the runs are subpaths of one path, stroked in a single pass: a crossing
+// between two of them is then one coverage computation and blends once, as it
+// does in a full render. Variable pressure has to draw each segment on its
+// own because each carries its own width.
+void drawLineStrokeRuns(QPainter &painter,
+    const QVector<QVector<StrokePoint>> &runs,
+    const QColor &color,
+    qreal baseWidth,
+    const BrushSettings &brush,
+    bool variablePressure);
+
 void drawLineStroke(QPainter &painter,
     const QVector<StrokePoint> &points,
     const QColor &color,
@@ -143,13 +157,8 @@ void drawLineStroke(QPainter &painter,
     }
     if (!variablePressure)
     {
-        const qreal pressure = points.first().pressure;
-        drawPath(painter,
-            smoothedPath(points),
-            colorWithOpacity(color,
-                brush.opacity * pressureScale(brush.opacityDynamics, pressure)),
-            pressureWidth(baseWidth, pressure, brush.sizeDynamics),
-            brush.tipShape);
+        drawLineStrokeRuns(
+            painter, {points}, color, baseWidth, brush, variablePressure);
         return;
     }
 
@@ -206,6 +215,50 @@ void drawLineStroke(QPainter &painter,
         pressureWidth(baseWidth,
             (points[lastIndex - 1].pressure + points[lastIndex].pressure) * 0.5,
             brush.sizeDynamics),
+        brush.tipShape);
+}
+
+void drawLineStrokeRuns(QPainter &painter,
+    const QVector<QVector<StrokePoint>> &runs,
+    const QColor &color,
+    qreal baseWidth,
+    const BrushSettings &brush,
+    bool variablePressure)
+{
+    if (variablePressure)
+    {
+        for (const QVector<StrokePoint> &points : runs)
+        {
+            drawLineStroke(
+                painter, points, color, baseWidth, brush, variablePressure);
+        }
+        return;
+    }
+    QPainterPath merged;
+    qreal pressure = 1.0;
+    bool havePressure = false;
+    for (const QVector<StrokePoint> &points : runs)
+    {
+        if (points.size() < 2)
+        {
+            continue;
+        }
+        if (!havePressure)
+        {
+            pressure = points.first().pressure;
+            havePressure = true;
+        }
+        merged.addPath(smoothedPath(points));
+    }
+    if (!havePressure)
+    {
+        return;
+    }
+    drawPath(painter,
+        merged,
+        colorWithOpacity(color,
+            brush.opacity * pressureScale(brush.opacityDynamics, pressure)),
+        pressureWidth(baseWidth, pressure, brush.sizeDynamics),
         brush.tipShape);
 }
 
@@ -979,22 +1032,47 @@ void paintPrimitives(QPainter &painter,
             ranges.append({first, last});
         }
     }
+    // Ranges are only the pieces of the line this caller asked about, and a
+    // full render would hand every piece of one visible run to a single
+    // drawLineStrokeRuns. Group them the same way, so ink that crosses itself
+    // between two pieces blends exactly as often as it does there. A run ends
+    // where the line turns invisible, because a full render stops its stroke
+    // at that point too.
+    QVector<QVector<StrokePoint>> runs;
+    int previousLast = -1;
     for (const Range &range : ranges)
     {
-        const qsizetype count = range.last - range.first + 2;
         QVector<StrokePoint> points;
-        points.reserve(count);
+        points.reserve(range.last - range.first + 2);
         for (int index = range.first; index <= range.last + 1; ++index)
         {
             points.append(prepared.points[index]);
         }
-        drawLineStroke(painter,
-            points,
-            color,
-            prepared.width,
-            stroke.brush,
-            prepared.variablePressure);
+        bool sameRun = previousLast >= 0;
+        for (int index = previousLast + 1; sameRun && index < range.first;
+            ++index)
+        {
+            sameRun = segmentVisible(prepared, index);
+        }
+        if (!sameRun && previousLast >= 0)
+        {
+            drawLineStrokeRuns(painter,
+                runs,
+                color,
+                prepared.width,
+                stroke.brush,
+                prepared.variablePressure);
+            runs.clear();
+        }
+        runs.append(std::move(points));
+        previousLast = range.last;
     }
+    drawLineStrokeRuns(painter,
+        runs,
+        color,
+        prepared.width,
+        stroke.brush,
+        prepared.variablePressure);
 }
 
 QRectF primitiveBounds(

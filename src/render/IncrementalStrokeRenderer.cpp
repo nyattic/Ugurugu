@@ -7,7 +7,6 @@
 #include <QSet>
 
 #include <algorithm>
-#include <numeric>
 #include <utility>
 
 namespace ugurugu
@@ -462,25 +461,7 @@ QImage IncrementalStrokeRenderer::renderTile(const QImage &baseLayer,
                        : checkpoint->image;
     const auto first = std::lower_bound(
         primitives->cbegin(), primitives->cend(), checkpointExclusive);
-    QVector<int> remainingPrimitives(first, primitives->cend());
-    if (stroke.brush.engine == BrushEngine::Line
-        && !StrokeRenderer::repaintIsIdempotent(stroke, prepared)
-        && !remainingPrimitives.isEmpty())
-    {
-        // A full render strokes the line as one path, so ink that crosses
-        // itself blends once. Asking only for the primitives that reach this
-        // tile would leave gaps where the line went outside it and paint the
-        // pieces separately, blending the crossings twice. Fill the span so
-        // paintPrimitives sees one run: the detour is clipped away, and the
-        // pixels that stay match the full render. Ink that survives being
-        // painted over does not care, and keeps the cheaper subset.
-        const int firstPrimitive = remainingPrimitives.first();
-        const int lastPrimitive = remainingPrimitives.last();
-        remainingPrimitives.resize(lastPrimitive - firstPrimitive + 1);
-        std::iota(remainingPrimitives.begin(),
-            remainingPrimitives.end(),
-            firstPrimitive);
-    }
+    const QVector<int> remainingPrimitives(first, primitives->cend());
     if (!paintTilePrimitives(
             image, bounds, document, stroke, prepared, remainingPrimitives))
     {
