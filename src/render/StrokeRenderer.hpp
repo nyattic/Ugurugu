@@ -98,5 +98,12 @@ void paintPrimitives(QPainter &painter,
 QRectF primitiveBounds(
     const Stroke &stroke, const PreparedStroke &prepared, int primitiveIndex);
 int primitiveCount(const Stroke &stroke, const PreparedStroke &prepared);
+// True when painting an already painted primitive again lands on the pixels
+// it left: aliased coverage is binary, saturated ink has nothing left to
+// blend, and a constant-pressure path draws the same shape wherever its range
+// happens to begin. Callers that want to reuse a painted prefix and draw the
+// remainder over it need this, because paintPrimitives redraws a few
+// neighbours around whatever it is asked for.
+bool repaintIsIdempotent(const Stroke &stroke, const PreparedStroke &prepared);
 
 }

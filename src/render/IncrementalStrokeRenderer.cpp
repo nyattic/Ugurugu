@@ -46,6 +46,48 @@ QPainterPath maskPath(const QImage &mask)
     return path;
 }
 
+// StrokeRenderer::paintPrimitives draws a Line primitive together with up to
+// two neighbours on either side, and merges two of those runs when they come
+// within one primitive of each other. Six is therefore the smallest index gap
+// that keeps the two sides in separate paths however they are grouped.
+constexpr int lineRangeReach = 2;
+constexpr int lineSafeGap = lineRangeReach * 2 + 2;
+
+// The position a Line stroke's tile prefix can be flattened at. Splitting a
+// connected path changes its joins and the coverage of its antialiased edges,
+// so the cut has to land where the tile's primitives are already drawn as
+// separate paths: on a gap wide enough that neither side reaches the other.
+// A pointer shaken over one tile leaves exactly those gaps, because the tile
+// is re-entered a whole sweep later. Returns first when there is none.
+QVector<int>::const_iterator lineCheckpointEnd(
+    QVector<int>::const_iterator first,
+    QVector<int>::const_iterator last,
+    QVector<int>::const_iterator end,
+    qsizetype stablePrimitiveExclusive)
+{
+    for (auto candidate = last; candidate != first; --candidate)
+    {
+        // Nothing follows yet, so the next appended primitive could continue
+        // the run this cut would end.
+        if (candidate == end)
+        {
+            continue;
+        }
+        if (*candidate - *(candidate - 1) < lineSafeGap)
+        {
+            continue;
+        }
+        // The flattened side draws its own trailing neighbours, which have to
+        // be settled too.
+        if (*(candidate - 1) + lineRangeReach >= stablePrimitiveExclusive)
+        {
+            continue;
+        }
+        return candidate;
+    }
+    return first;
+}
+
 }
 
 IncrementalStrokeRenderer::Update IncrementalStrokeRenderer::update(
@@ -333,13 +375,6 @@ void IncrementalStrokeRenderer::advanceTileCheckpoint(const QImage &baseLayer,
     qsizetype stablePrimitiveExclusive,
     quint64 &primitiveInstancesRendered)
 {
-    // Line strokes are rendered as connected paths. Splitting those paths at
-    // a checkpoint changes joins and antialiased edge coverage, so only the
-    // independent-dab engines can safely flatten a stable prefix.
-    if (stroke.brush.engine == BrushEngine::Line)
-    {
-        return;
-    }
     const auto primitives = m_primitivesByTile.constFind(tile);
     if (primitives == m_primitivesByTile.cend() || primitives->isEmpty())
     {
@@ -354,13 +389,31 @@ void IncrementalStrokeRenderer::advanceTileCheckpoint(const QImage &baseLayer,
                                         : checkpoint->throughPrimitiveExclusive;
     const auto first = std::lower_bound(
         primitives->cbegin(), primitives->cend(), checkpointExclusive);
-    const auto last = std::lower_bound(primitives->cbegin(),
+    auto last = std::lower_bound(primitives->cbegin(),
         primitives->cend(),
         static_cast<int>(stablePrimitiveExclusive));
+    if (stroke.brush.engine == BrushEngine::Line)
+    {
+        last = StrokeRenderer::repaintIsIdempotent(stroke, prepared)
+                   ? std::lower_bound(primitives->cbegin(),
+                         primitives->cend(),
+                         static_cast<int>(stablePrimitiveExclusive)
+                             - lineRangeReach)
+                   : lineCheckpointEnd(first,
+                         last,
+                         primitives->cend(),
+                         stablePrimitiveExclusive);
+    }
     if (last - first < checkpointPrimitiveInterval)
     {
         return;
     }
+    // Everything before the cut is flattened, and a Line stroke cuts where its
+    // own rule allowed rather than at the end of the stable prefix.
+    const int flattenedExclusive =
+        stroke.brush.engine == BrushEngine::Line
+            ? *(last - 1) + 1
+            : static_cast<int>(stablePrimitiveExclusive);
 
     const QRect bounds = tileBounds(tile);
     QImage image = checkpoint == m_tileCheckpoints.end()
@@ -375,8 +428,7 @@ void IncrementalStrokeRenderer::advanceTileCheckpoint(const QImage &baseLayer,
         return;
     }
     primitiveInstancesRendered += stablePrimitives.size();
-    m_tileCheckpoints.insert(
-        tile, {std::move(image), static_cast<int>(stablePrimitiveExclusive)});
+    m_tileCheckpoints.insert(tile, {std::move(image), flattenedExclusive});
 }
 
 bool IncrementalStrokeRenderer::paintTilePrimitives(QImage &image,

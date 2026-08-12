@@ -1051,4 +1051,34 @@ int primitiveCount(const Stroke &stroke, const PreparedStroke &prepared)
                : static_cast<int>(prepared.points.size());
 }
 
+bool repaintIsIdempotent(const Stroke &stroke, const PreparedStroke &prepared)
+{
+    // An antialiased edge carries partial coverage, and partial coverage
+    // composited over itself darkens.
+    if (stroke.brush.antialiasing)
+    {
+        return false;
+    }
+    // drawLineStroke gives the half segments at either end of a range the
+    // average of two pressures instead of the width their own point asks for,
+    // so a range that starts elsewhere is a different shape, not a repeat.
+    if (prepared.variablePressure)
+    {
+        return false;
+    }
+    if (stroke.mode != StrokeMode::Paint && stroke.mode != StrokeMode::Erase)
+    {
+        return false;
+    }
+    // Every alpha the dab and path painters can apply on top of the colour.
+    if (stroke.brush.opacity < 1.0 || stroke.brush.flow < 1.0
+        || stroke.brush.opacityDynamics > 0.0)
+    {
+        return false;
+    }
+    // Erasing paints coverage into the destination alpha, so the colour plays
+    // no part in it.
+    return stroke.mode == StrokeMode::Erase || stroke.color.alpha() == 255;
+}
+
 }
