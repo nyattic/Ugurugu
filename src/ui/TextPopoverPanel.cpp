@@ -4,6 +4,7 @@
 #include "ui/TextPopoverPanel.hpp"
 
 #include "ui/CanvasWidget.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 
 #include <QCheckBox>
 #include <QDoubleSpinBox>
@@ -91,6 +92,7 @@ TextPopoverPanel::TextPopoverPanel(CanvasWidget *canvas, QWidget *parent)
     sizeSpin->setRange(8.0, 512.0);
     sizeSpin->setDecimals(0);
     sizeSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(sizeSpin);
     sizeSpin->setValue(canvas->textFontSize());
     sizeLayout->addWidget(sizeLabel);
     sizeLayout->addWidget(sizeSpin, 1);

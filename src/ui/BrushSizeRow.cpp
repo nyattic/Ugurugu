@@ -5,6 +5,7 @@
 
 #include "document/DocumentLimits.hpp"
 #include "ui/CanvasWidget.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -58,6 +59,7 @@ BrushSizeRow::BrushSizeRow(CanvasWidget *canvas,
     spin->setRange(minimum,
         static_cast<int>(std::floor(DocumentLimits::maximumStrokeWidth)));
     spin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(spin);
     spin->setAccessibleName(accessibleName);
     label->setBuddy(spin);
     controlsLayout->addWidget(spin);

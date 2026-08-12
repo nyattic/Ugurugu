@@ -232,6 +232,8 @@ set(UGURUGU_UI_SOURCES
     src/ui/SelectionShapeButton.hpp
     src/ui/ShortcutBinding.cpp
     src/ui/ShortcutBinding.hpp
+    src/ui/SpinBoxCaretGuard.cpp
+    src/ui/SpinBoxCaretGuard.hpp
     src/ui/StrokePropertiesDialog.cpp
     src/ui/StrokePropertiesDialog.hpp
     src/ui/StrokeStabilizationRow.cpp

@@ -1534,6 +1534,72 @@ private slots:
         QCOMPARE(editor.text(), QStringLiteral("Layer name"));
         QCOMPARE(canvas->cursor().shape(), Qt::BlankCursor);
     }
+
+    void keepsTheCaretInFrontOfASpinBoxSuffix()
+    {
+        QSpinBox spin;
+        spin.setRange(1, 100000);
+        spin.setValue(640);
+        spin.setSuffix(QStringLiteral(" px"));
+        installSuffixCaretGuard(&spin);
+        spin.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&spin));
+        QLineEdit *edit = spin.findChild<QLineEdit *>();
+        QVERIFY(edit);
+        QCOMPARE(spin.text(), QStringLiteral("640 px"));
+
+        // Where a click on the empty space right of the suffix lands. Typing
+        // there used to be dropped by the validator without a trace.
+        edit->setCursorPosition(static_cast<int>(spin.text().size()));
+        QCOMPARE(edit->cursorPosition(), 3);
+        QTest::keyClick(edit, Qt::Key_8);
+        QCOMPARE(spin.text(), QStringLiteral("6408 px"));
+        QCOMPARE(spin.value(), 6408);
+
+        // And where a click on the suffix itself lands: Qt pushes it to the
+        // end, which is the same dead spot.
+        edit->setCursorPosition(6);
+        QCOMPARE(edit->cursorPosition(), 4);
+        QTest::keyClick(edit, Qt::Key_9);
+        QCOMPARE(spin.value(), 64089);
+
+        // A selection still owns the caret, so select-all and type keeps
+        // replacing the whole number.
+        edit->selectAll();
+        QVERIFY(edit->hasSelectedText());
+        QCOMPARE(edit->cursorPosition(), spin.text().size());
+    }
+
+    void takesTypingAfterClickingPastTheSizeSuffix()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(100, 100));
+        CanvasWidget canvas(&controller);
+        canvas.setAnimating(false);
+        canvas.setBrushWidth(12.0);
+
+        BrushSizeRow row(
+            &canvas, BrushSizeRow::Target::Brush, QStringLiteral("testBrush"));
+        row.resize(240, 40);
+        row.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&row));
+        QSpinBox *spin =
+            row.findChild<QSpinBox *>(QStringLiteral("testBrushSpin"));
+        QVERIFY(spin);
+        QCOMPARE(spin->text(), QStringLiteral("12 px"));
+        QLineEdit *edit = spin->findChild<QLineEdit *>();
+        QVERIFY(edit);
+
+        edit->setFocus(Qt::OtherFocusReason);
+        QTest::mouseClick(edit,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            QPoint(edit->width() - 2, edit->height() / 2));
+        QCOMPARE(edit->cursorPosition(), 2);
+        QTest::keyClick(edit, Qt::Key_5);
+        QCOMPARE(spin->value(), 125);
+        QCOMPARE(canvas.brushWidth(), 125.0);
+    }
 };
 
 int runUiDrawingToolTests(int argc, char **argv)

@@ -44,6 +44,7 @@
 #include "ui/SelectionShapeButton.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
 #include "ui/Theme.hpp"
 #include "ui/TimelineBar.hpp"

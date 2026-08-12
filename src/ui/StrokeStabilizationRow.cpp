@@ -4,6 +4,7 @@
 #include "ui/StrokeStabilizationRow.hpp"
 
 #include "ui/CanvasWidget.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -49,6 +50,7 @@ StrokeStabilizationRow::StrokeStabilizationRow(CanvasWidget *canvas,
     spin->setObjectName(objectNamePrefix + QStringLiteral("Spin"));
     spin->setRange(0, 100);
     spin->setSuffix(tr("%"));
+    installSuffixCaretGuard(spin);
     spin->setAccessibleName(accessibleName);
     label->setBuddy(spin);
     controlsLayout->addWidget(spin);

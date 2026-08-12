@@ -29,6 +29,7 @@
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/StrokePropertiesDialog.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolDock.hpp"
@@ -139,7 +140,9 @@ QSize requestCanvasSize(QWidget *parent,
     widthSpin->setValue(current.width());
     heightSpin->setValue(current.height());
     widthSpin->setSuffix(QObject::tr(" px"));
+    installSuffixCaretGuard(widthSpin);
     heightSpin->setSuffix(QObject::tr(" px"));
+    installSuffixCaretGuard(heightSpin);
     layout->addRow(QObject::tr("Width"), widthSpin);
     layout->addRow(QObject::tr("Height"), heightSpin);
 

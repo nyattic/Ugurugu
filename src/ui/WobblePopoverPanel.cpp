@@ -6,6 +6,7 @@
 #include "document/DocumentController.hpp"
 #include "document/DocumentLimits.hpp"
 #include "ui/ResponsiveGrid.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/WobblePreview.hpp"
 
 #include <QCheckBox>
@@ -43,6 +44,7 @@ PercentControls addPercentControls(QWidget *parent,
     spin->setObjectName(objectName + QStringLiteral("Spin"));
     spin->setRange(0, 100);
     spin->setSuffix(QStringLiteral("%"));
+    installSuffixCaretGuard(spin);
     auto *row = new QWidget(parent);
     auto *rowLayout = new QHBoxLayout(row);
     rowLayout->setContentsMargins(0, 0, 0, 0);
@@ -86,6 +88,7 @@ WobblePopoverPanel::WobblePopoverPanel(
     amountSpin->setDecimals(1);
     amountSpin->setSingleStep(0.1);
     amountSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(amountSpin);
     amountGrid->addWidget(amountSpin);
     layout->addWidget(amountGrid);
 
@@ -128,6 +131,7 @@ WobblePopoverPanel::WobblePopoverPanel(
         DocumentLimits::minimumBreakRange, DocumentLimits::maximumBreakRange);
     breakRange->setDecimals(1);
     breakRange->setSuffix(tr(" px"));
+    installSuffixCaretGuard(breakRange);
     form->addRow(tr("Break range"), breakRange);
     layout->addLayout(form);
 

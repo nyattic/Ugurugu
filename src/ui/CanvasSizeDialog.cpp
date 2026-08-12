@@ -4,6 +4,7 @@
 #include "ui/CanvasSizeDialog.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/Theme.hpp"
 
 #include <QAbstractButton>
@@ -244,6 +245,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
     m_widthSpin->setRange(minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_widthSpin->setValue(m_currentSize.width());
     m_widthSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_widthSpin);
     m_widthSpin->setAccessibleName(tr("Canvas width"));
     m_widthLabel->setBuddy(m_widthSpin);
     sizeForm->addRow(m_widthLabel, m_widthSpin);
@@ -255,6 +257,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
         minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_heightSpin->setValue(m_currentSize.height());
     m_heightSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_heightSpin);
     m_heightSpin->setAccessibleName(tr("Canvas height"));
     m_heightLabel->setBuddy(m_heightSpin);
     sizeForm->addRow(m_heightLabel, m_heightSpin);
@@ -334,6 +337,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
     m_offsetXSpin->setRange(
         -DocumentLimits::maximumCanvasEdge, DocumentLimits::maximumCanvasEdge);
     m_offsetXSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_offsetXSpin);
     static_cast<DimensionSpinBox *>(m_offsetXSpin)->setSignedDisplay(true);
     m_offsetXSpin->setAccessibleName(tr("Artwork horizontal offset"));
     offsetForm->addRow(tr("X offset"), m_offsetXSpin);
@@ -343,6 +347,7 @@ CanvasSizeDialog::CanvasSizeDialog(const QSize &currentSize, QWidget *parent)
     m_offsetYSpin->setRange(
         -DocumentLimits::maximumCanvasEdge, DocumentLimits::maximumCanvasEdge);
     m_offsetYSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_offsetYSpin);
     static_cast<DimensionSpinBox *>(m_offsetYSpin)->setSignedDisplay(true);
     m_offsetYSpin->setAccessibleName(tr("Artwork vertical offset"));
     offsetForm->addRow(tr("Y offset"), m_offsetYSpin);

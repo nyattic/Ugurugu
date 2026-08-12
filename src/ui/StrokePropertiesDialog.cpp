@@ -4,6 +4,7 @@
 #include "ui/StrokePropertiesDialog.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 
 #include <QCheckBox>
 #include <QColorDialog>
@@ -48,6 +49,7 @@ StrokePropertiesDialog::StrokePropertiesDialog(
         DocumentLimits::minimumStrokeWidth, DocumentLimits::maximumStrokeWidth);
     m_widthSpin->setDecimals(2);
     m_widthSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_widthSpin);
     m_widthSpin->setValue(values.width.value_or(6.0));
     m_widthSpin->setEnabled(values.widthSupported);
     form->addRow(m_widthCheck, m_widthSpin);

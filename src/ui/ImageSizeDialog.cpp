@@ -4,6 +4,7 @@
 #include "ui/ImageSizeDialog.hpp"
 
 #include "document/DocumentLimits.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/Theme.hpp"
 
 #include <QCheckBox>
@@ -166,6 +167,7 @@ ImageSizeDialog::ImageSizeDialog(const QSize &currentSize, QWidget *parent)
     m_widthSpin->setRange(minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_widthSpin->setValue(m_currentSize.width());
     m_widthSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_widthSpin);
     m_widthSpin->setAccessibleName(tr("Image width"));
     sizeForm->addRow(tr("Width"), m_widthSpin);
 
@@ -175,6 +177,7 @@ ImageSizeDialog::ImageSizeDialog(const QSize &currentSize, QWidget *parent)
         minimumDialogEdge, DocumentLimits::maximumCanvasEdge);
     m_heightSpin->setValue(m_currentSize.height());
     m_heightSpin->setSuffix(tr(" px"));
+    installSuffixCaretGuard(m_heightSpin);
     m_heightSpin->setAccessibleName(tr("Image height"));
     sizeForm->addRow(tr("Height"), m_heightSpin);
 
@@ -183,6 +186,7 @@ ImageSizeDialog::ImageSizeDialog(const QSize &currentSize, QWidget *parent)
     m_percentageSpin->setDecimals(1);
     m_percentageSpin->setSingleStep(10.0);
     m_percentageSpin->setSuffix(tr(" %"));
+    installSuffixCaretGuard(m_percentageSpin);
     m_percentageSpin->setAccessibleName(tr("Uniform scale"));
     m_percentageSpin->setToolTip(
         tr("Changing this value scales both dimensions uniformly."));

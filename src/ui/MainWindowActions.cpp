@@ -20,6 +20,7 @@
 #include "ui/SelectionActionBar.hpp"
 #include "ui/SettingsDialog.hpp"
 #include "ui/ShortcutBinding.hpp"
+#include "ui/SpinBoxCaretGuard.hpp"
 #include "ui/TimelineBar.hpp"
 #include "ui/ToolDock.hpp"
 #include "ui/ToolPopover.hpp"
@@ -1214,6 +1215,7 @@ void MainWindow::createStatusBar()
     m_zoomSpin->setObjectName(QStringLiteral("zoomPercentSpin"));
     m_zoomSpin->setRange(minimumZoomPercent, maximumZoomPercent);
     m_zoomSpin->setSuffix(tr("%"));
+    installSuffixCaretGuard(m_zoomSpin);
     m_zoomSpin->setWrapping(false);
     m_zoomSpin->setFixedWidth(72);
     m_zoomSpin->setToolTip(tr("Canvas zoom percentage"));
@@ -1233,6 +1235,7 @@ void MainWindow::createStatusBar()
     rotationSpin->setDecimals(1);
     rotationSpin->setSingleStep(5.0);
     rotationSpin->setSuffix(tr("°"));
+    installSuffixCaretGuard(rotationSpin);
     rotationSpin->setWrapping(true);
     rotationSpin->setFixedWidth(76);
     rotationSpin->setToolTip(tr("Canvas rotation angle"));
