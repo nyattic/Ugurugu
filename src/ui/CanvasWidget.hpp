@@ -546,6 +546,10 @@ private:
     // tail instead of the whole widget.
     QRect m_activeStrokePreviewPatchBounds;
     bool m_activeStrokePreviewPatchBoundsValid = false;
+    // Cleared by every resolveDisplayedFrame, so it marks whether the pointer
+    // reports that arrived since the last paint have already paid for a
+    // preview resolve. See continueStroke.
+    bool m_strokePreviewResolvedSincePaint = false;
     IncrementalStrokeRenderer m_incrementalStrokeRenderer;
     QImage m_composedPreviewFrame;
     QRect m_composedSelectionPreviewRegion;

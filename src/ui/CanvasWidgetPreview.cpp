@@ -406,6 +406,7 @@ QImage CanvasWidget::interactionPreview(
 
 CanvasWidget::DisplayedFrame CanvasWidget::resolveDisplayedFrame()
 {
+    m_strokePreviewResolvedSincePaint = false;
     const Document document = displayDocument();
     const QSize renderSize = previewRenderSize();
     QImage displayedFrame;

@@ -136,10 +136,22 @@ void CanvasWidget::continueStroke(
     m_activeStroke.points.append(
         {position, inputPressure(pressure, m_activeStrokeUsesTabletPressure)});
     invalidateActiveStrokePreview();
-    // Resolving the preview here instead of in paintEvent costs nothing extra
-    // (paintEvent reuses the resolved image) and yields the exact changed
-    // region, so the repaint can stay confined to the stroke tail instead of
-    // re-blitting the whole viewport per pointer event.
+    // A pointer reports several times per display refresh, and a resolve
+    // re-renders every tile the stroke tail covers — a cost that grows with
+    // the stroke, so the reports piled up faster than they could be served
+    // and drawing fell behind the hand. Only the first report after a paint
+    // resolves; the rest just widen the pending repaint and let that paint
+    // resolve once for all of them. The repaint is the whole viewport rather
+    // than the tail, because the exact changed region is a product of the
+    // resolve we are skipping; the GPU display redraws the frame view whole
+    // either way, and the software path trades one full blit per frame for
+    // the resolves it no longer runs per report.
+    if (m_strokePreviewResolvedSincePaint)
+    {
+        requestDisplayUpdate();
+        return;
+    }
+    m_strokePreviewResolvedSincePaint = true;
     const QSize renderSize = previewRenderSize();
     bool previewResolved = false;
     if (!renderSize.isEmpty())

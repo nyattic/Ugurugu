@@ -2023,6 +2023,84 @@ private slots:
         const Layer &layer = controller.document().layers.first();
         QVERIFY(layer.strokes.isEmpty());
     }
+
+    void resolvesTheStrokePreviewOncePerPaintWhileDrawing()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(160, 120));
+        CanvasWidget canvas(&controller);
+        canvas.resize(400, 320);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+
+        const auto widgetPoint = [&](const QPointF &documentPosition)
+        {
+            return CanvasWidgetTestAccess::mapFromDocument(
+                canvas, documentPosition);
+        };
+        // Posted straight to the widget: a pointer report must not be able to
+        // slip a paint in before the next one arrives, which is the whole
+        // situation under test.
+        const auto report = [&](const QPointF &documentPosition)
+        {
+            const QPointF position = widgetPoint(documentPosition);
+            QMouseEvent event(QEvent::MouseMove,
+                position,
+                canvas.mapToGlobal(position),
+                Qt::NoButton,
+                Qt::LeftButton,
+                Qt::NoModifier);
+            QApplication::sendEvent(&canvas, &event);
+        };
+
+        QTest::mousePress(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(20.0, 30.0)).toPoint());
+        CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+
+        report(QPointF(60.0, 40.0));
+        // The first report after a paint still resolves, so the interaction
+        // frame warmup and the tail-sized repaint keep their timing.
+        QVERIFY(
+            CanvasWidgetTestAccess::activeStrokePreviewIncludesStroke(canvas));
+
+        report(QPointF(90.0, 70.0));
+        report(QPointF(120.0, 45.0));
+        // Resolving a preview re-renders every tile the tail covers, and that
+        // cost grows with the stroke. Reports that arrive before the paint
+        // only widen the repaint.
+        QVERIFY(
+            !CanvasWidgetTestAccess::activeStrokePreviewIncludesStroke(canvas));
+
+        const auto resolved =
+            CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(
+            CanvasWidgetTestAccess::activeStrokePreviewIncludesStroke(canvas));
+        QVERIFY(!resolved.image.isNull());
+
+        // The deferred resolve has to land on the pixels the skipped ones
+        // would have produced.
+        const Stroke activeStroke =
+            CanvasWidgetTestAccess::activeStroke(canvas);
+        QCOMPARE(activeStroke.points.size(), 4);
+        Document expectedDocument =
+            CanvasWidgetTestAccess::displayDocument(canvas);
+        Layer *activeLayer =
+            expectedDocument.layer(expectedDocument.activeLayerId);
+        QVERIFY(activeLayer);
+        activeLayer->strokes.append(activeStroke);
+        QCOMPARE(resolved.image,
+            RenderEngine::renderScaled(expectedDocument,
+                canvas.currentFrame(),
+                resolved.image.size()));
+
+        QTest::mouseRelease(&canvas,
+            Qt::LeftButton,
+            Qt::NoModifier,
+            widgetPoint(QPointF(120.0, 45.0)).toPoint());
+    }
 };
 
 int runUiViewportTests(int argc, char **argv)
