@@ -1,7 +1,7 @@
 # Ugurugu 웹 이식 진행 현황
 
-- 기준일: 2026-08-08
-- 브랜치: `wasm-engine-spike`·`web-measure-recovery`(main에 머지), 이후 `web-port-next`
+- 기준일: 2026-08-12 (웹 작업 자체의 마지막 진척은 2026-08-10)
+- 브랜치: `wasm-engine-spike`·`web-measure-recovery`·`web-port-next`·`web-shell-fixes` 전부 main에 머지됐고, 현재 웹 전용 브랜치는 없다.
 - 기준 계획: [web-itchio-feasibility.md](web-itchio-feasibility.md)의 권장 3번 방향과 단계 0~6
 
 ## 1. 완료된 작업
@@ -192,24 +192,38 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 - 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증한다. 여기에 실패 경로 회귀가 붙어 있다: 깨진 파일 열기가 문서를 지키는지, 숨긴 레이어가 스트로크를 거부하는지, 반투명 레이어가 화면에 제 불투명도로 나오는지(스크린샷 픽셀 판독), 컨텍스트 손실이 소프트웨어 캔버스로 넘어가는지, 느린 엔진에서 재생 정지가 잔여 큐를 남기지 않는지, 엔진 아티팩트가 없을 때 오류가 뜨는지, 느린 엔진에서 연달아 그은 두 스트로크가 두 덩이로 남는지, 삭제 연타가 레이어를 하나만 지우는지, 390×844 뷰포트에서 캔버스가 폭을 갖고 스트로크를 받는지(80개 체크).
 - itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
 
+`89ca407` — 브라우저 스위트의 "재생 중 그린 스트로크가 커밋된다" 체크가 CI에서 간헐 실패했다. 이 체크만 커밋을 기다리지 않고 즉시 픽셀 수를 읽고 있었는데, 커밋은 재생 렌더와 큐를 공유하므로 손을 뗀 뒤 몇 프레임 지나 반영된다. 다른 체크와 같은 `waitForFunction` 폴링으로 바꾸고, 직전 스트로크와 겹치지 않는 경로로 그어 증가폭이 wobble 시드 차이가 아니라 선 하나가 되게 했다. 체크 수는 80개 그대로다.
+
 ## 2. 남은 작업
 
 계정·실기기·법률 검토가 필요한 항목이 남은 작업의 대부분이다. 코드로 닫을 수 있는 항목은 도구·기능 추가 쪽에 몰려 있다.
+
+2026-08-12 기준 확인: 아래 목록에서 닫힌 항목은 없다. 2026-08-10 이후 `web/`·`src/wasm`에 들어간 커밋은 브라우저 스위트 수정(`89ca407`) 하나뿐이다. 코드로 확인한 상태 — 번역 계층 없음, `ugu_abi_version()`은 여전히 4, `@media` 블록은 48rem 하나, `LayerPanel.svelte`·`ColorWheel.svelte`의 `aria-*`는 0개, `showSaveFilePicker` 없음, GIF 진행률·취소 없음, `UguruguWasm.cmake`에는 `-sALLOW_MEMORY_GROWTH=1`만 있고 `-sMAXIMUM_MEMORY`는 없다.
 
 ### 실기기·계정·법률 (코드로 닫을 수 없음)
 
 - iOS Safari, Android Chrome 실제 장치 스모크. 단계 1의 중단 기준 판단 재료이자 Mobile Friendly 표시의 전제다.
 - itch.io 스테이징 업로드와 전체 화면 실행은 확인됐다(위 단계 4 항목). 남은 실측: iframe 안 키보드 단축키, 새로고침 후 IndexedDB 복구 유지, PNG/GIF 다운로드 권한, clipboard, 그리고 데스크톱 브라우저별 차이.
 - 데스크톱 4종 브라우저 행렬, visibility 시험. 컨텍스트 손실은 `WEBGL_lose_context`로 실제 손실을 일으켜 소프트웨어 폴백을 자동 검증하지만, 드라이버가 일으키는 진짜 손실은 아직 겪어 보지 못했다.
-- Qt GPLv3 정적 배포 의무 검토, third-party notice와 대응 소스 제공 절차 (출시 전 필수).
+- Qt 정적 배포 의무 검토, third-party notice와 대응 소스 제공 절차 (출시 전 필수). 웹 wasm은 Qt를 정적 링크하므로 LGPLv3의 고지·재링크 수단 제공이 걸리는데, 현재 셸에는 고지 UI 자체가 없다(`web/index.html`·`App.svelte` 어디에도 라이선스·소스 위치 안내 없음). `THIRD_PARTY_NOTICES.md`는 데스크톱 패키지 기준으로만 쓰여 있다.
 - 메모리 정책 수치를 실기기 결과로 보정. 현재 값은 측정 기반 제안치를 그대로 코드에 옮긴 것이다.
 
 ### 단계 3 잔여 (웹 UI)
 
 - 웹 UI 번역 계층 (현재 영어 고정, 데스크톱은 ko/en/ja)
-- 선택 영역 이동·확대·회전 (`transformSelection`)과 선택 전환의 실행 취소
+- 선택 영역 이동·확대·회전 (`transformSelection`)과 선택 전환의 실행 취소. 엔진 재료는 이미 wasm 안에 있다 — `6827f5e`가 `SelectionOperation::makePixelSelectionOp(mask, transform, clearSource, drawDestination, sampling)`을 `src/document/`에 넣었고 `DocumentController::transformSelection`도 엔진 소스 목록에 있다. 남은 것은 브리지 함수와 셸의 핸들 UI다.
 - 모바일 반응형 레이아웃. 핀치·이동 제스처가 있고 48rem 미만에서 캔버스를 전폭으로 올려 쌓기는 하지만, 패널 자체는 데스크톱 치수 그대로다.
 - 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.
+
+### 데스크톱이 먼저 간 기능 (2026-08-12 시점 격차)
+
+데스크톱에는 있고 웹에는 대응이 없는 기능이다. 위 잔여 목록에 없던 항목이라 여기 적는다.
+
+- 우글 텍스트 도구 (`5cba14a`, 08-08). 텍스트를 스트로크로 굽는 `src/document/TextStrokeBuilder.{hpp,cpp}`는 `UGURUGU_ENGINE_SOURCES`에 있으므로 wasm에도 이미 링크돼 있다. 브리지·셸만 없다.
+- 캔버스 회전 (`22b61df`, 08-11). `web/src/lib/ViewTransform.ts`는 확대·이동만 다루고 회전 축이 없다. 프레젠터의 텍스처 그리기와 문서 좌표 역변환을 함께 손대야 한다.
+- 브러시 프리셋 버튼·도구 컨트롤 개선 (`6827f5e`, 08-11). 웹 `ToolOptions.svelte`는 이전 형태 그대로다.
+
+참고로 두 손가락 제스처(`82578cc`)는 반대 방향이다. 웹이 먼저 가지고 있던 것을 데스크톱이 따라왔다.
 
 ### 단계 4·6 잔여
 
