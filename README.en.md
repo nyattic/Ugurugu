@@ -107,6 +107,8 @@ the panel to **Active layer** to apply them to the selected layer only.
 - Use pressure-sensitive brushes and erasers, with 17 ready-made pens,
   markers, airbrushes, and sprays.
 - Smooth out slow or long strokes with adjustable line stabilization.
+- On supported multitouch displays, use two fingers to pan the canvas, pinch
+  to zoom, and twist to rotate.
 - Tell the paint bucket how similar nearby colors should be and whether it
   should look at the current layer or other layers too.
 - Select freehand, rectangular, or oval areas, then move, resize, rotate,
@@ -170,6 +172,7 @@ These are the defaults. You can change all of them in **Settings → Shortcuts**
 | `L` / `W` / `G` | Area select / Auto select / Paint bucket |
 | `I` | Eyedropper |
 | `P` | Play or pause movement |
+| Two-finger drag / pinch / twist | Pan / zoom / rotate the canvas (supported multitouch displays) |
 | `Space` + drag | Move around the canvas |
 | `Shift+Space` + mouse/pen drag | Rotate the canvas freely |
 | `Shift` + scroll | Rotate the canvas in 5° steps |
