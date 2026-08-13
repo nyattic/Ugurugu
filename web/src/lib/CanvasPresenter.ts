@@ -30,7 +30,9 @@ export class CanvasPresenter {
     #displayContext: CanvasRenderingContext2D | null = null;
     #program: WebGLProgram | null = null;
     #texture: WebGLTexture | null = null;
-    #rectangleLocation: WebGLUniformLocation | null = null;
+    #originLocation: WebGLUniformLocation | null = null;
+    #xAxisLocation: WebGLUniformLocation | null = null;
+    #yAxisLocation: WebGLUniformLocation | null = null;
     #documentWidth = 0;
     #documentHeight = 0;
     #textureDirty = true;
@@ -81,7 +83,9 @@ export class CanvasPresenter {
         this.#gl = gl;
         this.#program = program;
         this.#texture = gl.createTexture();
-        this.#rectangleLocation = gl.getUniformLocation(program, "uRectangle");
+        this.#originLocation = gl.getUniformLocation(program, "uOrigin");
+        this.#xAxisLocation = gl.getUniformLocation(program, "uXAxis");
+        this.#yAxisLocation = gl.getUniformLocation(program, "uYAxis");
         gl.bindTexture(gl.TEXTURE_2D, this.#texture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -235,8 +239,18 @@ export class CanvasPresenter {
             0,
             0,
         );
-        const width = this.#documentWidth * view.scale;
-        const height = this.#documentHeight * view.scale;
+        const topRight = toViewport(
+            view,
+            { width: cssWidth, height: cssHeight },
+            this.#documentWidth,
+            0,
+        );
+        const bottomLeft = toViewport(
+            view,
+            { width: cssWidth, height: cssHeight },
+            0,
+            this.#documentHeight,
+        );
         gl.viewport(0, 0, this.#display.width, this.#display.height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -245,14 +259,20 @@ export class CanvasPresenter {
         }
         gl.useProgram(this.#program);
         gl.bindTexture(gl.TEXTURE_2D, this.#texture);
-        // Clip space rectangle for the document quad: x and y are the top-left
-        // corner, z and w the size, all in [-1, 1] with y already flipped.
-        gl.uniform4f(
-            this.#rectangleLocation,
-            (topLeft.x / cssWidth) * 2 - 1,
-            1 - (topLeft.y / cssHeight) * 2,
-            (width / cssWidth) * 2,
-            (height / cssHeight) * 2,
+        // Clip-space origin and basis vectors for the document quad, with y
+        // flipped from the viewport's downward-positive coordinate system.
+        const originX = (topLeft.x / cssWidth) * 2 - 1;
+        const originY = 1 - (topLeft.y / cssHeight) * 2;
+        gl.uniform2f(this.#originLocation, originX, originY);
+        gl.uniform2f(
+            this.#xAxisLocation,
+            ((topRight.x - topLeft.x) / cssWidth) * 2,
+            ((topLeft.y - topRight.y) / cssHeight) * 2,
+        );
+        gl.uniform2f(
+            this.#yAxisLocation,
+            ((bottomLeft.x - topLeft.x) / cssWidth) * 2,
+            ((topLeft.y - bottomLeft.y) / cssHeight) * 2,
         );
         // Blending stays off. The context is premultipliedAlpha: false, so the
         // compositor reads the drawing buffer as straight RGBA — exactly what
@@ -271,26 +291,25 @@ export class CanvasPresenter {
         const target = this.#softwareCanvas ?? this.#display;
         const cssWidth = target.clientWidth || target.width;
         const cssHeight = target.clientHeight || target.height;
-        const ratio = target.width / Math.max(1, cssWidth);
-        context.setTransform(ratio, 0, 0, ratio, 0, 0);
-        context.clearRect(0, 0, cssWidth, cssHeight);
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, target.width, target.height);
         if (this.#documentWidth <= 0 || this.#documentHeight <= 0) {
             return;
         }
-        const topLeft = toViewport(
-            view,
-            { width: cssWidth, height: cssHeight },
+        context.setTransform(
+            target.width / Math.max(1, cssWidth),
+            0,
+            0,
+            target.height / Math.max(1, cssHeight),
             0,
             0,
         );
+        context.translate(cssWidth / 2, cssHeight / 2);
+        context.rotate((view.rotation * Math.PI) / 180);
+        context.scale(view.scale, view.scale);
+        context.translate(-view.centerX, -view.centerY);
         context.imageSmoothingEnabled = true;
-        context.drawImage(
-            this.#surface,
-            topLeft.x,
-            topLeft.y,
-            this.#documentWidth * view.scale,
-            this.#documentHeight * view.scale,
-        );
+        context.drawImage(this.#surface, 0, 0);
     }
 
     readPixel(x: number, y: number): [number, number, number] {
@@ -319,14 +338,15 @@ export class CanvasPresenter {
 }
 
 const vertexSource = `#version 300 es
-uniform vec4 uRectangle;
+uniform vec2 uOrigin;
+uniform vec2 uXAxis;
+uniform vec2 uYAxis;
 out vec2 vTexture;
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
     vTexture = corner;
     gl_Position = vec4(
-        uRectangle.x + corner.x * uRectangle.z,
-        uRectangle.y - corner.y * uRectangle.w,
+        uOrigin + corner.x * uXAxis + corner.y * uYAxis,
         0.0,
         1.0);
 }`;

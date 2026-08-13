@@ -14,6 +14,8 @@ export interface ShortcutActions {
     zoomBy: (factor: number) => void;
     zoomToFit: () => void;
     zoomToActualSize: () => void;
+    rotateBy: (delta: number) => void;
+    resetRotation: () => void;
     stepFrame: (delta: number) => void;
     togglePlayback: () => void;
     selectAll: () => void;
@@ -135,6 +137,18 @@ export function handleShortcut(
         case "]":
             actions.adjustBrushSize(1);
             return true;
+        case "-":
+            actions.rotateBy(-5);
+            return true;
+        case "^":
+            actions.rotateBy(5);
+            return true;
+        case "6":
+            if (event.shiftKey && event.code === "Digit6") {
+                actions.rotateBy(5);
+                return true;
+            }
+            return false;
         case "arrowleft":
             actions.stepFrame(-1);
             return true;

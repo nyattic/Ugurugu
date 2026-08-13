@@ -35,8 +35,10 @@
     } from "./lib/ToolSettings";
     import {
         fitToViewport,
+        normalizeRotation,
         pan,
         toDocument,
+        transformAround,
         zoomAround,
     } from "./lib/ViewTransform";
     import type { ViewState } from "./lib/ViewTransform";
@@ -74,7 +76,12 @@
     const settings = $state(loadToolSettings());
     let thumbnails = $state<LayerThumbnail[]>([]);
     let recentColors = $state<string[]>(loadRecentColors());
-    let view = $state<ViewState>({ scale: 1, centerX: 0, centerY: 0 });
+    let view = $state<ViewState>({
+        scale: 1,
+        rotation: 0,
+        centerX: 0,
+        centerY: 0,
+    });
     let showNewDocument = $state(false);
     let usingWebGL = $state(false);
     let hasSelection = $state(false);
@@ -86,6 +93,7 @@
 
     const recentColorCapacity = 16;
     const zoomPercent = $derived(Math.round(view.scale * 100));
+    const rotationDegrees = $derived(Math.round(view.rotation * 10) / 10);
     const activeTool = $derived(toolDefinition(tool));
 
     let recoveryOffer = $state<RecoverySnapshot | null>(null);
@@ -96,11 +104,19 @@
     let drawing = false;
     let picking = false;
     let panning = $state(false);
+    let rotating = $state(false);
     let spaceHeld = $state(false);
     let lastPanX = 0;
     let lastPanY = 0;
+    let rotationDragStartX = 0;
+    let rotationDragStartAngle = 0;
     const activeTouches = new Map<number, { x: number; y: number }>();
-    let pinchDistance = 0;
+    let touchGesture: {
+        centerX: number;
+        centerY: number;
+        distance: number;
+        angle: number;
+    } | null = null;
     let pendingPoints: number[] = [];
     let chain = Promise.resolve();
     let contentRevision = 0;
@@ -266,14 +282,19 @@
         if (!meta || viewport.width <= 0 || viewport.height <= 0) {
             return;
         }
-        view = fitToViewport(meta, viewport);
+        view = fitToViewport(meta, viewport, view.rotation);
     }
 
     function zoomToActualSize() {
         if (!meta) {
             return;
         }
-        view = { scale: 1, centerX: meta.width / 2, centerY: meta.height / 2 };
+        view = {
+            scale: 1,
+            rotation: view.rotation,
+            centerX: meta.width / 2,
+            centerY: meta.height / 2,
+        };
     }
 
     function zoomBy(factor: number) {
@@ -285,6 +306,36 @@
             viewport.height / 2,
             view.scale * factor,
         );
+    }
+
+    function rotationInputAvailable() {
+        return (
+            !drawing &&
+            !picking &&
+            !panning &&
+            !rotating &&
+            !selectionDrag &&
+            activeTouches.size === 0
+        );
+    }
+
+    function setRotation(degrees: number) {
+        if (!Number.isFinite(degrees) || !rotationInputAvailable()) {
+            return;
+        }
+        view = { ...view, rotation: normalizeRotation(degrees) };
+    }
+
+    function rotateBy(delta: number) {
+        setRotation(view.rotation + delta);
+    }
+
+    function resetRotation() {
+        setRotation(0);
+    }
+
+    function onRotationInput(event: Event) {
+        setRotation(Number((event.currentTarget as HTMLInputElement).value));
     }
 
     $effect(() => {
@@ -466,7 +517,7 @@
             // Mirrors CanvasWidget::advanceFrame: playback stays on through an
             // interaction and only stops advancing, so releasing the pointer
             // resumes the wobble instead of leaving it parked.
-            if (!meta || panning || picking) {
+            if (!meta || panning || rotating || touchGesture || picking) {
                 return;
             }
             if (drawing && !animateWhileDrawing) {
@@ -559,6 +610,13 @@
         panning = true;
         lastPanX = event.clientX;
         lastPanY = event.clientY;
+        displayCanvas.setPointerCapture(event.pointerId);
+    }
+
+    function beginRotation(event: PointerEvent) {
+        rotating = true;
+        rotationDragStartX = event.clientX;
+        rotationDragStartAngle = view.rotation;
         displayCanvas.setPointerCapture(event.pointerId);
     }
 
@@ -707,7 +765,8 @@
                 x: event.clientX,
                 y: event.clientY,
             });
-            if (activeTouches.size === 2) {
+            displayCanvas.setPointerCapture(event.pointerId);
+            if (activeTouches.size >= 2) {
                 // A second finger turns an in-progress stroke into a gesture.
                 // The line drawn so far is committed rather than dropped, so
                 // starting a pinch never silently throws away a stroke; undo
@@ -724,9 +783,15 @@
                     selectionDrag = null;
                     overlay?.setDrag(null);
                 }
-                pinchDistance = touchDistance();
+                touchGesture =
+                    activeTouches.size === 2 ? touchGestureMeasurement() : null;
                 return;
             }
+        }
+        if (spaceHeld && event.shiftKey && event.button === 0) {
+            event.preventDefault();
+            beginRotation(event);
+            return;
         }
         if (spaceHeld || event.button === 1) {
             event.preventDefault();
@@ -782,22 +847,18 @@
         return first && second ? ([first, second] as const) : null;
     }
 
-    function touchDistance() {
+    function touchGestureMeasurement() {
         const pair = touchPair();
         if (!pair) {
-            return 0;
+            return null;
         }
-        return Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
-    }
-
-    function touchCenter() {
-        const pair = touchPair();
-        if (!pair) {
-            return { clientX: 0, clientY: 0 };
-        }
+        const deltaX = pair[1].x - pair[0].x;
+        const deltaY = pair[1].y - pair[0].y;
         return {
-            clientX: (pair[0].x + pair[1].x) / 2,
-            clientY: (pair[0].y + pair[1].y) / 2,
+            centerX: (pair[0].x + pair[1].x) / 2,
+            centerY: (pair[0].y + pair[1].y) / 2,
+            distance: Math.hypot(deltaX, deltaY),
+            angle: (Math.atan2(deltaY, deltaX) * 180) / Math.PI,
         };
     }
 
@@ -810,22 +871,44 @@
                 x: event.clientX,
                 y: event.clientY,
             });
-            if (activeTouches.size === 2) {
-                const distance = touchDistance();
-                if (pinchDistance > 0 && distance > 0) {
+            if (activeTouches.size >= 2) {
+                const nextGesture =
+                    activeTouches.size === 2 ? touchGestureMeasurement() : null;
+                if (
+                    touchGesture &&
+                    nextGesture &&
+                    touchGesture.distance > 0 &&
+                    nextGesture.distance > 0
+                ) {
                     const rect = displayCanvas.getBoundingClientRect();
-                    const centre = touchCenter();
-                    view = zoomAround(
+                    const angleDelta = normalizeRotation(
+                        nextGesture.angle - touchGesture.angle,
+                    );
+                    view = transformAround(
                         view,
                         { width: rect.width, height: rect.height },
-                        centre.clientX - rect.left,
-                        centre.clientY - rect.top,
-                        view.scale * (distance / pinchDistance),
+                        touchGesture.centerX - rect.left,
+                        touchGesture.centerY - rect.top,
+                        nextGesture.centerX - rect.left,
+                        nextGesture.centerY - rect.top,
+                        view.scale *
+                            (nextGesture.distance / touchGesture.distance),
+                        view.rotation + angleDelta,
                     );
                 }
-                pinchDistance = distance;
+                touchGesture = nextGesture;
                 return;
             }
+        }
+        if (rotating) {
+            view = {
+                ...view,
+                rotation: normalizeRotation(
+                    rotationDragStartAngle +
+                        (event.clientX - rotationDragStartX) * 0.5,
+                ),
+            };
+            return;
         }
         if (panning) {
             view = pan(
@@ -861,8 +944,12 @@
 
     function onPointerUp(event: PointerEvent) {
         activeTouches.delete(event.pointerId);
-        if (activeTouches.size < 2) {
-            pinchDistance = 0;
+        touchGesture =
+            activeTouches.size === 2 ? touchGestureMeasurement() : null;
+        if (rotating) {
+            rotating = false;
+            displayCanvas.releasePointerCapture(event.pointerId);
+            return;
         }
         if (panning) {
             panning = false;
@@ -902,8 +989,29 @@
             return;
         }
         event.preventDefault();
+        if (
+            drawing ||
+            picking ||
+            panning ||
+            rotating ||
+            selectionDrag ||
+            activeTouches.size > 0
+        ) {
+            return;
+        }
         const rect = displayCanvas.getBoundingClientRect();
         const viewport = { width: rect.width, height: rect.height };
+        if (event.shiftKey) {
+            const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+            const wheelUnit =
+                event.deltaMode === WheelEvent.DOM_DELTA_PIXEL
+                    ? 100
+                    : event.deltaMode === WheelEvent.DOM_DELTA_LINE
+                      ? 3
+                      : 1;
+            rotateBy((-5 * delta) / wheelUnit);
+            return;
+        }
         if (event.ctrlKey || event.metaKey) {
             view = zoomAround(
                 view,
@@ -1112,12 +1220,10 @@
     function onKeyDown(event: KeyboardEvent) {
         if (event.key === " " && !spaceHeld) {
             const target = event.target as HTMLElement | null;
-            if (
-                !target ||
-                !["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(
-                    target.tagName,
-                )
-            ) {
+            const editing =
+                target?.isContentEditable ||
+                (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+            if (!editing && (event.shiftKey || target?.tagName !== "BUTTON")) {
                 spaceHeld = true;
                 event.preventDefault();
             }
@@ -1148,6 +1254,8 @@
             zoomBy,
             zoomToFit,
             zoomToActualSize,
+            rotateBy,
+            resetRotation,
             stepFrame,
             togglePlayback,
             selectAll: () => selectionAction("all"),
@@ -1171,6 +1279,8 @@
     // later click into a pan.
     function onWindowBlur() {
         spaceHeld = false;
+        rotating = false;
+        touchGesture = null;
     }
 
     onMount(() => {
@@ -1320,6 +1430,7 @@
                 bind:this={displayCanvas}
                 aria-label="Drawing canvas"
                 class:panning={panning || spaceHeld}
+                class:rotating={rotating}
                 onpointerdown={onPointerDown}
                 onpointermove={onPointerMove}
                 onpointerup={onPointerUp}
@@ -1331,6 +1442,45 @@
                 bind:this={overlayCanvas}
                 aria-hidden="true"
             ></canvas>
+            <div class="rotation-controls" role="group" aria-label="Canvas rotation">
+                <button
+                    id="rotate-left"
+                    title="Rotate canvas left 5° (−)"
+                    aria-label="Rotate canvas left 5 degrees"
+                    onclick={() => rotateBy(-5)}
+                >
+                    ↶
+                </button>
+                <label class="rotation-angle" title="Canvas rotation angle">
+                    <input
+                        id="rotation-angle"
+                        type="number"
+                        min="-180"
+                        max="180"
+                        step="0.5"
+                        value={rotationDegrees}
+                        aria-label="Canvas rotation angle"
+                        onchange={onRotationInput}
+                    />
+                    <span aria-hidden="true">°</span>
+                </label>
+                <button
+                    id="rotate-right"
+                    title="Rotate canvas right 5° (^)"
+                    aria-label="Rotate canvas right 5 degrees"
+                    onclick={() => rotateBy(5)}
+                >
+                    ↷
+                </button>
+                <button
+                    id="rotation-reset"
+                    title="Reset canvas rotation to 0°"
+                    aria-label="Reset canvas rotation to 0 degrees"
+                    onclick={resetRotation}
+                >
+                    0°
+                </button>
+            </div>
             <div class="zoom-controls">
                 <button
                     title="Zoom out (Ctrl/Cmd −)"
@@ -1586,15 +1736,20 @@
         cursor: grab;
     }
 
+    #display-canvas.rotating {
+        cursor: grabbing;
+    }
+
     #selection-overlay {
         pointer-events: none;
     }
 
-    .zoom-controls {
+    .zoom-controls,
+    .rotation-controls {
         position: absolute;
-        inset-block-end: 0.75rem;
         inset-inline-end: 0.75rem;
         display: flex;
+        align-items: center;
         gap: 2px;
         padding: 2px;
         border-radius: 9px;
@@ -1602,7 +1757,16 @@
         backdrop-filter: blur(6px);
     }
 
-    .zoom-controls button {
+    .zoom-controls {
+        inset-block-end: 0.75rem;
+    }
+
+    .rotation-controls {
+        inset-block-end: 3.4rem;
+    }
+
+    .zoom-controls button,
+    .rotation-controls button {
         min-inline-size: 2.4rem;
         padding: 0.2rem 0.4rem;
         border: 0;
@@ -1611,6 +1775,33 @@
         font-family: var(--mono);
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
+    }
+
+    .rotation-angle {
+        display: flex;
+        align-items: center;
+        block-size: 1.7rem;
+        padding-inline: 0.35rem;
+        border-radius: 7px;
+        color: var(--paper);
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rotation-angle:focus-within {
+        outline: 1px solid var(--accent);
+    }
+
+    .rotation-angle input {
+        inline-size: 3.4rem;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: end;
     }
 
     .side {

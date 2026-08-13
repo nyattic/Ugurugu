@@ -132,22 +132,38 @@ export class SelectionOverlay {
             path.closePath();
             return;
         }
-        const anchor = at(0);
-        const current = at(drag.points.length / 2 - 1);
-        const x = Math.min(anchor.x, current.x);
-        const y = Math.min(anchor.y, current.y);
-        const width = Math.abs(current.x - anchor.x);
-        const height = Math.abs(current.y - anchor.y);
+        const last = drag.points.length - 2;
+        const anchorX = drag.points[0] ?? 0;
+        const anchorY = drag.points[1] ?? 0;
+        const currentX = drag.points[last] ?? 0;
+        const currentY = drag.points[last + 1] ?? 0;
+        const left = Math.min(anchorX, currentX);
+        const top = Math.min(anchorY, currentY);
+        const right = Math.max(anchorX, currentX);
+        const bottom = Math.max(anchorY, currentY);
         if (drag.shape === "rectangle") {
-            path.rect(x, y, width, height);
+            const topLeft = toViewport(view, viewport, left, top);
+            const topRight = toViewport(view, viewport, right, top);
+            const bottomRight = toViewport(view, viewport, right, bottom);
+            const bottomLeft = toViewport(view, viewport, left, bottom);
+            path.moveTo(topLeft.x, topLeft.y);
+            path.lineTo(topRight.x, topRight.y);
+            path.lineTo(bottomRight.x, bottomRight.y);
+            path.lineTo(bottomLeft.x, bottomLeft.y);
+            path.closePath();
             return;
         }
+        const centerX = (left + right) / 2;
+        const centerY = (top + bottom) / 2;
+        const center = toViewport(view, viewport, centerX, centerY);
+        const horizontal = toViewport(view, viewport, right, centerY);
+        const vertical = toViewport(view, viewport, centerX, bottom);
         path.ellipse(
-            x + width / 2,
-            y + height / 2,
-            width / 2,
-            height / 2,
-            0,
+            center.x,
+            center.y,
+            Math.hypot(horizontal.x - center.x, horizontal.y - center.y),
+            Math.hypot(vertical.x - center.x, vertical.y - center.y),
+            Math.atan2(horizontal.y - center.y, horizontal.x - center.x),
             0,
             Math.PI * 2,
         );

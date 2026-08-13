@@ -2,8 +2,10 @@
 // Copyright (C) 2026 Nyabi (nyattic)
 
 export interface ViewState {
-    // Document pixels per CSS pixel.
+    // CSS pixels per document pixel.
     scale: number;
+    // Clockwise degrees, normalized to [-180, 180).
+    rotation: number;
     // Document point pinned to the centre of the viewport.
     centerX: number;
     centerY: number;
@@ -25,17 +27,25 @@ export interface Viewport {
 export function fitToViewport(
     document: { width: number; height: number },
     viewport: Viewport,
+    rotation = 0,
 ): ViewState {
+    const normalizedRotation = normalizeRotation(rotation);
+    const radians = degreesToRadians(normalizedRotation);
+    const cosine = Math.abs(Math.cos(radians));
+    const sine = Math.abs(Math.sin(radians));
+    const rotatedWidth = document.width * cosine + document.height * sine;
+    const rotatedHeight = document.width * sine + document.height * cosine;
     const scale =
         document.width <= 0 || document.height <= 0
             ? 1
             : Math.min(
-                  viewport.width / document.width,
-                  viewport.height / document.height,
+                  viewport.width / rotatedWidth,
+                  viewport.height / rotatedHeight,
                   1,
               );
     return {
         scale: Math.max(minimumScale, scale),
+        rotation: normalizedRotation,
         centerX: document.width / 2,
         centerY: document.height / 2,
     };
@@ -45,15 +55,27 @@ export function clampScale(scale: number): number {
     return Math.min(maximumScale, Math.max(minimumScale, scale));
 }
 
+export function normalizeRotation(rotation: number): number {
+    if (!Number.isFinite(rotation)) {
+        return 0;
+    }
+    return ((((rotation + 180) % 360) + 360) % 360) - 180;
+}
+
 export function toDocument(
     view: ViewState,
     viewport: Viewport,
     viewportX: number,
     viewportY: number,
 ): { x: number; y: number } {
+    const radians = degreesToRadians(view.rotation);
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const offsetX = (viewportX - viewport.width / 2) / view.scale;
+    const offsetY = (viewportY - viewport.height / 2) / view.scale;
     return {
-        x: view.centerX + (viewportX - viewport.width / 2) / view.scale,
-        y: view.centerY + (viewportY - viewport.height / 2) / view.scale,
+        x: view.centerX + cosine * offsetX + sine * offsetY,
+        y: view.centerY - sine * offsetX + cosine * offsetY,
     };
 }
 
@@ -63,9 +85,53 @@ export function toViewport(
     documentX: number,
     documentY: number,
 ): { x: number; y: number } {
+    const radians = degreesToRadians(view.rotation);
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const offsetX = documentX - view.centerX;
+    const offsetY = documentY - view.centerY;
     return {
-        x: viewport.width / 2 + (documentX - view.centerX) * view.scale,
-        y: viewport.height / 2 + (documentY - view.centerY) * view.scale,
+        x:
+            viewport.width / 2 +
+            (cosine * offsetX - sine * offsetY) * view.scale,
+        y:
+            viewport.height / 2 +
+            (sine * offsetX + cosine * offsetY) * view.scale,
+    };
+}
+
+// Keeps the document point at one viewport position pinned to another while
+// the scale and rotation change. Pinch gestures use the previous and current
+// midpoint respectively, so translation, zoom, and rotation stay in one
+// continuous transform rather than accumulating independent rounding errors.
+export function transformAround(
+    view: ViewState,
+    viewport: Viewport,
+    anchorViewportX: number,
+    anchorViewportY: number,
+    nextViewportX: number,
+    nextViewportY: number,
+    nextScale: number,
+    nextRotation: number,
+): ViewState {
+    const anchor = toDocument(
+        view,
+        viewport,
+        anchorViewportX,
+        anchorViewportY,
+    );
+    const scale = clampScale(nextScale);
+    const rotation = normalizeRotation(nextRotation);
+    const radians = degreesToRadians(rotation);
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const offsetX = (nextViewportX - viewport.width / 2) / scale;
+    const offsetY = (nextViewportY - viewport.height / 2) / scale;
+    return {
+        scale,
+        rotation,
+        centerX: anchor.x - cosine * offsetX - sine * offsetY,
+        centerY: anchor.y + sine * offsetX - cosine * offsetY,
     };
 }
 
@@ -78,13 +144,16 @@ export function zoomAround(
     viewportY: number,
     nextScale: number,
 ): ViewState {
-    const scale = clampScale(nextScale);
-    const anchor = toDocument(view, viewport, viewportX, viewportY);
-    return {
-        scale,
-        centerX: anchor.x - (viewportX - viewport.width / 2) / scale,
-        centerY: anchor.y - (viewportY - viewport.height / 2) / scale,
-    };
+    return transformAround(
+        view,
+        viewport,
+        viewportX,
+        viewportY,
+        viewportX,
+        viewportY,
+        nextScale,
+        view.rotation,
+    );
 }
 
 export function pan(
@@ -92,9 +161,21 @@ export function pan(
     deltaViewportX: number,
     deltaViewportY: number,
 ): ViewState {
+    const radians = degreesToRadians(view.rotation);
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
     return {
         scale: view.scale,
-        centerX: view.centerX - deltaViewportX / view.scale,
-        centerY: view.centerY - deltaViewportY / view.scale,
+        rotation: normalizeRotation(view.rotation),
+        centerX:
+            view.centerX -
+            (cosine * deltaViewportX + sine * deltaViewportY) / view.scale,
+        centerY:
+            view.centerY +
+            (sine * deltaViewportX - cosine * deltaViewportY) / view.scale,
     };
+}
+
+function degreesToRadians(degrees: number): number {
+    return (degrees * Math.PI) / 180;
 }
