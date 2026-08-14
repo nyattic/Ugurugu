@@ -55,17 +55,14 @@
         fitToViewport,
         normalizeRotation,
         pan,
+        pinchMeasurement,
         toDocument,
         transformAround,
         zoomAround,
     } from "./lib/ViewTransform";
-    import type { ViewState } from "./lib/ViewTransform";
-    import {
-        clearRecoverySnapshot,
-        readRecoverySnapshot,
-        writeRecoverySnapshot,
-    } from "./lib/RecoveryStore";
-    import type { RecoverySnapshot } from "./lib/RecoveryStore";
+    import type { PinchMeasurement, ViewState } from "./lib/ViewTransform";
+    import { AutosaveController } from "./lib/AutosaveController.svelte";
+    import { downloadBlob } from "./lib/download";
 
     const engine = new EngineClient();
     const profile: MemoryProfile = detectMemoryProfile();
@@ -128,8 +125,13 @@
     const rotationDegrees = $derived(Math.round(view.rotation * 10) / 10);
     const activeTool = $derived(toolDefinition(tool));
 
-    let recoveryOffer = $state<RecoverySnapshot | null>(null);
-    let autosaveStatus = $state("");
+    const autosave = new AutosaveController({
+        ready: () => meta !== null && !drawing,
+        revision: () => contentRevision,
+        name: () => documentName,
+        serialize: () => engine.serialize(),
+        open: (bytes, name) => void openDocument(bytes, name),
+    });
     let exportingGif = $state(false);
 
     let playTimer: ReturnType<typeof setInterval> | null = null;
@@ -143,17 +145,10 @@
     let rotationDragStartX = 0;
     let rotationDragStartAngle = 0;
     const activeTouches = new Map<number, { x: number; y: number }>();
-    let touchGesture: {
-        centerX: number;
-        centerY: number;
-        distance: number;
-        angle: number;
-    } | null = null;
+    let touchGesture: PinchMeasurement | null = null;
     let pendingPoints: number[] = [];
     let chain = Promise.resolve();
     let contentRevision = 0;
-    let snapshotRevision = 0;
-    let snapshotBusy = false;
     let thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
     let selectionDrag: DragShape | null = null;
     let selectionCombine: CombineValue = selectionCombines.replace;
@@ -498,7 +493,7 @@
         documentName = name;
         frameIndex = 0;
         contentRevision = 0;
-        snapshotRevision = 0;
+        autosave.reset();
         layers = next.layers;
         presets = next.presets;
         eraserPresets = next.eraserPresets;
@@ -1047,8 +1042,7 @@
                 // The pending transform survives the gesture; only the drag
                 // that was steering it ends here.
                 movingSelection = false;
-                touchGesture =
-                    activeTouches.size === 2 ? touchGestureMeasurement() : null;
+                touchGesture = pinchMeasurement(activeTouches.values());
                 return;
             }
         }
@@ -1118,28 +1112,6 @@
         });
     }
 
-    function touchPair() {
-        const points = [...activeTouches.values()];
-        const first = points[0];
-        const second = points[1];
-        return first && second ? ([first, second] as const) : null;
-    }
-
-    function touchGestureMeasurement() {
-        const pair = touchPair();
-        if (!pair) {
-            return null;
-        }
-        const deltaX = pair[1].x - pair[0].x;
-        const deltaY = pair[1].y - pair[0].y;
-        return {
-            centerX: (pair[0].x + pair[1].x) / 2,
-            centerY: (pair[0].y + pair[1].y) / 2,
-            distance: Math.hypot(deltaX, deltaY),
-            angle: (Math.atan2(deltaY, deltaX) * 180) / Math.PI,
-        };
-    }
-
     function onPointerMove(event: PointerEvent) {
         if (
             event.pointerType === "touch" &&
@@ -1150,8 +1122,9 @@
                 y: event.clientY,
             });
             if (activeTouches.size >= 2) {
-                const nextGesture =
-                    activeTouches.size === 2 ? touchGestureMeasurement() : null;
+                const nextGesture = pinchMeasurement(
+                    activeTouches.values(),
+                );
                 if (
                     touchGesture &&
                     nextGesture &&
@@ -1226,8 +1199,7 @@
 
     function onPointerUp(event: PointerEvent) {
         activeTouches.delete(event.pointerId);
-        touchGesture =
-            activeTouches.size === 2 ? touchGestureMeasurement() : null;
+        touchGesture = pinchMeasurement(activeTouches.values());
         if (rotating) {
             rotating = false;
             displayCanvas.releasePointerCapture(event.pointerId);
@@ -1447,21 +1419,6 @@
         });
     }
 
-    function downloadBlob(blob: Blob, filename: string) {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = filename;
-        // In the document because some browsers ignore click() on a detached
-        // anchor, and the URL outlives the call because revoking it in the
-        // same turn can cancel a download that has not started reading yet.
-        anchor.style.display = "none";
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-    }
-
     function exportGif() {
         stopPlayback();
         cancelTransformForBoundary(
@@ -1481,69 +1438,6 @@
                 exportingGif = false;
             }
         });
-    }
-
-    async function snapshotRecovery() {
-        if (
-            !meta ||
-            drawing ||
-            snapshotBusy ||
-            contentRevision === snapshotRevision
-        ) {
-            return;
-        }
-        snapshotBusy = true;
-        const revision = contentRevision;
-        try {
-            const bytes = await engine.serialize();
-            await writeRecoverySnapshot({
-                name: documentName,
-                bytes,
-                savedAt: Date.now(),
-            });
-            snapshotRevision = revision;
-            const time = new Date().toLocaleTimeString();
-            autosaveStatus = `Recovery snapshot saved ${time}`;
-        } catch (error) {
-            const detail =
-                error instanceof Error
-                    ? `${error.name}: ${error.message}`
-                    : String(error);
-            autosaveStatus = `Recovery save failed — ${detail}`;
-        } finally {
-            snapshotBusy = false;
-        }
-    }
-
-    function restoreRecovery() {
-        const offer = recoveryOffer;
-        recoveryOffer = null;
-        if (!offer) {
-            return;
-        }
-        void openDocument(offer.bytes, offer.name);
-    }
-
-    async function discardRecovery() {
-        recoveryOffer = null;
-        try {
-            await clearRecoverySnapshot();
-        } catch (error) {
-            autosaveStatus = `Could not clear the recovery slot — ${error}`;
-        }
-    }
-
-    // Reload-safety knob: the interval is short because a browser tab can go
-    // away without any reliable shutdown callback. Tests pass ?autosave=1.
-    function autosaveIntervalMs() {
-        const parameter = new URLSearchParams(window.location.search).get(
-            "autosave",
-        );
-        const seconds = Number(parameter);
-        if (!Number.isFinite(seconds) || seconds <= 0) {
-            return 15000;
-        }
-        return Math.min(600, Math.max(1, seconds)) * 1000;
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -1651,35 +1545,22 @@
         observer.observe(viewportElement);
         resizeDisplay();
         void (async () => {
-            try {
-                recoveryOffer = await readRecoverySnapshot();
-            } catch (error) {
-                autosaveStatus = `Could not read the recovery slot — ${error}`;
-            }
+            await autosave.readOffer();
             await createDocument(
                 profile.defaultCanvasWidth,
                 profile.defaultCanvasHeight,
             );
         })();
-        const snapshotTimer = setInterval(() => {
-            void snapshotRecovery();
-        }, autosaveIntervalMs());
-        const onHidden = () => {
-            if (document.visibilityState === "hidden") {
-                void snapshotRecovery();
-            }
-        };
-        document.addEventListener("visibilitychange", onHidden);
+        const stopAutosave = autosave.start();
         return () => {
             observer.disconnect();
-            clearInterval(snapshotTimer);
+            stopAutosave();
             if (thumbnailTimer !== null) {
                 clearTimeout(thumbnailTimer);
             }
             if (antsFrame !== null) {
                 cancelAnimationFrame(antsFrame);
             }
-            document.removeEventListener("visibilitychange", onHidden);
             stopPlayback();
         };
     });
@@ -1766,17 +1647,20 @@
         </div>
     </header>
 
-    {#if recoveryOffer}
+    {#if autosave.offer}
         <div class="recovery-banner" role="alert">
             <span>
                 Unsaved work from an earlier session —
-                {recoveryOffer.name},
-                {new Date(recoveryOffer.savedAt).toLocaleString()}
+                {autosave.offer.name},
+                {new Date(autosave.offer.savedAt).toLocaleString()}
             </span>
-            <button id="recovery-restore" onclick={restoreRecovery}>
+            <button id="recovery-restore" onclick={() => autosave.restore()}>
                 Restore
             </button>
-            <button id="recovery-discard" onclick={discardRecovery}>
+            <button
+                id="recovery-discard"
+                onclick={() => void autosave.discard()}
+            >
                 Discard
             </button>
         </div>
@@ -2014,7 +1898,7 @@
         </div>
         <div class="status-bar">
             <p id="status">{status}</p>
-            <p id="autosave-status">{autosaveStatus}</p>
+            <p id="autosave-status">{autosave.status}</p>
             <p id="presenter-status">
                 {activeTool.label} · {usingWebGL ? "WebGL 2" : "Canvas 2D"} ·
                 {profile.name}

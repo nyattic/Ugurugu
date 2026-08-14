@@ -179,3 +179,29 @@ export function pan(
 function degreesToRadians(degrees: number): number {
     return (degrees * Math.PI) / 180;
 }
+
+export interface PinchMeasurement {
+    centerX: number;
+    centerY: number;
+    distance: number;
+    angle: number;
+}
+
+// The midpoint, span and tilt of exactly two touches, which is what a pinch
+// compares between two moves to produce one transform.
+export function pinchMeasurement(
+    touches: Iterable<{ x: number; y: number }>,
+): PinchMeasurement | null {
+    const [first, second, third] = [...touches];
+    if (!first || !second || third) {
+        return null;
+    }
+    const deltaX = second.x - first.x;
+    const deltaY = second.y - first.y;
+    return {
+        centerX: (first.x + second.x) / 2,
+        centerY: (first.y + second.y) / 2,
+        distance: Math.hypot(deltaX, deltaY),
+        angle: (Math.atan2(deltaY, deltaX) * 180) / Math.PI,
+    };
+}
