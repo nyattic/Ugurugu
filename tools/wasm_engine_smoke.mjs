@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 const modulePath = new URL(
     "../out/build/wasm-release/ugurugu_engine_spike.js",
@@ -9,9 +8,9 @@ const modulePath = new URL(
 const fixturePath =
     process.argv[2] ?? new URL("../examples/Wave.ugu", import.meta.url);
 
-const { default: createUguruguEngine } = await import(
-    fileURLToPath(modulePath)
-);
+// The href, not a native path: Windows absolute paths are not valid ESM
+// specifiers.
+const { default: createUguruguEngine } = await import(modulePath.href);
 const engine = await createUguruguEngine();
 
 function openDocument(bytes) {

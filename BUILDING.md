@@ -71,6 +71,17 @@ cmake --build --preset wasm-release
 node tools/wasm_engine_smoke.mjs
 ```
 
+The preset is macOS-only. On Windows, configure the same build
+directory by hand with `EMSDK` in the environment:
+
+```sh
+cmake -S . -B out/build/wasm-release -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=C:/Qt/6.11.1/wasm_singlethread/lib/cmake/Qt6/qt.toolchain.cmake \
+  -DQT_HOST_PATH=C:/Qt/6.11.1/mingw_64 \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build out/build/wasm-release --parallel
+```
+
 The smoke script loads `examples/Wave.ugu`, renders three frames, and
 round-trips the serializer in Node. `tools/wasm_worker_harness/` runs
 the same check inside a browser Dedicated Worker: serve `index.html`,

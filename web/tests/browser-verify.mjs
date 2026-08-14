@@ -36,10 +36,14 @@ function startServer({ withoutEngine = false } = {}) {
     const server = createServer(async (request, response) => {
         try {
             const url = new URL(request.url, "http://localhost");
-            let path = normalize(decodeURIComponent(url.pathname));
+            // The directory index is decided on the URL, before normalize()
+            // turns the separators native: on Windows "/" comes back as "\"
+            // and would never match a trailing slash.
+            let path = decodeURIComponent(url.pathname);
             if (path.endsWith("/")) {
                 path += "index.html";
             }
+            path = normalize(path);
             if (withoutEngine && path.includes("ugurugu_engine_spike.js")) {
                 response.writeHead(404);
                 response.end();
@@ -1095,6 +1099,59 @@ const browser = await chromium.launch({
     await page.locator("#selection-actions").waitFor({ timeout: 20000 });
     check(true, "the wand selected the area around the painted shape");
 
+    // A selection change is an undo entry of its own, the way
+    // pushSelectionStateCommand records it on the desktop.
+    const paintedBeforeUndo = await countBrushPixels(page);
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(
+        () => document.querySelector("#selection-actions") === null,
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "undo takes back the wand's selection");
+    check(
+        (await countBrushPixels(page)) === paintedBeforeUndo,
+        "undoing a selection change leaves the artwork alone",
+    );
+
+    await page.keyboard.press("Control+Shift+z");
+    await page.locator("#selection-actions").waitFor({ timeout: 20000 });
+    check(true, "redo brings the selection back");
+
+    // "Reference layers" is only answerable once a layer is marked as one,
+    // which is what ugu_layer_set_reference exists for.
+    await page.keyboard.press("Control+d");
+    await page.locator("#fill-reference-1").click();
+    await page.mouse.click(empty.x, empty.y);
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector("#status")
+                ?.textContent.includes("reference"),
+        undefined,
+        { timeout: 20000 },
+    );
+    check(
+        (await page.locator("#selection-actions").count()) === 0,
+        "the wand refuses to read reference layers while none is marked",
+    );
+
+    const referenceToggle = page.locator("aside li button.reference").first();
+    await referenceToggle.click();
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector("aside li button.reference")
+                ?.getAttribute("aria-pressed") === "true",
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "a layer can be marked as a reference layer");
+
+    await page.mouse.click(empty.x, empty.y);
+    await page.locator("#selection-actions").waitFor({ timeout: 20000 });
+    check(true, "the wand reads the layer once it is marked");
+
     // The rail letters are the desktop's, and every one of them has a button.
     for (const [key, id] of [
         ["l", "tool-lasso"],
@@ -2102,6 +2159,142 @@ const browser = await chromium.launch({
         (await page.locator("#notices-close").count()) === 0,
         "Escape closes the notices panel",
     );
+    await context.close();
+}
+
+// Scenario 17: the document's own properties — wobble, frame count, fps and
+// canvas size — are editable, and every one of them is an undo entry.
+{
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await installPixelCounter(page);
+    await page.goto(origin);
+    await waitForDocumentLoaded(page);
+
+    await page.locator("#new-document").click();
+    await page.locator("#new-document-width").fill("400");
+    await page.locator("#new-document-height").fill("300");
+    await page.locator("#new-document-confirm").click();
+    await page.waitForFunction(
+        () => document.querySelector("#document-surface")?.height === 300,
+        undefined,
+        { timeout: 30000 },
+    );
+
+    await drawStroke(page);
+    const straight = await countBrushPixels(page);
+
+    // Wobble displaces every stroke, so the frame the shell shows has to
+    // change when the amount does.
+    const before = await page.evaluate(() =>
+        document
+            .querySelector("#document-surface")
+            .getContext("2d")
+            .getImageData(0, 0, 400, 300)
+            .data.join(","),
+    );
+    await page.locator("#wobble-amount").fill("9");
+    await page.locator("#wobble-amount").dispatchEvent("change");
+    await page.waitForFunction(
+        (previous) =>
+            document
+                .querySelector("#document-surface")
+                .getContext("2d")
+                .getImageData(0, 0, 400, 300)
+                .data.join(",") !== previous,
+        before,
+        { timeout: 30000 },
+    );
+    check(true, "raising the wobble amount redraws the frame");
+
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(
+        (previous) =>
+            document
+                .querySelector("#document-surface")
+                .getContext("2d")
+                .getImageData(0, 0, 400, 300)
+                .data.join(",") === previous,
+        before,
+        { timeout: 30000 },
+    );
+    check(true, "undo takes the wobble change back");
+    check(
+        (await countBrushPixels(page)) === straight,
+        "the stroke itself survived the wobble change",
+    );
+
+    await page.locator("#wobble-style-1").click();
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector("#wobble-style-1")
+                ?.getAttribute("aria-pressed") === "true",
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "the motion style can be switched to Smooth");
+
+    await page.locator("#animation-frames").fill("8");
+    await page.locator("#animation-frames").dispatchEvent("change");
+    await page.waitForFunction(
+        () =>
+            document
+                .querySelector(".frame-label")
+                ?.textContent.trim()
+                .endsWith("/8"),
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "the animation frame count is editable");
+
+    await page.locator("#frames-per-second").fill("12");
+    await page.locator("#frames-per-second").dispatchEvent("change");
+    await page.waitForFunction(
+        () =>
+            document.querySelector("#frames-per-second")?.value === "12",
+        undefined,
+        { timeout: 20000 },
+    );
+    check(true, "the playback speed is editable");
+
+    // Image size scales the artwork with the canvas; the ink has to survive.
+    await page.locator("#document-size").click();
+    await page.locator("#resize-width").fill("800");
+    await page.locator("#resize-height").fill("600");
+    await page.locator("#resize-confirm").click();
+    await page.waitForFunction(
+        () => document.querySelector("#document-surface")?.width === 800,
+        undefined,
+        { timeout: 30000 },
+    );
+    const scaled = await countBrushPixels(page);
+    check(
+        scaled > straight,
+        `image resize scaled the artwork up (${straight} to ${scaled} px)`,
+    );
+
+    // Canvas size keeps the artwork's size and only moves its bounds.
+    await page.locator("#document-size").click();
+    await page.locator("#resize-mode-canvas").click();
+    await page.locator("#resize-width").fill("500");
+    await page.locator("#resize-height").fill("400");
+    await page.locator("#resize-anchor-0").click();
+    await page.locator("#resize-confirm").click();
+    await page.waitForFunction(
+        () => document.querySelector("#document-surface")?.width === 500,
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "canvas resize crops the document to 500x400");
+
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(
+        () => document.querySelector("#document-surface")?.width === 800,
+        undefined,
+        { timeout: 30000 },
+    );
+    check(true, "undo restores the canvas size");
     await context.close();
 }
 

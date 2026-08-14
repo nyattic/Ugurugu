@@ -36,6 +36,19 @@ const toolKeys: Record<string, ToolId> = {
     i: "eyedropper",
 };
 
+// A slider or a checkbox holds no text to type into, so leaving one focused
+// must not swallow the shortcuts: moving the wobble slider and pressing
+// Ctrl+Z has to undo the change it just made.
+function isTextEntry(target: HTMLElement): boolean {
+    if (target.isContentEditable) {
+        return true;
+    }
+    if (target instanceof HTMLInputElement) {
+        return !["range", "checkbox", "radio", "button"].includes(target.type);
+    }
+    return ["TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
 // Browser- and OS-owned chords (Cmd/Ctrl+W, +L, +T, reload, native zoom) are
 // deliberately left alone: inside the itch.io iframe the app cannot assume it
 // owns them, so every shortcut here also has a visible control.
@@ -44,11 +57,7 @@ export function handleShortcut(
     actions: ShortcutActions,
 ): boolean {
     const target = event.target as HTMLElement | null;
-    if (
-        target &&
-        (target.isContentEditable ||
-            ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-    ) {
+    if (target && isTextEntry(target)) {
         return false;
     }
     const accelerator = event.metaKey || event.ctrlKey;

@@ -47,6 +47,10 @@ target_link_options(
     -sEXPORT_NAME=createUguruguEngine
     -sENVIRONMENT=web,worker,node
     -sALLOW_MEMORY_GROWTH=1
+    # A named allocation failure the shell can report, rather than the
+    # browser's own 2 GiB limit killing the tab. The worst measured document
+    # peaks at 150 MiB.
+    -sMAXIMUM_MEMORY=512MB
     -sEXPORTED_FUNCTIONS=_malloc,_free
     -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,HEAPU8,UTF8ToString
 )

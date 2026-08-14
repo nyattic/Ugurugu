@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 5;
+const expectedAbiVersion = 7;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -55,6 +55,7 @@ function layerList(engine) {
             ),
             group: engine._ugu_layer_kind(handle, index) === 1,
             visible: engine._ugu_layer_visible(handle, index) === 1,
+            reference: engine._ugu_layer_reference(handle, index) === 1,
             opacity: engine._ugu_layer_opacity(handle, index),
             active: engine._ugu_layer_is_active(handle, index) === 1,
             depth: engine._ugu_layer_depth(handle, index),
@@ -102,14 +103,8 @@ function engineError(engine) {
     );
 }
 
-function adoptDocument(engine, handle, undoLimit) {
-    documentHandle = handle;
-    // A fresh handle starts at revision 0 with no selection; forcing a
-    // mismatch makes the first reply carry that empty outline.
-    sentSelectionRevision = -1;
-    if (undoLimit > 0) {
-        engine._ugu_set_undo_limit(handle, undoLimit);
-    }
+function documentMeta(engine) {
+    const handle = requireDocument();
     return {
         abiVersion: engine._ugu_abi_version(),
         schemaVersion: engine._ugu_schema_version(),
@@ -118,11 +113,33 @@ function adoptDocument(engine, handle, undoLimit) {
         frameCount: engine._ugu_document_frame_count(handle),
         layerCount: engine._ugu_document_layer_count(handle),
         fps: engine._ugu_document_fps(handle),
+        wobble: {
+            amount: engine._ugu_document_wobble(handle),
+            style: engine._ugu_motion_style(handle),
+            poseCount: engine._ugu_motion_pose_count(handle),
+            detail: engine._ugu_motion_detail(handle),
+            linked: engine._ugu_motion_linked(handle),
+            randomness: engine._ugu_motion_randomness(handle),
+            brokenLine: engine._ugu_motion_broken_line(handle) === 1,
+            breakAmount: engine._ugu_motion_break_amount(handle),
+            breakRange: engine._ugu_motion_break_range(handle),
+        },
         presets: presetList(engine),
         eraserPresets: eraserPresetList(engine),
         layers: layerList(engine),
         ...historyState(engine),
     };
+}
+
+function adoptDocument(engine, handle, undoLimit) {
+    documentHandle = handle;
+    // A fresh handle starts at revision 0 with no selection; forcing a
+    // mismatch makes the first reply carry that empty outline.
+    sentSelectionRevision = -1;
+    if (undoLimit > 0) {
+        engine._ugu_set_undo_limit(handle, undoLimit);
+    }
+    return documentMeta(engine);
 }
 
 function closeDocument(engine) {
@@ -271,9 +288,9 @@ function selectionState(engine) {
     return state;
 }
 
-// A selection change moves no pixels, so the reply carries the outline and
-// the panel state but no image data.
-function selectionReply(engine, id) {
+// For operations that move no pixels: the reply carries the outline and the
+// panel state but no image data.
+function stateReply(engine, id, meta = null) {
     const selection = selectionState(engine);
     postMessage(
         {
@@ -283,13 +300,16 @@ function selectionReply(engine, id) {
             pixels: null,
             layers: layerList(engine),
             selection,
+            meta,
             ...historyState(engine),
         },
         selection.outline ? [selection.outline] : [],
     );
 }
 
-function regionReply(engine, id) {
+// meta rides along when a document property the shell mirrors — canvas size,
+// frame count, fps, wobble — changed under the operation.
+function regionReply(engine, id, meta = null) {
     const { rect, pixels } = dirtyRegion(engine);
     const selection = selectionState(engine);
     const message = {
@@ -299,6 +319,7 @@ function regionReply(engine, id) {
         pixels,
         layers: layerList(engine),
         selection,
+        meta,
         ...historyState(engine),
     };
     const transfers = [];
@@ -475,7 +496,7 @@ self.onmessage = async (event) => {
             if (event.data.paint) {
                 regionReply(engine, id);
             } else {
-                selectionReply(engine, id);
+                stateReply(engine, id);
             }
             return;
         } else if (type === "selectionFlood") {
@@ -490,23 +511,23 @@ self.onmessage = async (event) => {
             ) {
                 throw engineError(engine);
             }
-            selectionReply(engine, id);
+            stateReply(engine, id);
             return;
         } else if (type === "selectionAll") {
             if (!engine._ugu_selection_all(handleFor())) {
                 throw engineError(engine);
             }
-            selectionReply(engine, id);
+            stateReply(engine, id);
             return;
         } else if (type === "selectionInvert") {
             if (!engine._ugu_selection_invert(handleFor())) {
                 throw engineError(engine);
             }
-            selectionReply(engine, id);
+            stateReply(engine, id);
             return;
         } else if (type === "selectionClear") {
             engine._ugu_selection_clear(handleFor());
-            selectionReply(engine, id);
+            stateReply(engine, id);
             return;
         } else if (type === "selectionTransformBegin") {
             if (
@@ -578,12 +599,20 @@ self.onmessage = async (event) => {
             if (engine._ugu_stroke_end(handleFor()) > 1) {
                 throw engineError(engine);
             }
-        } else if (type === "undo") {
-            engine._ugu_undo(handleFor());
-            fullRender(engine, event.data.frame);
-        } else if (type === "redo") {
-            engine._ugu_redo(handleFor());
-            fullRender(engine, event.data.frame);
+        } else if (type === "undo" || type === "redo") {
+            const handle = handleFor();
+            if (type === "undo") {
+                engine._ugu_undo(handle);
+            } else {
+                engine._ugu_redo(handle);
+            }
+            // History reaches document properties too — canvas size, frames,
+            // fps, wobble — so the shell is told what it is looking at now,
+            // and the frame it asked for may no longer exist.
+            const count = engine._ugu_document_frame_count(handle);
+            fullRender(engine, Math.min(event.data.frame, count - 1));
+            regionReply(engine, id, documentMeta(engine));
+            return;
         } else if (type === "layerActivate") {
             engine._ugu_layer_activate(handleFor(), event.data.index);
             fullRender(engine, event.data.frame);
@@ -594,6 +623,77 @@ self.onmessage = async (event) => {
                 event.data.visible ? 1 : 0,
             );
             fullRender(engine, event.data.frame);
+        } else if (type === "wobble") {
+            const settings = event.data.wobble;
+            if (
+                !engine._ugu_set_wobble(
+                    handleFor(),
+                    settings.amount,
+                    settings.style,
+                    settings.poseCount,
+                    settings.detail,
+                    settings.linked,
+                    settings.randomness,
+                    settings.brokenLine ? 1 : 0,
+                    settings.breakAmount,
+                    settings.breakRange,
+                )
+            ) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+            regionReply(engine, id, documentMeta(engine));
+            return;
+        } else if (type === "animationFrames") {
+            const handle = handleFor();
+            engine._ugu_set_animation_frames(handle, event.data.frames);
+            // The frame the shell was showing may no longer exist.
+            const count = engine._ugu_document_frame_count(handle);
+            fullRender(engine, Math.min(event.data.frame, count - 1));
+            regionReply(engine, id, documentMeta(engine));
+            return;
+        } else if (type === "framesPerSecond") {
+            engine._ugu_set_fps(handleFor(), event.data.fps);
+            stateReply(engine, id, documentMeta(engine));
+            return;
+        } else if (type === "resizeImage") {
+            if (
+                !engine._ugu_resize_image(
+                    handleFor(),
+                    event.data.width,
+                    event.data.height,
+                )
+            ) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+            regionReply(engine, id, documentMeta(engine));
+            return;
+        } else if (type === "resizeCanvas") {
+            if (
+                !engine._ugu_resize_canvas(
+                    handleFor(),
+                    event.data.width,
+                    event.data.height,
+                    event.data.offsetX,
+                    event.data.offsetY,
+                )
+            ) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+            regionReply(engine, id, documentMeta(engine));
+            return;
+        } else if (type === "layerReference") {
+            engine._ugu_layer_set_reference(
+                handleFor(),
+                event.data.index,
+                event.data.reference ? 1 : 0,
+            );
+            // The flag only picks which layers a flood fill reads; no pixel
+            // in the frame moves, so nothing has to be rendered or uploaded.
+            stateReply(engine, id);
+            return;
         } else if (type === "layerOpacity") {
             engine._ugu_layer_set_opacity(
                 handleFor(),

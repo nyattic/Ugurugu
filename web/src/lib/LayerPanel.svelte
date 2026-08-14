@@ -6,6 +6,7 @@
         thumbnails,
         onactivate,
         onvisible,
+        onreference,
         onopacity,
         onadd,
         onremove,
@@ -19,6 +20,7 @@
         // move renumbers every row before the next one runs.
         onactivate: (id: string) => void;
         onvisible: (id: string, visible: boolean) => void;
+        onreference: (id: string, reference: boolean) => void;
         onopacity: (id: string, opacity: number) => void;
         onadd: () => void;
         onremove: (id: string) => void;
@@ -126,6 +128,18 @@
                 >
                     {layer.group ? "📁 " : ""}{layer.name}
                 </button>
+                {#if !layer.group}
+                    <button
+                        class="reference"
+                        class:on={layer.reference}
+                        title="Reference layer for the wand and the bucket"
+                        aria-pressed={layer.reference}
+                        onclick={() =>
+                            onreference(layer.id, !layer.reference)}
+                    >
+                        R
+                    </button>
+                {/if}
             </li>
         {/each}
     </ul>
@@ -277,6 +291,31 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .reference {
+        flex-shrink: 0;
+        inline-size: 1.35rem;
+        padding: 0.1rem 0;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: none;
+        color: var(--paper-dim);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        line-height: 1.2;
+        cursor: pointer;
+    }
+
+    .reference.on {
+        border-color: var(--accent);
+        background: var(--accent-bed);
+        color: var(--accent);
+    }
+
+    .reference:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
     }
 
     .opacity-controls {

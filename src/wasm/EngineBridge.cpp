@@ -337,14 +337,19 @@ bool selectionAppliesTo(const BridgeDocument *handle, const QUuid &layerId)
                   == handle->controller->document().size;
 }
 
+bool selectionMaskUsable(
+    const BridgeDocument *handle, const QImage &mask, const QUuid &layerId)
+{
+    return !mask.isNull() && mask.size() == handle->controller->document().size
+           && mask.format() == QImage::Format_Grayscale8
+           && ugurugu::maskHasContent(mask) && !layerId.isNull();
+}
+
 // Every selection change goes through here so the revision, the cached
 // outline and the "empty means no selection" rule stay in one place.
 void installSelection(BridgeDocument *handle, QImage mask, const QUuid &layerId)
 {
-    const QSize size = handle->controller->document().size;
-    const bool usable = !mask.isNull() && mask.size() == size
-                        && mask.format() == QImage::Format_Grayscale8
-                        && ugurugu::maskHasContent(mask) && !layerId.isNull();
+    const bool usable = selectionMaskUsable(handle, mask, layerId);
     handle->selectionMask = usable ? std::move(mask) : QImage();
     handle->selectionLayerId = usable ? layerId : QUuid();
     handle->selectionRevision += 1;
@@ -369,6 +374,35 @@ void installSelection(BridgeDocument *handle, QImage mask, const QUuid &layerId)
             handle->outlinePoints.append(static_cast<float>(point.x()));
             handle->outlinePoints.append(static_cast<float>(point.y()));
         }
+    }
+}
+
+// Pushing the command runs its own redo, which emits
+// selectionHistoryStateRequested and installs the mask, so callers hand the
+// next state over instead of installing it themselves.
+void pushSelectionChange(BridgeDocument *handle,
+    const QImage &nextMask,
+    const QUuid &nextLayerId,
+    const char *text)
+{
+    const bool usable = selectionMaskUsable(handle, nextMask, nextLayerId);
+    const QImage afterMask = usable ? nextMask : QImage();
+    const QUuid afterLayerId = usable ? nextLayerId : QUuid();
+    if (handle->selectionMask.isNull() && afterMask.isNull())
+    {
+        installSelection(handle, afterMask, afterLayerId);
+        return;
+    }
+    const int revision = handle->selectionRevision;
+    handle->controller->pushSelectionStateCommand(QString::fromLatin1(text),
+        handle->selectionLayerId,
+        handle->selectionMask,
+        afterLayerId,
+        afterMask);
+    if (handle->selectionRevision == revision)
+    {
+        // The stack refused the entry. The selection still has to change.
+        installSelection(handle, afterMask, afterLayerId);
     }
 }
 
@@ -409,12 +443,13 @@ void applySelectionCombine(BridgeDocument *handle,
 {
     if (combine == CombineReplace || !selectionAppliesTo(handle, layerId))
     {
-        installSelection(handle, mask, layerId);
+        pushSelectionChange(handle, mask, layerId, "Select area");
         return;
     }
-    installSelection(handle,
+    pushSelectionChange(handle,
         combinedSelectionMask(handle->selectionMask, mask, combine),
-        layerId);
+        layerId,
+        combine == CombineAdd ? "Add to selection" : "Subtract from selection");
 }
 
 // Drops the floating transform without touching pixels. For callers that have
@@ -429,6 +464,20 @@ void clearSelectionTransform(BridgeDocument *handle)
     handle->transformFrame = -1;
     handle->transformBaseFrame = QImage();
     handle->transformPreviewRegion = QRect();
+}
+
+// Undo and redo of a selection change arrive as this signal, the way
+// CanvasWidget routes it into restoreSelectionState.
+void attachSelectionHistory(BridgeDocument *handle)
+{
+    QObject::connect(handle->controller.get(),
+        &ugurugu::DocumentController::selectionHistoryStateRequested,
+        handle->controller.get(),
+        [handle](const QUuid &layerId, const QImage &mask)
+        {
+            clearSelectionTransform(handle);
+            installSelection(handle, mask, layerId);
+        });
 }
 
 // Puts the committed pixels back under wherever the preview painted, then ends
@@ -652,6 +701,51 @@ QImage maskFromShape(
     return mask;
 }
 
+// A selection and a promoted split both describe the canvas that just went
+// away, and a floating transform holds pixels lifted from it.
+void afterCanvasResize(BridgeDocument *handle)
+{
+    clearSelectionTransform(handle);
+    installSelection(handle, QImage(), QUuid());
+    invalidateSplit(handle);
+}
+
+// Clamps the way each desktop wobble control clamps its own field, so a
+// slider that reaches its end is applied rather than rejected whole.
+std::optional<ugurugu::MotionSettings> motionFromValues(int style,
+    int poseCount,
+    int detail,
+    double linked,
+    double randomness,
+    int brokenLine,
+    double breakAmount,
+    double breakRange)
+{
+    const auto motionStyle = static_cast<ugurugu::MotionStyle>(style);
+    if (!ugurugu::isValidMotionStyle(motionStyle) || !std::isfinite(linked)
+        || !std::isfinite(randomness) || !std::isfinite(breakAmount)
+        || !std::isfinite(breakRange))
+    {
+        return std::nullopt;
+    }
+    ugurugu::MotionSettings motion;
+    motion.style = motionStyle;
+    motion.poseCount = std::clamp(poseCount,
+        ugurugu::DocumentLimits::minimumMotionPoseCount,
+        ugurugu::DocumentLimits::maximumMotionPoseCount);
+    motion.detail = std::clamp(detail,
+        ugurugu::DocumentLimits::minimumMotionDetail,
+        ugurugu::DocumentLimits::maximumMotionDetail);
+    motion.linked = std::clamp(linked, 0.0, 1.0);
+    motion.randomness = std::clamp(randomness, 0.0, 1.0);
+    motion.brokenLine = brokenLine != 0;
+    motion.breakAmount = std::clamp(breakAmount, 0.0, 1.0);
+    motion.breakRange = std::clamp(breakRange,
+        ugurugu::DocumentLimits::minimumBreakRange,
+        ugurugu::DocumentLimits::maximumBreakRange);
+    return motion;
+}
+
 // Commits a coverage mask as a Fill stroke, the same shape of document
 // operation the desktop bucket and lasso-paint modes produce.
 int commitFrozenFill(BridgeDocument *handle, const QImage &coverage, int frame)
@@ -726,7 +820,7 @@ extern "C"
     // instead of a missing-export TypeError somewhere later.
     EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
     {
-        return 5;
+        return 7;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
@@ -761,6 +855,7 @@ extern "C"
             return nullptr;
         }
         auto handle = std::make_unique<BridgeDocument>();
+        attachSelectionHistory(handle.get());
         QString error;
         if (!handle->controller->newDocument(QSize(width, height), &error))
         {
@@ -795,6 +890,7 @@ extern "C"
             return nullptr;
         }
         auto handle = std::make_unique<BridgeDocument>();
+        attachSelectionHistory(handle.get());
         if (!handle->controller->loadDocument(std::move(*document), &error))
         {
             setError(StatusDocumentInvalid, error.toUtf8());
@@ -834,6 +930,139 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE double ugu_document_fps(const BridgeDocument *handle)
     {
         return handle->controller->document().framesPerSecond;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_document_wobble(
+        const BridgeDocument *handle)
+    {
+        return handle->controller->document().wobbleAmount;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_motion_style(const BridgeDocument *handle)
+    {
+        return static_cast<int>(handle->controller->document().motion.style);
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_motion_pose_count(const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.poseCount;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_motion_detail(const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.detail;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_motion_linked(const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.linked;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_motion_randomness(
+        const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.randomness;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_motion_broken_line(
+        const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.brokenLine ? 1 : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_motion_break_amount(
+        const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.breakAmount;
+    }
+
+    EMSCRIPTEN_KEEPALIVE double ugu_motion_break_range(
+        const BridgeDocument *handle)
+    {
+        return handle->controller->document().motion.breakRange;
+    }
+
+    // The whole wobble state in one call, so a change the artist makes with
+    // one control is one undo entry rather than one per field.
+    EMSCRIPTEN_KEEPALIVE int ugu_set_wobble(BridgeDocument *handle,
+        double amount,
+        int style,
+        int poseCount,
+        int detail,
+        double linked,
+        double randomness,
+        int brokenLine,
+        double breakAmount,
+        double breakRange)
+    {
+        const auto motion = motionFromValues(style,
+            poseCount,
+            detail,
+            linked,
+            randomness,
+            brokenLine,
+            breakAmount,
+            breakRange);
+        if (!motion || !std::isfinite(amount))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the wobble settings are out of range"));
+            return 0;
+        }
+        if (!handle->controller->applyMotionPreset(amount, *motion))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the wobble settings were rejected"));
+            return 0;
+        }
+        invalidateSplit(handle);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_set_animation_frames(
+        BridgeDocument *handle, int frames)
+    {
+        handle->controller->setAnimationFrames(frames);
+        invalidateSplit(handle);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_set_fps(BridgeDocument *handle, double fps)
+    {
+        handle->controller->setFramesPerSecond(fps);
+    }
+
+    // Scales the artwork with the canvas. contentOffset-free by definition:
+    // every stroke moves in proportion.
+    EMSCRIPTEN_KEEPALIVE int ugu_resize_image(
+        BridgeDocument *handle, int width, int height)
+    {
+        if (!handle->controller->resizeImage(QSize(width, height)))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the image could not be resized"));
+            return 0;
+        }
+        afterCanvasResize(handle);
+        clearError();
+        return 1;
+    }
+
+    // Keeps the artwork at its size and moves it by contentOffset inside the
+    // new canvas, which is how the desktop crops and extends.
+    EMSCRIPTEN_KEEPALIVE int ugu_resize_canvas(
+        BridgeDocument *handle, int width, int height, int offsetX, int offsetY)
+    {
+        if (!handle->controller->resizeCanvas(
+                QSize(width, height), QPoint(offsetX, offsetY)))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the canvas could not be resized"));
+            return 0;
+        }
+        afterCanvasResize(handle);
+        clearError();
+        return 1;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_brush_preset_count()
@@ -1357,7 +1586,7 @@ extern "C"
             return 0;
         }
         mask.fill(255);
-        installSelection(handle, std::move(mask), layerId);
+        pushSelectionChange(handle, mask, layerId, "Select all");
         clearError();
         return 1;
     }
@@ -1372,7 +1601,8 @@ extern "C"
         }
         QImage inverted = handle->selectionMask;
         inverted.invertPixels();
-        installSelection(handle, std::move(inverted), handle->selectionLayerId);
+        pushSelectionChange(
+            handle, inverted, handle->selectionLayerId, "Invert selection");
         clearError();
         return 1;
     }
@@ -1383,7 +1613,7 @@ extern "C"
         {
             return;
         }
-        installSelection(handle, QImage(), QUuid());
+        pushSelectionChange(handle, QImage(), QUuid(), "Deselect");
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_selection_fill(
@@ -1744,6 +1974,13 @@ extern "C"
         return layer != nullptr && layer->visible ? 1 : 0;
     }
 
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_reference(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr && layer->reference ? 1 : 0;
+    }
+
     EMSCRIPTEN_KEEPALIVE double ugu_layer_opacity(
         const BridgeDocument *handle, int index)
     {
@@ -1790,6 +2027,17 @@ extern "C"
         {
             handle->controller->setLayerVisible(layer->id, visible != 0);
             invalidateSplit(handle);
+        }
+    }
+
+    // Marks a paint layer as a flood-fill reference, the source the wand and
+    // the bucket read when their reference option is "marked layers".
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_reference(
+        BridgeDocument *handle, int index, int reference)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setLayerReference(layer->id, reference != 0);
         }
     }
 

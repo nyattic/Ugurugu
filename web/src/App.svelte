@@ -8,10 +8,13 @@
         LayerThumbnail,
         RegionUpdate,
         SelectionContour,
+        WobbleSettings,
     } from "./lib/EngineClient";
     import ColorPanel from "./lib/ColorPanel.svelte";
     import LayerPanel from "./lib/LayerPanel.svelte";
     import NewDocumentDialog from "./lib/NewDocumentDialog.svelte";
+    import DocumentSizeDialog from "./lib/DocumentSizeDialog.svelte";
+    import WobblePanel from "./lib/WobblePanel.svelte";
     import NoticesDialog from "./lib/NoticesDialog.svelte";
     import ToolIcon from "./lib/ToolIcon.svelte";
     import ToolOptions from "./lib/ToolOptions.svelte";
@@ -98,6 +101,7 @@
         centerY: 0,
     });
     let showNewDocument = $state(false);
+    let showDocumentSize = $state(false);
     let showNotices = $state(false);
     let usingWebGL = $state(false);
     let hasSelection = $state(false);
@@ -251,7 +255,29 @@
         return next;
     }
 
+    // Document properties the shell mirrors — canvas size, frames, fps,
+    // wobble — only travel with the operations that change them.
+    function applyMeta(next: DocumentMeta) {
+        const resized =
+            !meta || meta.width !== next.width || meta.height !== next.height;
+        meta = next;
+        frameIndex = Math.min(frameIndex, next.frameCount - 1);
+        if (!resized) {
+            return;
+        }
+        selectionMoveMode = false;
+        selectionContours = [];
+        overlay?.setContours([]);
+        forgetTransformSession();
+        presenter?.resizeDocument(next.width, next.height);
+        resizeDisplay();
+        zoomToFit();
+    }
+
     function present(update: RegionUpdate) {
+        if (update.meta) {
+            applyMeta(update.meta);
+        }
         layers = update.layers;
         canUndo = update.canUndo;
         canRedo = update.canRedo;
@@ -1310,17 +1336,37 @@
         scheduleThumbnailRefresh();
     }
 
-    function layerAction(action: (frame: number) => Promise<RegionUpdate>) {
+    function documentAction(
+        action: (frame: number) => Promise<RegionUpdate>,
+        boundary = "document change",
+    ) {
         stopPlayback();
         cancelTransformForBoundary(
-            "The pending selection transform was canceled before the layer " +
-                "change.",
+            `The pending selection transform was canceled before the ` +
+                `${boundary}.`,
         );
         enqueue(async () => {
             present(await action(frameIndex));
             contentRevision += 1;
         });
         scheduleThumbnailRefresh();
+    }
+
+    function layerAction(action: (frame: number) => Promise<RegionUpdate>) {
+        documentAction(action, "layer change");
+    }
+
+    // Unlike the other document changes this one leaves playback running: the
+    // point of moving a wobble slider is to watch the drawing move.
+    function wobbleChanged(next: WobbleSettings) {
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before the wobble " +
+                "change.",
+        );
+        enqueue(async () => {
+            present(await engine.wobble(frameIndex, next));
+            contentRevision += 1;
+        });
     }
 
     // A row index is only valid against the layer list the click was made on.
@@ -1677,6 +1723,13 @@
             <button id="new-document" onclick={() => (showNewDocument = true)}>
                 New
             </button>
+            <button
+                id="document-size"
+                onclick={() => (showDocumentSize = true)}
+                disabled={!meta}
+            >
+                Size
+            </button>
             <label class="file-button">
                 Open
                 <input
@@ -1839,6 +1892,13 @@
         </section>
 
         <div class="side">
+            {#if meta}
+                <WobblePanel
+                    wobble={meta.wobble}
+                    frameCount={meta.frameCount}
+                    onchange={wobbleChanged}
+                />
+            {/if}
             <ColorPanel
                 color={colorHex}
                 {recentColors}
@@ -1855,6 +1915,10 @@
                 onvisible={(id, visible) =>
                     layerCommand(id, (frame, index) =>
                         engine.layerVisible(frame, index, visible),
+                    )}
+                onreference={(id, reference) =>
+                    layerCommand(id, (_frame, index) =>
+                        engine.layerReference(index, reference),
                     )}
                 onopacity={(id, opacity) =>
                     layerCommand(id, (frame, index) =>
@@ -1899,6 +1963,42 @@
                 <span class="frame-label">
                     {frameIndex + 1}/{meta.frameCount}
                 </span>
+                <label class="spin" title="Animation frames">
+                    <span>Frames</span>
+                    <input
+                        id="animation-frames"
+                        type="number"
+                        min="2"
+                        max="60"
+                        step="1"
+                        value={meta.frameCount}
+                        aria-label="Animation frames"
+                        onchange={(event) => {
+                            // Read here, not inside the queued action: by the
+                            // time that runs the event has no target left.
+                            const frames = Number(event.currentTarget.value);
+                            documentAction((frame) =>
+                                engine.animationFrames(frame, frames),
+                            );
+                        }}
+                    />
+                </label>
+                <label class="spin" title="Playback speed">
+                    <span>FPS</span>
+                    <input
+                        id="frames-per-second"
+                        type="number"
+                        min="1"
+                        max="50"
+                        step="1"
+                        value={meta.fps}
+                        aria-label="Frames per second"
+                        onchange={(event) => {
+                            const fps = Number(event.currentTarget.value);
+                            documentAction(() => engine.framesPerSecond(fps));
+                        }}
+                    />
+                </label>
                 <label
                     class="toggle"
                     title="Keep the wobble running while drawing"
@@ -1928,6 +2028,26 @@
         {profile}
         oncreate={(width, height) => void createDocument(width, height)}
         oncancel={() => (showNewDocument = false)}
+    />
+{/if}
+
+{#if showDocumentSize && meta}
+    <DocumentSizeDialog
+        {meta}
+        {profile}
+        onimage={(width, height) => {
+            showDocumentSize = false;
+            documentAction((frame) =>
+                engine.resizeImage(frame, width, height),
+            );
+        }}
+        oncanvas={(width, height, offsetX, offsetY) => {
+            showDocumentSize = false;
+            documentAction((frame) =>
+                engine.resizeCanvas(frame, width, height, offsetX, offsetY),
+            );
+        }}
+        oncancel={() => (showDocumentSize = false)}
     />
 {/if}
 
@@ -2207,6 +2327,29 @@
         font-variant-numeric: tabular-nums;
         text-align: end;
         color: var(--paper-dim);
+    }
+
+    .spin {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.625rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--paper-dim);
+    }
+
+    .spin input {
+        inline-size: 3.2rem;
+        padding: 0.15rem 0.3rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--ink-800);
+        color: var(--paper);
+        font-family: var(--mono);
+        font-size: 0.6875rem;
+        font-variant-numeric: tabular-nums;
     }
 
     .status-bar {

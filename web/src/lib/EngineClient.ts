@@ -6,6 +6,7 @@ export interface LayerInfo {
     name: string;
     group: boolean;
     visible: boolean;
+    reference: boolean;
     opacity: number;
     active: boolean;
     depth: number;
@@ -24,6 +25,20 @@ export interface LayerThumbnail {
     pixels: Uint8ClampedArray<ArrayBuffer> | null;
 }
 
+// Document.motion plus Document.wobbleAmount, the fields the wobble panel
+// edits as one unit.
+export interface WobbleSettings {
+    amount: number;
+    style: number;
+    poseCount: number;
+    detail: number;
+    linked: number;
+    randomness: number;
+    brokenLine: boolean;
+    breakAmount: number;
+    breakRange: number;
+}
+
 export interface DocumentMeta {
     abiVersion: number;
     schemaVersion: number;
@@ -32,6 +47,7 @@ export interface DocumentMeta {
     frameCount: number;
     layerCount: number;
     fps: number;
+    wobble: WobbleSettings;
     presets: BrushPresetInfo[];
     eraserPresets: BrushPresetInfo[];
     layers: LayerInfo[];
@@ -56,6 +72,8 @@ export interface RegionUpdate {
     pixels: Uint8ClampedArray<ArrayBuffer> | null;
     layers: LayerInfo[];
     selection: SelectionUpdate;
+    // Only when the operation changed a document property the shell mirrors.
+    meta: DocumentMeta | null;
     canUndo: boolean;
     canRedo: boolean;
 }
@@ -89,6 +107,7 @@ interface RegionResponse {
     pixels: ArrayBuffer | null;
     layers: LayerInfo[];
     selection: { revision: number; active: boolean; outline: ArrayBuffer | null };
+    meta: DocumentMeta | null;
     canUndo: boolean;
     canRedo: boolean;
 }
@@ -200,6 +219,7 @@ export class EngineClient {
                     ? splitContours(response.selection.outline)
                     : null,
             },
+            meta: response.meta ?? null,
             canUndo: response.canUndo,
             canRedo: response.canRedo,
         };
@@ -392,6 +412,56 @@ export class EngineClient {
             frame,
             index,
             visible,
+        });
+    }
+
+    wobble(frame: number, wobble: WobbleSettings): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "wobble", frame, wobble });
+    }
+
+    animationFrames(frame: number, frames: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "animationFrames", frame, frames });
+    }
+
+    framesPerSecond(fps: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "framesPerSecond", fps });
+    }
+
+    resizeImage(
+        frame: number,
+        width: number,
+        height: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "resizeImage",
+            frame,
+            width,
+            height,
+        });
+    }
+
+    resizeCanvas(
+        frame: number,
+        width: number,
+        height: number,
+        offsetX: number,
+        offsetY: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "resizeCanvas",
+            frame,
+            width,
+            height,
+            offsetX,
+            offsetY,
+        });
+    }
+
+    layerReference(index: number, reference: boolean): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerReference",
+            index,
+            reference,
         });
     }
 

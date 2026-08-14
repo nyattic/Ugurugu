@@ -212,13 +212,37 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 
 남은 것은 **선택 전환 자체의 실행 취소**다(`pushSelectionStateCommand`/`selectionHistoryStateRequested`). 변형과 한 항목으로 묶여 있었지만 별개의 작업이라 열어 뒀다 — 아래 잔여 목록 참고.
 
+### 단계 3·6 — 선택 전환 실행 취소, 참조 레이어, 우글 설정, 문서 크기 (2026-08-14)
+
+잔여 목록의 우선순위 1·2를 닫았다. ABI는 5 → **7**(6은 참조 레이어, 7은 문서 속성).
+
+**선택 전환 자체의 실행 취소.** 데스크톱 `CanvasWidget::pushSelectionChange`를 그대로 옮겼다. 브리지가 `selectionHistoryStateRequested`를 받아 `installSelection`을 부르고(핸들마다 한 번 연결), 순수 선택 변경 지점(`ugu_selection_shape`의 Select 모드, `_flood`, `_all`, `_invert`, `_clear`)이 `pushSelectionStateCommand`로 전후 마스크를 커맨드에 담는다. 커맨드를 밀면 그 redo가 곧 설치이므로 호출자는 설치하지 않는다. `_delete`·`_fill`·변형은 이미 문서 커맨드를 밀기 때문에 손대지 않았다 — 항목이 둘이 되지 않게 하는 것이 이 작업의 제약이었다.
+
+**참조 레이어.** `ugu_layer_reference`/`ugu_layer_set_reference`. 이전에는 도구 옵션의 "Reference layers"가 웹에서 표시할 방법이 없어 사실상 죽은 선택지였다(데스크톱에서 표시해 둔 파일을 연 경우 말고는). 레이어 행의 `R` 토글이 데스크톱 LayerDock의 "Reference layer"와 같은 의미다. 플래그는 합성을 바꾸지 않으므로 split을 무효화하지 않고, 픽셀이 움직이지 않으므로 응답도 이미지 없이 나간다.
+
+**우글·모션 설정.** `ugu_set_wobble`이 진폭과 `MotionSettings` 전체를 한 번에 받아 `applyMotionPreset`으로 커밋한다 — 컨트롤 하나를 움직이면 실행 취소 항목도 하나다. 값은 데스크톱의 각 컨트롤과 같은 범위로 브리지가 클램프한다. 셸의 `WobblePanel`은 진폭·스타일을 항상 보여 주고 나머지(포즈·디테일·Linked·Randomness·끊긴 선 3종)는 접힌 절에 둔다. 슬라이더는 `change`에서만 커밋하므로 드래그가 히스토리를 채우지 않고, 우글 변경만은 재생을 멈추지 않는다(움직이는 걸 보려고 만지는 값이다).
+
+**프레임 수·fps·문서 크기.** `ugu_set_animation_frames`, `ugu_set_fps`, `ugu_resize_image`, `ugu_resize_canvas`. 타임라인에 프레임/FPS 입력이 생겼고, 상단 바의 Size 버튼이 데스크톱 두 다이얼로그(Image size/Canvas size)를 한 다이얼로그의 두 모드로 연다. 캔버스 모드의 3×3 앵커는 데스크톱 `offsetForAnchor`와 같은 계산이다. 크기가 바뀌면 브리지가 선택·변형·split을 모두 버린다.
+
+이 과정에서 문서 속성이 응답 경로에 없다는 것이 드러나 `RegionUpdate`에 `meta`를 추가했다. **undo/redo 응답도 meta를 싣는다** — 히스토리는 캔버스 크기·프레임 수·fps·우글까지 되돌리는데, 셸이 그걸 모르면 표시 서피스가 옛 크기로 남는다. 워커는 되돌린 문서의 프레임 수로 요청 프레임을 클램프한다.
+
+함께 고친 것:
+
+- 슬라이더·체크박스에 포커스가 있으면 단축키가 통째로 막히던 것. 우글 슬라이더를 움직인 직후 Ctrl+Z가 아무 일도 하지 않았다. 텍스트를 입력하는 요소만 단축키를 삼킨다.
+- 프레임·FPS 입력이 `event.currentTarget`을 **큐가 실행될 때** 읽던 것. 스트로크 포인트 버퍼에서 겪은 것과 같은 종류의 버그로, 값이 항상 null이었다.
+- `tools/wasm_engine_smoke.mjs`가 Windows 절대 경로를 ESM 지정자로 넘겨 실행되지 않던 것(href를 넘긴다).
+- 브라우저 스위트의 테스트 서버가 Windows에서 `normalize("/")`가 `"\"`가 되는 탓에 디렉터리 인덱스를 찾지 못하던 것.
+
+측정·검증은 Windows(Qt 6.11.1 `wasm_singlethread` + `mingw_64` 호스트 킷, Emscripten 4.0.7)에서 돌렸다. `wasm-release` 프리셋은 `hostSystemName == Darwin` 조건이라 Windows에서는 같은 빌드 디렉터리로 직접 구성해야 한다(BUILDING.md 참고). 브라우저 체크는 136 → **152개**이고, `Wave.ugu`의 프레임 0/15/29 해시와 재직렬화 해시는 이전과 동일하다.
+
 ### 검증 방법 (반복 실행 가능)
 
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증한다. 캔버스 회전은 좌·우·초기화 컨트롤, `-`/`^`와 확대 단축키 충돌, `Shift`+휠, `Shift+Space` 자유 회전, 회전된 WebGL quad와 Canvas 2D 폴백, 역좌표 입력, 회전 상태의 화면 맞춤, 두 손가락 이동·핀치·비틀기 결합과 중심 앵커를 검증한다. 여기에 실패 경로 회귀가 붙어 있다: 깨진 파일 열기가 문서를 지키는지, 숨긴 레이어가 스트로크를 거부하는지, 반투명 레이어가 화면에 제 불투명도로 나오는지(스크린샷 픽셀 판독), 컨텍스트 손실이 소프트웨어 폴백으로 넘어가는지, 느린 엔진에서 재생 정지가 잔여 큐를 남기지 않는지, 엔진 아티팩트가 없을 때 오류가 뜨는지, 느린 엔진에서 연달아 그은 두 스트로크가 두 덩이로 남는지, 삭제 연타가 레이어를 하나만 지우는지, 390×844 뷰포트에서 캔버스가 폭을 갖고 스트로크를 받는지. 선택 변형은 미리보기·적용·취소와 **한 번의 undo로 전체 이동이 되돌아가는지**, 90° 회전이 상자를 전치하는지, 150% 확대가 픽셀을 늘리는지, 선택 밖 드래그가 아무것도 옮기지 않는지를 검증하고, 고지 패널은 문구·소스 링크와 함께 **패키지가 실제로 라이선스 원문 6개를 서빙하는지**까지 받아 본다(137개 체크).
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증한다. 캔버스 회전은 좌·우·초기화 컨트롤, `-`/`^`와 확대 단축키 충돌, `Shift`+휠, `Shift+Space` 자유 회전, 회전된 WebGL quad와 Canvas 2D 폴백, 역좌표 입력, 회전 상태의 화면 맞춤, 두 손가락 이동·핀치·비틀기 결합과 중심 앵커를 검증한다. 여기에 실패 경로 회귀가 붙어 있다: 깨진 파일 열기가 문서를 지키는지, 숨긴 레이어가 스트로크를 거부하는지, 반투명 레이어가 화면에 제 불투명도로 나오는지(스크린샷 픽셀 판독), 컨텍스트 손실이 소프트웨어 폴백으로 넘어가는지, 느린 엔진에서 재생 정지가 잔여 큐를 남기지 않는지, 엔진 아티팩트가 없을 때 오류가 뜨는지, 느린 엔진에서 연달아 그은 두 스트로크가 두 덩이로 남는지, 삭제 연타가 레이어를 하나만 지우는지, 390×844 뷰포트에서 캔버스가 폭을 갖고 스트로크를 받는지. 선택 변형은 미리보기·적용·취소와 **한 번의 undo로 전체 이동이 되돌아가는지**, 90° 회전이 상자를 전치하는지, 150% 확대가 픽셀을 늘리는지, 선택 밖 드래그가 아무것도 옮기지 않는지를 검증하고, 고지 패널은 문구·소스 링크와 함께 **패키지가 실제로 라이선스 원문 6개를 서빙하는지**까지 받아 본다. 문서 속성은 우글 진폭 변경이 프레임을 다시 그리는지와 그 실행 취소, 모션 스타일 전환, 프레임 수·fps 편집, 이미지 크기 확대가 그림을 키우는지, 캔버스 크기 축소와 그 실행 취소가 표시 서피스를 되돌리는지를 검증하고, 선택은 마술봉 선택의 undo/redo와 참조 레이어를 표시해야 "Reference layers"가 답하는지를 검증한다(152개 체크).
 - itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
+- Windows에서는 `wasm-release` 프리셋의 조건(`Darwin`)이 걸리므로 같은 빌드 디렉터리로 직접 구성한다: `cmake -S . -B out/build/wasm-release -G Ninja -DCMAKE_TOOLCHAIN_FILE=<Qt>/wasm_singlethread/lib/cmake/Qt6/qt.toolchain.cmake -DQT_HOST_PATH=<Qt>/mingw_64 -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF` (환경에 `EMSDK`가 있어야 한다). 브라우저 스위트는 `UGURUGU_CHROMIUM_PATH` 또는 `npx playwright install chromium`으로 브라우저를 찾는다.
 
 `89ca407` — 브라우저 스위트의 "재생 중 그린 스트로크가 커밋된다" 체크가 CI에서 간헐 실패했다. 이 체크만 커밋을 기다리지 않고 즉시 픽셀 수를 읽고 있었는데, 커밋은 재생 렌더와 큐를 공유하므로 손을 뗀 뒤 몇 프레임 지나 반영된다. 다른 체크와 같은 `waitForFunction` 폴링으로 바꾸고, 직전 스트로크와 겹치지 않는 경로로 그어 증가폭이 wobble 시드 차이가 아니라 선 하나가 되게 했다. 당시 체크 수는 80개 그대로였다.
 
@@ -226,7 +250,9 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 
 계정·실기기·법률 검토가 필요한 항목이 남은 작업의 대부분이다. 코드로 닫을 수 있는 항목은 도구·기능 추가 쪽에 몰려 있다.
 
-2026-08-14 기준 확인: 캔버스 회전(08-13), 선택 영역 변형과 라이선스 고지(08-14)가 닫혔다. 코드로 확인한 나머지 상태 — 번역 계층 없음, `ugu_abi_version()`은 5, `@media` 블록은 48rem 하나, `LayerPanel.svelte`·`ColorWheel.svelte`의 `aria-*`는 0개, `showSaveFilePicker` 없음, GIF 진행률·취소 없음, `UguruguWasm.cmake`에는 `-sALLOW_MEMORY_GROWTH=1`만 있고 `-sMAXIMUM_MEMORY`는 없다.
+2026-08-14 기준 확인: 캔버스 회전(08-13), 선택 영역 변형과 라이선스 고지, 선택 전환 실행 취소·참조 레이어·우글 설정·프레임/fps·문서 크기·`-sMAXIMUM_MEMORY=512MB`(08-14)가 닫혔다. 코드로 확인한 나머지 상태 — 번역 계층 없음, `ugu_abi_version()`은 7, `@media` 블록은 48rem 하나, `LayerPanel.svelte`·`ColorWheel.svelte`의 `aria-*`는 각각 1개·0개, `showSaveFilePicker` 없음, GIF 진행률·취소 없음.
+
+아래 "데스크톱에 있고 웹에 없는 것"은 2026-08-14에 `DocumentController` 공개 API와 브리지 노출을 대조해 다시 세웠다. 전부 엔진에는 이미 링크돼 있고 없는 것은 브리지와 셸이다.
 
 ### 실기기·계정·법률 (코드로 닫을 수 없음)
 
@@ -239,15 +265,19 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 ### 단계 3 잔여 (웹 UI)
 
 - 웹 UI 번역 계층 (현재 영어 고정, 데스크톱은 ko/en/ja)
-- **선택 전환 자체의 실행 취소.** 이동·확대·회전은 2026-08-14에 닫혔지만(위 단계 6), 선택을 바꾸는 행위 자체는 여전히 히스토리 밖이다. 데스크톱은 `pushSelectionStateCommand`로 전후 마스크를 커맨드에 담고 undo 때 `selectionHistoryStateRequested`로 되돌린다. 브리지가 할 일은 그 신호를 받아 `installSelection`을 부르고, 순수 선택 변경 지점(`ugu_selection_shape`의 Select 모드, `_flood`, `_all`, `_invert`, `_clear`)에서 커맨드를 밀어 넣는 것이다. 주의할 점은 `_delete`·`_fill`·변형처럼 이미 문서 커맨드를 미는 경로에 겹쳐 밀어 실행 취소 항목이 둘이 되지 않게 하는 것.
 - 모바일 반응형 레이아웃. 핀치·이동 제스처가 있고 48rem 미만에서 캔버스를 전폭으로 올려 쌓기는 하지만, 패널 자체는 데스크톱 치수 그대로다.
 - 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.
 
-### 데스크톱이 먼저 간 기능 (2026-08-13 시점 격차)
+### 데스크톱에 있고 웹에 없는 것 (2026-08-14 대조)
 
-데스크톱에는 있고 웹에는 대응이 없는 기능이다. 위 잔여 목록에 없던 항목이라 여기 적는다.
+브리지가 내주지 않아 셸이 손댈 수 없는 `DocumentController` 기능이다. 엔진에는 전부 링크돼 있다.
 
-- 우글 텍스트 도구 (`5cba14a`, 08-08). 텍스트를 스트로크로 굽는 `src/document/TextStrokeBuilder.{hpp,cpp}`는 `UGURUGU_ENGINE_SOURCES`에 있으므로 wasm에도 이미 링크돼 있다. 브리지·셸만 없다.
+- 우글 텍스트 도구 (`5cba14a`, 08-08). `TextStrokeBuilder`는 `UGURUGU_ENGINE_SOURCES`에 있어 wasm에 이미 들어 있다. 브리지·셸만 없다.
+- 레이어 고급 조작: `addLayerGroup`, `duplicateLayer`, `mergeLayerDown`, `clearLayer`, `setLayerBlendMode`, `setLayerClipToBelow`, `setLayerParentGroup`. 그룹이 있는 문서를 열면 표시와 round-trip은 되지만 편집은 못 한다.
+- 레이어별 우글 override (`setLayerWobbleOverride`). 문서 전체 설정은 2026-08-14에 들어왔지만 데스크톱 WobbleDock의 "Active layer" 범위는 아직 없다.
+- 배경색 (`setBackground`), 스트로크 속성 편집 (`updateStrokeAttributes`), 이미지 삽입 (`setImageTransform`).
+- 복사·잘라내기·붙여넣기. `SelectionClipboardCodec`이 엔진 소스에 있으므로 같은 탭 안의 클립보드는 브리지만 있으면 된다. MVP가 제외한 것은 OS 바이너리 클립보드였다.
+- 캔버스 미러(임시 좌우 반전). 회전만 있다.
 - 브러시 프리셋 버튼·도구 컨트롤 개선 (`6827f5e`, 08-11). 웹 `ToolOptions.svelte`는 이전 형태 그대로다.
 
 참고로 두 손가락 제스처(`82578cc`)는 반대 방향이다. 웹이 먼저 가지고 있던 것을 데스크톱이 따라왔다.
@@ -256,8 +286,7 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 
 - File System Access 지원 브라우저의 "같은 파일에 다시 저장" (선택 기능)
 - GIF 내보내기 진행률·취소 (현재는 Worker 블로킹)
-- raster/Wawa import, 고급 selection과 layer group 편집
-- 링크 시 `-sMAXIMUM_MEMORY=512MB` 고정 검토 (아직 미적용)
+- raster/Wawa import
 
 ## 3. 알려진 한계
 
@@ -269,3 +298,5 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 - 문서 표면과 WebGL 텍스처를 각각 하나씩 들고 있으므로 표시 계층 메모리는 문서 크기의 2배다(2048²에서 32 MiB). 메모리 정책의 상한 안에 들어오지만 zero-copy는 아니다.
 - 100%를 넘겨 확대하면 네이티브 픽셀을 보간해 키우는 것이므로 선이 부드러워질 뿐 해상도가 늘지는 않는다. 데스크톱과 같은 제약이며, 표시 배율로 재렌더하려면 엔진의 preview 정책부터 바꿔야 한다.
 - undo 한도는 개수 기준이다. 엔진에 바이트 단위 히스토리 예산이 없어 정책 표의 MiB 값을 그대로 강제하지는 못한다.
+- 선택 영역 삭제는 선택을 함께 지우고, 그 지움은 히스토리에 없다. 삭제를 되돌리면 픽셀은 돌아오지만 마칭 앤츠는 돌아오지 않는다(데스크톱은 선택을 유지한다). 실행 취소 항목을 둘로 만들지 않으려면 문서 커맨드와 한 매크로로 묶어야 한다.
+- 단일 파일이 커졌다. `web/src/App.svelte` 2,455줄, `src/wasm/EngineBridge.cpp` 2,311줄, `web/tests/browser-verify.mjs` 2,308줄이다. 데스크톱이 `CanvasWidget*.cpp`·`MainWindow*.cpp`로 나눈 것과 같은 분할이 필요하다.
