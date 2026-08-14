@@ -18,7 +18,17 @@ target_compile_options(ugurugu_engine PRIVATE -flto)
 # Plain add_executable on purpose: the engine runs headless, so it must not
 # pull in the wasm QPA plugin or the qtloader HTML shell that
 # qt_add_executable's finalization generates.
-add_executable(ugurugu_engine_spike src/wasm/EngineBridge.cpp)
+add_executable(
+    ugurugu_engine_spike
+    src/wasm/BridgeDocument.cpp
+    src/wasm/BridgeDocument.hpp
+    src/wasm/EngineBridge.cpp
+    src/wasm/EngineBridgeExport.cpp
+    src/wasm/EngineBridgeLayers.cpp
+    src/wasm/EngineBridgeRender.cpp
+    src/wasm/EngineBridgeSelection.cpp
+    src/wasm/EngineBridgeStrokes.cpp
+)
 target_link_libraries(ugurugu_engine_spike PRIVATE ugurugu_engine)
 ugurugu_target_defaults(ugurugu_engine_spike)
 target_compile_options(ugurugu_engine_spike PRIVATE -flto)
