@@ -19,6 +19,7 @@ export interface ShortcutActions {
     stepFrame: (delta: number) => void;
     togglePlayback: () => void;
     selectAll: () => void;
+    toggleSelectionMove: () => void;
     invertSelection: () => void;
     deselect: () => void;
     fillSelection: () => void;
@@ -131,6 +132,11 @@ export function handleShortcut(
     }
 
     switch (key) {
+        // Move mode is a mode rather than a tool, so it sits outside the tool
+        // letters even though it answers to the same kind of key.
+        case "m":
+            actions.toggleSelectionMove();
+            return true;
         case "[":
             actions.adjustBrushSize(-1);
             return true;

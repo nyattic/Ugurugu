@@ -145,7 +145,7 @@
 - 마칭 앤츠는 표시 캔버스 위 오버레이 캔버스가 그리고, 선택이 없으면 애니메이션 루프가 돌지 않는다. 드래그 중인 올가미 경로도 같은 오버레이에 그린다.
 - 단축키는 데스크톱 레일과 같다. B/E/L/W/G/I, Ctrl+A 전체 선택, Ctrl+Shift+I 반전, Ctrl+D·Esc 해제, Delete 삭제, Alt+Delete 채우기.
 
-알려진 차이: 웹의 선택 상태는 셸이 들고 있어 **실행 취소 대상이 아니다**. 데스크톱은 `pushSelectionStateCommand`로 선택 전환까지 히스토리에 넣는다. 선택 영역 이동·변형(`transformSelection`)도 아직 웹에 없다.
+알려진 차이: 웹의 선택 상태는 셸이 들고 있어 **실행 취소 대상이 아니다**. 데스크톱은 `pushSelectionStateCommand`로 선택 전환까지 히스토리에 넣는다. (선택 영역 이동·변형은 2026-08-14에 들어왔다 — 아래 단계 6 참고.)
 
 ### 단계 4 — itch.io 스테이징 첫 업로드 (2026-08-09)
 
@@ -191,12 +191,33 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 - 데스크톱과 같은 `Shift+Space` 드래그 자유 회전(0.5°/px), `Shift`+휠과 `-`/`^` 5° 회전, 좌·우·각도 입력·0° 초기화 화면 컨트롤을 추가했다. `Ctrl/Cmd+-` 확대와 충돌하지 않으며 회전은 문서·undo·내보내기를 바꾸지 않는 뷰 상태다.
 - 두 손가락 제스처는 이전 중심·거리만 일부 사용하던 경로를 중심·거리·각도의 단일 변환으로 바꿨다. 이 과정에서 거리가 같으면 두 손가락 이동이 실제로 적용되지 않던 기존 결함도 고쳤다. 이전 터치 중심 아래의 문서 점이 이동·핀치·비틀기 뒤 새 중심에 그대로 고정된다.
 
+### 단계 6 — 선택 영역 변형과 라이선스 고지 (2026-08-14)
+
+잔여 목록에서 "코드로 닫을 수 있는" 두 항목을 닫았다. ABI는 4 → **5**.
+
+**떠 있는(floating) 선택 변형.** 엔진 재료(`SelectionOperation`, `DocumentController::transformSelection`)는 이미 wasm에 링크돼 있었고 없던 것은 브리지와 셸뿐이었다. 데스크톱 `FloatingTransformSession`을 그대로 옮겼다.
+
+- 브리지 `ugu_selection_transform_{begin,update,apply,cancel,active}`. begin이 `makePixelSelectionOp(mask, identity, clearSource, drawDestination)`로 픽셀을 들어 올리고, update는 행렬만 바꿔 `isValidPixelSelectionOp`로 검증한 뒤 미리보기를 그리며, apply가 `transformSelection`으로 **한 번의 실행 취소 항목**을 남긴다. 커밋 뒤에는 데스크톱 `transformSelectionOverlay`와 같은 `transformedSelectionSupport` 마스크를 설치해 마칭 앤츠가 픽셀을 따라간다.
+- 미리보기는 전체 렌더가 아니라 `replayPixelSelectionOnLayerRegion` + `composeLayerSplitRegion`으로 **움직인 영역만** 패치한다(데스크톱 `CanvasWidgetPreview`와 같은 경로). split은 스트로크 커밋이 승격해 둔 것을 재사용하므로 드래그 중 비용은 이동 영역에 비례한다. split을 못 쓰는 레이어(그룹·클리핑)는 레이어 전체 → 문서 전체 순으로 폴백한다.
+- 세션 중 문서가 바뀌면(undo·레이어 편집 등) apply는 커밋하지 않고 거부한다. begin 시점의 `undoStack()->index()`를 들고 있다가 비교한다. 셸도 undo/redo·레이어·프레임 이동·선택 변경·내보내기·재생 앞에서 세션을 취소한다(데스크톱 `cancelSelectionTransformForBoundary`와 같은 지점).
+- 셸: 선택이 있으면 뷰포트 위에 변형 바가 뜬다. Move 토글(단축키 `M`, 데스크톱처럼 도구가 아니라 **모드**)로 선택 안쪽을 드래그해 이동, Scale(%)·Rotate(°)는 데스크톱 `MainWindow::scaleSelection`/`rotateSelection`과 같은 기본값·범위(125%, 10~400 / 90°, ±360), 좌우·상하 뒤집기. 전부 같은 행렬에 누적되고 Enter로 적용, Esc로 취소한다.
+- 드래그는 포인터가 행렬을 엔진보다 빠르게 만들어 내므로 미리보기 요청을 **최신 것으로 합친다**(재생 back-pressure와 같은 이유). 앤츠는 셸이 이미 들고 있는 윤곽을 행렬로 매핑해 즉시 따라가고, 픽셀만 엔진 응답을 기다린다.
+- 함정: 행렬을 `$state`에 두면 Svelte가 프록시로 넘겨 `postMessage`가 `DataCloneError`로 죽는다. `$state.raw`여야 한다.
+
+**라이선스 고지.** 웹 빌드는 Qt를 **정적 링크**하는데 셸에 고지 UI가 아예 없었다.
+
+- 상단 바의 About 버튼이 고지 패널을 연다. GPL-3.0-or-later, 전체 소스 위치(<https://github.com/nyattic/Ugurugu>), 이 빌드의 엔진 ABI·스키마 버전, 그리고 Qt 6.11.1(LGPL-3.0, 정적 링크와 재링크 경로)·Pretendard JP(OFL 1.1)·Svelte 5(MIT)·Emscripten 4.0.7(MIT/NCSA)을 적는다.
+- 라이선스 원문은 링크만 걸지 않고 **패키지에 함께 올린다**. `sync-engine.mjs`가 `resources/licenses/`와 저장소 루트에서 `public/licenses/`로 복사하고, 브라우저 스위트가 패널이 가리키는 6개 파일을 실제로 받아 본다. Emscripten·Svelte 원문을 `resources/licenses/`에 추가한 것도 이 때문이다 — CI에는 emsdk가 없으므로 툴체인 디렉터리에서 가져올 수 없다.
+- `THIRD_PARTY_NOTICES.md`에 웹 절을 넣고, 데스크톱 Qt 절의 "동적 라이브러리라 교체 가능" 문장이 웹에도 적용되는 것처럼 읽히던 것을 갈랐다.
+
+남은 것은 **선택 전환 자체의 실행 취소**다(`pushSelectionStateCommand`/`selectionHistoryStateRequested`). 변형과 한 항목으로 묶여 있었지만 별개의 작업이라 열어 뒀다 — 아래 잔여 목록 참고.
+
 ### 검증 방법 (반복 실행 가능)
 
 - Node 스모크: `node tools/wasm_engine_smoke.mjs [문서.ugu]` — load/render/round-trip과 해시 출력. 인자를 생략하면 `examples/Wave.ugu`.
 - 네이티브 비교: `cmake --build --preset macos-debug --target ugurugu_engine_digest_probe && ./out/build/macos-debug/ugurugu_engine_digest_probe examples/Wave.ugu` — 스모크와 같은 형식의 해시.
 - 측정: `cmake --build --preset macos-debug --target ugurugu_stress_document_generator`로 스트레스 문서를 만들고 `node tools/wasm_engine_bench.mjs <문서.ugu>…`로 지연·heap을 측정.
-- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증한다. 캔버스 회전은 좌·우·초기화 컨트롤, `-`/`^`와 확대 단축키 충돌, `Shift`+휠, `Shift+Space` 자유 회전, 회전된 WebGL quad와 Canvas 2D 폴백, 역좌표 입력, 회전 상태의 화면 맞춤, 두 손가락 이동·핀치·비틀기 결합과 중심 앵커를 검증한다. 여기에 실패 경로 회귀가 붙어 있다: 깨진 파일 열기가 문서를 지키는지, 숨긴 레이어가 스트로크를 거부하는지, 반투명 레이어가 화면에 제 불투명도로 나오는지(스크린샷 픽셀 판독), 컨텍스트 손실이 소프트웨어 폴백으로 넘어가는지, 느린 엔진에서 재생 정지가 잔여 큐를 남기지 않는지, 엔진 아티팩트가 없을 때 오류가 뜨는지, 느린 엔진에서 연달아 그은 두 스트로크가 두 덩이로 남는지, 삭제 연타가 레이어를 하나만 지우는지, 390×844 뷰포트에서 캔버스가 폭을 갖고 스트로크를 받는지(99개 체크).
+- 브라우저: `cd web && npm run build && npm run test:browser` — headless Chromium(`/Applications/Chromium.app`)으로 복구 루프(그리기→자동 저장→재접속→복구→픽셀 일치), 드래그 중 라이브 프리뷰, 레이어 썸네일 표시·갱신, 컬러 서클/최근 색/스포이드, PNG·GIF 다운로드 서명, IndexedDB 실패 노출, 확대·축소와 확대 시 문서 픽셀 불변, B/E/I·Ctrl+Z 단축키, 지우개 프리셋, 새 문서 생성과 상한 클램프, 스트로크 후 재생 유지, 안티앨리어싱 토글, 캔버스 밖으로 나간 스트로크 커밋, 그리고 올가미 선택→마칭 앤츠 표시→선택 영역 채우기(140×100 = 14,000 px 정확히), 선택 경계에서 멈추는 스트로크(오른쪽 끝 x=439), 선택 영역 삭제, 빈 레이어 전체를 채우는 페인트통(307,200 px)과 그 실행 취소, 올가미 Paint 모드, 마술봉, L/W/G/B 단축키를 자동 검증한다. 캔버스 회전은 좌·우·초기화 컨트롤, `-`/`^`와 확대 단축키 충돌, `Shift`+휠, `Shift+Space` 자유 회전, 회전된 WebGL quad와 Canvas 2D 폴백, 역좌표 입력, 회전 상태의 화면 맞춤, 두 손가락 이동·핀치·비틀기 결합과 중심 앵커를 검증한다. 여기에 실패 경로 회귀가 붙어 있다: 깨진 파일 열기가 문서를 지키는지, 숨긴 레이어가 스트로크를 거부하는지, 반투명 레이어가 화면에 제 불투명도로 나오는지(스크린샷 픽셀 판독), 컨텍스트 손실이 소프트웨어 폴백으로 넘어가는지, 느린 엔진에서 재생 정지가 잔여 큐를 남기지 않는지, 엔진 아티팩트가 없을 때 오류가 뜨는지, 느린 엔진에서 연달아 그은 두 스트로크가 두 덩이로 남는지, 삭제 연타가 레이어를 하나만 지우는지, 390×844 뷰포트에서 캔버스가 폭을 갖고 스트로크를 받는지. 선택 변형은 미리보기·적용·취소와 **한 번의 undo로 전체 이동이 되돌아가는지**, 90° 회전이 상자를 전치하는지, 150% 확대가 픽셀을 늘리는지, 선택 밖 드래그가 아무것도 옮기지 않는지를 검증하고, 고지 패널은 문구·소스 링크와 함께 **패키지가 실제로 라이선스 원문 6개를 서빙하는지**까지 받아 본다(137개 체크).
 - itch.io 패키징: `cd web && npm run build && node ../tools/check_itchio_package.mjs dist`.
 
 `89ca407` — 브라우저 스위트의 "재생 중 그린 스트로크가 커밋된다" 체크가 CI에서 간헐 실패했다. 이 체크만 커밋을 기다리지 않고 즉시 픽셀 수를 읽고 있었는데, 커밋은 재생 렌더와 큐를 공유하므로 손을 뗀 뒤 몇 프레임 지나 반영된다. 다른 체크와 같은 `waitForFunction` 폴링으로 바꾸고, 직전 스트로크와 겹치지 않는 경로로 그어 증가폭이 wobble 시드 차이가 아니라 선 하나가 되게 했다. 당시 체크 수는 80개 그대로였다.
@@ -205,20 +226,20 @@ CI의 `Wasm engine parity` job이 이제 셸을 빌드해 브라우저 스위트
 
 계정·실기기·법률 검토가 필요한 항목이 남은 작업의 대부분이다. 코드로 닫을 수 있는 항목은 도구·기능 추가 쪽에 몰려 있다.
 
-2026-08-13 기준 확인: 데스크톱과의 격차였던 캔버스 회전은 닫혔다. 그 밖의 아래 목록은 그대로다. 코드로 확인한 상태 — 번역 계층 없음, `ugu_abi_version()`은 여전히 4, `@media` 블록은 48rem 하나, `LayerPanel.svelte`·`ColorWheel.svelte`의 `aria-*`는 0개, `showSaveFilePicker` 없음, GIF 진행률·취소 없음, `UguruguWasm.cmake`에는 `-sALLOW_MEMORY_GROWTH=1`만 있고 `-sMAXIMUM_MEMORY`는 없다.
+2026-08-14 기준 확인: 캔버스 회전(08-13), 선택 영역 변형과 라이선스 고지(08-14)가 닫혔다. 코드로 확인한 나머지 상태 — 번역 계층 없음, `ugu_abi_version()`은 5, `@media` 블록은 48rem 하나, `LayerPanel.svelte`·`ColorWheel.svelte`의 `aria-*`는 0개, `showSaveFilePicker` 없음, GIF 진행률·취소 없음, `UguruguWasm.cmake`에는 `-sALLOW_MEMORY_GROWTH=1`만 있고 `-sMAXIMUM_MEMORY`는 없다.
 
 ### 실기기·계정·법률 (코드로 닫을 수 없음)
 
 - iOS Safari, Android Chrome 실제 장치 스모크. 단계 1의 중단 기준 판단 재료이자 Mobile Friendly 표시의 전제다.
 - itch.io 스테이징 업로드와 전체 화면 실행은 확인됐다(위 단계 4 항목). 남은 실측: iframe 안 키보드 단축키, 새로고침 후 IndexedDB 복구 유지, PNG/GIF 다운로드 권한, clipboard, 그리고 데스크톱 브라우저별 차이.
 - 데스크톱 4종 브라우저 행렬, visibility 시험. 컨텍스트 손실은 `WEBGL_lose_context`로 실제 손실을 일으켜 소프트웨어 폴백을 자동 검증하지만, 드라이버가 일으키는 진짜 손실은 아직 겪어 보지 못했다.
-- Qt 정적 배포 의무 검토, third-party notice와 대응 소스 제공 절차 (출시 전 필수). 웹 wasm은 Qt를 정적 링크하므로 LGPLv3의 고지·재링크 수단 제공이 걸리는데, 현재 셸에는 고지 UI 자체가 없다(`web/index.html`·`App.svelte` 어디에도 라이선스·소스 위치 안내 없음). `THIRD_PARTY_NOTICES.md`는 데스크톱 패키지 기준으로만 쓰여 있다.
+- Qt 정적 배포 의무의 **법률 검토** (출시 전 필수). 고지 UI와 문서는 2026-08-14에 만들었다 — 셸의 About 패널이 GPL-3.0-or-later·전체 소스 위치·Qt LGPL-3.0 정적 링크와 재링크 경로를 밝히고, 라이선스 원문 6개가 패키지에 함께 올라가며, `THIRD_PARTY_NOTICES.md`에 웹 절이 생겼다. 남은 것은 이 구성이 실제로 의무를 충족하는지에 대한 판단이며, 그건 코드가 답할 수 있는 문제가 아니다.
 - 메모리 정책 수치를 실기기 결과로 보정. 현재 값은 측정 기반 제안치를 그대로 코드에 옮긴 것이다.
 
 ### 단계 3 잔여 (웹 UI)
 
 - 웹 UI 번역 계층 (현재 영어 고정, 데스크톱은 ko/en/ja)
-- 선택 영역 이동·확대·회전 (`transformSelection`)과 선택 전환의 실행 취소. 엔진 재료는 이미 wasm 안에 있다 — `6827f5e`가 `SelectionOperation::makePixelSelectionOp(mask, transform, clearSource, drawDestination, sampling)`을 `src/document/`에 넣었고 `DocumentController::transformSelection`도 엔진 소스 목록에 있다. 남은 것은 브리지 함수와 셸의 핸들 UI다.
+- **선택 전환 자체의 실행 취소.** 이동·확대·회전은 2026-08-14에 닫혔지만(위 단계 6), 선택을 바꾸는 행위 자체는 여전히 히스토리 밖이다. 데스크톱은 `pushSelectionStateCommand`로 전후 마스크를 커맨드에 담고 undo 때 `selectionHistoryStateRequested`로 되돌린다. 브리지가 할 일은 그 신호를 받아 `installSelection`을 부르고, 순수 선택 변경 지점(`ugu_selection_shape`의 Select 모드, `_flood`, `_all`, `_invert`, `_clear`)에서 커맨드를 밀어 넣는 것이다. 주의할 점은 `_delete`·`_fill`·변형처럼 이미 문서 커맨드를 미는 경로에 겹쳐 밀어 실행 취소 항목이 둘이 되지 않게 하는 것.
 - 모바일 반응형 레이아웃. 핀치·이동 제스처가 있고 48rem 미만에서 캔버스를 전폭으로 올려 쌓기는 하지만, 패널 자체는 데스크톱 치수 그대로다.
 - 접근성 마무리. 캔버스·슬라이더 레이블과 전 기능 단축키는 넣었지만, 스크린 리더 낭독 순서와 레이어 트리의 키보드 전용 조작은 남아 있다.
 

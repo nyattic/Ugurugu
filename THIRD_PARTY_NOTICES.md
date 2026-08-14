@@ -9,18 +9,26 @@ packages.
 The app icon artwork in `resources/icons/` is copyright © seuppi and is
 distributed under GPL-3.0-or-later with the rest of the project.
 
+Two kinds of package are covered here. The desktop packages for macOS and
+Windows contain everything listed below except the web section; the browser
+build contains only Qt, Pretendard JP and the components named under
+[Web (WebAssembly) build](#web-webassembly-build).
+
 ## Qt 6
 
 Copyright © The Qt Company Ltd. and other contributors.
 
 Ugurugu uses Qt under the GNU Lesser General Public License
-version 3. Release packages ship Qt as separate dynamic libraries, so the
-bundled Qt can be replaced with a modified build of the same version
+version 3. Desktop release packages ship Qt as separate dynamic libraries, so
+the bundled Qt can be replaced with a modified build of the same version
 without rebuilding Ugurugu. LGPLv3 adds permissions on top of
 GPLv3; both texts are included, as `LGPL-3.0.txt` and `LICENSE`. Qt source
 for the bundled libraries and the full relinking obligations are available
 from <https://www.qt.io/licensing/open-source-lgpl-obligations> and
 <https://code.qt.io/>.
+
+The browser build links Qt statically instead; see the web section below for
+how the same obligation is met there.
 
 ## spdlog 1.16.0
 
@@ -55,3 +63,33 @@ Licensed under the MIT License and additional licenses reproduced in
 Copyright © 2021 Caelan Sayler. Copyright © 2024 Velopack Ltd.
 
 Licensed under the MIT License. See `Velopack-LICENSE.txt`.
+
+## Web (WebAssembly) build
+
+The browser build is a different package from the desktop ones. Its engine is
+a single `.wasm` binary with Qt 6 Core and Gui linked **statically**; spdlog,
+libwebp, Sparkle and Velopack are not part of it. The shell around it adds the
+components below. License texts travel with the upload under `licenses/`, and
+the in-app Notices panel points at them.
+
+Because Qt is static here, the relinking route the desktop packages satisfy by
+shipping replaceable dynamic libraries is met instead by publishing the
+complete corresponding source. Ugurugu is GPL-3.0-or-later and its whole
+source — engine, bridge and web shell — is at
+<https://github.com/nyattic/Ugurugu>. `BUILDING.md` names the exact toolchain
+the binary was produced with (Qt 6.11.1, Emscripten 4.0.7) and the
+`wasm-release` preset that rebuilds the engine, so a recipient can relink it
+against a modified Qt of the same version.
+
+### Svelte 5.56.8
+
+Copyright © 2016–2025 Svelte Contributors.
+
+Licensed under the MIT License. See `Svelte-LICENSE.txt`.
+
+### Emscripten 4.0.7
+
+Copyright © 2010–2014 Emscripten authors, see the project's AUTHORS file.
+
+Available under both the MIT License and the University of Illinois/NCSA Open
+Source License. See `Emscripten-LICENSE.txt`.

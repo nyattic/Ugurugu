@@ -32,12 +32,15 @@
 #include <QRectF>
 #include <QSize>
 #include <QString>
+#include <QTransform>
 #include <QUuid>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <emscripten/emscripten.h>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace
@@ -87,6 +90,24 @@ struct BridgeDocument
     // outline it already has.
     int selectionRevision = 0;
     QVector<float> outlinePoints;
+    // Floating selection transform, held the way CanvasWidget holds its
+    // FloatingTransformSession: the mask and the operation are captured once
+    // when the session opens and every update only replaces the matrix, so the
+    // committed transform is the one the preview drew.
+    bool transformActive = false;
+    QUuid transformLayerId;
+    QImage transformSourceMask;
+    ugurugu::PixelSelectionOp transformOperation;
+    QTransform transformMatrix;
+    int transformFrame = -1;
+    // History position when the session opened. Anything that pushes, undoes
+    // or redoes a command makes the captured pixels describe a document that
+    // no longer exists, and the commit has to refuse rather than guess.
+    int transformHistoryIndex = 0;
+    // The committed frame each preview patches over, plus the region the last
+    // preview touched so the next one knows what to restore.
+    QImage transformBaseFrame;
+    QRect transformPreviewRegion;
     ugurugu::FloodFillMask::Comparison fillComparison =
         ugurugu::FloodFillMask::Comparison::AlphaBoundary;
     int fillTolerance = 32;
@@ -207,6 +228,31 @@ void invalidateSplit(BridgeDocument *handle)
     handle->splitLayerId = {};
     handle->splitFrame = -1;
     handle->splitUsable = false;
+}
+
+// Makes handle->split hold layerId's committed pixels for frameIndex, reusing
+// a split an earlier commit already promoted. Returns whether the split can be
+// used; an invalid one means the caller has to render the whole document.
+bool ensureLayerSplit(BridgeDocument *handle, const QUuid &layerId, int frame)
+{
+    const ugurugu::Document &document = handle->controller->document();
+    const bool reusable =
+        handle->splitUsable && handle->split.valid
+        && handle->splitLayerId == layerId && handle->splitFrame == frame
+        && handle->split.below.size() == document.size
+        && ugurugu::RenderEngine::supportsLayerSplit(document, layerId);
+    if (!reusable)
+    {
+        handle->split = ugurugu::RenderEngine::renderLayerSplit(document,
+            frame,
+            document.size,
+            layerId,
+            ugurugu::RenderEngine::ScaledRenderMode::NativeExact);
+        handle->splitLayerId = layerId;
+        handle->splitFrame = frame;
+        handle->splitUsable = handle->split.valid;
+    }
+    return handle->split.valid;
 }
 
 void renderCommittedFrame(BridgeDocument *handle, int frameIndex)
@@ -369,6 +415,132 @@ void applySelectionCombine(BridgeDocument *handle,
     installSelection(handle,
         combinedSelectionMask(handle->selectionMask, mask, combine),
         layerId);
+}
+
+// Drops the floating transform without touching pixels. For callers that have
+// already replaced renderedFrame, or are about to.
+void clearSelectionTransform(BridgeDocument *handle)
+{
+    handle->transformActive = false;
+    handle->transformLayerId = QUuid();
+    handle->transformSourceMask = QImage();
+    handle->transformOperation = {};
+    handle->transformMatrix = QTransform();
+    handle->transformFrame = -1;
+    handle->transformBaseFrame = QImage();
+    handle->transformPreviewRegion = QRect();
+}
+
+// Puts the committed pixels back under wherever the preview painted, then ends
+// the session. Only the patched region is restored, so cancelling a small move
+// on a large canvas uploads a small rectangle.
+void restoreSelectionTransformBase(BridgeDocument *handle)
+{
+    const QRect patched = handle->transformPreviewRegion;
+    const QImage base = handle->transformBaseFrame;
+    const int frame = handle->transformFrame;
+    if (!base.isNull())
+    {
+        if (patched.isEmpty())
+        {
+            handle->dirty = QRect();
+        }
+        else if (handle->renderedFrame.size() == base.size())
+        {
+            QPainter painter(&handle->renderedFrame);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(patched.topLeft(), base, patched);
+            painter.end();
+            handle->dirty = patched;
+        }
+        else
+        {
+            handle->renderedFrame = base;
+            handle->dirty = handle->renderedFrame.rect();
+        }
+        handle->renderedFrameIndex = frame;
+        handle->renderedFrameCommitted = true;
+    }
+    clearSelectionTransform(handle);
+}
+
+// Draws the floating selection at its current matrix over the committed frame.
+// Mirrors CanvasWidgetPreview: replay the operation against the layer split and
+// patch only the region it moves, falling back to whole-layer and then whole-
+// document renders when the split cannot serve the layer.
+void renderSelectionTransformPreview(BridgeDocument *handle)
+{
+    const QRect previous = handle->transformPreviewRegion;
+    const int frame = handle->transformFrame;
+    if (handle->renderedFrame.size() != handle->transformBaseFrame.size())
+    {
+        handle->renderedFrame = handle->transformBaseFrame;
+    }
+    if (ensureLayerSplit(handle, handle->transformLayerId, frame))
+    {
+        const ugurugu::RenderEngine::PixelSelectionPreviewRegion region =
+            ugurugu::RenderEngine::replayPixelSelectionOnLayerRegion(
+                handle->split.layerBase, handle->transformOperation);
+        const QImage composed =
+            region.valid && !region.bounds.isEmpty()
+                ? ugurugu::RenderEngine::composeLayerSplitRegion(
+                      handle->split, region.image, region.bounds)
+                : QImage();
+        if (region.valid && (region.bounds.isEmpty() || !composed.isNull()))
+        {
+            const QRect dirty = previous.united(region.bounds)
+                                    .intersected(handle->renderedFrame.rect());
+            if (!dirty.isEmpty())
+            {
+                QPainter painter(&handle->renderedFrame);
+                painter.setCompositionMode(QPainter::CompositionMode_Source);
+                // The base goes back first: the previous preview may have left
+                // ink outside the region this one touches.
+                painter.drawImage(
+                    dirty.topLeft(), handle->transformBaseFrame, dirty);
+                if (!region.bounds.isEmpty())
+                {
+                    painter.drawImage(region.bounds.topLeft(), composed);
+                }
+                painter.end();
+            }
+            handle->transformPreviewRegion =
+                region.bounds.intersected(handle->renderedFrame.rect());
+            handle->dirty = dirty;
+            handle->renderedFrameIndex = frame;
+            handle->renderedFrameCommitted = false;
+            return;
+        }
+        QImage layerImage = handle->split.layerBase;
+        if (ugurugu::RenderEngine::replayPixelSelectionOnLayer(
+                layerImage, handle->transformOperation))
+        {
+            QImage composedFrame = ugurugu::RenderEngine::composeLayerSplit(
+                handle->split, layerImage);
+            if (!composedFrame.isNull())
+            {
+                handle->renderedFrame = std::move(composedFrame);
+                handle->transformPreviewRegion = handle->renderedFrame.rect();
+                handle->dirty = handle->renderedFrame.rect();
+                handle->renderedFrameIndex = frame;
+                handle->renderedFrameCommitted = false;
+                return;
+            }
+        }
+    }
+    ugurugu::Document preview = handle->controller->document();
+    if (ugurugu::Layer *layer = preview.layer(handle->transformLayerId))
+    {
+        ugurugu::Stroke operation;
+        operation.mode = ugurugu::StrokeMode::PixelSelection;
+        operation.pixelSelectionOp = handle->transformOperation;
+        layer->strokes.append(std::move(operation));
+    }
+    handle->renderedFrame = ugurugu::RenderEngine::render(preview, frame);
+    handle->transformPreviewRegion = handle->renderedFrame.rect();
+    handle->dirty = handle->renderedFrame.rect();
+    handle->renderedFrameIndex = frame;
+    handle->renderedFrameCommitted = false;
 }
 
 // The image the flood fill reads. Mirrors CanvasWidget's three reference
@@ -554,7 +726,7 @@ extern "C"
     // instead of a missing-export TypeError somewhere later.
     EMSCRIPTEN_KEEPALIVE int ugu_abi_version()
     {
-        return 4;
+        return 5;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_schema_version()
@@ -847,23 +1019,7 @@ extern "C"
         // A split promoted by the previous ugu_stroke_end already holds this
         // layer's committed pixels, so the common case of drawing stroke after
         // stroke never pays for renderLayerSplit again.
-        const bool reusable =
-            handle->splitUsable && handle->split.valid
-            && handle->splitLayerId == layerId && handle->splitFrame == frame
-            && handle->split.below.size() == document.size
-            && ugurugu::RenderEngine::supportsLayerSplit(document, layerId);
-        if (!reusable)
-        {
-            handle->split = ugurugu::RenderEngine::renderLayerSplit(document,
-                frame,
-                document.size,
-                layerId,
-                ugurugu::RenderEngine::ScaledRenderMode::NativeExact);
-            handle->splitLayerId = layerId;
-            handle->splitFrame = frame;
-            handle->splitUsable = handle->split.valid;
-        }
-        handle->incrementalActive = handle->split.valid;
+        handle->incrementalActive = ensureLayerSplit(handle, layerId, frame);
         if (!handle->incrementalActive)
         {
             renderCommittedFrame(handle, frame);
@@ -1287,6 +1443,214 @@ extern "C"
         renderCommittedFrame(handle, frame);
         clearError();
         return 1;
+    }
+
+    // Opens a floating transform on the current selection. Until it is applied
+    // or cancelled the frame shows the selected pixels lifted off the layer and
+    // drawn back through the pending matrix; the document itself is untouched,
+    // so the whole gesture costs one undo entry.
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_transform_begin(
+        BridgeDocument *handle, int frame)
+    {
+        if (handle->transformActive)
+        {
+            clearError();
+            return 1;
+        }
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = paintTargetLayer(document);
+        if (!selectionAppliesTo(handle, layerId))
+        {
+            setError(StatusNoSelection,
+                QByteArrayLiteral("select an area on this layer to move it"));
+            return 0;
+        }
+        const ugurugu::Layer *layer = document.layer(layerId);
+        if (layer == nullptr)
+        {
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("document has no paint layer"));
+            return 0;
+        }
+        // Same guard the stroke tools carry: moving pixels on a layer nobody
+        // can see is work the artist would never find again.
+        if (!layer->visible || layer->opacity <= 0.0
+            || !ugurugu::DocumentOperations::isLayerRenderable(
+                document, *layer))
+        {
+            setError(StatusLayerNotDrawable,
+                QByteArrayLiteral("the selected layer is hidden; make it "
+                                  "visible to move the selection"));
+            return 0;
+        }
+        const std::optional<ugurugu::PixelSelectionOp> operation =
+            ugurugu::makePixelSelectionOp(
+                handle->selectionMask, QTransform(), true, true);
+        if (!operation)
+        {
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("the selection could not be lifted"));
+            return 0;
+        }
+        if (!handle->renderedFrameCommitted
+            || handle->renderedFrameIndex != frame
+            || handle->renderedFrame.size() != document.size)
+        {
+            renderCommittedFrame(handle, frame);
+        }
+        handle->transformActive = true;
+        handle->transformLayerId = layerId;
+        handle->transformSourceMask = handle->selectionMask;
+        handle->transformOperation = *operation;
+        handle->transformMatrix = QTransform();
+        handle->transformFrame = frame;
+        handle->transformHistoryIndex =
+            handle->controller->undoStack()->index();
+        // Shares with renderedFrame until the first preview paints and detaches
+        // it, so opening a session copies nothing.
+        handle->transformBaseFrame = handle->renderedFrame;
+        handle->transformPreviewRegion = QRect();
+        handle->dirty = QRect();
+        clearError();
+        return 1;
+    }
+
+    // Replaces the pending matrix and redraws the floating pixels. Rejecting an
+    // unusable matrix leaves the previous preview standing, so a gesture that
+    // wanders out of range simply stops following instead of tearing.
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_transform_update(
+        BridgeDocument *handle,
+        double m11,
+        double m12,
+        double m21,
+        double m22,
+        double dx,
+        double dy)
+    {
+        if (!handle->transformActive)
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("no selection transform is in progress"));
+            return 0;
+        }
+        if (!std::isfinite(m11) || !std::isfinite(m12) || !std::isfinite(m21)
+            || !std::isfinite(m22) || !std::isfinite(dx) || !std::isfinite(dy))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the selection transform is not finite"));
+            return 0;
+        }
+        const QTransform transform(m11, m12, m21, m22, dx, dy);
+        ugurugu::PixelSelectionOp candidate = handle->transformOperation;
+        candidate.transform = transform;
+        candidate.sampling = ugurugu::samplingForSelectionTransform(transform);
+        if (!ugurugu::isValidPixelSelectionOp(candidate))
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the selection transform is out of range"));
+            return 0;
+        }
+        handle->transformOperation = candidate;
+        handle->transformMatrix = transform;
+        renderSelectionTransformPreview(handle);
+        clearError();
+        return 1;
+    }
+
+    // Commits the pending matrix as one undoable operation and moves the ants
+    // with the pixels.
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_transform_apply(
+        BridgeDocument *handle)
+    {
+        if (!handle->transformActive)
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("no selection transform is in progress"));
+            return 0;
+        }
+        const int frame = handle->transformFrame;
+        // Undo, a layer edit or another tool ran while the session was open, so
+        // the captured pixels no longer describe this document. Drop the
+        // session and show what the document actually holds.
+        if (handle->controller->undoStack()->index()
+            != handle->transformHistoryIndex)
+        {
+            clearSelectionTransform(handle);
+            invalidateSplit(handle);
+            renderCommittedFrame(handle, frame);
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("the document changed while the selection "
+                                  "was being moved"));
+            return 0;
+        }
+        // A gesture that ends where it started is not a document change; the
+        // desktop drops the session rather than pushing an empty entry.
+        if (handle->transformMatrix.isIdentity())
+        {
+            restoreSelectionTransformBase(handle);
+            clearError();
+            return 1;
+        }
+        const ugurugu::Document &document = handle->controller->document();
+        const QUuid layerId = handle->transformLayerId;
+        const ugurugu::Layer *layer = document.layer(layerId);
+        if (layer == nullptr)
+        {
+            restoreSelectionTransformBase(handle);
+            setError(StatusNoPaintLayer,
+                QByteArrayLiteral("the layer the selection came from is gone"));
+            return 0;
+        }
+        // The desktop offers every stroke on the layer and lets the controller
+        // decide which ones the mask covers; matching that keeps one definition
+        // of "selected content".
+        QVector<QUuid> strokeIds;
+        strokeIds.reserve(layer->strokes.size());
+        for (const ugurugu::Stroke &stroke : layer->strokes)
+        {
+            strokeIds.append(stroke.id);
+        }
+        const QTransform transform = handle->transformMatrix;
+        const QImage sourceMask = handle->transformSourceMask;
+        const ugurugu::SamplingMode sampling =
+            handle->transformOperation.sampling;
+        if (!handle->controller->transformSelection(
+                layerId, strokeIds, transform, sourceMask, sampling))
+        {
+            restoreSelectionTransformBase(handle);
+            setError(StatusEmptyRegion,
+                QByteArrayLiteral("there is no content in the selected area"));
+            return 0;
+        }
+        // The ants follow the pixels, the same support mask
+        // CanvasWidget::transformSelectionOverlay installs after the commit. An
+        // empty result means the content left the canvas, which drops the
+        // selection instead of leaving ants around nothing.
+        installSelection(handle,
+            ugurugu::transformedSelectionSupport(
+                sourceMask, sourceMask.size(), transform, sampling),
+            layerId);
+        clearSelectionTransform(handle);
+        invalidateSplit(handle);
+        renderCommittedFrame(handle, frame);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_selection_transform_cancel(
+        BridgeDocument *handle)
+    {
+        if (!handle->transformActive)
+        {
+            return;
+        }
+        restoreSelectionTransformBase(handle);
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_selection_transform_active(
+        const BridgeDocument *handle)
+    {
+        return handle->transformActive ? 1 : 0;
     }
 
     EMSCRIPTEN_KEEPALIVE int ugu_selection_active(const BridgeDocument *handle)

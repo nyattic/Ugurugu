@@ -139,8 +139,12 @@ npm run build
 components. `npm run build` copies the `wasm-release` outputs into
 `public/engine` when they exist, and warns instead of failing when they
 do not, so the shell can be type-checked and bundled without a wasm
-build. `npm run test:browser` drives the built shell in headless
-Chromium; it needs a real wasm build plus a browser from
+build. It also copies the licence texts the in-app notices panel links
+to from `resources/licenses/` and the repository root into
+`public/licenses/`; those come from the repository rather than from a
+toolchain directory so the web package carries them whether or not
+Emscripten is installed. `npm run test:browser` drives the built shell in
+headless Chromium; it needs a real wasm build plus a browser from
 `npx playwright install chromium` or `UGURUGU_CHROMIUM_PATH`.
 
 `web/src/assets/PretendardJP-ui.woff2` is the desktop font cut to Latin

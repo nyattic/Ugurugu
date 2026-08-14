@@ -320,6 +320,31 @@ export class EngineClient {
         return this.#regionRequest({ type: "selectionDelete", frame });
     }
 
+    // Lifts the selected pixels off the layer. Until apply or cancel the frame
+    // shows them floating at the pending matrix and the document is unchanged,
+    // so a whole move-scale-rotate gesture costs one undo entry.
+    selectionTransformBegin(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionTransformBegin", frame });
+    }
+
+    // matrix is QTransform's row-vector layout: m11, m12, m21, m22, dx, dy.
+    selectionTransformUpdate(
+        matrix: [number, number, number, number, number, number],
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "selectionTransformUpdate",
+            matrix,
+        });
+    }
+
+    selectionTransformApply(): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionTransformApply" });
+    }
+
+    selectionTransformCancel(): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "selectionTransformCancel" });
+    }
+
     strokeBegin(
         frame: number,
         x: number,

@@ -7,16 +7,31 @@
         LayerInfo,
         LayerThumbnail,
         RegionUpdate,
+        SelectionContour,
     } from "./lib/EngineClient";
     import ColorPanel from "./lib/ColorPanel.svelte";
     import LayerPanel from "./lib/LayerPanel.svelte";
     import NewDocumentDialog from "./lib/NewDocumentDialog.svelte";
+    import NoticesDialog from "./lib/NoticesDialog.svelte";
     import ToolIcon from "./lib/ToolIcon.svelte";
     import ToolOptions from "./lib/ToolOptions.svelte";
     import ToolRail from "./lib/ToolRail.svelte";
     import { CanvasPresenter } from "./lib/CanvasPresenter";
     import { SelectionOverlay } from "./lib/SelectionOverlay";
     import type { DragShape } from "./lib/SelectionOverlay";
+    import SelectionTransformBar from "./lib/SelectionTransformBar.svelte";
+    import {
+        boundsCenter,
+        compose,
+        flipAbout,
+        identity,
+        isIdentity,
+        rotationAbout,
+        scaleAbout,
+        transformedBounds,
+        translation,
+    } from "./lib/SelectionTransform";
+    import type { Matrix } from "./lib/SelectionTransform";
     import { checkImportSize, detectMemoryProfile } from "./lib/MemoryPolicy";
     import type { MemoryProfile } from "./lib/MemoryPolicy";
     import { handleShortcut } from "./lib/Shortcuts";
@@ -83,8 +98,21 @@
         centerY: 0,
     });
     let showNewDocument = $state(false);
+    let showNotices = $state(false);
     let usingWebGL = $state(false);
     let hasSelection = $state(false);
+    // Move mode is a mode, not a tool, exactly as on the desktop: while it is
+    // on, a drag inside the selection moves the pixels whatever tool is picked.
+    let selectionMoveMode = $state(false);
+    let transformActive = $state(false);
+    // Raw on purpose. A plain $state array is handed out as a proxy, and a
+    // proxy cannot be structured-cloned, so posting one to the worker fails
+    // with DataCloneError. The matrix is always replaced wholesale, never
+    // mutated in place, so it needs no deep reactivity anyway.
+    let transformMatrix = $state.raw<Matrix>(identity);
+    const transformPending = $derived(
+        transformActive && !isIdentity(transformMatrix),
+    );
     // Same default as the desktop's canvas/animateWhileDrawing setting.
     let animateWhileDrawing = $state(
         window.localStorage.getItem("ugurugu-web-animate-while-drawing") ===
@@ -126,6 +154,19 @@
     let selectionDrag: DragShape | null = null;
     let selectionCombine: CombineValue = selectionCombines.replace;
     let antsFrame: number | null = null;
+    // The outline the engine last sent, kept so a transform can be anchored on
+    // the box the artist currently sees without asking for it again.
+    let selectionContours: SelectionContour[] = [];
+    let movingSelection = false;
+    let moveStartX = 0;
+    let moveStartY = 0;
+    let moveBaseMatrix: Matrix = identity;
+    // Latest matrix the pointer reached, and the one the engine has drawn. A
+    // drag produces matrices faster than the engine renders them, so previews
+    // coalesce to the newest instead of queueing every intermediate one.
+    let queuedTransform: Matrix | null = null;
+    let sentTransform: Matrix = identity;
+    let transformPumping = false;
     // Playback renders at most one frame at a time. Without this the timer
     // queued a render every tick regardless of whether the engine had finished
     // the last one, so a document that renders slower than its frame interval
@@ -216,8 +257,15 @@
         canRedo = update.canRedo;
         hasSelection = update.selection.active;
         if (update.selection.contours) {
+            selectionContours = update.selection.contours;
             overlay?.setContours(update.selection.contours);
             startAnts();
+        }
+        // A selection that went away takes the move mode and any floating
+        // transform with it; there is nothing left to move.
+        if (!hasSelection && (selectionMoveMode || transformActive)) {
+            selectionMoveMode = false;
+            forgetTransformSession();
         }
         if (!presenter) {
             return;
@@ -315,6 +363,7 @@
             !panning &&
             !rotating &&
             !selectionDrag &&
+            !movingSelection &&
             activeTouches.size === 0
         );
     }
@@ -438,6 +487,11 @@
         canUndo = next.canUndo;
         canRedo = next.canRedo;
         hasSelection = false;
+        selectionMoveMode = false;
+        selectionContours = [];
+        // The engine handle this session belonged to is gone with the old
+        // document, so only the shell's half has to be dropped.
+        forgetTransformSession();
         overlay?.setContours([]);
         presenter?.resizeDocument(next.width, next.height);
         resizeDisplay();
@@ -512,6 +566,9 @@
         if (!meta || meta.frameCount < 2) {
             return;
         }
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before playback.",
+        );
         playing = true;
         playTimer = setInterval(() => {
             // Mirrors CanvasWidget::advanceFrame: playback stays on through an
@@ -547,6 +604,12 @@
             return;
         }
         stopPlayback();
+        // The lifted pixels belong to the frame they were lifted from, so
+        // leaving that frame ends the session rather than carrying it along.
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before changing " +
+                "frame.",
+        );
         const count = meta.frameCount;
         frameIndex = (((frameIndex + delta) % count) + count) % count;
         requestRender(frameIndex);
@@ -729,6 +792,9 @@
         if (action !== "all" && action !== "deselect" && !hasSelection) {
             return;
         }
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before selecting.",
+        );
         const frame = frameIndex;
         const usedColor = colorHex;
         enqueue(async () => {
@@ -754,6 +820,175 @@
         if (action === "fill" || action === "delete") {
             markContentChanged();
         }
+    }
+
+    // Local half of ending a session. The engine side is ended separately by
+    // apply or cancel, so this never talks to the worker on its own.
+    function forgetTransformSession() {
+        transformActive = false;
+        transformMatrix = identity;
+        queuedTransform = null;
+        sentTransform = identity;
+        movingSelection = false;
+        overlay?.setTransform(identity);
+    }
+
+    // Sets the pending matrix and shows it. The ants follow immediately from
+    // the outline the shell already holds; the pixels follow when the engine
+    // answers, which is why the outline is not waited on.
+    function requestTransformPreview(matrix: Matrix) {
+        transformMatrix = matrix;
+        overlay?.setTransform(matrix);
+        overlay?.draw(view);
+        queuedTransform = matrix;
+        if (transformPumping) {
+            return;
+        }
+        transformPumping = true;
+        const frame = frameIndex;
+        enqueue(async () => {
+            try {
+                if (!transformActive) {
+                    present(await engine.selectionTransformBegin(frame));
+                    transformActive = true;
+                }
+                // Drains to whatever the gesture reached last: a preview the
+                // pointer has already moved past is not worth rendering.
+                while (queuedTransform) {
+                    const next = queuedTransform;
+                    queuedTransform = null;
+                    present(await engine.selectionTransformUpdate(next));
+                    sentTransform = next;
+                }
+            } catch (error) {
+                // The lift was refused — a hidden layer, an empty selection.
+                // Drop the local session so the ants stop showing a move that
+                // is not happening.
+                forgetTransformSession();
+                overlay?.draw(view);
+                throw error;
+            } finally {
+                transformPumping = false;
+            }
+        });
+    }
+
+    // Centre of the box the artist currently sees, so a second scale grows what
+    // is on screen rather than the original selection.
+    function transformAnchor() {
+        const bounds = transformedBounds(selectionContours, transformMatrix);
+        return bounds ? boundsCenter(bounds) : null;
+    }
+
+    function scaleSelectionBy(percent: number) {
+        const factor = percent / 100;
+        const anchor = transformAnchor();
+        if (!anchor || !Number.isFinite(factor) || factor <= 0 || factor === 1) {
+            return;
+        }
+        requestTransformPreview(
+            compose(transformMatrix, scaleAbout(anchor.x, anchor.y, factor)),
+        );
+    }
+
+    function rotateSelectionBy(degrees: number) {
+        const anchor = transformAnchor();
+        if (!anchor || !Number.isFinite(degrees) || degrees === 0) {
+            return;
+        }
+        requestTransformPreview(
+            compose(transformMatrix, rotationAbout(anchor.x, anchor.y, degrees)),
+        );
+    }
+
+    function flipSelectionBy(horizontal: boolean) {
+        const anchor = transformAnchor();
+        if (!anchor) {
+            return;
+        }
+        requestTransformPreview(
+            compose(transformMatrix, flipAbout(anchor.x, anchor.y, horizontal)),
+        );
+    }
+
+    function applySelectionTransform() {
+        if (!transformActive) {
+            return;
+        }
+        const committed = transformMatrix;
+        const moved = !isIdentity(committed);
+        const behind = sentTransform !== committed;
+        forgetTransformSession();
+        overlay?.draw(view);
+        enqueue(async () => {
+            // A coalesced preview may have been dropped, so the engine is told
+            // the matrix the artist actually sees before it commits it.
+            if (moved && behind) {
+                present(await engine.selectionTransformUpdate(committed));
+            }
+            present(await engine.selectionTransformApply());
+        });
+        if (moved) {
+            status = "Selection transform applied.";
+            markContentChanged();
+        }
+    }
+
+    function cancelSelectionTransform() {
+        if (!transformActive) {
+            return;
+        }
+        forgetTransformSession();
+        overlay?.draw(view);
+        enqueue(async () => {
+            present(await engine.selectionTransformCancel());
+        });
+    }
+
+    // Anything that changes the document underneath a floating transform drops
+    // it rather than committing something the artist did not ask for, the same
+    // call CanvasWidget::cancelSelectionTransformForBoundary makes.
+    function cancelTransformForBoundary(message: string) {
+        if (!transformActive) {
+            return;
+        }
+        cancelSelectionTransform();
+        status = message;
+    }
+
+    function beginSelectionMove(event: PointerEvent) {
+        const { x, y } = documentPosition(event);
+        movingSelection = true;
+        moveStartX = x;
+        moveStartY = y;
+        moveBaseMatrix = transformMatrix;
+        displayCanvas.setPointerCapture(event.pointerId);
+    }
+
+    function continueSelectionMove(event: PointerEvent) {
+        const { x, y } = documentPosition(event);
+        requestTransformPreview(
+            compose(
+                moveBaseMatrix,
+                translation(x - moveStartX, y - moveStartY),
+            ),
+        );
+    }
+
+    function endSelectionMove(event: PointerEvent) {
+        movingSelection = false;
+        displayCanvas.releasePointerCapture(event.pointerId);
+    }
+
+    function toggleSelectionMoveMode() {
+        if (!hasSelection) {
+            return;
+        }
+        selectionMoveMode = !selectionMoveMode;
+        if (!selectionMoveMode) {
+            return;
+        }
+        status = "Move mode — drag inside the selection to move it.";
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -783,6 +1018,9 @@
                     selectionDrag = null;
                     overlay?.setDrag(null);
                 }
+                // The pending transform survives the gesture; only the drag
+                // that was steering it ends here.
+                movingSelection = false;
                 touchGesture =
                     activeTouches.size === 2 ? touchGestureMeasurement() : null;
                 return;
@@ -802,11 +1040,25 @@
             return;
         }
         displayCanvas.setPointerCapture(event.pointerId);
+        // Move mode owns the pointer whatever tool is selected, the same
+        // precedence CanvasWidgetEvents gives m_selectionMoveMode.
+        if (selectionMoveMode && hasSelection) {
+            const { x, y } = documentPosition(event);
+            if (overlay?.containsDocumentPoint(x, y)) {
+                beginSelectionMove(event);
+            } else {
+                status = "Drag inside the selection to move it.";
+            }
+            return;
+        }
         if (tool === "eyedropper") {
             picking = true;
             pickColor(event);
             return;
         }
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled.",
+        );
         if (tool === "bucket") {
             bucketFill(event);
             return;
@@ -924,6 +1176,10 @@
             pickColor(event);
             return;
         }
+        if (movingSelection) {
+            continueSelectionMove(event);
+            return;
+        }
         if (selectionDrag) {
             continueSelectionDrag(event);
             return;
@@ -961,6 +1217,10 @@
             displayCanvas.releasePointerCapture(event.pointerId);
             return;
         }
+        if (movingSelection) {
+            endSelectionMove(event);
+            return;
+        }
         if (selectionDrag) {
             displayCanvas.releasePointerCapture(event.pointerId);
             endSelectionDrag();
@@ -995,6 +1255,7 @@
             panning ||
             rotating ||
             selectionDrag ||
+            movingSelection ||
             activeTouches.size > 0
         ) {
             return;
@@ -1027,6 +1288,9 @@
 
     function undo() {
         stopPlayback();
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before undoing.",
+        );
         enqueue(async () => {
             present(await engine.undo(frameIndex));
             contentRevision += 1;
@@ -1036,6 +1300,9 @@
 
     function redo() {
         stopPlayback();
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before redoing.",
+        );
         enqueue(async () => {
             present(await engine.redo(frameIndex));
             contentRevision += 1;
@@ -1045,6 +1312,10 @@
 
     function layerAction(action: (frame: number) => Promise<RegionUpdate>) {
         stopPlayback();
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before the layer " +
+                "change.",
+        );
         enqueue(async () => {
             present(await action(frameIndex));
             contentRevision += 1;
@@ -1064,6 +1335,10 @@
         action: (frame: number, index: number) => Promise<RegionUpdate>,
     ) {
         stopPlayback();
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before the layer " +
+                "change.",
+        );
         enqueue(async () => {
             const index = layers.findIndex((layer) => layer.id === id);
             if (index < 0) {
@@ -1106,6 +1381,11 @@
 
     function exportFramePng() {
         stopPlayback();
+        // Export encodes the committed document, so a floating transform that
+        // is not in it must not be left on screen either.
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before exporting.",
+        );
         const frame = frameIndex;
         enqueue(async () => {
             present(await engine.renderFrame(frame));
@@ -1138,6 +1418,9 @@
 
     function exportGif() {
         stopPlayback();
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before exporting.",
+        );
         exportingGif = true;
         status = "Exporting GIF…";
         enqueue(async () => {
@@ -1232,6 +1515,32 @@
         if (showNewDocument) {
             return;
         }
+        if (showNotices) {
+            if (event.key === "Escape") {
+                showNotices = false;
+                event.preventDefault();
+            }
+            return;
+        }
+        // While pixels are floating, Enter and Escape belong to them: Enter
+        // commits the move as one undo entry, Escape puts the pixels back.
+        // Both fall through to playback and deselect once nothing is floating.
+        const focus = event.target as HTMLElement | null;
+        const typing =
+            focus?.isContentEditable ||
+            (focus && ["INPUT", "TEXTAREA", "SELECT"].includes(focus.tagName));
+        if (!typing && transformActive) {
+            if (event.key === "Enter") {
+                applySelectionTransform();
+                event.preventDefault();
+                return;
+            }
+            if (event.key === "Escape") {
+                cancelSelectionTransform();
+                event.preventDefault();
+                return;
+            }
+        }
         const handled = handleShortcut(event, {
             undo,
             redo,
@@ -1259,6 +1568,7 @@
             stepFrame,
             togglePlayback,
             selectAll: () => selectionAction("all"),
+            toggleSelectionMove: toggleSelectionMoveMode,
             invertSelection: () => selectionAction("invert"),
             deselect: () => selectionAction("deselect"),
             fillSelection: () => selectionAction("fill"),
@@ -1390,6 +1700,17 @@
                 {exportingGif ? "Exporting…" : "GIF"}
             </button>
         </div>
+
+        <div class="bar-group">
+            <!--
+              Not decoration: the browser build links Qt statically and ships
+              no files beside the page, so this is the only place the licence
+              and the source it points at can be reached from.
+            -->
+            <button id="notices" onclick={() => (showNotices = true)}>
+                About
+            </button>
+        </div>
     </header>
 
     {#if recoveryOffer}
@@ -1431,6 +1752,7 @@
                 aria-label="Drawing canvas"
                 class:panning={panning || spaceHeld}
                 class:rotating={rotating}
+                class:moving={selectionMoveMode && !panning && !spaceHeld}
                 onpointerdown={onPointerDown}
                 onpointermove={onPointerMove}
                 onpointerup={onPointerUp}
@@ -1442,6 +1764,18 @@
                 bind:this={overlayCanvas}
                 aria-hidden="true"
             ></canvas>
+            {#if hasSelection}
+                <SelectionTransformBar
+                    moveMode={selectionMoveMode}
+                    pending={transformPending}
+                    onmovetoggle={toggleSelectionMoveMode}
+                    onscale={scaleSelectionBy}
+                    onrotate={rotateSelectionBy}
+                    onflip={flipSelectionBy}
+                    onapply={applySelectionTransform}
+                    oncancel={cancelSelectionTransform}
+                />
+            {/if}
             <div class="rotation-controls" role="group" aria-label="Canvas rotation">
                 <button
                     id="rotate-left"
@@ -1597,6 +1931,10 @@
     />
 {/if}
 
+{#if showNotices}
+    <NoticesDialog {meta} onclose={() => (showNotices = false)} />
+{/if}
+
 <style>
     /*
       Palette and control shapes come from the desktop's Theme.cpp, so the web
@@ -1738,6 +2076,10 @@
 
     #display-canvas.rotating {
         cursor: grabbing;
+    }
+
+    #display-canvas.moving {
+        cursor: move;
     }
 
     #selection-overlay {

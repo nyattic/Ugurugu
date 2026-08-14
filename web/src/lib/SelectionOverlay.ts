@@ -4,6 +4,8 @@
 import { toViewport } from "./ViewTransform";
 import type { ViewState, Viewport } from "./ViewTransform";
 import type { SelectionContour } from "./EngineClient";
+import { identity, mapPoint } from "./SelectionTransform";
+import type { Matrix } from "./SelectionTransform";
 
 export interface DragShape {
     shape: "freehand" | "rectangle" | "ellipse";
@@ -21,6 +23,10 @@ export class SelectionOverlay {
     #drag: DragShape | null = null;
     #dashOffset = 0;
     #frame = 0;
+    // Pending floating transform. The engine keeps sending the committed
+    // outline while a selection is being moved, so the ants are mapped through
+    // this on the way to the screen instead of being re-read every frame.
+    #transform: Matrix = identity;
 
     constructor(canvas: HTMLCanvasElement) {
         this.#canvas = canvas;
@@ -29,6 +35,40 @@ export class SelectionOverlay {
 
     setContours(contours: SelectionContour[]) {
         this.#contours = contours;
+    }
+
+    setTransform(transform: Matrix) {
+        this.#transform = transform;
+    }
+
+    // Even-odd so a selection with holes reports the holes as outside, the same
+    // reading CanvasWidget::selectionContains gets from its mask.
+    containsDocumentPoint(x: number, y: number): boolean {
+        const context = this.#context;
+        if (!context || this.#contours.length === 0) {
+            return false;
+        }
+        const path = new Path2D();
+        for (const contour of this.#contours) {
+            for (let index = 0; index + 1 < contour.length; index += 2) {
+                const point = mapPoint(
+                    this.#transform,
+                    contour[index] ?? 0,
+                    contour[index + 1] ?? 0,
+                );
+                if (index === 0) {
+                    path.moveTo(point.x, point.y);
+                } else {
+                    path.lineTo(point.x, point.y);
+                }
+            }
+            path.closePath();
+        }
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        const inside = context.isPointInPath(path, x, y, "evenodd");
+        context.restore();
+        return inside;
     }
 
     setDrag(drag: DragShape | null) {
@@ -80,12 +120,12 @@ export class SelectionOverlay {
         const path = new Path2D();
         for (const contour of this.#contours) {
             for (let index = 0; index + 1 < contour.length; index += 2) {
-                const point = toViewport(
-                    view,
-                    viewport,
+                const moved = mapPoint(
+                    this.#transform,
                     contour[index] ?? 0,
                     contour[index + 1] ?? 0,
                 );
+                const point = toViewport(view, viewport, moved.x, moved.y);
                 if (index === 0) {
                     path.moveTo(point.x, point.y);
                 } else {

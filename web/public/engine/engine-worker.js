@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 4;
+const expectedAbiVersion = 5;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -508,6 +508,36 @@ self.onmessage = async (event) => {
             engine._ugu_selection_clear(handleFor());
             selectionReply(engine, id);
             return;
+        } else if (type === "selectionTransformBegin") {
+            if (
+                !engine._ugu_selection_transform_begin(
+                    handleFor(),
+                    event.data.frame,
+                )
+            ) {
+                throw engineError(engine);
+            }
+        } else if (type === "selectionTransformUpdate") {
+            const [m11, m12, m21, m22, dx, dy] = event.data.matrix;
+            if (
+                !engine._ugu_selection_transform_update(
+                    handleFor(),
+                    m11,
+                    m12,
+                    m21,
+                    m22,
+                    dx,
+                    dy,
+                )
+            ) {
+                throw engineError(engine);
+            }
+        } else if (type === "selectionTransformApply") {
+            if (!engine._ugu_selection_transform_apply(handleFor())) {
+                throw engineError(engine);
+            }
+        } else if (type === "selectionTransformCancel") {
+            engine._ugu_selection_transform_cancel(handleFor());
         } else if (type === "selectionFill") {
             if (!engine._ugu_selection_fill(handleFor(), event.data.frame)) {
                 throw engineError(engine);
