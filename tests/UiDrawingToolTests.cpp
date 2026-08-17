@@ -827,6 +827,112 @@ private slots:
         QCOMPARE(points.last().pressure, 0.72);
     }
 
+    // The row used to give its label an Ignored horizontal size policy, so the
+    // stretch beside it took every pixel and the label collapsed to nothing:
+    // the panel showed a checkbox with no word next to it.
+    void showsTheTabletPressureLabelBesideItsToggle()
+    {
+        MainWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+
+        const std::pair<CanvasTool, QString> rows[] = {
+            {CanvasTool::Brush, QStringLiteral("brushTabletPressure")},
+            {CanvasTool::Eraser, QStringLiteral("eraserTabletPressure")},
+        };
+        for (const auto &[tool, prefix] : rows)
+        {
+            // The panels live in a stack; only the current page gets laid out,
+            // so the row has to be on screen before its width means anything.
+            canvas->setTool(tool);
+            QCoreApplication::processEvents();
+            QLabel *label =
+                window.findChild<QLabel *>(prefix + QStringLiteral("Label"));
+            QCheckBox *toggle = window.findChild<QCheckBox *>(
+                prefix + QStringLiteral("Toggle"));
+            QVERIFY(label);
+            QVERIFY(toggle);
+            QVERIFY(!label->text().isEmpty());
+            QVERIFY(label->sizeHint().width() > 0);
+            QVERIFY(label->width() >= label->sizeHint().width());
+        }
+    }
+
+    // The row used to give its label an Ignored horizontal size policy, so the
+    // stretch beside it took every pixel and the label collapsed to nothing:
+    // the panel showed a checkbox with no word next to it.
+    void showsTheTabletPressureLabelBesideItsToggle()
+    {
+        MainWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
+        QVERIFY(canvas);
+
+        const std::pair<CanvasTool, QString> rows[] = {
+            {CanvasTool::Brush, QStringLiteral("brushTabletPressure")},
+            {CanvasTool::Eraser, QStringLiteral("eraserTabletPressure")},
+        };
+        for (const auto &[tool, prefix] : rows)
+        {
+            // The panels live in a stack; only the current page gets laid out,
+            // so the row has to be on screen before its width means anything.
+            canvas->setTool(tool);
+            QCoreApplication::processEvents();
+            QLabel *label =
+                window.findChild<QLabel *>(prefix + QStringLiteral("Label"));
+            QCheckBox *toggle = window.findChild<QCheckBox *>(
+                prefix + QStringLiteral("Toggle"));
+            QVERIFY(label);
+            QVERIFY(toggle);
+            QVERIFY(!label->text().isEmpty());
+            QVERIFY(label->sizeHint().width() > 0);
+            QVERIFY(label->width() >= label->sizeHint().width());
+        }
+    }
+
+    // The canvas shadow is fourteen antialiased passes over the canvas
+    // outline. Stroked on every repaint it cost four times an ordinary one as
+    // soon as the canvas was turned off the axes, so a rotated canvas dragged
+    // every repaint down, playback included. It is baked once per outline now.
+    void bakesTheCanvasShadowOncePerOutline()
+    {
+        Document document = Document::createDefault(QSize(320, 240));
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+
+        CanvasWidget canvas(&controller);
+        canvas.resize(500, 400);
+        canvas.setAnimating(false);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        canvas.repaint();
+        QCoreApplication::processEvents();
+
+        const qint64 baked = CanvasWidgetTestAccess::shadowCacheKey(canvas);
+        QVERIFY(baked != 0);
+
+        canvas.repaint();
+        QCoreApplication::processEvents();
+        QCOMPARE(CanvasWidgetTestAccess::shadowCacheKey(canvas), baked);
+
+        canvas.rotateCanvasRight();
+        canvas.repaint();
+        QCoreApplication::processEvents();
+        const qint64 rotated = CanvasWidgetTestAccess::shadowCacheKey(canvas);
+        QVERIFY(rotated != 0);
+        QVERIFY(rotated != baked);
+
+        canvas.repaint();
+        QCoreApplication::processEvents();
+        QCOMPARE(CanvasWidgetTestAccess::shadowCacheKey(canvas), rotated);
+    }
+
     void disablesTabletPressureForBrushAndEraserStrokes()
     {
         DocumentController controller;

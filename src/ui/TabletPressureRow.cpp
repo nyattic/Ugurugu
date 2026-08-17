@@ -22,8 +22,8 @@ TabletPressureRow::TabletPressureRow(
     layout->setSpacing(8);
 
     auto *label = new QLabel(tr("PEN PRESSURE"), this);
+    label->setObjectName(objectNamePrefix + QStringLiteral("Label"));
     label->setProperty("fieldLabel", true);
-    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     layout->addWidget(label);
     layout->addStretch(1);
 
