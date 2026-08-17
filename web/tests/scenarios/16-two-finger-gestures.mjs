@@ -168,5 +168,55 @@ export default async function run({ browser, origin }) {
         { timeout: 15000 },
     );
     check(true, "one finger dragged past the slop still draws");
+
+    // A twist arriving a degree at a time is a hand failing to hold an angle,
+    // not a request to rotate.
+    await page.locator("#rotation-reset").click();
+    const twist = async (degrees) => {
+        const radians = (degrees * Math.PI) / 180;
+        await session.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [
+                point(
+                    oldCenter.x - Math.cos(radians) * 60,
+                    oldCenter.y - Math.sin(radians) * 60,
+                    6,
+                ),
+                point(
+                    oldCenter.x + Math.cos(radians) * 60,
+                    oldCenter.y + Math.sin(radians) * 60,
+                    7,
+                ),
+            ],
+        });
+    };
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [
+            point(oldCenter.x - 60, oldCenter.y, 6),
+            point(oldCenter.x + 60, oldCenter.y, 7),
+        ],
+    });
+    for (let degrees = 1; degrees <= 3; degrees += 1) {
+        await twist(degrees);
+    }
+    const heldStill = await page.locator("#rotation-angle").inputValue();
+    check(heldStill === "0", `a 3 degree wobble leaves the canvas at 0`);
+
+    for (let degrees = 4; degrees <= 20; degrees += 1) {
+        await twist(degrees);
+    }
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+    });
+    const engaged = Number(
+        await page.locator("#rotation-angle").inputValue(),
+    );
+    check(
+        engaged >= 13 && engaged <= 16,
+        `twisting past the slop rotates by the twist less the slop ` +
+            `(${engaged} degrees of 20)`,
+    );
     await context.close();
 }

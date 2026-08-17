@@ -16,6 +16,7 @@
     import DocumentSizeDialog from "./lib/DocumentSizeDialog.svelte";
     import WobblePanel from "./lib/WobblePanel.svelte";
     import NoticesDialog from "./lib/NoticesDialog.svelte";
+    import MobileChrome from "./lib/MobileChrome.svelte";
     import ToolIcon from "./lib/ToolIcon.svelte";
     import ToolOptions from "./lib/ToolOptions.svelte";
     import ToolRail from "./lib/ToolRail.svelte";
@@ -135,6 +136,18 @@
     let exportingGif = $state(false);
 
     let playTimer: ReturnType<typeof setInterval> | null = null;
+    // Matches the CSS breakpoint. The layouts differ in structure, not only in
+    // measurements, so the choice has to reach the markup as well.
+    const compactQuery = "(max-width: 48rem)";
+    // itch.io runs the upload in an iframe and draws its own fullscreen button
+    // over the bottom-right corner. Comparing the frames is allowed across
+    // origins; reading through them is not.
+    const embedded = typeof window !== "undefined" && window.self !== window.top;
+    let compact = $state(
+        typeof window === "undefined"
+            ? false
+            : window.matchMedia(compactQuery).matches,
+    );
     let drawing = false;
     let picking = false;
     let panning = $state(false);
@@ -146,6 +159,14 @@
     let rotationDragStartAngle = 0;
     const activeTouches = new Map<number, { x: number; y: number }>();
     let touchGesture: PinchMeasurement | null = null;
+    // Two fingers hold an angle far less steadily than a hand thinks they do,
+    // so a pan or a zoom arrived with a degree or two of twist on it and left
+    // the canvas askew. Rotation waits until the twist accumulated over the
+    // gesture says it was meant. The desktop keeps its immediate rotation:
+    // there the same wobble is a smaller share of a much larger screen.
+    const gestureRotationSlop = 5;
+    let gestureTwist = 0;
+    let gestureRotating = false;
     // Two fingers never land at the same instant, so the first one of a pinch
     // opened and committed a stroke before the second arrived, leaving an ink
     // dot at the start of every pan and zoom. A touch stroke is held here
@@ -1063,6 +1084,8 @@
                 // that was steering it ends here.
                 movingSelection = false;
                 touchGesture = pinchMeasurement(activeTouches.values());
+                gestureTwist = 0;
+                gestureRotating = false;
                 return;
             }
         }
@@ -1188,6 +1211,10 @@
                     const angleDelta = normalizeRotation(
                         nextGesture.angle - touchGesture.angle,
                     );
+                    gestureTwist += angleDelta;
+                    if (Math.abs(gestureTwist) >= gestureRotationSlop) {
+                        gestureRotating = true;
+                    }
                     view = transformAround(
                         view,
                         { width: rect.width, height: rect.height },
@@ -1197,7 +1224,9 @@
                         nextGesture.centerY - rect.top,
                         view.scale *
                             (nextGesture.distance / touchGesture.distance),
-                        view.rotation + angleDelta,
+                        gestureRotating
+                            ? view.rotation + angleDelta
+                            : view.rotation,
                     );
                 }
                 touchGesture = nextGesture;
@@ -1264,6 +1293,8 @@
     function onPointerUp(event: PointerEvent) {
         activeTouches.delete(event.pointerId);
         touchGesture = pinchMeasurement(activeTouches.values());
+        gestureTwist = 0;
+        gestureRotating = false;
         if (rotating) {
             rotating = false;
             displayCanvas.releasePointerCapture(event.pointerId);
@@ -1624,8 +1655,13 @@
             );
         })();
         const stopAutosave = autosave.start();
+        const media = window.matchMedia(compactQuery);
+        const syncCompact = () => (compact = media.matches);
+        media.addEventListener("change", syncCompact);
+        syncCompact();
         return () => {
             observer.disconnect();
+            media.removeEventListener("change", syncCompact);
             stopAutosave();
             if (thumbnailTimer !== null) {
                 clearTimeout(thumbnailTimer);
@@ -1644,80 +1680,155 @@
     onblur={onWindowBlur}
 />
 
-<main>
-    <header class="bar">
-        <div class="identity">
-            <span class="wordmark">Ugurugu</span>
-            <span class="document" title={documentName}>{documentName}</span>
-        </div>
+{#snippet historyActions()}
+    <button
+        id="undo"
+        class="icon-button"
+        title="Undo (Ctrl/Cmd Z)"
+        onclick={undo}
+        disabled={!canUndo}
+    >
+        <ToolIcon name="undo" size={18} />
+    </button>
+    <button
+        id="redo"
+        class="icon-button"
+        title="Redo (Ctrl/Cmd Shift Z)"
+        onclick={redo}
+        disabled={!canRedo}
+    >
+        <ToolIcon name="redo" size={18} />
+    </button>
+{/snippet}
 
-        <div class="bar-group">
-            <button
-                id="undo"
-                class="icon-button"
-                title="Undo (Ctrl/Cmd Z)"
-                onclick={undo}
-                disabled={!canUndo}
-            >
-                <ToolIcon name="undo" size={18} />
-            </button>
-            <button
-                id="redo"
-                class="icon-button"
-                title="Redo (Ctrl/Cmd Shift Z)"
-                onclick={redo}
-                disabled={!canRedo}
-            >
-                <ToolIcon name="redo" size={18} />
-            </button>
-        </div>
+{#snippet fileActions()}
+    <button id="new-document" onclick={() => (showNewDocument = true)}>
+        New
+    </button>
+    <button
+        id="document-size"
+        onclick={() => (showDocumentSize = true)}
+        disabled={!meta}
+    >
+        Size
+    </button>
+    <label class="file-button">
+        Open
+        <input
+            bind:this={fileInput}
+            type="file"
+            accept=".ugu"
+            onchange={onFileChosen}
+        />
+    </label>
+    <button id="save-document" onclick={downloadDocument} disabled={!meta}>
+        Save
+    </button>
+    <button id="export-png" onclick={exportFramePng} disabled={!meta}>
+        PNG
+    </button>
+    <button
+        id="export-gif"
+        onclick={exportGif}
+        disabled={!meta || exportingGif}
+    >
+        {exportingGif ? "Exporting…" : "GIF"}
+    </button>
+{/snippet}
 
-        <div class="bar-group">
-            <button id="new-document" onclick={() => (showNewDocument = true)}>
-                New
-            </button>
-            <button
-                id="document-size"
-                onclick={() => (showDocumentSize = true)}
-                disabled={!meta}
-            >
-                Size
-            </button>
-            <label class="file-button">
-                Open
-                <input
-                    bind:this={fileInput}
-                    type="file"
-                    accept=".ugu"
-                    onchange={onFileChosen}
-                />
-            </label>
-            <button id="save-document" onclick={downloadDocument} disabled={!meta}>
-                Save
-            </button>
-            <button id="export-png" onclick={exportFramePng} disabled={!meta}>
-                PNG
-            </button>
-            <button
-                id="export-gif"
-                onclick={exportGif}
-                disabled={!meta || exportingGif}
-            >
-                {exportingGif ? "Exporting…" : "GIF"}
-            </button>
-        </div>
+<!--
+  Not decoration: the browser build links Qt statically and ships no files
+  beside the page, so this is the only place the licence and the source it
+  points at can be reached from. On a phone it lives in the file sheet, which
+  is why it is a snippet rather than markup in the bar.
+-->
+{#snippet aboutAction()}
+    <button id="notices" onclick={() => (showNotices = true)}>About</button>
+{/snippet}
 
-        <div class="bar-group">
-            <!--
-              Not decoration: the browser build links Qt statically and ships
-              no files beside the page, so this is the only place the licence
-              and the source it points at can be reached from.
-            -->
-            <button id="notices" onclick={() => (showNotices = true)}>
-                About
-            </button>
-        </div>
-    </header>
+{#snippet toolRail()}
+    <ToolRail
+        {tool}
+        {hasSelection}
+        onselect={(next) => (tool = next)}
+        onselectionaction={selectionAction}
+    />
+{/snippet}
+
+{#snippet toolOptions()}
+    <ToolOptions {tool} {settings} {presets} {eraserPresets} />
+{/snippet}
+
+{#snippet wobblePanel()}
+    {#if meta}
+        <WobblePanel
+            wobble={meta.wobble}
+            frameCount={meta.frameCount}
+            onchange={wobbleChanged}
+        />
+    {/if}
+{/snippet}
+
+{#snippet colorPanel()}
+    <ColorPanel
+        color={colorHex}
+        {recentColors}
+        onchange={(hex) => (colorHex = hex)}
+        onrecent={chooseColor}
+    />
+{/snippet}
+
+{#snippet layerPanel()}
+    <LayerPanel
+        {layers}
+        {thumbnails}
+        onactivate={(id) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerActivate(frame, index),
+            )}
+        onvisible={(id, visible) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerVisible(frame, index, visible),
+            )}
+        onreference={(id, reference) =>
+            layerCommand(id, (_frame, index) =>
+                engine.layerReference(index, reference),
+            )}
+        onopacity={(id, opacity) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerOpacity(frame, index, opacity),
+            )}
+        onadd={() => layerAction((frame) => engine.layerAdd(frame))}
+        onremove={(id) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerRemove(frame, index),
+            )}
+        onrename={(id, name) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerRename(frame, index, name),
+            )}
+        onmove={(id, offset) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerMove(frame, index, offset),
+            )}
+    />
+{/snippet}
+
+<main class:compact>
+    {#if !compact}
+        <header class="bar">
+            <div class="identity">
+                <span class="wordmark">Ugurugu</span>
+                <span class="document" title={documentName}>
+                    {documentName}
+                </span>
+            </div>
+
+            <div class="bar-group">{@render historyActions()}</div>
+            <div class="bar-group">{@render fileActions()}</div>
+            <div class="bar-group">{@render aboutAction()}</div>
+        </header>
+    {/if}
 
     {#if autosave.offer}
         <div class="recovery-banner" role="alert">
@@ -1746,14 +1857,17 @@
     <canvas id="document-surface" bind:this={surfaceCanvas} hidden></canvas>
 
     <div class="workspace">
-        <ToolRail
-            {tool}
-            {hasSelection}
-            onselect={(next) => (tool = next)}
-            onselectionaction={selectionAction}
-        />
-        <ToolOptions {tool} {settings} {presets} {eraserPresets} />
+        {#if !compact}
+            {@render toolRail()}
+            {@render toolOptions()}
+        {/if}
 
+        <!--
+          Rendered here in both layouts on purpose. Moving it into the branch
+          would destroy and rebuild the canvas whenever the breakpoint is
+          crossed, and the presenter holds the WebGL context of the canvas it
+          was given.
+        -->
         <section class="viewport" bind:this={viewportElement}>
             <canvas
                 id="display-canvas"
@@ -1847,137 +1961,118 @@
             </div>
         </section>
 
-        <div class="side">
-            {#if meta}
-                <WobblePanel
-                    wobble={meta.wobble}
-                    frameCount={meta.frameCount}
-                    onchange={wobbleChanged}
-                />
-            {/if}
-            <ColorPanel
-                color={colorHex}
-                {recentColors}
-                onchange={(hex) => (colorHex = hex)}
-                onrecent={chooseColor}
-            />
-            <LayerPanel
-                {layers}
-                {thumbnails}
-                onactivate={(id) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerActivate(frame, index),
-                    )}
-                onvisible={(id, visible) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerVisible(frame, index, visible),
-                    )}
-                onreference={(id, reference) =>
-                    layerCommand(id, (_frame, index) =>
-                        engine.layerReference(index, reference),
-                    )}
-                onopacity={(id, opacity) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerOpacity(frame, index, opacity),
-                    )}
-                onadd={() => layerAction((frame) => engine.layerAdd(frame))}
-                onremove={(id) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerRemove(frame, index),
-                    )}
-                onrename={(id, name) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerRename(frame, index, name),
-                    )}
-                onmove={(id, offset) =>
-                    layerCommand(id, (frame, index) =>
-                        engine.layerMove(frame, index, offset),
-                    )}
-            />
-        </div>
+        {#if !compact}
+            <div class="side">
+                {@render wobblePanel()}
+                {@render colorPanel()}
+                {@render layerPanel()}
+            </div>
+        {/if}
     </div>
 
-    <footer>
-        <div class="timeline">
-            {#if meta}
-                <button
-                    class="play icon-button"
-                    onclick={togglePlayback}
-                    disabled={meta.frameCount < 2}
-                    title={playing ? "Stop (Enter)" : "Play (Enter)"}
-                >
-                    <ToolIcon name={playing ? "pause" : "play"} size={18} />
-                </button>
-                <input
-                    type="range"
-                    min="0"
-                    max={meta.frameCount - 1}
-                    value={frameIndex}
-                    aria-label="Frame"
-                    oninput={onSliderInput}
-                />
-                <span class="frame-label">
-                    {frameIndex + 1}/{meta.frameCount}
-                </span>
-                <label class="spin" title="Animation frames">
-                    <span>Frames</span>
-                    <input
-                        id="animation-frames"
-                        type="number"
-                        min="2"
-                        max="60"
-                        step="1"
-                        value={meta.frameCount}
-                        aria-label="Animation frames"
-                        onchange={(event) => {
-                            // Read here, not inside the queued action: by the
-                            // time that runs the event has no target left.
-                            const frames = Number(event.currentTarget.value);
-                            documentAction((frame) =>
-                                engine.animationFrames(frame, frames),
-                            );
-                        }}
-                    />
-                </label>
-                <label class="spin" title="Playback speed">
-                    <span>FPS</span>
-                    <input
-                        id="frames-per-second"
-                        type="number"
-                        min="1"
-                        max="50"
-                        step="1"
-                        value={meta.fps}
-                        aria-label="Frames per second"
-                        onchange={(event) => {
-                            const fps = Number(event.currentTarget.value);
-                            documentAction(() => engine.framesPerSecond(fps));
-                        }}
-                    />
-                </label>
-                <label
-                    class="toggle"
-                    title="Keep the wobble running while drawing"
-                >
-                    <input
-                        id="animate-while-drawing"
-                        type="checkbox"
-                        bind:checked={animateWhileDrawing}
-                    />
-                    Wobble while drawing
-                </label>
-            {/if}
-        </div>
-        <div class="status-bar">
-            <p id="status">{status}</p>
-            <p id="autosave-status">{autosave.status}</p>
-            <p id="presenter-status">
-                {activeTool.label} · {usingWebGL ? "WebGL 2" : "Canvas 2D"} ·
-                {profile.name}
-            </p>
-        </div>
-    </footer>
+    {#if compact}
+        <MobileChrome
+            {tool}
+            color={colorHex}
+            {playing}
+            hasDocument={Boolean(meta)}
+            {embedded}
+            ontoggleplay={togglePlayback}
+            {toolRail}
+            {toolOptions}
+            {wobblePanel}
+            {colorPanel}
+            {layerPanel}
+            {fileActions}
+            {aboutAction}
+            {historyActions}
+            {timelineControls}
+            {statusBar}
+        />
+    {:else}
+        <footer>
+            <div class="timeline">{@render timelineControls()}</div>
+            {@render statusBar()}
+        </footer>
+    {/if}
 </main>
+
+{#snippet timelineControls()}
+    {#if meta}
+        <button
+            class="play icon-button"
+            onclick={togglePlayback}
+            disabled={meta.frameCount < 2}
+            title={playing ? "Stop (Enter)" : "Play (Enter)"}
+        >
+            <ToolIcon name={playing ? "pause" : "play"} size={18} />
+        </button>
+        <input
+            type="range"
+            min="0"
+            max={meta.frameCount - 1}
+            value={frameIndex}
+            aria-label="Frame"
+            oninput={onSliderInput}
+        />
+        <span class="frame-label">{frameIndex + 1}/{meta.frameCount}</span>
+        <label class="spin" title="Animation frames">
+            <span>Frames</span>
+            <input
+                id="animation-frames"
+                type="number"
+                min="2"
+                max="60"
+                step="1"
+                value={meta.frameCount}
+                aria-label="Animation frames"
+                onchange={(event) => {
+                    // Read here, not inside the queued action: by the time
+                    // that runs the event has no target left.
+                    const frames = Number(event.currentTarget.value);
+                    documentAction((frame) =>
+                        engine.animationFrames(frame, frames),
+                    );
+                }}
+            />
+        </label>
+        <label class="spin" title="Playback speed">
+            <span>FPS</span>
+            <input
+                id="frames-per-second"
+                type="number"
+                min="1"
+                max="50"
+                step="1"
+                value={meta.fps}
+                aria-label="Frames per second"
+                onchange={(event) => {
+                    const fps = Number(event.currentTarget.value);
+                    documentAction(() => engine.framesPerSecond(fps));
+                }}
+            />
+        </label>
+        <label class="toggle" title="Keep the wobble running while drawing">
+            <input
+                id="animate-while-drawing"
+                type="checkbox"
+                bind:checked={animateWhileDrawing}
+            />
+            Wobble while drawing
+        </label>
+    {/if}
+{/snippet}
+
+{#snippet statusBar()}
+    <div class="status-bar">
+        <p id="status">{status}</p>
+        <p id="autosave-status">{autosave.status}</p>
+        <p id="presenter-status">
+            {activeTool.label} · {usingWebGL ? "WebGL 2" : "Canvas 2D"} ·
+            {profile.name}
+        </p>
+    </div>
+{/snippet}
 
 {#if showNewDocument}
     <NewDocumentDialog
@@ -2036,6 +2131,10 @@
     }
 
     :global(:root) {
+        /* The compact layout reserves this at the foot of the page, the dock
+           fills exactly it, and sheets rise from its top edge. One expression
+           so the three cannot drift apart. */
+        --dock-block-size: calc(3.25rem + env(safe-area-inset-bottom, 0px));
         --ink-950: #141518;
         --ink-900: #1b1d21;
         --ink-850: #202226;
@@ -2065,6 +2164,7 @@
     }
 
     main {
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         block-size: 100vh;
@@ -2238,40 +2338,26 @@
        and panels under it. The full responsive layout is still to come; this
        is the part that has to hold, because a canvas nobody can draw on is a
        broken shell rather than a cramped one. */
-    @media (max-width: 48rem) {
-        /* The header and the footer sit outside .workspace, so its wrap never
-           reached them. In a 390 px viewport the bar wanted 511 px and the
-           timeline 628 px, which left the GIF and About buttons, the FPS field
-           and the wobble toggle off-screen with nothing to scroll. */
-        .bar,
-        .timeline {
-            flex-wrap: wrap;
-            row-gap: 0.4rem;
-        }
+    /* Below the breakpoint the panels move into MobileChrome's sheets, so the
+       workspace holds nothing but the canvas. All that is left to arrange is
+       the strip the dock occupies. */
+    main.compact {
+        padding-block-end: var(--dock-block-size);
+        --sheet-lift: var(--dock-block-size);
+    }
 
-        /* itch.io overlays its fullscreen button on this corner. */
-        .status-bar {
-            padding-inline-end: 3.5rem;
-        }
+    /* The foot of the canvas belongs to the status toast in this layout, so
+       the view controls move under the file button instead of colliding with
+       it. Pinching covers both of them; what they are still needed for is
+       reading the numbers back and resetting them. */
+    main.compact .rotation-controls {
+        inset-block-start: 3.6rem;
+        inset-block-end: auto;
+    }
 
-        .workspace {
-            flex-wrap: wrap;
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
-
-        .viewport {
-            order: -1;
-            flex: 1 1 100%;
-            min-block-size: 55vh;
-        }
-
-        .side {
-            flex: 1 1 100%;
-            inline-size: auto;
-            border-inline-start: 0;
-            border-block-start: 1px solid var(--line);
-        }
+    main.compact .zoom-controls {
+        inset-block-start: 6.4rem;
+        inset-block-end: auto;
     }
 
     footer {
