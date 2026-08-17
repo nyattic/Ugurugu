@@ -4,6 +4,7 @@
 #include "support/DocumentControllerTestAccess.hpp"
 #include "support/UiTestHelpers.hpp"
 #include "support/UiTestSuites.hpp"
+#include "ui/TabletPressureRow.hpp"
 
 #include <QMenu>
 
@@ -832,12 +833,33 @@ private slots:
     // the panel showed a checkbox with no word next to it.
     void showsTheTabletPressureLabelBesideItsToggle()
     {
+        DocumentController controller;
+        QVERIFY(controller.newDocument(QSize(64, 64)));
+        CanvasWidget canvas(&controller);
+
+        // Measured on the row itself, at a width that comfortably fits the
+        // label: the panel it normally sits in is as wide as the tool dock
+        // happens to be, and a label squeezed by a narrow dock is allowed to
+        // fall short of its hint. Collapsing to nothing is not, which is what
+        // the Ignored size policy used to do here.
+        TabletPressureRow row(&canvas, QStringLiteral("benchTabletPressure"));
+        row.resize(360, 40);
+        row.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&row));
+
+        QLabel *label =
+            row.findChild<QLabel *>(QStringLiteral("benchTabletPressureLabel"));
+        QVERIFY(label);
+        QVERIFY(!label->text().isEmpty());
+        QVERIFY(label->sizeHint().width() > 0);
+        QVERIFY(label->width() >= label->sizeHint().width());
+
         MainWindow window;
+        window.resize(1400, 900);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
-
-        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QVERIFY(canvas);
+        CanvasWidget *windowCanvas = window.findChild<CanvasWidget *>();
+        QVERIFY(windowCanvas);
 
         const std::pair<CanvasTool, QString> rows[] = {
             {CanvasTool::Brush, QStringLiteral("brushTabletPressure")},
@@ -847,17 +869,16 @@ private slots:
         {
             // The panels live in a stack; only the current page gets laid out,
             // so the row has to be on screen before its width means anything.
-            canvas->setTool(tool);
+            windowCanvas->setTool(tool);
             QCoreApplication::processEvents();
-            QLabel *label =
+            QLabel *panelLabel =
                 window.findChild<QLabel *>(prefix + QStringLiteral("Label"));
             QCheckBox *toggle = window.findChild<QCheckBox *>(
                 prefix + QStringLiteral("Toggle"));
-            QVERIFY(label);
+            QVERIFY(panelLabel);
             QVERIFY(toggle);
-            QVERIFY(!label->text().isEmpty());
-            QVERIFY(label->sizeHint().width() > 0);
-            QVERIFY(label->width() >= label->sizeHint().width());
+            QVERIFY(!panelLabel->text().isEmpty());
+            QVERIFY(panelLabel->width() > 0);
         }
     }
 
