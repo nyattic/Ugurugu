@@ -264,28 +264,31 @@ jobs:
 
       - name: Notarize and staple the application
         env:
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           for name in \
-            MACOS_NOTARY_APPLE_ID \
-            MACOS_NOTARY_PASSWORD \
-            MACOS_NOTARY_TEAM_ID
+            MACOS_NOTARY_KEY \
+            MACOS_NOTARY_KEY_ID \
+            MACOS_NOTARY_ISSUER_ID
           do
             if [[ -z "${!name}" ]]; then
               echo "$name is not configured"
               exit 1
             fi
           done
+          key="$RUNNER_TEMP/notary-key.p8"
+          (umask 077 && printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode > "$key")
           application="$RUNNER_TEMP/install/Ugurugu.app"
           submission="$RUNNER_TEMP/notarize-application.zip"
           ditto -c -k --sequesterRsrc --keepParent "$application" "$submission"
           xcrun notarytool submit "$submission" \
-            --apple-id "$MACOS_NOTARY_APPLE_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" \
-            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --key "$key" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
             --wait
+          rm -f "$key"
           # Stapled before the DMG and the Sparkle archive are built, so both
           # ship a bundle Gatekeeper accepts without a network round trip.
           xcrun stapler staple "$application"
@@ -343,9 +346,9 @@ jobs:
       - name: Notarize and staple the DMG
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           dmg=$(find artifacts \
             -maxdepth 1 \
@@ -356,15 +359,18 @@ jobs:
             echo "Missing macOS DMG"
             exit 1
           fi
+          key="$RUNNER_TEMP/notary-key.p8"
+          (umask 077 && printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode > "$key")
           # The disk image carries its own signature and ticket, so the very
           # first open is accepted offline too, not just the app inside it.
           codesign --force --timestamp \
             --sign "$MACOS_SIGNING_IDENTITY" "$dmg"
           xcrun notarytool submit "$dmg" \
-            --apple-id "$MACOS_NOTARY_APPLE_ID" \
-            --password "$MACOS_NOTARY_PASSWORD" \
-            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --key "$key" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
             --wait
+          rm -f "$key"
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
 
