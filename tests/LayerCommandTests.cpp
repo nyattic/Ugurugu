@@ -58,6 +58,35 @@ private slots:
         QVERIFY(!controller.document().layer(groupId)->reference);
     }
 
+    // A group is not a layer as far as the numbering goes. Counting every row
+    // meant Layer 1, Layer 2 and Group 1 were followed by Layer 4.
+    void numbersNewLayersPastThePaintLayersOnly()
+    {
+        DocumentController controller;
+        controller.newDocument(QSize(96, 96));
+        QCOMPARE(controller.document().layers.size(), 1);
+
+        controller.addLayer();
+        QCOMPARE(controller.document().layers.last().name,
+            QStringLiteral("Layer 2"));
+
+        controller.addLayerGroup(controller.document().activeLayerId);
+        QCOMPARE(controller.document().layers.size(), 3);
+
+        controller.addLayer();
+        const auto named = [&controller](const QString &name)
+        {
+            return std::any_of(controller.document().layers.cbegin(),
+                controller.document().layers.cend(),
+                [&name](const Layer &layer)
+                {
+                    return layer.name == name;
+                });
+        };
+        QVERIFY(named(QStringLiteral("Layer 3")));
+        QVERIFY(!named(QStringLiteral("Layer 4")));
+    }
+
     void managesLayerGroupsAndClippingUndoably()
     {
         DocumentController controller;

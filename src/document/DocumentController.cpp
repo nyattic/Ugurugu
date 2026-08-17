@@ -1707,7 +1707,16 @@ void DocumentController::ensureActiveLayer(Document &document)
 QString DocumentController::nextLayerName() const
 {
     const Document &current = document();
-    int number = static_cast<int>(current.layers.size()) + 1;
+    // Groups carry their own numbering, so counting them here made the next
+    // paint layer skip a number: Layer 1, Layer 2 and Group 1 produced
+    // Layer 4. The loop below still steps past any name already taken.
+    int number = static_cast<int>(std::count_if(current.layers.cbegin(),
+                     current.layers.cend(),
+                     [](const Layer &layer)
+                     {
+                         return layer.kind == LayerKind::Paint;
+                     }))
+                 + 1;
     while (true)
     {
         const QString candidate = tr("Layer %1").arg(number);
