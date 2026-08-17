@@ -29,5 +29,29 @@ export default async function run({ browser, origin }) {
     await drawStroke(page);
     const drawn = await countBrushPixels(page);
     check(drawn > 0, `a phone-sized canvas takes a stroke (${drawn} px)`);
+
+    const reachable = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const offscreen = [];
+        for (const selector of ["header.bar", ".timeline"]) {
+            const root = document.querySelector(selector);
+            for (const el of root.querySelectorAll("button, input, label")) {
+                const box = el.getBoundingClientRect();
+                if (box.width === 0 && box.height === 0) {
+                    continue;
+                }
+                if (box.right > width || box.left < 0) {
+                    offscreen.push(el.id || el.textContent.trim().slice(0, 20));
+                }
+            }
+        }
+        return offscreen;
+    });
+    check(
+        reachable.length === 0,
+        `every bar control fits the phone width${
+            reachable.length ? ` (off-screen: ${reachable.join(", ")})` : ""
+        }`,
+    );
     await context.close();
 }

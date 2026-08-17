@@ -146,6 +146,22 @@
     let rotationDragStartAngle = 0;
     const activeTouches = new Map<number, { x: number; y: number }>();
     let touchGesture: PinchMeasurement | null = null;
+    // Two fingers never land at the same instant, so the first one of a pinch
+    // opened and committed a stroke before the second arrived, leaving an ink
+    // dot at the start of every pan and zoom. A touch stroke is held here
+    // until it crosses the slop or lifts; a second finger drops it.
+    const touchStrokeSlop = 8;
+    let pendingTouchStroke:
+        | {
+              x: number;
+              y: number;
+              pressure: number;
+              timestamp: number;
+              clientX: number;
+              clientY: number;
+              frame: number;
+          }
+        | null = null;
     let pendingPoints: number[] = [];
     let chain = Promise.resolve();
     let contentRevision = 0;
@@ -1030,10 +1046,14 @@
                 if (drawing) {
                     drawing = false;
                     pendingPoints = [];
-                    enqueue(async () => {
-                        present(await engine.strokeEnd(frameIndex));
-                        contentRevision += 1;
-                    });
+                    if (pendingTouchStroke) {
+                        pendingTouchStroke = null;
+                    } else {
+                        enqueue(async () => {
+                            present(await engine.strokeEnd(frameIndex));
+                            contentRevision += 1;
+                        });
+                    }
                 }
                 if (selectionDrag) {
                     selectionDrag = null;
@@ -1096,6 +1116,28 @@
         const { x, y, pressure } = canvasPosition(event);
         const frame = frameIndex;
         const timestamp = event.timeStamp;
+        if (event.pointerType === "touch") {
+            pendingTouchStroke = {
+                x,
+                y,
+                pressure,
+                timestamp,
+                clientX: event.clientX,
+                clientY: event.clientY,
+                frame,
+            };
+            return;
+        }
+        beginStroke(frame, x, y, pressure, timestamp);
+    }
+
+    function beginStroke(
+        frame: number,
+        x: number,
+        y: number,
+        pressure: number,
+        timestamp: number,
+    ) {
         enqueue(async () => {
             try {
                 present(
@@ -1110,6 +1152,17 @@
                 throw error;
             }
         });
+    }
+
+    // Opens the stroke on the point the finger went down on, not the one that
+    // crossed the slop.
+    function promoteTouchStroke() {
+        if (!pendingTouchStroke) {
+            return;
+        }
+        const { frame, x, y, pressure, timestamp } = pendingTouchStroke;
+        pendingTouchStroke = null;
+        beginStroke(frame, x, y, pressure, timestamp);
     }
 
     function onPointerMove(event: PointerEvent) {
@@ -1186,6 +1239,17 @@
         if (!drawing) {
             return;
         }
+        if (pendingTouchStroke) {
+            if (
+                Math.hypot(
+                    event.clientX - pendingTouchStroke.clientX,
+                    event.clientY - pendingTouchStroke.clientY,
+                ) < touchStrokeSlop
+            ) {
+                return;
+            }
+            promoteTouchStroke();
+        }
         const samples =
             "getCoalescedEvents" in event
                 ? event.getCoalescedEvents()
@@ -1229,6 +1293,14 @@
         }
         drawing = false;
         displayCanvas.releasePointerCapture(event.pointerId);
+        if (pendingTouchStroke) {
+            if (event.type === "pointercancel") {
+                pendingTouchStroke = null;
+                pendingPoints = [];
+                return;
+            }
+            promoteTouchStroke();
+        }
         flushPendingPoints();
         const frame = frameIndex;
         const usedColor = tool === "brush" ? colorHex : null;
@@ -2013,6 +2085,7 @@
         gap: 0.6rem;
         min-inline-size: 0;
         margin-inline-end: auto;
+        overflow: hidden;
     }
 
     .wordmark {
@@ -2166,6 +2239,21 @@
        is the part that has to hold, because a canvas nobody can draw on is a
        broken shell rather than a cramped one. */
     @media (max-width: 48rem) {
+        /* The header and the footer sit outside .workspace, so its wrap never
+           reached them. In a 390 px viewport the bar wanted 511 px and the
+           timeline 628 px, which left the GIF and About buttons, the FPS field
+           and the wobble toggle off-screen with nothing to scroll. */
+        .bar,
+        .timeline {
+            flex-wrap: wrap;
+            row-gap: 0.4rem;
+        }
+
+        /* itch.io overlays its fullscreen button on this corner. */
+        .status-bar {
+            padding-inline-end: 3.5rem;
+        }
+
         .workspace {
             flex-wrap: wrap;
             overflow-x: hidden;

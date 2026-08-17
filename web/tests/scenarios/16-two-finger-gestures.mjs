@@ -115,5 +115,58 @@ export default async function run({ browser, origin }) {
         `the touch midpoint keeps document ${inkCenter.x.toFixed(1)},` +
             `${inkCenter.y.toFixed(1)} anchored while it moves`,
     );
+
+    // The check above starts both fingers in one event, which no hand does.
+    // Staggering them is what left a dot at the first finger on every pan.
+    const beforePinch = await countBrushPixels(page);
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [point(oldCenter.x - 30, oldCenter.y, 3)],
+    });
+    await page.waitForTimeout(80);
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [
+            point(oldCenter.x - 30, oldCenter.y, 3),
+            point(oldCenter.x + 30, oldCenter.y, 4),
+        ],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [
+            point(oldCenter.x - 80, oldCenter.y, 3),
+            point(oldCenter.x + 80, oldCenter.y, 4),
+        ],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+    });
+    await page.waitForTimeout(600);
+    const afterPinch = await countBrushPixels(page);
+    check(
+        afterPinch === beforePinch,
+        `a pinch whose fingers land apart in time paints nothing ` +
+            `(${beforePinch} to ${afterPinch} px)`,
+    );
+
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [point(oldCenter.x - 60, oldCenter.y + 60, 5)],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [point(oldCenter.x + 20, oldCenter.y + 60, 5)],
+    });
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+    });
+    await page.waitForFunction(
+        (baseline) => window.__uguruguBrushCount() > baseline,
+        afterPinch,
+        { timeout: 15000 },
+    );
+    check(true, "one finger dragged past the slop still draws");
     await context.close();
 }
