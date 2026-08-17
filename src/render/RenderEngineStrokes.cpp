@@ -206,10 +206,9 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
         return refresh;
     }
     const QRect canvasBounds(QPoint(), document.size);
-    // Pixel-selection and reframe operations move pixels across the canvas,
-    // so a stroke outside the refreshed region could still change pixels
-    // inside it. Every other operation only writes where it paints, which is
-    // what makes dropping far-away strokes safe.
+    // A reframe rewrites the whole framebuffer and its own epoch's coordinate
+    // system, so the native bounds this plan is expressed in stop meaning the
+    // same thing partway through the document. Nothing here can describe that.
     for (const Layer &layer : document.layers)
     {
         if (layer.initialCanvasSize.isValid()
@@ -219,9 +218,7 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
         }
         for (const Stroke &stroke : layer.strokes)
         {
-            if (stroke.pixelSelectionOp || stroke.reframeOp
-                || stroke.mode == StrokeMode::PixelSelection
-                || stroke.mode == StrokeMode::Reframe)
+            if (stroke.reframeOp || stroke.mode == StrokeMode::Reframe)
             {
                 return refresh;
             }
@@ -295,6 +292,21 @@ RenderEngine::RegionalStrokeRefresh RenderEngine::prepareRegionalStrokeRefresh(
         {
             // Keeping every stroke of a layer the plan cannot describe is
             // always correct, only slower.
+            continue;
+        }
+        // A pixel-selection operation carries pixels away from where they were
+        // painted, so a stroke this layer draws far outside filterBounds can
+        // still end up inside it. Such a layer keeps every stroke. The
+        // refreshed stroke's own bounds are a separate matter that
+        // conservativeStrokeCoverageBounds already follows through them.
+        if (std::any_of(layer.strokes.cbegin(),
+                layer.strokes.cend(),
+                [](const Stroke &stroke)
+                {
+                    return stroke.mode == StrokeMode::PixelSelection
+                           || stroke.pixelSelectionOp.has_value();
+                }))
+        {
             continue;
         }
         QVector<Stroke> kept;

@@ -356,30 +356,23 @@ private slots:
         }
     }
 
-    void refusesRegionalStrokeRefreshWhenPixelsCanMove()
+    // A pixel-selection operation carries pixels away from where they were
+    // painted, so the layer holding one cannot have strokes dropped from it.
+    // That is a reason to keep the layer whole, not to refuse the whole
+    // document: a selection in one layer used to cost every other layer its
+    // regional refresh, and every cached frame with it.
+    void keepsLayersThatMovePixelsWholeInARegionalStrokeRefresh()
     {
         Document document = Document::createDefault(QSize(128, 96));
         document.animationFrames = 4;
-        Layer &layer = document.layers.first();
-        layer.initialCanvasSize = document.size;
-        layer.strokes.append(makeStroke(StrokeMode::Paint,
+        Layer &moving = document.layers.first();
+        moving.name = QStringLiteral("Moving");
+        moving.initialCanvasSize = document.size;
+        moving.strokes.append(makeStroke(StrokeMode::Paint,
             QColor(210, 40, 70),
             8.0,
             21,
             {QPointF(20.0, 20.0), QPointF(40.0, 32.0)}));
-
-        Stroke added = makeStroke(StrokeMode::Paint,
-            QColor(240, 200, 40),
-            5.0,
-            22,
-            {QPointF(90.0, 70.0), QPointF(110.0, 82.0)});
-        const QUuid addedId = added.id;
-        layer.strokes.append(added);
-
-        QVERIFY(RenderEngine::prepareRegionalStrokeRefresh(
-            document, layer.id, addedId, QSize(64, 48))
-                .valid);
-
         const QImage selection =
             rectangularMask(document.size, QRect(8, 8, 32, 32));
         QTransform shift;
@@ -390,6 +383,175 @@ private slots:
         Stroke operation;
         operation.mode = StrokeMode::PixelSelection;
         operation.pixelSelectionOp = *selectionOperation;
+        moving.strokes.append(operation);
+
+        Layer plain;
+        plain.name = QStringLiteral("Plain");
+        plain.initialCanvasSize = document.size;
+        plain.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(30, 80, 200),
+            9.0,
+            22,
+            {QPointF(100.0, 70.0), QPointF(118.0, 88.0)}));
+        plain.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(20, 160, 90),
+            6.0,
+            23,
+            {QPointF(14.0, 14.0), QPointF(26.0, 30.0)}));
+        document.layers.append(plain);
+
+        const QSize previewSize(64, 48);
+        QVector<QImage> framesBefore;
+        for (int frame = 0; frame < document.animationFrames; ++frame)
+        {
+            framesBefore.append(
+                RenderEngine::renderScaled(document, frame, previewSize));
+            QVERIFY(!framesBefore.last().isNull());
+        }
+
+        Stroke added = makeStroke(StrokeMode::Paint,
+            QColor(240, 200, 40),
+            5.0,
+            24,
+            {QPointF(16.0, 16.0), QPointF(28.0, 32.0)});
+        const QUuid addedId = added.id;
+        const QUuid layerId = document.layers.last().id;
+        document.layers.last().strokes.append(added);
+
+        const RenderEngine::RegionalStrokeRefresh refresh =
+            RenderEngine::prepareRegionalStrokeRefresh(
+                document, layerId, addedId, previewSize);
+        QVERIFY(refresh.valid);
+        QVERIFY(!refresh.outputBounds.isEmpty());
+        QCOMPARE(refresh.filteredDocument.layers.first().strokes.size(),
+            document.layers.first().strokes.size());
+        QVERIFY(refresh.filteredDocument.layers.last().strokes.size()
+                < document.layers.last().strokes.size());
+
+        for (int frame = 0; frame < document.animationFrames; ++frame)
+        {
+            const QImage expected =
+                RenderEngine::renderScaled(document, frame, previewSize);
+            QVERIFY(!expected.isNull());
+            const QImage patch =
+                RenderEngine::renderScaledRegion(refresh.filteredDocument,
+                    frame,
+                    previewSize,
+                    refresh.outputBounds);
+            QVERIFY(!patch.isNull());
+            QImage patched = framesBefore[frame];
+            QPainter painter(&patched);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(refresh.outputBounds.topLeft(), patch);
+            painter.end();
+            QCOMPARE(patched, expected);
+        }
+    }
+
+    void rendersARegionExactly()
+    {
+        Document document = Document::createDefault(QSize(128, 96));
+        document.animationFrames = 4;
+        Layer &base = document.layers.first();
+        base.initialCanvasSize = document.size;
+        base.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(210, 40, 70),
+            8.0,
+            41,
+            {QPointF(10.0, 10.0), QPointF(60.0, 40.0), QPointF(30.0, 70.0)}));
+        base.strokes.append(makeStroke(StrokeMode::Erase,
+            Qt::black,
+            10.0,
+            42,
+            {QPointF(40.0, 30.0), QPointF(52.0, 44.0)}));
+        const QImage selection =
+            rectangularMask(document.size, QRect(8, 8, 32, 32));
+        QTransform shift;
+        shift.translate(48.0, 24.0);
+        const std::optional<PixelSelectionOp> selectionOperation =
+            makePixelSelectionOp(selection, shift, true, true);
+        QVERIFY(selectionOperation.has_value());
+        Stroke operation;
+        operation.mode = StrokeMode::PixelSelection;
+        operation.pixelSelectionOp = *selectionOperation;
+        base.strokes.append(operation);
+
+        Layer top;
+        top.name = QStringLiteral("Top");
+        top.initialCanvasSize = document.size;
+        top.opacity = 0.8;
+        top.blendMode = LayerBlendMode::Multiply;
+        top.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(20, 160, 90),
+            6.0,
+            43,
+            {QPointF(60.0, 10.0), QPointF(96.0, 60.0)}));
+        document.layers.append(top);
+
+        const QSize sizes[] = {document.size, QSize(64, 48), QSize(93, 67)};
+        const QRect regions[] = {
+            QRect(0, 0, 16, 12), QRect(11, 7, 29, 23), QRect(0, 0, 64, 48)};
+        for (const QSize &outputSize : sizes)
+        {
+            for (const QRect &region : regions)
+            {
+                const QRect clamped =
+                    region.intersected(QRect(QPoint(), outputSize));
+                if (clamped.isEmpty())
+                {
+                    continue;
+                }
+                const QImage whole =
+                    RenderEngine::renderScaled(document, 2, outputSize);
+                QVERIFY(!whole.isNull());
+                const QImage part = RenderEngine::renderScaledRegion(
+                    document, 2, outputSize, clamped);
+                QVERIFY(!part.isNull());
+                QCOMPARE(part.size(), clamped.size());
+                QCOMPARE(part, whole.copy(clamped));
+            }
+        }
+
+        // Upscaled output resamples across the region edge, so it has no
+        // regional form and the caller has to render the frame whole.
+        QVERIFY(RenderEngine::renderScaledRegion(
+            document, 2, QSize(256, 192), QRect(0, 0, 16, 12))
+                .isNull());
+    }
+
+    // A reframe rewrites the framebuffer and the coordinate system the plan's
+    // bounds are expressed in, which nothing downstream can follow.
+    void refusesRegionalStrokeRefreshAcrossAReframe()
+    {
+        Document document = Document::createDefault(QSize(128, 96));
+        document.animationFrames = 4;
+        Layer &layer = document.layers.first();
+        layer.initialCanvasSize = document.size;
+        layer.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(210, 40, 70),
+            8.0,
+            31,
+            {QPointF(20.0, 20.0), QPointF(40.0, 32.0)}));
+
+        Stroke added = makeStroke(StrokeMode::Paint,
+            QColor(240, 200, 40),
+            5.0,
+            32,
+            {QPointF(90.0, 70.0), QPointF(110.0, 82.0)});
+        const QUuid addedId = added.id;
+        layer.strokes.append(added);
+
+        QVERIFY(RenderEngine::prepareRegionalStrokeRefresh(
+            document, layer.id, addedId, QSize(64, 48))
+                .valid);
+
+        ReframeOp reframe;
+        reframe.mode = ReframeMode::Canvas;
+        reframe.sourceSize = document.size;
+        reframe.targetSize = document.size;
+        Stroke operation;
+        operation.mode = StrokeMode::Reframe;
+        operation.reframeOp = reframe;
         layer.strokes.insert(0, operation);
 
         QVERIFY(!RenderEngine::prepareRegionalStrokeRefresh(

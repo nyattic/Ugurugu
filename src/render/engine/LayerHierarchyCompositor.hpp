@@ -292,6 +292,18 @@ QImage renderAtDisplayScale(const Document &document,
 QImage renderAtSize(
     const Document &document, int frameIndex, const QSize &outputSize);
 
+// Renders outputRegion of the frame the two above produce whole, without
+// paying for the pixels outside it. Layers whose strokes cannot be replayed
+// against a partial framebuffer still render whole and are cropped, so the
+// saving depends on the document; the result is identical either way. Null
+// when outputSize is neither the document size nor a display-scale replay,
+// because the native-exact resampler reads outside the region.
+QImage renderRegion(const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    const QRect &outputRegion,
+    RenderEngine::ScaledRenderStats *stats);
+
 }
 
 }

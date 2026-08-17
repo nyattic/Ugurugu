@@ -69,6 +69,19 @@ QImage RenderEngine::renderScaled(const Document &document,
     return renderAtSize(document, frameIndex, outputSize);
 }
 
+QImage RenderEngine::renderScaledRegion(const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    const QRect &outputRegion,
+    ScaledRenderStats *stats)
+{
+    if (stats)
+    {
+        *stats = {};
+    }
+    return renderRegion(document, frameIndex, outputSize, outputRegion, stats);
+}
+
 LayerCompositionMemoryEstimate RenderEngine::estimateHierarchyMemory(
     const Document &document, const QSize &outputSize)
 {
@@ -78,26 +91,68 @@ LayerCompositionMemoryEstimate RenderEngine::estimateHierarchyMemory(
 bool RenderEngine::supportsLayerSplit(
     const Document &document, const QUuid &layerId)
 {
-    const int targetIndex = document.layerIndex(layerId);
+    // A split is below + target + above, and the halves are only separable
+    // where the composite over the target is a plain source-over stack. Groups
+    // and clipping are fine on either side because each is self-contained; it
+    // is a group or clip that straddles the target that cannot be split.
     const Layer *target = document.layer(layerId);
-    if (targetIndex < 0 || !target || target->kind != LayerKind::Paint
-        || std::any_of(
-            document.layers.cbegin(),
-            document.layers.cend(),
-            [](const Layer &layer)
-            {
-                return layer.kind == LayerKind::Group
-                       || !layer.parentGroupId.isNull()
-                       || layer.clipToLayerBelow;
-            }))
+    if (!target || target->kind != LayerKind::Paint
+        || !target->parentGroupId.isNull() || target->clipToLayerBelow
+        || !LayerCompositionPlan::build(document).isValid())
     {
         return false;
     }
-    for (int index = targetIndex + 1; index < document.layers.size(); ++index)
+
+    const auto carriesContent = [&document](const Layer &layer)
     {
-        const Layer &layer = document.layers[index];
-        if (layer.visible && layer.opacity > 0.0 && !layer.strokes.isEmpty()
-            && layer.blendMode != LayerBlendMode::Normal)
+        if (layer.kind != LayerKind::Group)
+        {
+            return !layer.strokes.isEmpty();
+        }
+        return std::any_of(document.layers.cbegin(),
+            document.layers.cend(),
+            [&document, &layer](const Layer &candidate)
+            {
+                return candidate.kind == LayerKind::Paint
+                       && !candidate.strokes.isEmpty() && candidate.visible
+                       && candidate.opacity > 0.0
+                       && document.isLayerDescendantOf(candidate.id, layer.id);
+            });
+    };
+
+    bool afterTarget = false;
+    // The target is the clipping base for whatever follows it, and that base
+    // lands on the other side of the split.
+    bool clipsAcrossTheSplit = true;
+    for (const Layer &layer : document.layers)
+    {
+        if (!layer.parentGroupId.isNull())
+        {
+            continue;
+        }
+        if (layer.id == layerId)
+        {
+            afterTarget = true;
+            continue;
+        }
+        if (!afterTarget)
+        {
+            continue;
+        }
+        if (layer.clipToLayerBelow)
+        {
+            if (clipsAcrossTheSplit)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            clipsAcrossTheSplit = false;
+        }
+        if (layer.visible && layer.opacity > 0.0
+            && layer.blendMode != LayerBlendMode::Normal
+            && carriesContent(layer))
         {
             return false;
         }
@@ -124,13 +179,12 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
         return split;
     }
 
-    QImage below(outputSize, QImage::Format_ARGB32_Premultiplied);
+    QImage below;
     QImage layerBase(outputSize, QImage::Format_ARGB32_Premultiplied);
-    if (below.isNull() || layerBase.isNull())
+    if (layerBase.isNull())
     {
         return split;
     }
-    below.fill(document.background);
     layerBase.fill(Qt::transparent);
     QImage above;
 
@@ -152,9 +206,6 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
         outputSize,
         static_cast<qreal>(outputSize.width()) / document.size.width(),
         static_cast<qreal>(outputSize.height()) / document.size.height()};
-    notePreviewImage(previewStats, below);
-    notePreviewImage(previewStats, layerBase);
-    notePreviewWorkingSet(previewStats, below, layerBase);
 
     const auto renderedLayer = [&document,
                                    &mapping,
@@ -201,52 +252,86 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                                                  Qt::FastTransformation);
     };
 
+    // Each half keeps its own groups and clip chains intact and is composited
+    // by the ordinary hierarchy renderer, so a group below or above the target
+    // costs the split nothing.
+    Document belowDocument = document;
+    Document aboveDocument = document;
+    belowDocument.activeLayerId = QUuid();
+    aboveDocument.activeLayerId = QUuid();
+    aboveDocument.background = Qt::transparent;
     bool afterTarget = false;
+    QVector<QUuid> belowRoots;
+    QVector<QUuid> aboveRoots;
     for (const Layer &layer : document.layers)
     {
+        if (!layer.parentGroupId.isNull())
+        {
+            continue;
+        }
         if (layer.id == layerId)
         {
-            split.layerVisible = layer.visible && layer.opacity > 0.0;
-            split.layerOpacity = std::clamp(layer.opacity, 0.0, 1.0);
-            split.layerBlendMode = layer.blendMode;
-            if (split.layerVisible && !layer.strokes.isEmpty())
-            {
-                layerBase = renderedLayer(layer);
-                if (layerBase.isNull())
-                {
-                    return split;
-                }
-            }
             afterTarget = true;
             continue;
         }
-        if (!layer.visible || layer.opacity <= 0.0 || layer.strokes.isEmpty())
+        (afterTarget ? aboveRoots : belowRoots).append(layer.id);
+    }
+    const auto keepRoots = [&document](
+                               Document &half, const QVector<QUuid> &roots)
+    {
+        QVector<Layer> kept;
+        kept.reserve(document.layers.size());
+        for (const Layer &layer : document.layers)
         {
-            continue;
+            const bool belongs = std::any_of(roots.cbegin(),
+                roots.cend(),
+                [&document, &layer](const QUuid &root)
+                {
+                    return layer.id == root
+                           || document.isLayerDescendantOf(layer.id, root);
+                });
+            if (belongs)
+            {
+                kept.append(layer);
+            }
         }
+        half.layers = std::move(kept);
+    };
+    keepRoots(belowDocument, belowRoots);
+    keepRoots(aboveDocument, aboveRoots);
 
-        const QImage layerImage = renderedLayer(layer);
-        if (layerImage.isNull())
+    below = renderScaled(belowDocument, frameIndex, outputSize, mode, nullptr);
+    if (below.isNull())
+    {
+        return split;
+    }
+    notePreviewImage(previewStats, below);
+    if (const Layer *target = document.layer(layerId))
+    {
+        split.layerVisible = target->visible && target->opacity > 0.0;
+        split.layerOpacity = std::clamp(target->opacity, 0.0, 1.0);
+        split.layerBlendMode = target->blendMode;
+        if (split.layerVisible && !target->strokes.isEmpty())
         {
-            return split;
-        }
-        if (afterTarget && above.isNull())
-        {
-            above = QImage(outputSize, QImage::Format_ARGB32_Premultiplied);
-            if (above.isNull())
+            layerBase = renderedLayer(*target);
+            if (layerBase.isNull())
             {
                 return split;
             }
-            above.fill(Qt::transparent);
-            notePreviewImage(previewStats, above);
         }
-        notePreviewWorkingSet(
-            previewStats, below, layerBase, above, layerImage);
-        QPainter compositor(afterTarget ? &above : &below);
-        compositor.setRenderHint(QPainter::Antialiasing, false);
-        prepareLayerComposition(compositor, layer.blendMode, layer.opacity);
-        compositor.drawImage(QPoint(0, 0), layerImage);
     }
+    notePreviewImage(previewStats, layerBase);
+    if (!aboveDocument.layers.isEmpty())
+    {
+        above =
+            renderScaled(aboveDocument, frameIndex, outputSize, mode, nullptr);
+        if (above.isNull())
+        {
+            return split;
+        }
+        notePreviewImage(previewStats, above);
+    }
+    notePreviewWorkingSet(previewStats, below, layerBase, above);
 
     split.below = std::move(below);
     split.layerBase = std::move(layerBase);

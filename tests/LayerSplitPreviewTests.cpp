@@ -47,6 +47,157 @@ private slots:
         QVERIFY(!split.valid);
     }
 
+    // A group or a clip chain that sits wholly on one side of the target is
+    // self-contained, so it does not stop the split. Only one that straddles
+    // the target does.
+    void splitsAroundGroupsAndClipChains()
+    {
+        Document document = Document::createDefault(QSize(64, 48));
+        document.wobbleAmount = 0.0;
+        document.layers.clear();
+
+        Layer group;
+        group.name = QStringLiteral("Group");
+        group.kind = LayerKind::Group;
+        group.opacity = 0.7;
+        group.blendMode = LayerBlendMode::Screen;
+        group.initialCanvasSize = document.size;
+
+        Layer childBase;
+        childBase.name = QStringLiteral("Child base");
+        childBase.parentGroupId = group.id;
+        childBase.initialCanvasSize = document.size;
+        childBase.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 180, 100),
+            16.0,
+            101,
+            {QPointF(20.0, 20.0)}));
+
+        Layer childClipped;
+        childClipped.name = QStringLiteral("Child clipped");
+        childClipped.parentGroupId = group.id;
+        childClipped.clipToLayerBelow = true;
+        childClipped.blendMode = LayerBlendMode::Multiply;
+        childClipped.initialCanvasSize = document.size;
+        childClipped.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(200, 60, 40),
+            14.0,
+            102,
+            {QPointF(24.0, 24.0)}));
+
+        Layer target;
+        target.name = QStringLiteral("Target");
+        target.initialCanvasSize = document.size;
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(220, 200, 60),
+            10.0,
+            103,
+            {QPointF(40.0, 24.0)}));
+
+        Layer above;
+        above.name = QStringLiteral("Above");
+        above.opacity = 0.6;
+        above.initialCanvasSize = document.size;
+        above.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(60, 90, 220),
+            8.0,
+            104,
+            {QPointF(12.0, 40.0)}));
+
+        document.layers = {childBase, childClipped, group, target, above};
+        document.activeLayerId = target.id;
+        const QUuid targetId = target.id;
+
+        QVERIFY(RenderEngine::supportsLayerSplit(document, targetId));
+        const RenderEngine::LayerSplitFrame split =
+            RenderEngine::renderLayerSplit(
+                document, 0, document.size, targetId);
+        QVERIFY(split.valid);
+        QCOMPARE(RenderEngine::composeLayerSplit(split, split.layerBase),
+            RenderEngine::render(document, 0));
+
+        Stroke active = makeStroke(StrokeMode::Paint,
+            QColor(250, 240, 200),
+            6.0,
+            105,
+            {QPointF(30.0, 12.0), QPointF(52.0, 36.0)});
+        Document full = document;
+        full.layer(targetId)->strokes.append(active);
+        QImage layerImage = split.layerBase;
+        QVERIFY(RenderEngine::renderStrokesOnLayer(
+            layerImage, document, {active}, 0, document.size));
+        QCOMPARE(RenderEngine::composeLayerSplit(split, layerImage),
+            RenderEngine::render(full, 0));
+    }
+
+    void refusesLayerSplitWhereTheCompositeStraddlesTheTarget()
+    {
+        Document document = Document::createDefault(QSize(48, 36));
+        document.wobbleAmount = 0.0;
+        document.layers.clear();
+
+        Layer base;
+        base.name = QStringLiteral("Base");
+        base.initialCanvasSize = document.size;
+        base.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(40, 180, 100),
+            12.0,
+            201,
+            {QPointF(16.0, 16.0)}));
+
+        Layer target;
+        target.name = QStringLiteral("Target");
+        target.initialCanvasSize = document.size;
+        target.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(220, 200, 60),
+            10.0,
+            202,
+            {QPointF(28.0, 18.0)}));
+
+        Layer clipped;
+        clipped.name = QStringLiteral("Clipped");
+        clipped.clipToLayerBelow = true;
+        clipped.initialCanvasSize = document.size;
+        clipped.strokes.append(makeStroke(StrokeMode::Paint,
+            QColor(60, 90, 220),
+            8.0,
+            203,
+            {QPointF(30.0, 20.0)}));
+
+        document.layers = {base, target, clipped};
+        document.activeLayerId = target.id;
+        // The layer above clips to the target, so its pixels depend on the
+        // half the split puts on the other side.
+        QVERIFY(!RenderEngine::supportsLayerSplit(document, target.id));
+
+        document.layers = {base, target};
+        QVERIFY(RenderEngine::supportsLayerSplit(document, target.id));
+
+        Layer group;
+        group.name = QStringLiteral("Group above");
+        group.kind = LayerKind::Group;
+        group.blendMode = LayerBlendMode::Multiply;
+        group.initialCanvasSize = document.size;
+        Layer child = clipped;
+        child.clipToLayerBelow = false;
+        child.parentGroupId = group.id;
+        document.layers = {base, target, child, group};
+        // A group above the target multiplies against everything under it,
+        // which is not a source-over stack the split can rebuild.
+        QVERIFY(!RenderEngine::supportsLayerSplit(document, target.id));
+
+        group.blendMode = LayerBlendMode::Normal;
+        document.layers = {base, target, child, group};
+        QVERIFY(RenderEngine::supportsLayerSplit(document, target.id));
+
+        // A target inside a group reaches the frame through the group's own
+        // opacity and blend rather than directly.
+        Layer nested = target;
+        nested.parentGroupId = group.id;
+        document.layers = {base, nested, child, group};
+        QVERIFY(!RenderEngine::supportsLayerSplit(document, nested.id));
+    }
+
     void composesLayerSplitLikeFullRender()
     {
         Document document = Document::createDefault(QSize(96, 72));

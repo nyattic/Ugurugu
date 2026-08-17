@@ -141,6 +141,14 @@ public:
         const QSize &outputSize,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
         ScaledRenderStats *stats = nullptr);
+    // outputRegion of renderScaled's frame, sized to that region. Null when
+    // the region cannot be rendered on its own, which leaves the caller to
+    // render the whole frame and crop it.
+    static QImage renderScaledRegion(const Document &document,
+        int frameIndex,
+        const QSize &outputSize,
+        const QRect &outputRegion,
+        ScaledRenderStats *stats = nullptr);
     static LayerCompositionMemoryEstimate estimateHierarchyMemory(
         const Document &document, const QSize &outputSize);
     static bool supportsLayerSplit(

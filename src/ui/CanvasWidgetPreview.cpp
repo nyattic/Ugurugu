@@ -144,16 +144,27 @@ QImage CanvasWidget::frameImage(int frame)
             base && base->size() == renderSize)
         {
             ++m_synchronousPreviewRenderCount;
-            const QImage regional = RenderEngine::renderScaled(
-                *m_frameCacheRefreshDocument, frame, renderSize);
-            if (regional.size() == base->size())
+            QImage patch =
+                RenderEngine::renderScaledRegion(*m_frameCacheRefreshDocument,
+                    frame,
+                    renderSize,
+                    m_frameCacheRefreshOutputBounds);
+            if (patch.isNull())
+            {
+                const QImage regional = RenderEngine::renderScaled(
+                    *m_frameCacheRefreshDocument, frame, renderSize);
+                if (regional.size() == renderSize)
+                {
+                    patch = regional.copy(m_frameCacheRefreshOutputBounds);
+                }
+            }
+            if (patch.size() == m_frameCacheRefreshOutputBounds.size())
             {
                 image = base->copy();
                 QPainter painter(&image);
                 painter.setCompositionMode(QPainter::CompositionMode_Source);
-                painter.drawImage(m_frameCacheRefreshOutputBounds.topLeft(),
-                    regional,
-                    m_frameCacheRefreshOutputBounds);
+                painter.drawImage(
+                    m_frameCacheRefreshOutputBounds.topLeft(), patch);
                 painter.end();
             }
         }
@@ -1359,15 +1370,15 @@ void CanvasWidget::renderNextFrameCacheWarmup()
                 if (!patchBounds.isEmpty())
                 {
                     QImage *base = m_frameCache.object(frame);
-                    if (!image.isNull() && base && base->size() == image.size()
+                    if (image.size() == patchBounds.size() && base
+                        && base->size() == renderSize
                         && m_frameCacheStaleFrames.contains(frame))
                     {
                         QImage patched = base->copy();
                         QPainter painter(&patched);
                         painter.setCompositionMode(
                             QPainter::CompositionMode_Source);
-                        painter.drawImage(
-                            patchBounds.topLeft(), image, patchBounds);
+                        painter.drawImage(patchBounds.topLeft(), image);
                         painter.end();
                         const int cost = PreviewRenderPolicy::cacheCostKiB(
                             patched.sizeInBytes());
@@ -1397,14 +1408,30 @@ void CanvasWidget::renderNextFrameCacheWarmup()
                     0, this, &CanvasWidget::renderNextFrameCacheWarmup);
             });
         watcher->setFuture(QtConcurrent::run(&m_frameCacheWarmupPool,
-            [document, cancellation, frame, renderSize]()
+            [document, cancellation, frame, renderSize, patchBounds]()
             {
                 if (cancellation->load(std::memory_order_relaxed))
                 {
                     return QImage();
                 }
+                // A patch run only ever uses patchBounds, so rendering the
+                // frame whole spent the rest of the canvas on pixels it threw
+                // away. Whole frames still render whole.
                 QImage image =
-                    RenderEngine::renderScaled(*document, frame, renderSize);
+                    patchBounds.isEmpty()
+                        ? RenderEngine::renderScaled(
+                              *document, frame, renderSize)
+                        : RenderEngine::renderScaledRegion(
+                              *document, frame, renderSize, patchBounds);
+                if (image.isNull() && !patchBounds.isEmpty())
+                {
+                    const QImage whole = RenderEngine::renderScaled(
+                        *document, frame, renderSize);
+                    if (whole.size() == renderSize)
+                    {
+                        image = whole.copy(patchBounds);
+                    }
+                }
                 if (cancellation->load(std::memory_order_relaxed))
                 {
                     return QImage();
