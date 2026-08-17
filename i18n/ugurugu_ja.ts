@@ -3967,7 +3967,7 @@ Alt+click does the same from the brush, eraser or paint bucket.</source>
     <message>
         <location filename="../src/ui/TabletPressureRow.cpp" line="24"/>
         <source>PEN PRESSURE</source>
-        <translation>筆圧を反映</translation>
+        <translation>筆圧</translation>
     </message>
     <message>
         <location filename="../src/ui/TabletPressureRow.cpp" line="32"/>
