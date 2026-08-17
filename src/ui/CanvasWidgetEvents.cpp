@@ -270,6 +270,49 @@ void CanvasWidget::paintEvent(QPaintEvent *event)
 // equivalent), border, empty-document hint, selection outlines and the tool
 // cursor. Kept free of background and frame drawing so a texture-backed
 // display can run it over a transparent overlay unchanged.
+// Redraws the shadow pixmap when the canvas outline or the device pixel ratio
+// changed, and leaves it alone otherwise.
+void CanvasWidget::refreshCanvasShadow(const QPolygonF &canvasPolygon)
+{
+    const qreal ratio = devicePixelRatioF();
+    const QSize pixelSize = (QSizeF(size()) * ratio).toSize();
+    if (pixelSize.isEmpty())
+    {
+        m_shadowCache = QPixmap();
+        m_shadowCacheOutline = QPolygonF();
+        return;
+    }
+    if (!m_shadowCache.isNull() && m_shadowCache.size() == pixelSize
+        && qFuzzyCompare(m_shadowCacheRatio, ratio)
+        && m_shadowCacheOutline == canvasPolygon)
+    {
+        return;
+    }
+
+    m_shadowCache = QPixmap(pixelSize);
+    m_shadowCache.setDevicePixelRatio(ratio);
+    m_shadowCache.fill(Qt::transparent);
+    m_shadowCacheOutline = canvasPolygon;
+    m_shadowCacheRatio = ratio;
+
+    QPainterPath shadowPath;
+    shadowPath.addPolygon(canvasPolygon);
+    shadowPath.closeSubpath();
+    shadowPath.translate(0.0, 2.0);
+
+    QPainter shadowPainter(&m_shadowCache);
+    shadowPainter.setRenderHint(QPainter::Antialiasing, true);
+    shadowPainter.setBrush(Qt::NoBrush);
+    for (int step = 14; step > 0; --step)
+    {
+        QColor shadow(Qt::black);
+        shadow.setAlphaF(static_cast<float>(0.020 * (1.0 - step / 14.0)));
+        shadowPainter.setPen(QPen(
+            shadow, step * 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        shadowPainter.drawPath(shadowPath);
+    }
+}
+
 void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
 {
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -288,22 +331,19 @@ void CanvasWidget::paintOverlay(QPainter &painter, const QRegion &exposedRegion)
         QRegion(canvasPolygon.toPolygon()).intersected(rect()));
     if (!shadowRegion.isEmpty())
     {
-        painter.save();
-        painter.setClipRegion(shadowRegion);
-        painter.setBrush(Qt::NoBrush);
-        const QPainterPath shadowPath = canvasPath.translated(0.0, 2.0);
-        for (int step = 14; step > 0; --step)
+        // Baked once per outline instead of stroked on every repaint. The
+        // fourteen antialiased passes are cheap while the canvas is square to
+        // the screen and expensive the moment it is turned, so a rotated
+        // canvas paid four times an ordinary repaint for a picture that only
+        // changes when the geometry does.
+        refreshCanvasShadow(canvasPolygon);
+        if (!m_shadowCache.isNull())
         {
-            QColor shadow(Qt::black);
-            shadow.setAlphaF(static_cast<float>(0.020 * (1.0 - step / 14.0)));
-            painter.setPen(QPen(shadow,
-                step * 2.0,
-                Qt::SolidLine,
-                Qt::RoundCap,
-                Qt::RoundJoin));
-            painter.drawPath(shadowPath);
+            painter.save();
+            painter.setClipRegion(shadowRegion);
+            painter.drawPixmap(rect(), m_shadowCache);
+            painter.restore();
         }
-        painter.restore();
     }
 
     painter.setPen(QPen(Theme::canvasBorder(), 1.0));

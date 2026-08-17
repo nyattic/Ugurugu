@@ -292,6 +292,7 @@ private:
     void applyWobbleAnimationSetting(Document &document) const;
     DisplayedFrame resolveDisplayedFrame();
     void paintOverlay(QPainter &painter, const QRegion &exposedRegion);
+    void refreshCanvasShadow(const QPolygonF &canvasPolygon);
     void requestDisplayUpdate();
     void requestDisplayUpdate(const QRect &rect);
     bool usingGpuDisplay() const;
@@ -550,6 +551,12 @@ private:
     // reports that arrived since the last paint have already paid for a
     // preview resolve. See continueStroke.
     bool m_strokePreviewResolvedSincePaint = false;
+    // The canvas drop shadow, baked once per geometry. Its fourteen
+    // antialiased passes are cheap along the axes and expensive at an angle,
+    // so redrawing them every repaint made a rotated canvas crawl.
+    QPixmap m_shadowCache;
+    QPolygonF m_shadowCacheOutline;
+    qreal m_shadowCacheRatio = 0.0;
     IncrementalStrokeRenderer m_incrementalStrokeRenderer;
     QImage m_composedPreviewFrame;
     QRect m_composedSelectionPreviewRegion;

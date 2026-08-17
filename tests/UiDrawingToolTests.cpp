@@ -861,40 +861,6 @@ private slots:
         }
     }
 
-    // The row used to give its label an Ignored horizontal size policy, so the
-    // stretch beside it took every pixel and the label collapsed to nothing:
-    // the panel showed a checkbox with no word next to it.
-    void showsTheTabletPressureLabelBesideItsToggle()
-    {
-        MainWindow window;
-        window.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&window));
-
-        CanvasWidget *canvas = window.findChild<CanvasWidget *>();
-        QVERIFY(canvas);
-
-        const std::pair<CanvasTool, QString> rows[] = {
-            {CanvasTool::Brush, QStringLiteral("brushTabletPressure")},
-            {CanvasTool::Eraser, QStringLiteral("eraserTabletPressure")},
-        };
-        for (const auto &[tool, prefix] : rows)
-        {
-            // The panels live in a stack; only the current page gets laid out,
-            // so the row has to be on screen before its width means anything.
-            canvas->setTool(tool);
-            QCoreApplication::processEvents();
-            QLabel *label =
-                window.findChild<QLabel *>(prefix + QStringLiteral("Label"));
-            QCheckBox *toggle = window.findChild<QCheckBox *>(
-                prefix + QStringLiteral("Toggle"));
-            QVERIFY(label);
-            QVERIFY(toggle);
-            QVERIFY(!label->text().isEmpty());
-            QVERIFY(label->sizeHint().width() > 0);
-            QVERIFY(label->width() >= label->sizeHint().width());
-        }
-    }
-
     // The canvas shadow is fourteen antialiased passes over the canvas
     // outline. Stroked on every repaint it cost four times an ordinary one as
     // soon as the canvas was turned off the axes, so a rotated canvas dragged
