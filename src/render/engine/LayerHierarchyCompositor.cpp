@@ -244,7 +244,8 @@ QImage renderRegion(const Document &document,
                 // operation only widens the reach once a later one has shown
                 // that its destination is wanted.
                 QRect reach = nativeRegion;
-                for (int index = layer.strokes.size() - 1; index >= 0; --index)
+                for (qsizetype index = layer.strokes.size() - 1; index >= 0;
+                    --index)
                 {
                     const Stroke &stroke = layer.strokes[index];
                     if (stroke.mode != StrokeMode::PixelSelection
