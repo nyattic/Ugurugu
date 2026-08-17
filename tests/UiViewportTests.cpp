@@ -1563,7 +1563,7 @@ private slots:
                           << penUpMilliseconds << " ms";
     }
 
-    void warmsFramesWhilePausedSoResumingDoesNotRenderThemOnTheUiThread()
+    void defersStaleFrameWarmupWhilePausedUntilPlaybackStarts()
     {
         Document document = Document::createDefault(QSize(256, 256));
         document.animationFrames = 30;
@@ -1583,33 +1583,73 @@ private slots:
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         canvas.fitToWindow();
-        canvas.setAnimating(false);
-        QVERIFY(!canvas.isAnimating());
-        QTRY_VERIFY_WITH_TIMEOUT(
-            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
-
-        Stroke edit;
-        edit.color = QColor(20, 90, 210);
-        edit.width = 18.0;
-        edit.points = {
-            {QPointF(60.0, 200.0), 1.0}, {QPointF(200.0, 60.0), 1.0}};
-        QCOMPARE(
-            controller.addStroke(controller.document().activeLayerId, edit),
-            DocumentController::AddStrokeResult::Added);
-        QVERIFY(!canvas.isAnimating());
-
-        // Editing clears the cache; the warmup must refill it while paused so
-        // that resuming plays from cache instead of rendering on the GUI
-        // thread.
         QTRY_COMPARE_WITH_TIMEOUT(
             CanvasWidgetTestAccess::cachedFrameCount(canvas),
             qsizetype{30},
             10000);
-        QVERIFY(!CanvasWidgetTestAccess::frameCacheWarmupActive(canvas));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::frameCacheWarmupActive(canvas), 10000);
+        QCOMPARE(
+            CanvasWidgetTestAccess::frameCacheWarmupWorkerCount(canvas), 0);
 
-        canvas.setAnimating(true);
+        canvas.setAnimating(false);
+        QVERIFY(!canvas.isAnimating());
+        QCOMPARE(
+            CanvasWidgetTestAccess::frameCacheWarmupWorkerCount(canvas), 0);
+
+        const QPointF start = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(60.0, 200.0));
+        const QPointF end = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(200.0, 60.0));
+        CanvasWidgetTestAccess::beginStroke(canvas, start, 100);
+        CanvasWidgetTestAccess::continueStroke(canvas, end, 200);
+        CanvasWidgetTestAccess::endStroke(canvas, end, 300);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+        QVERIFY(!canvas.isAnimating());
+
+        QTest::qWait(100);
+        QVERIFY(!CanvasWidgetTestAccess::frameCacheWarmupActive(canvas));
+        QCOMPARE(
+            CanvasWidgetTestAccess::frameCacheWarmupWorkerCount(canvas), 0);
         QCOMPARE(
             CanvasWidgetTestAccess::cachedFrameCount(canvas), qsizetype{30});
+        QCOMPARE(
+            CanvasWidgetTestAccess::staleFrameCount(canvas), qsizetype{29});
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
+            canvas, canvas.currentFrame()));
+        const QImage promotedFrame =
+            CanvasWidgetTestAccess::cachedFrame(canvas, canvas.currentFrame());
+        QVERIFY(!promotedFrame.isNull());
+        QCOMPARE(promotedFrame,
+            RenderEngine::renderScaled(
+                CanvasWidgetTestAccess::displayDocument(canvas),
+                canvas.currentFrame(),
+                promotedFrame.size()));
+
+        const qsizetype staleBeforeResume =
+            CanvasWidgetTestAccess::staleFrameCount(canvas);
+        const quint64 synchronousRenderBaseline =
+            CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas);
+        canvas.setAnimating(true);
+        CanvasWidgetTestAccess::stopAnimationTimer(canvas);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::frameCacheWarmupWorkerCount(canvas) > 0
+                || CanvasWidgetTestAccess::staleFrameCount(canvas)
+                       < staleBeforeResume,
+            5000);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::staleFrameCount(canvas),
+            qsizetype{0},
+            10000);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::frameCacheWarmupWorkerCount(canvas),
+            0,
+            10000);
+        QVERIFY(!CanvasWidgetTestAccess::frameCacheWarmupActive(canvas));
+        QCOMPARE(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas), qsizetype{30});
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
         for (int frame = 0; frame < 30; ++frame)
         {
             QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(canvas, frame));

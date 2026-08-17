@@ -1218,16 +1218,19 @@ void CanvasWidget::cancelFrameCacheWarmup()
 
 void CanvasWidget::scheduleFrameCacheWarmup()
 {
+    // Paused views prepare their current interaction frame separately. Defer
+    // all other frames until playback resumes so speculative work cannot
+    // compete with continued drawing.
+    if (!m_animating)
+    {
+        return;
+    }
     const quint64 generation = m_frameCacheWarmupGeneration;
     QTimer::singleShot(0,
         this,
         [this, generation]()
         {
-            // Warmed while paused too: every edit clears the cache, so gating
-            // this on playback left the cache empty for the whole time the
-            // user was drawing and made the next play re-render every frame on
-            // the GUI thread as playback reached it.
-            if (generation != m_frameCacheWarmupGeneration
+            if (generation != m_frameCacheWarmupGeneration || !m_animating
                 || !m_wobbleAnimationEnabled || m_drawing)
             {
                 return;

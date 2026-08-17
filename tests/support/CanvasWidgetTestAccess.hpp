@@ -65,6 +65,16 @@ public:
         return canvas.m_frameCacheWarmupActive;
     }
 
+    static int frameCacheWarmupWorkerCount(const CanvasWidget &canvas)
+    {
+        return canvas.m_frameCacheWarmupWorkersRunning;
+    }
+
+    static qsizetype staleFrameCount(const CanvasWidget &canvas)
+    {
+        return canvas.m_frameCacheStaleFrames.size();
+    }
+
     static qsizetype cachedFrameCount(const CanvasWidget &canvas)
     {
         return canvas.m_frameCache.size();

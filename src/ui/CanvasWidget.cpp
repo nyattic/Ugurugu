@@ -1376,6 +1376,7 @@ void CanvasWidget::setAnimating(bool animating)
     else
     {
         m_animationTimer.stop();
+        cancelFrameCacheWarmup();
         if (hasSelection())
         {
             // Playback left the selection's per-frame editability unresolved;
@@ -1383,7 +1384,7 @@ void CanvasWidget::setAnimating(bool animating)
             notifySelectionTransformAvailability();
         }
     }
-    if (!previewSizeChanged)
+    if (m_animating && !previewSizeChanged)
     {
         scheduleFrameCacheWarmup();
     }
