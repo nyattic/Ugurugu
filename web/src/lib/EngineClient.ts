@@ -10,7 +10,26 @@ export interface LayerInfo {
     opacity: number;
     active: boolean;
     depth: number;
+    blendMode: LayerBlendMode;
+    clipped: boolean;
+    // MergeLayerDownStatus: 0 means the merge would go through, anything else
+    // is the reason it would not.
+    mergeStatus: number;
 }
+
+export const layerBlendModes = ["Normal", "Multiply", "Screen", "Overlay"];
+
+export type LayerBlendMode = 0 | 1 | 2 | 3;
+
+// Mirrors DocumentController::MergeLayerDownStatus.
+export const mergeBlockReasons: Record<number, string> = {
+    1: "There is no such layer.",
+    2: "There is no paint layer below this one.",
+    3: "The layers have properties that would change the picture if merged.",
+    4: "This layer has strokes that cannot be merged.",
+    5: "The layers were drawn on different canvas sizes.",
+    6: "Merging would exceed the stroke limit.",
+};
 
 export interface BrushPresetInfo {
     index: number;
@@ -500,6 +519,76 @@ export class EngineClient {
         offset: number,
     ): Promise<RegionUpdate> {
         return this.#regionRequest({ type: "layerMove", frame, index, offset });
+    }
+
+    // A negative index makes an empty group; otherwise the layer at index is
+    // wrapped in the new one.
+    layerAddGroup(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerAddGroup", frame, index });
+    }
+
+    layerDuplicate(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerDuplicate", frame, index });
+    }
+
+    layerClear(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerClear", frame, index });
+    }
+
+    layerMergeDown(frame: number, index: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "layerMergeDown", frame, index });
+    }
+
+    layerBlendMode(
+        frame: number,
+        index: number,
+        mode: LayerBlendMode,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerBlendMode",
+            frame,
+            index,
+            mode,
+        });
+    }
+
+    layerClipToBelow(
+        frame: number,
+        index: number,
+        clipped: boolean,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerClipToBelow",
+            frame,
+            index,
+            clipped,
+        });
+    }
+
+    // A negative groupIndex moves the layer out to the top level.
+    layerParentGroup(
+        frame: number,
+        index: number,
+        groupIndex: number,
+    ): Promise<RegionUpdate> {
+        return this.#regionRequest({
+            type: "layerParentGroup",
+            frame,
+            index,
+            groupIndex,
+        });
+    }
+
+    copySelection(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "clipboardCopy", frame });
+    }
+
+    cutSelection(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "clipboardCut", frame });
+    }
+
+    paste(frame: number): Promise<RegionUpdate> {
+        return this.#regionRequest({ type: "clipboardPaste", frame });
     }
 
     async serialize(): Promise<ArrayBuffer> {

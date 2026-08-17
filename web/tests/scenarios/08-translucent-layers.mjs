@@ -50,9 +50,7 @@ export default async function run({ browser, origin }) {
     };
     await page.mouse.click(middle.x, middle.y);
     await page.evaluate(() => {
-        const slider = document.querySelector(
-            ".opacity-controls input[type=range]",
-        );
+        const slider = document.querySelector("#layer-opacity");
         slider.value = "50";
         slider.dispatchEvent(new Event("change", { bubbles: true }));
     });

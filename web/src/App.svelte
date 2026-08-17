@@ -148,6 +148,9 @@
             ? false
             : window.matchMedia(compactQuery).matches,
     );
+    // The clipboard lives in the engine and is only ever filled by this shell,
+    // so tracking that a copy happened is as good as asking it.
+    let canPaste = $state(false);
     let drawing = false;
     let picking = false;
     let panning = $state(false);
@@ -878,6 +881,41 @@
         if (action === "fill" || action === "delete") {
             markContentChanged();
         }
+    }
+
+    // Copy and cut need a selection; paste only needs something on the
+    // clipboard, which is the shell's own buffer inside the engine and so
+    // survives opening another document but not reloading the tab.
+    function clipboardAction(action: "copy" | "cut" | "paste") {
+        if (!meta) {
+            return;
+        }
+        if (action !== "paste" && !hasSelection) {
+            return;
+        }
+        cancelTransformForBoundary(
+            "The pending selection transform was canceled before copying.",
+        );
+        const frame = frameIndex;
+        enqueue(async () => {
+            if (action === "copy") {
+                present(await engine.copySelection(frame));
+                canPaste = true;
+                // The copy lands on a new layer offset from the original, so
+                // it can be dragged away at once — CanvasWidget::copySelection
+                // arms the same move mode.
+                selectionMoveMode = true;
+                status = "Copied to a new layer. Drag inside it to move it.";
+            } else if (action === "cut") {
+                present(await engine.cutSelection(frame));
+                canPaste = true;
+                status = "Selection cut.";
+            } else {
+                present(await engine.paste(frame));
+                status = "Pasted as a new layer.";
+            }
+        });
+        markContentChanged();
     }
 
     // Local half of ending a session. The engine side is ended separately by
@@ -1616,6 +1654,9 @@
             deselect: () => selectionAction("deselect"),
             fillSelection: () => selectionAction("fill"),
             deleteSelection: () => selectionAction("delete"),
+            copySelection: () => clipboardAction("copy"),
+            cutSelection: () => clipboardAction("cut"),
+            paste: () => clipboardAction("paste"),
         });
         if (handled) {
             event.preventDefault();
@@ -1750,8 +1791,15 @@
     <ToolRail
         {tool}
         {hasSelection}
+        {canPaste}
         onselect={(next) => (tool = next)}
-        onselectionaction={selectionAction}
+        onselectionaction={(action) => {
+            if (action === "copy" || action === "cut" || action === "paste") {
+                clipboardAction(action);
+            } else {
+                selectionAction(action);
+            }
+        }}
     />
 {/snippet}
 
@@ -1810,6 +1858,46 @@
         onmove={(id, offset) =>
             layerCommand(id, (frame, index) =>
                 engine.layerMove(frame, index, offset),
+            )}
+        onaddgroup={(id) => {
+            if (id === null) {
+                layerAction((frame) => engine.layerAddGroup(frame, -1));
+            } else {
+                layerCommand(id, (frame, index) =>
+                    engine.layerAddGroup(frame, index),
+                );
+            }
+        }}
+        onduplicate={(id) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerDuplicate(frame, index),
+            )}
+        onmergedown={(id) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerMergeDown(frame, index),
+            )}
+        onclear={(id) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerClear(frame, index),
+            )}
+        onblendmode={(id, mode) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerBlendMode(frame, index, mode),
+            )}
+        onclip={(id, clipped) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerClipToBelow(frame, index, clipped),
+            )}
+        onparentgroup={(id, groupId) =>
+            layerCommand(id, (frame, index) =>
+                engine.layerParentGroup(
+                    frame,
+                    index,
+                    groupId === null
+                        ? -1
+                        : (layers.find((layer) => layer.id === groupId)
+                              ?.index ?? -1),
+                ),
             )}
     />
 {/snippet}

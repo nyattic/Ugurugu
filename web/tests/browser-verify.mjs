@@ -29,6 +29,7 @@ import twoFingerGestures from "./scenarios/16-two-finger-gestures.mjs";
 import selectionTransform from "./scenarios/17-selection-transform.mjs";
 import licenceNotices from "./scenarios/18-licence-notices.mjs";
 import documentProperties from "./scenarios/19-document-properties.mjs";
+import clipboardAndLayers from "./scenarios/20-clipboard-and-layers.mjs";
 
 // Order matters only in that the cheapest, most fundamental checks come first:
 // a failure in scenario 1 makes every later one meaningless.
@@ -52,6 +53,7 @@ const scenarios = [
     ["selection-transform", selectionTransform],
     ["licence-notices", licenceNotices],
     ["document-properties", documentProperties],
+    ["clipboard-and-layers", clipboardAndLayers],
 ];
 
 const filter = process.argv[2];

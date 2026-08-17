@@ -6,7 +6,7 @@ importScripts("ugurugu_engine_spike.js");
 // Must match ugu_abi_version() in src/wasm/EngineBridge.cpp. A stale artifact
 // under public/engine used to surface as "… is not a function" deep inside an
 // unrelated call; refusing here names the real problem instead.
-const expectedAbiVersion = 7;
+const expectedAbiVersion = 8;
 
 const enginePromise = createUguruguEngine().then((engine) => {
     const version = engine._ugu_abi_version?.();
@@ -59,6 +59,11 @@ function layerList(engine) {
             opacity: engine._ugu_layer_opacity(handle, index),
             active: engine._ugu_layer_is_active(handle, index) === 1,
             depth: engine._ugu_layer_depth(handle, index),
+            blendMode: engine._ugu_layer_blend_mode(handle, index),
+            clipped: engine._ugu_layer_clip_to_below(handle, index) === 1,
+            // Available (0) means the merge would go through; the other
+            // values are the reason it would not, and the shell says which.
+            mergeStatus: engine._ugu_layer_merge_down_status(handle, index),
         });
     }
     return layers;
@@ -724,6 +729,56 @@ self.onmessage = async (event) => {
                 event.data.index,
                 event.data.offset,
             );
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerAddGroup") {
+            engine._ugu_layer_add_group(handleFor(), event.data.index);
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerDuplicate") {
+            engine._ugu_layer_duplicate(handleFor(), event.data.index);
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerClear") {
+            engine._ugu_layer_clear(handleFor(), event.data.index);
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerMergeDown") {
+            if (!engine._ugu_layer_merge_down(handleFor(), event.data.index)) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerBlendMode") {
+            engine._ugu_layer_set_blend_mode(
+                handleFor(),
+                event.data.index,
+                event.data.mode,
+            );
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerClipToBelow") {
+            engine._ugu_layer_set_clip_to_below(
+                handleFor(),
+                event.data.index,
+                event.data.clipped ? 1 : 0,
+            );
+            fullRender(engine, event.data.frame);
+        } else if (type === "layerParentGroup") {
+            engine._ugu_layer_set_parent_group(
+                handleFor(),
+                event.data.index,
+                event.data.groupIndex,
+            );
+            fullRender(engine, event.data.frame);
+        } else if (type === "clipboardCopy") {
+            if (!engine._ugu_selection_copy(handleFor(), event.data.frame)) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+        } else if (type === "clipboardCut") {
+            if (!engine._ugu_selection_cut(handleFor(), event.data.frame)) {
+                throw engineError(engine);
+            }
+            fullRender(engine, event.data.frame);
+        } else if (type === "clipboardPaste") {
+            if (!engine._ugu_clipboard_paste(handleFor(), event.data.frame)) {
+                throw engineError(engine);
+            }
             fullRender(engine, event.data.frame);
         } else {
             throw new Error(`unknown request: ${type}`);

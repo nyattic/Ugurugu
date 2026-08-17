@@ -11,14 +11,24 @@
     let {
         tool,
         hasSelection,
+        canPaste,
         onselect,
         onselectionaction,
     }: {
         tool: ToolId;
         hasSelection: boolean;
+        canPaste: boolean;
         onselect: (tool: ToolId) => void;
         onselectionaction: (
-            action: "all" | "invert" | "fill" | "delete" | "deselect",
+            action:
+                | "all"
+                | "invert"
+                | "fill"
+                | "delete"
+                | "deselect"
+                | "copy"
+                | "cut"
+                | "paste",
         ) => void;
     } = $props();
 
@@ -49,6 +59,18 @@
             icon: "delete",
             label: "Delete selection",
             shortcut: "Delete",
+        },
+        {
+            id: "copy" as const,
+            icon: "copy",
+            label: "Copy to a new layer",
+            shortcut: "Ctrl C",
+        },
+        {
+            id: "cut" as const,
+            icon: "cut",
+            label: "Cut selection",
+            shortcut: "Ctrl X",
         },
         {
             id: "deselect" as const,
@@ -117,6 +139,22 @@
                     <ToolIcon name={action.icon} size={18} />
                 </button>
             {/each}
+        </div>
+    {/if}
+
+    <!-- Outside the selection group: pasting needs a clipboard, not a
+         selection, and on a phone there is no Ctrl+V to fall back on. -->
+    {#if canPaste}
+        <div class="group" id="clipboard-actions">
+            <span class="group-label">Clip</span>
+            <button
+                id="selection-paste"
+                class="tool compact"
+                title="Paste as a new layer (Ctrl V)"
+                onclick={() => onselectionaction("paste")}
+            >
+                <ToolIcon name="paste" size={18} />
+            </button>
         </div>
     {/if}
 </nav>

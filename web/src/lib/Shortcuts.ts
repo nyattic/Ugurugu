@@ -24,6 +24,9 @@ export interface ShortcutActions {
     deselect: () => void;
     fillSelection: () => void;
     deleteSelection: () => void;
+    copySelection: () => void;
+    cutSelection: () => void;
+    paste: () => void;
 }
 
 // Tool letters match the desktop rail.
@@ -89,6 +92,15 @@ export function handleShortcut(
                 return true;
             case "d":
                 actions.deselect();
+                return true;
+            case "c":
+                actions.copySelection();
+                return true;
+            case "x":
+                actions.cutSelection();
+                return true;
+            case "v":
+                actions.paste();
                 return true;
             case "i":
                 if (event.shiftKey) {

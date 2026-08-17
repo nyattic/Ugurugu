@@ -173,6 +173,140 @@ extern "C"
         }
     }
 
+    // Wraps the layer at index in a new group, or makes an empty one when the
+    // index names no layer, the two forms LayerDock offers.
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_add_group(
+        BridgeDocument *handle, int childIndex)
+    {
+        const ugurugu::Layer *child = layerAtIndex(handle, childIndex);
+        handle->controller->addLayerGroup(
+            child != nullptr ? child->id : QUuid());
+        invalidateSplit(handle);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_duplicate(
+        BridgeDocument *handle, int index)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->duplicateLayer(layer->id);
+            invalidateSplit(handle);
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_clear(BridgeDocument *handle, int index)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->clearLayer(layer->id);
+            invalidateSplit(handle);
+        }
+    }
+
+    // Mirrors MergeLayerDownStatus so the shell can disable the action and say
+    // why instead of offering a merge that will be refused.
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_merge_down_status(
+        BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return static_cast<int>(ugurugu::DocumentController::
+                    MergeLayerDownStatus::MissingLayer);
+        }
+        return static_cast<int>(
+            handle->controller->mergeLayerDownStatus(layer->id));
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_merge_down(
+        BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            setError(StatusInvalidArgument,
+                QByteArrayLiteral("there is no layer at that index"));
+            return 0;
+        }
+        if (!handle->controller->mergeLayerDown(layer->id))
+        {
+            setError(StatusLayerNotDrawable,
+                QByteArrayLiteral("this layer cannot be merged down"));
+            return 0;
+        }
+        invalidateSplit(handle);
+        clearError();
+        return 1;
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_blend_mode(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr ? static_cast<int>(layer->blendMode) : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_blend_mode(
+        BridgeDocument *handle, int index, int mode)
+    {
+        const auto blendMode = static_cast<ugurugu::LayerBlendMode>(mode);
+        if (!ugurugu::isValidLayerBlendMode(blendMode))
+        {
+            setError(
+                StatusInvalidArgument, QByteArrayLiteral("unknown blend mode"));
+            return;
+        }
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setLayerBlendMode(layer->id, blendMode);
+            invalidateSplit(handle);
+            clearError();
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE int ugu_layer_clip_to_below(
+        const BridgeDocument *handle, int index)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        return layer != nullptr && layer->clipToLayerBelow ? 1 : 0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_clip_to_below(
+        BridgeDocument *handle, int index, int clipped)
+    {
+        if (const ugurugu::Layer *layer = layerAtIndex(handle, index))
+        {
+            handle->controller->setLayerClipToBelow(layer->id, clipped != 0);
+            invalidateSplit(handle);
+        }
+    }
+
+    // A group index of -1 moves the layer out to the top level.
+    EMSCRIPTEN_KEEPALIVE void ugu_layer_set_parent_group(
+        BridgeDocument *handle, int index, int groupIndex)
+    {
+        const ugurugu::Layer *layer = layerAtIndex(handle, index);
+        if (layer == nullptr)
+        {
+            return;
+        }
+        QUuid groupId;
+        if (groupIndex >= 0)
+        {
+            const ugurugu::Layer *group = layerAtIndex(handle, groupIndex);
+            if (group == nullptr || group->kind != ugurugu::LayerKind::Group)
+            {
+                setError(StatusInvalidArgument,
+                    QByteArrayLiteral("that row is not a group"));
+                return;
+            }
+            groupId = group->id;
+        }
+        handle->controller->setLayerParentGroup(layer->id, groupId);
+        invalidateSplit(handle);
+        clearError();
+    }
+
     // Renders the layer subtree at index as a static thumbnail (frame 0,
     // wobble off), the same picture the desktop layer dock shows. The buffer
     // is premultiplied BGRA like ugu_render_frame and stays valid until the

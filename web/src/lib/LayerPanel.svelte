@@ -1,5 +1,11 @@
 <script lang="ts">
-    import type { LayerInfo, LayerThumbnail } from "./EngineClient";
+    import {
+        layerBlendModes,
+        mergeBlockReasons,
+        type LayerBlendMode,
+        type LayerInfo,
+        type LayerThumbnail,
+    } from "./EngineClient";
 
     let {
         layers,
@@ -12,6 +18,13 @@
         onremove,
         onrename,
         onmove,
+        onaddgroup,
+        onduplicate,
+        onmergedown,
+        onclear,
+        onblendmode,
+        onclip,
+        onparentgroup,
     }: {
         layers: LayerInfo[];
         thumbnails: LayerThumbnail[];
@@ -26,10 +39,28 @@
         onremove: (id: string) => void;
         onrename: (id: string, name: string) => void;
         onmove: (id: string, offset: number) => void;
+        onaddgroup: (id: string | null) => void;
+        onduplicate: (id: string) => void;
+        onmergedown: (id: string) => void;
+        onclear: (id: string) => void;
+        onblendmode: (id: string, mode: LayerBlendMode) => void;
+        onclip: (id: string, clipped: boolean) => void;
+        onparentgroup: (id: string, groupId: string | null) => void;
     } = $props();
 
     const displayLayers = $derived([...layers].reverse());
     const activeLayer = $derived(layers.find((layer) => layer.active));
+    const groups = $derived(
+        layers.filter(
+            (layer) => layer.group && layer.id !== activeLayer?.id,
+        ),
+    );
+    const mergeReason = $derived(
+        activeLayer && activeLayer.mergeStatus !== 0
+            ? (mergeBlockReasons[activeLayer.mergeStatus] ??
+              "This layer cannot be merged down.")
+            : "Merge into the layer below",
+    );
 
     function rename(layer: LayerInfo) {
         const name = window.prompt("Layer name", layer.name);
@@ -72,6 +103,13 @@
         <div class="panel-actions">
             <button id="layer-add" title="Add layer" onclick={onadd}>
                 +
+            </button>
+            <button
+                id="layer-add-group"
+                title="Put the active layer in a new group"
+                onclick={() => onaddgroup(activeLayer?.id ?? null)}
+            >
+                ▣
             </button>
             <button
                 id="layer-remove"
@@ -143,7 +181,91 @@
             </li>
         {/each}
     </ul>
-    <div class="opacity-controls">
+    <div class="layer-controls">
+        <div class="row buttons">
+            <button
+                id="layer-duplicate"
+                title="Duplicate layer"
+                disabled={!activeLayer}
+                onclick={() => activeLayer && onduplicate(activeLayer.id)}
+            >
+                Duplicate
+            </button>
+            <button
+                id="layer-merge-down"
+                title={mergeReason}
+                disabled={!activeLayer || activeLayer.mergeStatus !== 0}
+                onclick={() => activeLayer && onmergedown(activeLayer.id)}
+            >
+                Merge down
+            </button>
+            <button
+                id="layer-clear"
+                title="Erase everything on this layer"
+                disabled={!activeLayer || activeLayer.group}
+                onclick={() => activeLayer && onclear(activeLayer.id)}
+            >
+                Clear
+            </button>
+        </div>
+        <label class="row">
+            <span class="field-label">Blend</span>
+            <select
+                id="layer-blend-mode"
+                disabled={!activeLayer}
+                value={activeLayer?.blendMode ?? 0}
+                onchange={(event) =>
+                    activeLayer &&
+                    onblendmode(
+                        activeLayer.id,
+                        Number(
+                            (event.currentTarget as HTMLSelectElement).value,
+                        ) as LayerBlendMode,
+                    )}
+            >
+                {#each layerBlendModes as mode, index (mode)}
+                    <option value={index}>{mode}</option>
+                {/each}
+            </select>
+        </label>
+        <label class="row">
+            <span class="field-label">Group</span>
+            <select
+                id="layer-parent-group"
+                disabled={!activeLayer}
+                value={activeLayer && activeLayer.depth > 0 ? "" : "top"}
+                onchange={(event) => {
+                    const value = (event.currentTarget as HTMLSelectElement)
+                        .value;
+                    if (activeLayer) {
+                        onparentgroup(
+                            activeLayer.id,
+                            value === "top" ? null : value,
+                        );
+                    }
+                }}
+            >
+                <option value="top">Top level</option>
+                {#each groups as group (group.id)}
+                    <option value={group.id}>{group.name}</option>
+                {/each}
+            </select>
+        </label>
+        <label class="row checkbox">
+            <input
+                id="layer-clip"
+                type="checkbox"
+                disabled={!activeLayer || activeLayer.group}
+                checked={activeLayer?.clipped ?? false}
+                onchange={(event) =>
+                    activeLayer &&
+                    onclip(
+                        activeLayer.id,
+                        (event.currentTarget as HTMLInputElement).checked,
+                    )}
+            />
+            Clip to layer below
+        </label>
         <label>
             <span class="field-label">
                 Opacity
@@ -152,6 +274,7 @@
                 </em>
             </span>
             <input
+                id="layer-opacity"
                 type="range"
                 min="0"
                 max="100"
@@ -318,15 +441,45 @@
         outline-offset: 1px;
     }
 
-    .opacity-controls {
+    .layer-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
         padding: 0.5rem 0.75rem;
         border-block-start: 1px solid var(--line);
     }
 
-    .opacity-controls label {
+    .layer-controls label {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
+    }
+
+    .layer-controls .row {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .layer-controls .row .field-label {
+        flex: none;
+        min-inline-size: 3.2rem;
+    }
+
+    .layer-controls select {
+        flex: 1;
+        min-inline-size: 0;
+    }
+
+    .layer-controls .checkbox {
+        font-size: 0.75rem;
+        color: var(--paper-dim);
+    }
+
+    .buttons button {
+        flex: 1;
+        padding: 0.3rem 0.2rem;
+        font-size: 0.6875rem;
     }
 
     .field-label {
@@ -350,7 +503,7 @@
         color: var(--paper);
     }
 
-    .opacity-controls input[type="range"] {
+    .layer-controls input[type="range"] {
         inline-size: 100%;
         accent-color: var(--accent);
     }
