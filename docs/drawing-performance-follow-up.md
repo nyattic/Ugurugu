@@ -2,7 +2,7 @@
 
 - 기준일: 2026-08-18
 - 기준 커밋: `a5a8c36d66ff8a57d30ded57183439416bd34fd9`
-- 기준 릴리스: 2.2.10 준비 완료, 아직 미게시
+- 기준 릴리스: 2.2.10 게시됨(`debf530`, 2026-08-18)
 - 범위: Qt 데스크톱 앱의 그리기 입력, 미리보기, 프레임 캐시와 배포 검증
 - 제외 범위: 웹 이식, `.ugu` 파일 형식 변경, 근거 없는 GPU renderer 재작성
 
@@ -186,11 +186,16 @@ probe가 최소한 기록할 항목:
 릴리즈 권한과 외부 서비스가 필요한 항목은 남아 있다.
 
 - [x] release 준비 커밋과 이 문서를 원격에 반영한다.
-- [ ] 같은 SHA의 main CI가 macOS와 Windows에서 모두 통과하는지 확인한다.
-- [ ] 기존 관례와 같은 lightweight tag `v2.2.10`을 만들고 push한다.
-- [ ] tag의 release workflow를 실행한다.
-- [ ] macOS notarization/stapling과 Windows Velopack job이 성공했는지 확인한다.
-- [ ] GitHub Release의 ko/en/ja 본문과 Sparkle/Velopack 업데이트 창을 확인한다.
+- [x] 같은 SHA의 main CI가 macOS와 Windows에서 모두 통과하는지 확인한다.
+      (`debf530`, 12 jobs green)
+- [x] 기존 관례와 같은 lightweight tag `v2.2.10`을 만들고 push한다.
+      (`debf530`에 지정)
+- [x] tag의 release workflow를 실행한다. (run 32116702894)
+- [x] macOS notarization/stapling과 Windows Velopack job이 성공했는지
+      확인한다. (4 jobs success, dmg·zip·appcast·nupkg·RELEASES 게시)
+- [ ] GitHub Release의 ko/en/ja 본문과 Sparkle/Velopack 업데이트 창을
+      확인한다. 본문 3개 언어는 확인했고, 실제 업데이트 창은 아래 smoke와
+      함께 남아 있다.
 - [ ] 2.2.9 설치본에서 2.2.10으로 실제 업데이트하고 서명·실행·문서 열기·
   그리기를 smoke test한다.
 
