@@ -8,7 +8,11 @@
 
 ## 1. 현재 상태
 
-2.2.9 이후 제품 변경은 `05276c8` 한 건이다. 움직임 재생을 멈춘 동안에는
+2.2.9 이후 제품 변경은 `05276c8`과, 2026-08-18에 구현한 아래 P1 두 건
+`9ce634c`(성공 승격 뒤 중복 interaction warmup 제거)와 `fe51f80`(취소를
+RenderEngine 내부까지 전달)이다. P1 두 건은 사용자 결정으로 2.2.10에
+포함한다. 회귀 테스트는 갖췄지만 아래 완료 조건의 Release 50회 A/B 측정은
+아직 수행하지 않았다. `05276c8`은 움직임 재생을 멈춘 동안에는
 현재 프레임만 준비하고, 나머지 프레임의 캐시 갱신은 재생을 다시 시작할 때
 수행한다. 구현 위치는
 [`CanvasWidget::setAnimating`](../src/ui/CanvasWidget.cpp)과
@@ -46,8 +50,8 @@
 
 | 우선순위 | 상태 | 작업 | 다음 결정 기준 |
 |---|---|---|---|
-| P1 | 확인된 잔여 작업 | 성공한 stroke 뒤 중복 interaction warmup 제거 | worker·픽셀·fallback A/B |
-| P1 | 확인된 취소 지연 | cancellation을 RenderEngine 내부까지 전달 | 취소 뒤 잔여 CPU와 정상 렌더 회귀 |
+| P1 | 구현 완료(`9ce634c`), A/B 측정 대기 | 성공한 stroke 뒤 중복 interaction warmup 제거 | worker·픽셀·fallback A/B |
+| P1 | 구현 완료(`fe51f80`), A/B 측정 대기 | cancellation을 RenderEngine 내부까지 전달 | 취소 뒤 잔여 CPU와 정상 렌더 회귀 |
 | P2 | 병목 여부 미측정 | regional patch의 UI-thread 전체 프레임 복사 | callback p95와 복사 바이트 |
 | P2 | 경합 여부 추가 측정 | 백그라운드 우선순위와 동시성 | 입력 latency와 resume 준비 시간 |
 | P3 | 보류 | GPU 작업 | Metal profile에서 반복 지배 비용 확인 |
@@ -181,7 +185,7 @@ probe가 최소한 기록할 항목:
 
 릴리즈 권한과 외부 서비스가 필요한 항목은 남아 있다.
 
-- [ ] release 준비 커밋과 이 문서를 원격에 반영한다.
+- [x] release 준비 커밋과 이 문서를 원격에 반영한다.
 - [ ] 같은 SHA의 main CI가 macOS와 Windows에서 모두 통과하는지 확인한다.
 - [ ] 기존 관례와 같은 lightweight tag `v2.2.10`을 만들고 push한다.
 - [ ] tag의 release workflow를 실행한다.
@@ -190,8 +194,9 @@ probe가 최소한 기록할 항목:
 - [ ] 2.2.9 설치본에서 2.2.10으로 실제 업데이트하고 서명·실행·문서 열기·
   그리기를 smoke test한다.
 
-2.2.10에는 측정과 회귀 테스트가 끝난 `05276c8` 외의 성능 변경을 추가하지
-않는다. 위 P1 이후 항목은 별도 버전에서 하나씩 A/B한 뒤 반영한다.
+2.2.10에는 `05276c8`과 P1 두 건(`9ce634c`, `fe51f80`)을 포함한다. P1 두
+건은 회귀 테스트까지 마쳤고, 정량 A/B는 릴리즈 후 native desktop probe를
+추가하면서 수행한다. P2 이후 항목은 별도 버전에서 하나씩 A/B한 뒤 반영한다.
 
 ## 5. 권장 실행 순서
 
