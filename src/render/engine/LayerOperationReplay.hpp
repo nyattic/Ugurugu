@@ -4,6 +4,7 @@
 #pragma once
 
 #include "document/Document.hpp"
+#include "render/engine/RenderCancellation.hpp"
 
 #include <QHash>
 #include <QImage>
@@ -71,13 +72,15 @@ bool applyImageOperation(
     QImage &layerImage, const Document &document, const ImageOp &operation);
 
 // Returns false when the framebuffer no longer matches the document size the
-// remaining operations were recorded against; the caller must discard it.
+// remaining operations were recorded against, or when cancellation was
+// observed at an operation boundary; the caller must discard it.
 bool renderLayerOperations(QImage &layerImage,
     const Document &document,
     const QVector<Stroke> &operations,
     int normalizedFrame,
     int frameCount,
-    const QSize &initialCanvasSize);
+    const QSize &initialCanvasSize,
+    const std::atomic_bool *cancellation = nullptr);
 
 }
 

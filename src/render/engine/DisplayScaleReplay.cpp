@@ -246,7 +246,8 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
     int frameCount,
     const QSize &initialCanvasSize,
     const PreviewScaleMapping &mapping,
-    RenderEngine::ScaledRenderStats *stats)
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (!initialCanvasSize.isValid())
     {
@@ -267,11 +268,17 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
     QHash<qint64, QImage> scaledClipMasks;
     QVector<QImage> completedSections;
     QVector<Stroke> primitiveRun;
-    const auto flush = [&]()
+    // A flush is the operation boundary cancellation observes: the pending
+    // primitive run is skipped whole rather than checked per stroke.
+    const auto flush = [&]() -> bool
     {
+        if (isRenderCancelled(cancellation))
+        {
+            return false;
+        }
         if (primitiveRun.isEmpty())
         {
-            return;
+            return true;
         }
         if (stats)
         {
@@ -289,6 +296,7 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
             scaledClipMasks);
         primitiveRun.clear();
         notePreviewImage(stats, layerImage);
+        return true;
     };
 
     // Sections sealed by composite boundaries render on their own transparent
@@ -308,7 +316,10 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
         const Stroke &operation = operations[index];
         if (operation.mode == StrokeMode::PixelSelection)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.pixelSelectionOp || operation.reframeOp
                 || !applyPixelSelectionOperationAtDisplayScale(layerImage,
                     *operation.pixelSelectionOp,
@@ -321,7 +332,10 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::Reframe)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.reframeOp || operation.pixelSelectionOp
                 || !applyReframeOperationAtDisplayScale(layerImage,
                     *operation.reframeOp,
@@ -352,7 +366,10 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::CompositeBoundary)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (operation.pixelSelectionOp || operation.reframeOp
                 || operation.imageOp || !operation.points.isEmpty())
             {
@@ -400,7 +417,10 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::Image)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.imageOp || operation.pixelSelectionOp
                 || operation.reframeOp
                 || !applyImageOperationAtDisplayScale(
@@ -419,7 +439,10 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
             primitiveRun.append(operation);
         }
     }
-    flush();
+    if (!flush())
+    {
+        return false;
+    }
     return nativeCanvasSize == document.size
            && layerImage.size() == mapping.outputSize;
 }

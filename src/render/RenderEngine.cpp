@@ -17,6 +17,7 @@
 #include "render/engine/LayerHierarchyCompositor.hpp"
 #include "render/engine/LayerOperationReplay.hpp"
 #include "render/engine/PreviewScale.hpp"
+#include "render/engine/RenderCancellation.hpp"
 
 #include <QHash>
 #include <QPainter>
@@ -47,7 +48,8 @@ QImage RenderEngine::renderScaled(const Document &document,
     int frameIndex,
     const QSize &outputSize,
     ScaledRenderMode mode,
-    ScaledRenderStats *stats)
+    ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (stats)
     {
@@ -60,26 +62,29 @@ QImage RenderEngine::renderScaled(const Document &document,
         {
             stats->usedDisplayScaleReplay = true;
         }
-        return renderAtDisplayScale(document, frameIndex, outputSize, stats);
+        return renderAtDisplayScale(
+            document, frameIndex, outputSize, stats, cancellation);
     }
     if (stats)
     {
         stats->usedNativeExactFallback = true;
     }
-    return renderAtSize(document, frameIndex, outputSize);
+    return renderAtSize(document, frameIndex, outputSize, cancellation);
 }
 
 QImage RenderEngine::renderScaledRegion(const Document &document,
     int frameIndex,
     const QSize &outputSize,
     const QRect &outputRegion,
-    ScaledRenderStats *stats)
+    ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (stats)
     {
         *stats = {};
     }
-    return renderRegion(document, frameIndex, outputSize, outputRegion, stats);
+    return renderRegion(
+        document, frameIndex, outputSize, outputRegion, stats, cancellation);
 }
 
 LayerCompositionMemoryEstimate RenderEngine::estimateHierarchyMemory(
@@ -166,7 +171,8 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     const QSize &outputSize,
     const QUuid &layerId,
     ScaledRenderMode mode,
-    ScaledRenderStats *stats)
+    ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (stats)
     {
@@ -213,7 +219,8 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                                    displayScaleReplay,
                                    outputSize,
                                    normalizedFrame,
-                                   frameCount](const Layer &layer)
+                                   frameCount,
+                                   cancellation](const Layer &layer)
     {
         QImage native;
         const QSize initialSize = layer.initialCanvasSize.isValid()
@@ -231,7 +238,8 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                     frameCount,
                     initialSize,
                     mapping,
-                    previewStats))
+                    previewStats,
+                    cancellation))
             {
                 return QImage();
             }
@@ -242,7 +250,8 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
                 layer.strokes,
                 normalizedFrame,
                 frameCount,
-                initialSize))
+                initialSize,
+                cancellation))
         {
             return QImage();
         }
@@ -300,7 +309,8 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     keepRoots(belowDocument, belowRoots);
     keepRoots(aboveDocument, aboveRoots);
 
-    below = renderScaled(belowDocument, frameIndex, outputSize, mode, nullptr);
+    below = renderScaled(
+        belowDocument, frameIndex, outputSize, mode, nullptr, cancellation);
     if (below.isNull())
     {
         return split;
@@ -323,13 +333,17 @@ RenderEngine::LayerSplitFrame RenderEngine::renderLayerSplit(
     notePreviewImage(previewStats, layerBase);
     if (!aboveDocument.layers.isEmpty())
     {
-        above =
-            renderScaled(aboveDocument, frameIndex, outputSize, mode, nullptr);
+        above = renderScaled(
+            aboveDocument, frameIndex, outputSize, mode, nullptr, cancellation);
         if (above.isNull())
         {
             return split;
         }
         notePreviewImage(previewStats, above);
+    }
+    if (isRenderCancelled(cancellation))
+    {
+        return split;
     }
     notePreviewWorkingSet(previewStats, below, layerBase, above);
 
@@ -346,7 +360,8 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
     const QSize &outputSize,
     qint64 maximumBytes,
     ScaledRenderMode mode,
-    ScaledRenderStats *stats)
+    ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (stats)
     {
@@ -381,6 +396,10 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
     qint64 retainedBytes = 0;
     for (const Layer &layer : document.layers)
     {
+        if (isRenderCancelled(cancellation))
+        {
+            return frame;
+        }
         if (layer.kind != LayerKind::Paint)
         {
             continue;
@@ -425,7 +444,8 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
                         frameCount,
                         initialSize,
                         mapping,
-                        previewStats))
+                        previewStats,
+                        cancellation))
                 {
                     return frame;
                 }
@@ -438,7 +458,8 @@ RenderEngine::LayerRasterFrame RenderEngine::renderLayerRasterFrame(
                         layer.strokes,
                         normalizedFrame,
                         frameCount,
-                        initialSize))
+                        initialSize,
+                        cancellation))
                 {
                     return frame;
                 }

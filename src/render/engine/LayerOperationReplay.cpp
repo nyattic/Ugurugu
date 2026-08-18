@@ -470,7 +470,8 @@ bool renderLayerOperations(QImage &layerImage,
     const QVector<Stroke> &operations,
     int normalizedFrame,
     int frameCount,
-    const QSize &initialCanvasSize)
+    const QSize &initialCanvasSize,
+    const std::atomic_bool *cancellation)
 {
     if (!initialCanvasSize.isValid())
     {
@@ -487,11 +488,17 @@ bool renderLayerOperations(QImage &layerImage,
     QHash<qint64, QImage> scaledClipMasks;
     QVector<QImage> completedSections;
     QVector<Stroke> primitiveRun;
-    const auto flush = [&]()
+    // A flush is the operation boundary cancellation observes: the pending
+    // primitive run is skipped whole rather than checked per stroke.
+    const auto flush = [&]() -> bool
     {
+        if (isRenderCancelled(cancellation))
+        {
+            return false;
+        }
         if (primitiveRun.isEmpty())
         {
-            return;
+            return true;
         }
         renderLayerStrokes(layerImage,
             document,
@@ -503,6 +510,7 @@ bool renderLayerOperations(QImage &layerImage,
             clipPaths,
             scaledClipMasks);
         primitiveRun.clear();
+        return true;
     };
 
     // Sections sealed by composite boundaries render on their own transparent
@@ -524,7 +532,10 @@ bool renderLayerOperations(QImage &layerImage,
         const Stroke &operation = operations[index];
         if (operation.mode == StrokeMode::PixelSelection)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.pixelSelectionOp || operation.reframeOp
                 || !applyPixelSelectionOperation(
                     layerImage, *operation.pixelSelectionOp))
@@ -534,7 +545,10 @@ bool renderLayerOperations(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::Reframe)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.reframeOp || operation.pixelSelectionOp
                 || !applyReframeOperation(layerImage, *operation.reframeOp))
             {
@@ -552,7 +566,10 @@ bool renderLayerOperations(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::CompositeBoundary)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (operation.pixelSelectionOp || operation.reframeOp
                 || operation.imageOp || !operation.points.isEmpty())
             {
@@ -589,7 +606,10 @@ bool renderLayerOperations(QImage &layerImage,
         }
         else if (operation.mode == StrokeMode::Image)
         {
-            flush();
+            if (!flush())
+            {
+                return false;
+            }
             if (!operation.imageOp || operation.pixelSelectionOp
                 || operation.reframeOp
                 || !applyImageOperation(
@@ -608,7 +628,10 @@ bool renderLayerOperations(QImage &layerImage,
             primitiveRun.append(operation);
         }
     }
-    flush();
+    if (!flush())
+    {
+        return false;
+    }
     return layerImage.size() == document.size;
 }
 

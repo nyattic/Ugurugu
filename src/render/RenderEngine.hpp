@@ -10,6 +10,8 @@
 #include <QImage>
 #include <QPainterPath>
 
+#include <atomic>
+
 namespace ugurugu
 {
 
@@ -136,11 +138,16 @@ public:
     };
 
     static QImage render(const Document &document, int frameIndex);
+    // cancellation, where accepted, is a read-only flag observed at layer and
+    // framebuffer-operation boundaries. A render that observes it set returns
+    // a null or invalid result; the caller must discard that result and must
+    // not cache it, distinguishing cancellation from failure by the flag.
     static QImage renderScaled(const Document &document,
         int frameIndex,
         const QSize &outputSize,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
-        ScaledRenderStats *stats = nullptr);
+        ScaledRenderStats *stats = nullptr,
+        const std::atomic_bool *cancellation = nullptr);
     // outputRegion of renderScaled's frame, sized to that region. Null when
     // the region cannot be rendered on its own, which leaves the caller to
     // render the whole frame and crop it.
@@ -148,7 +155,8 @@ public:
         int frameIndex,
         const QSize &outputSize,
         const QRect &outputRegion,
-        ScaledRenderStats *stats = nullptr);
+        ScaledRenderStats *stats = nullptr,
+        const std::atomic_bool *cancellation = nullptr);
     static LayerCompositionMemoryEstimate estimateHierarchyMemory(
         const Document &document, const QSize &outputSize);
     static bool supportsLayerSplit(
@@ -158,13 +166,15 @@ public:
         const QSize &outputSize,
         const QUuid &layerId,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
-        ScaledRenderStats *stats = nullptr);
+        ScaledRenderStats *stats = nullptr,
+        const std::atomic_bool *cancellation = nullptr);
     static LayerRasterFrame renderLayerRasterFrame(const Document &document,
         int frameIndex,
         const QSize &outputSize,
         qint64 maximumBytes,
         ScaledRenderMode mode = ScaledRenderMode::DisplayPreview,
-        ScaledRenderStats *stats = nullptr);
+        ScaledRenderStats *stats = nullptr,
+        const std::atomic_bool *cancellation = nullptr);
     static QImage composeLayerRasterFrame(const Document &document,
         const LayerRasterFrame &frame,
         const QUuid &replacementLayerId,

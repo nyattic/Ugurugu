@@ -6,6 +6,7 @@
 #include "document/Document.hpp"
 #include "render/LayerCompositionPlan.hpp"
 #include "render/engine/PreviewScale.hpp"
+#include "render/engine/RenderCancellation.hpp"
 
 #include <QImage>
 #include <QPainter>
@@ -38,7 +39,8 @@ QImage renderLayerHierarchy(const Document &document,
     const QSize &outputSize,
     const QColor &background,
     RenderPaintLayer renderPaintLayer,
-    RenderEngine::ScaledRenderStats *stats)
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation = nullptr)
 {
     const LayerCompositionPlan plan = LayerCompositionPlan::build(document);
     if (!plan.isValid())
@@ -210,6 +212,10 @@ QImage renderLayerHierarchy(const Document &document,
         plan.operations();
     for (int operationIndex = 0; operationIndex < operations.size();)
     {
+        if (isRenderCancelled(cancellation))
+        {
+            return {};
+        }
         const LayerCompositionPlan::Operation &operation =
             operations[operationIndex];
         const Layer &layer = document.layers[operation.layerIndex];
@@ -287,10 +293,13 @@ QImage renderLayerHierarchy(const Document &document,
 QImage renderAtDisplayScale(const Document &document,
     int frameIndex,
     const QSize &outputSize,
-    RenderEngine::ScaledRenderStats *stats);
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation = nullptr);
 
-QImage renderAtSize(
-    const Document &document, int frameIndex, const QSize &outputSize);
+QImage renderAtSize(const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    const std::atomic_bool *cancellation = nullptr);
 
 // Renders outputRegion of the frame the two above produce whole, without
 // paying for the pixels outside it. Layers whose strokes cannot be replayed
@@ -302,7 +311,8 @@ QImage renderRegion(const Document &document,
     int frameIndex,
     const QSize &outputSize,
     const QRect &outputRegion,
-    RenderEngine::ScaledRenderStats *stats);
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation = nullptr);
 
 }
 

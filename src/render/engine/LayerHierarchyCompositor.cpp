@@ -46,7 +46,8 @@ void prepareLayerComposition(
 QImage renderAtDisplayScale(const Document &document,
     int frameIndex,
     const QSize &outputSize,
-    RenderEngine::ScaledRenderStats *stats)
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (document.size.isEmpty() || outputSize.isEmpty())
     {
@@ -83,18 +84,25 @@ QImage renderAtDisplayScale(const Document &document,
                 frameCount,
                 initialSize,
                 mapping,
-                stats))
+                stats,
+                cancellation))
         {
             return QImage();
         }
         return layerImage;
     };
-    return renderLayerHierarchy(
-        document, outputSize, document.background, renderPaintLayer, stats);
+    return renderLayerHierarchy(document,
+        outputSize,
+        document.background,
+        renderPaintLayer,
+        stats,
+        cancellation);
 }
 
-QImage renderAtSize(
-    const Document &document, int frameIndex, const QSize &outputSize)
+QImage renderAtSize(const Document &document,
+    int frameIndex,
+    const QSize &outputSize,
+    const std::atomic_bool *cancellation)
 {
     if (document.size.isEmpty() || outputSize.isEmpty())
     {
@@ -127,7 +135,8 @@ QImage renderAtSize(
                 layer.strokes,
                 normalizedFrame,
                 frameCount,
-                initialSize))
+                initialSize,
+                cancellation))
         {
             return QImage();
         }
@@ -142,15 +151,20 @@ QImage renderAtSize(
         }
         return layerImage;
     };
-    return renderLayerHierarchy(
-        document, outputSize, document.background, renderPaintLayer, nullptr);
+    return renderLayerHierarchy(document,
+        outputSize,
+        document.background,
+        renderPaintLayer,
+        nullptr,
+        cancellation);
 }
 
 QImage renderRegion(const Document &document,
     int frameIndex,
     const QSize &outputSize,
     const QRect &outputRegion,
-    RenderEngine::ScaledRenderStats *stats)
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation)
 {
     if (document.size.isEmpty() || outputSize.isEmpty()
         || outputRegion.isEmpty()
@@ -300,13 +314,15 @@ QImage renderRegion(const Document &document,
                                         frameCount,
                                         initialSize,
                                         mapping,
-                                        stats)
+                                        stats,
+                                        cancellation)
                                   : renderLayerOperations(whole,
                                         layerDocument,
                                         strokes,
                                         normalizedFrame,
                                         frameCount,
-                                        initialSize);
+                                        initialSize,
+                                        cancellation);
         if (!rendered)
         {
             return QImage();
@@ -326,7 +342,8 @@ QImage renderRegion(const Document &document,
         outputRegion.size(),
         document.background,
         renderPaintLayer,
-        stats);
+        stats,
+        cancellation);
 }
 
 }

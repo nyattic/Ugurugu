@@ -5,6 +5,7 @@
 
 #include "document/Document.hpp"
 #include "render/engine/PreviewScale.hpp"
+#include "render/engine/RenderCancellation.hpp"
 
 #include <QImage>
 #include <QRect>
@@ -58,7 +59,8 @@ bool renderLayerOperationsAtDisplayScale(QImage &layerImage,
     int frameCount,
     const QSize &initialCanvasSize,
     const PreviewScaleMapping &mapping,
-    RenderEngine::ScaledRenderStats *stats);
+    RenderEngine::ScaledRenderStats *stats,
+    const std::atomic_bool *cancellation = nullptr);
 
 }
 

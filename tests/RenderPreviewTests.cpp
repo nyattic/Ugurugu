@@ -1325,6 +1325,88 @@ private slots:
             static_cast<quint64>(outputSize.width()) * outputSize.height());
         QCOMPARE(pixelOperation.packedMask.size(), qsizetype(2 * 1024 * 1024));
     }
+    void discardsRendersCancelledBeforeTheFirstBoundary()
+    {
+        const Document document = animatedDocument();
+        const QSize previewSize(48, 36);
+        std::atomic_bool cancellation{true};
+
+        QVERIFY(RenderEngine::renderScaled(document,
+            5,
+            previewSize,
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            nullptr,
+            &cancellation)
+                .isNull());
+        QVERIFY(RenderEngine::renderScaled(document,
+            5,
+            document.size,
+            RenderEngine::ScaledRenderMode::NativeExact,
+            nullptr,
+            &cancellation)
+                .isNull());
+        QVERIFY(RenderEngine::renderScaledRegion(document,
+            5,
+            previewSize,
+            QRect(4, 4, 16, 12),
+            nullptr,
+            &cancellation)
+                .isNull());
+        QVERIFY(!RenderEngine::renderLayerSplit(document,
+            5,
+            previewSize,
+            document.layers.first().id,
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            nullptr,
+            &cancellation)
+                .valid);
+        QVERIFY(!RenderEngine::renderLayerRasterFrame(document,
+            5,
+            previewSize,
+            qint64{64} * 1024 * 1024,
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            nullptr,
+            &cancellation)
+                .valid);
+    }
+
+    void rendersIdenticallyWithAnUntriggeredCancellationToken()
+    {
+        const Document document = animatedDocument();
+        const QSize previewSize(48, 36);
+        std::atomic_bool cancellation{false};
+
+        const QImage baseline =
+            RenderEngine::renderScaled(document, 5, previewSize);
+        const QImage watched = RenderEngine::renderScaled(document,
+            5,
+            previewSize,
+            RenderEngine::ScaledRenderMode::DisplayPreview,
+            nullptr,
+            &cancellation);
+        QVERIFY(!watched.isNull());
+        QCOMPARE(watched, baseline);
+
+        const QRect region(4, 4, 16, 12);
+        const QImage baselineRegion =
+            RenderEngine::renderScaledRegion(document, 5, previewSize, region);
+        const QImage watchedRegion = RenderEngine::renderScaledRegion(
+            document, 5, previewSize, region, nullptr, &cancellation);
+        QVERIFY(!watchedRegion.isNull());
+        QCOMPARE(watchedRegion, baselineRegion);
+
+        const RenderEngine::LayerSplitFrame split =
+            RenderEngine::renderLayerSplit(document,
+                5,
+                previewSize,
+                document.layers.first().id,
+                RenderEngine::ScaledRenderMode::DisplayPreview,
+                nullptr,
+                &cancellation);
+        QVERIFY(split.valid);
+        QCOMPARE(
+            RenderEngine::composeLayerSplit(split, split.layerBase), baseline);
+    }
 };
 
 int runRenderPreviewTests(int argc, char **argv)

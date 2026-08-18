@@ -787,8 +787,13 @@ void CanvasWidget::startInteractionFrameWarmup()
             }
             if (RenderEngine::supportsLayerSplit(*document, layerId))
             {
-                result.split = RenderEngine::renderLayerSplit(
-                    *document, frame, renderSize, layerId);
+                result.split = RenderEngine::renderLayerSplit(*document,
+                    frame,
+                    renderSize,
+                    layerId,
+                    RenderEngine::ScaledRenderMode::DisplayPreview,
+                    nullptr,
+                    cancellation.get());
                 if (result.split.valid)
                 {
                     result.baseFrame = RenderEngine::composeLayerSplit(
@@ -798,8 +803,13 @@ void CanvasWidget::startInteractionFrameWarmup()
             if (!result.split.valid
                 && !cancellation->load(std::memory_order_relaxed))
             {
-                result.rasters = RenderEngine::renderLayerRasterFrame(
-                    *document, frame, renderSize, rasterBudgetBytes);
+                result.rasters = RenderEngine::renderLayerRasterFrame(*document,
+                    frame,
+                    renderSize,
+                    rasterBudgetBytes,
+                    RenderEngine::ScaledRenderMode::DisplayPreview,
+                    nullptr,
+                    cancellation.get());
                 if (result.rasters.valid)
                 {
                     result.baseFrame = RenderEngine::composeLayerRasterFrame(
@@ -1422,14 +1432,30 @@ void CanvasWidget::renderNextFrameCacheWarmup()
                 // away. Whole frames still render whole.
                 QImage image =
                     patchBounds.isEmpty()
-                        ? RenderEngine::renderScaled(
-                              *document, frame, renderSize)
-                        : RenderEngine::renderScaledRegion(
-                              *document, frame, renderSize, patchBounds);
-                if (image.isNull() && !patchBounds.isEmpty())
+                        ? RenderEngine::renderScaled(*document,
+                              frame,
+                              renderSize,
+                              RenderEngine::ScaledRenderMode::DisplayPreview,
+                              nullptr,
+                              cancellation.get())
+                        : RenderEngine::renderScaledRegion(*document,
+                              frame,
+                              renderSize,
+                              patchBounds,
+                              nullptr,
+                              cancellation.get());
+                // A null region is either a cancellation or a region the
+                // engine cannot render alone; only the latter may fall back
+                // to the whole frame.
+                if (image.isNull() && !patchBounds.isEmpty()
+                    && !cancellation->load(std::memory_order_relaxed))
                 {
-                    const QImage whole = RenderEngine::renderScaled(
-                        *document, frame, renderSize);
+                    const QImage whole = RenderEngine::renderScaled(*document,
+                        frame,
+                        renderSize,
+                        RenderEngine::ScaledRenderMode::DisplayPreview,
+                        nullptr,
+                        cancellation.get());
                     if (whole.size() == renderSize)
                     {
                         image = whole.copy(patchBounds);
