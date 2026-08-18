@@ -150,6 +150,19 @@ public:
         return canvas.m_synchronousPreviewRenderCount;
     }
 
+    static bool interactionFrameWarmupActive(const CanvasWidget &canvas)
+    {
+        return canvas.m_interactionFrameWarmupActive;
+    }
+
+    static bool hasCurrentInteractionBase(const CanvasWidget &canvas, int frame)
+    {
+        return (canvas.m_previewSplit.valid
+                   && canvas.m_previewSplitFrame == frame)
+               || (canvas.m_previewLayerRasters.valid
+                   && canvas.m_previewLayerRasterFrame == frame);
+    }
+
     static bool hasPreparedInteractionFrame(
         const CanvasWidget &canvas, int frame)
     {

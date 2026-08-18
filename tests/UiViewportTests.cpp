@@ -1656,6 +1656,145 @@ private slots:
         }
     }
 
+    void skipsTheInteractionWarmupAfterAFullyPromotedStroke()
+    {
+        Document document = Document::createDefault(QSize(256, 256));
+        document.animationFrames = 30;
+        document.wobbleAmount = 1.6;
+        Stroke background;
+        background.color = QColor(220, 70, 50);
+        background.width = 24.0;
+        background.points = {{QPointF(40.0, 80.0), 1.0},
+            {QPointF(120.0, 190.0), 1.0},
+            {QPointF(210.0, 70.0), 1.0}};
+        document.layers.first().strokes.append(background);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(320, 320);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas),
+            qsizetype{30},
+            10000);
+        canvas.setAnimating(false);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas)
+                && CanvasWidgetTestAccess::hasCurrentInteractionBase(
+                    canvas, canvas.currentFrame()),
+            10000);
+
+        const quint64 synchronousRenderBaseline =
+            CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas);
+        const QPointF start = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(60.0, 200.0));
+        const QPointF end = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(200.0, 60.0));
+        CanvasWidgetTestAccess::beginStroke(canvas, start, 100);
+        CanvasWidgetTestAccess::continueStroke(canvas, end, 200);
+        CanvasWidgetTestAccess::endStroke(canvas, end, 300);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+
+        // The pen-up promoted the current frame and a reusable base, so the
+        // commit must not have queued an interaction worker, now or deferred.
+        QVERIFY(!CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas));
+        QTest::qWait(100);
+        QVERIFY(!CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas));
+        QVERIFY(CanvasWidgetTestAccess::hasCurrentInteractionBase(
+            canvas, canvas.currentFrame()));
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(
+            canvas, canvas.currentFrame()));
+        const QImage promotedFrame =
+            CanvasWidgetTestAccess::cachedFrame(canvas, canvas.currentFrame());
+        QCOMPARE(promotedFrame,
+            RenderEngine::renderScaled(
+                CanvasWidgetTestAccess::displayDocument(canvas),
+                canvas.currentFrame(),
+                promotedFrame.size()));
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+
+        // The next stroke starts with zero interaction workers and reuses the
+        // promoted base without any synchronous preview render.
+        CanvasWidgetTestAccess::beginStroke(canvas, end, 400);
+        CanvasWidgetTestAccess::continueStroke(canvas, start, 500);
+        CanvasWidgetTestAccess::resolveDisplayedFrame(canvas);
+        QVERIFY(!CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas));
+        CanvasWidgetTestAccess::endStroke(canvas, start, 600);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 3);
+        QVERIFY(!CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas));
+        QCOMPARE(CanvasWidgetTestAccess::synchronousPreviewRenderCount(canvas),
+            synchronousRenderBaseline);
+    }
+
+    void keepsPreparingInteractionFramesOutsideAFullyPromotedCommit()
+    {
+        Document document = Document::createDefault(QSize(256, 256));
+        document.animationFrames = 30;
+        document.wobbleAmount = 1.6;
+        Stroke background;
+        background.color = QColor(220, 70, 50);
+        background.width = 24.0;
+        background.points = {{QPointF(40.0, 80.0), 1.0},
+            {QPointF(120.0, 190.0), 1.0},
+            {QPointF(210.0, 70.0), 1.0}};
+        document.layers.first().strokes.append(background);
+
+        DocumentController controller;
+        QVERIFY(controller.loadDocument(document));
+        CanvasWidget canvas(&controller);
+        canvas.resize(320, 320);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        canvas.fitToWindow();
+        QTRY_COMPARE_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::cachedFrameCount(canvas),
+            qsizetype{30},
+            10000);
+        canvas.setAnimating(false);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !CanvasWidgetTestAccess::interactionFrameWarmupActive(canvas)
+                && CanvasWidgetTestAccess::hasCurrentInteractionBase(
+                    canvas, canvas.currentFrame()),
+            10000);
+
+        const QPointF start = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(60.0, 200.0));
+        const QPointF end = CanvasWidgetTestAccess::mapFromDocument(
+            canvas, QPointF(200.0, 60.0));
+        CanvasWidgetTestAccess::beginStroke(canvas, start, 100);
+        CanvasWidgetTestAccess::continueStroke(canvas, end, 200);
+        CanvasWidgetTestAccess::endStroke(canvas, end, 300);
+        QCOMPARE(controller.document().layers.first().strokes.size(), 2);
+
+        // Scrubbing to another frame while paused still prepares that frame's
+        // interaction base.
+        canvas.setCurrentFrame(1);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::hasCurrentInteractionBase(canvas, 1),
+            10000);
+        QVERIFY(CanvasWidgetTestAccess::hasCachedFrame(canvas, 1));
+        const QImage scrubbedFrame =
+            CanvasWidgetTestAccess::cachedFrame(canvas, 1);
+        QCOMPARE(scrubbedFrame,
+            RenderEngine::renderScaled(
+                CanvasWidgetTestAccess::displayDocument(canvas),
+                1,
+                scrubbedFrame.size()));
+
+        // An invalidation outside a stroke commit, here an undo, still
+        // prepares the interaction base.
+        controller.undoStack()->undo();
+        QCOMPARE(controller.document().layers.first().strokes.size(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            CanvasWidgetTestAccess::hasCurrentInteractionBase(
+                canvas, canvas.currentFrame()),
+            10000);
+    }
+
     void warmsAnimatedFourKFramesOffTheUiThreadAfterErasing()
     {
         Document document = Document::createDefault(QSize(4096, 4096));

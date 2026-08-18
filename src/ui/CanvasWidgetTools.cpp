@@ -246,11 +246,15 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
     m_composedSelectionPreviewRegion = {};
     m_composedPreviewBaseKey = 0;
     m_strokeStabilizer.reset();
+    m_strokeCommitDefersInteractionWarmup = true;
     const DocumentController::AddStrokeResult result =
         commitStroke(layerId, std::move(completed));
+    m_strokeCommitDefersInteractionWarmup = false;
+    bool promotedReusableBase = false;
     if (result == DocumentController::AddStrokeResult::Added
         && promotedPreviewResolved && !promotedFrame.isNull())
     {
+        promotedReusableBase = promotedSplit.valid || promotedRasters.valid;
         m_cachedRenderSize = promotedRenderSize;
         const int cost =
             PreviewRenderPolicy::cacheCostKiB(promotedFrame.sizeInBytes());
@@ -278,10 +282,18 @@ void CanvasWidget::endStroke(const QPointF &widgetPosition, quint64 timestamp)
                != DocumentController::AddStrokeResult::AddedWithResampledPoints)
     {
         scheduleFrameCacheWarmup();
-        if (!m_animating)
-        {
-            requestInteractionFrameWarmup(m_currentFrame);
-        }
+    }
+    // A pen-up that promoted both the exact current frame and a reusable
+    // split or raster base has nothing left for the interaction worker to
+    // prepare. Every other outcome — resampled points, a rejected stroke, a
+    // promotion without a reusable base — still warms up.
+    const bool fullyPromoted =
+        result == DocumentController::AddStrokeResult::Added
+        && promotedPreviewResolved && !promotedFrame.isNull()
+        && promotedReusableBase;
+    if (!m_animating && !fullyPromoted)
+    {
+        requestInteractionFrameWarmup(m_currentFrame);
     }
     requestDisplayUpdate();
 }

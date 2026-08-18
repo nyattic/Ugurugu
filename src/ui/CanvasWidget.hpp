@@ -503,6 +503,11 @@ private:
     QRect m_frameCacheRefreshOutputBounds;
     std::shared_ptr<const Document> m_frameCacheRefreshDocument;
     PendingStrokeRefreshHint m_pendingStrokeRefreshHint;
+    // Armed by endStroke around commitStroke. The invalidation the commit
+    // triggers must not start an interaction warmup itself: endStroke decides
+    // after the commit, when it knows whether the pen-up promotion produced
+    // the current frame and a reusable base that make the warmup redundant.
+    bool m_strokeCommitDefersInteractionWarmup = false;
     std::shared_ptr<const Document> m_frameCacheWarmupDocument;
     std::shared_ptr<std::atomic_bool> m_frameCacheWarmupCancellation;
     QVector<int> m_frameCacheWarmupFrames;

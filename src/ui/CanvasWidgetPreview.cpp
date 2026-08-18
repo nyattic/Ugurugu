@@ -1149,7 +1149,7 @@ bool CanvasWidget::tryRegionalStrokeInvalidation(
     notifyZoomChanged();
     requestDisplayUpdate();
     scheduleFrameCacheWarmup();
-    if (!m_animating)
+    if (!m_animating && !m_strokeCommitDefersInteractionWarmup)
     {
         requestInteractionFrameWarmup(m_currentFrame);
     }
@@ -1194,7 +1194,7 @@ void CanvasWidget::invalidateFrames()
     notifyZoomChanged();
     requestDisplayUpdate();
     scheduleFrameCacheWarmup();
-    if (!m_animating)
+    if (!m_animating && !m_strokeCommitDefersInteractionWarmup)
     {
         requestInteractionFrameWarmup(m_currentFrame);
     }
